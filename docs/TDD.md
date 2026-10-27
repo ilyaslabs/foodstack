@@ -127,17 +127,17 @@ Rules (enforced by Module-Switch at startup and by `ModuleRules.verify("io.githu
 | `identity` | Users, credentials, OTP, OIDC authorization server, roles and permissions, back-office invitations, data export/delete orchestration | `/oauth2`, `/login`, `/.well-known`, `/api/v1/auth`, `/api/v1/users`, `/api/v1/me` | none | `UserRegistered`, `UserDeleted`, `RoleChanged` | none |
 | `settings` | Branding, locale, business rules, content pages, feature flags | `/api/v1/settings`, `/api/v1/content` | none | `SettingsChanged` | none |
 | `geo` | Zones, address geocoding, routing and ETA, maps provider SPI | `/api/v1/geo`, `/api/v1/zones` | none | `ZoneChanged` | none |
-| `store` | Stores, branches, hours, pause, menus, items, modifiers, availability, commission config | `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged` | none |
+| `store` | Stores, branches, hours, pause, menus, items, modifiers, availability, commission config | `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `StorePaymentCollectionChanged` | none |
 | `search` | Search and discovery read model in Elasticsearch, home sections | `/api/v1/search`, `/api/v1/discovery` | `geo` | none | `store.*`, `review.*` (rating), `settings.*` (languages) |
 | `cart` | Carts, pricing preview | `/api/v1/carts` | `store`, `geo`, `promotion` | none | `store.*` (invalidate) |
 | `promotion` | Coupons, store offers, validation, redemption | `/api/v1/coupons`, `/api/v1/offers` | none | `CouponRedeemed`, `CouponReleased` | `order.*` (redeem on confirm, release on cancel) |
-| `payment` | Payment intents, gateway SPI, webhooks, refunds, saved card tokens | `/api/v1/payments`, `/api/v1/payment-webhooks` | none | `PaymentSucceeded`, `PaymentFailed`, `RefundSucceeded` | `order.*` (refund on cancel) |
+| `payment` | Payment intents, gateway SPI, merchant accounts (operator and store-owned), webhooks, refunds, saved card tokens | `/api/v1/payments`, `/api/v1/payment-webhooks` | none | `PaymentSucceeded`, `PaymentFailed`, `RefundSucceeded` | `order.*` (refund on cancel), `store.*` (collection mode), `ledger.*` (credit limit) |
 | `order` | Order placement, state machine, timeline, support actions, SSE stream | `/api/v1/orders` | `cart`, `store`, `promotion`, `payment`, `geo` | `OrderPlaced`, `OrderConfirmed`, `OrderAccepted`, `OrderReady`, `OrderPickedUp`, `OrderDelivered`, `OrderCancelled`, `OrderRefunded` | `payment.*`, `dispatch.*` |
 | `dispatch` | Delivery jobs, rider matching, offers, proof of delivery | `/api/v1/deliveries`, `/api/v1/dispatch` | `rider`, `geo` | `RiderAssigned`, `DeliveryPickedUp`, `DeliveryCompleted`, `DeliveryFailed` | `order.*` |
 | `rider` | Rider profiles, documents, online state, live location, earnings view | `/api/v1/riders`, `/api/v1/rider` | `geo` | `RiderStatusChanged` | `dispatch.*`, `ledger.*` |
 | `review` | Ratings, reviews, replies, moderation | `/api/v1/reviews` | `order` | `ReviewPublished`, `ReviewHidden` | none |
 | `notification` | Templates, channels (email, SMS, push), preferences, delivery log, device tokens | `/api/v1/notifications`, `/api/v1/devices` | `identity` | none | events from all modules |
-| `ledger` | Double-entry ledger, commissions, payouts, receipts, reports | `/api/v1/ledger`, `/api/v1/payouts`, `/api/v1/receipts` | none | `PayoutSettled` | `order.*`, `payment.*`, `dispatch.*`, `promotion.*` |
+| `ledger` | Double-entry ledger, commissions, store receivables and credit limits, netted payouts, receipts, reports | `/api/v1/ledger`, `/api/v1/payouts`, `/api/v1/receipts` | none | `PayoutSettled`, `StoreCreditLimitExceeded`, `StoreBalanceSettled` | `order.*`, `payment.*`, `dispatch.*`, `promotion.*` |
 
 The synchronous dependency graph is acyclic: `order → cart → store → geo/settings`, `order → promotion/payment`, `dispatch → rider → geo`, `review → order`, `notification → identity`. Back-references go through events (for example `dispatch` tells `order` about pickup with `DeliveryPickedUp`, never by calling `OrderApi`).
 
@@ -150,7 +150,8 @@ Customer ─POST /api/v1/orders (Idempotency-Key)─► order
   order ─► geo.quote(storeLocation, address)              (in zone? fee, distance, ETA)
   order ─► promotion.validate(couponCode, context)        (discount, funding split)
   order    computes totals, persists order + outbox(OrderPlaced) in one Mongo transaction
-  if card: order ─► payment.createIntent(orderId, amount) ─► client confirms with gateway
+  if card: order ─► payment.resolveMerchant(storeId)       (operator account, or store's own; see 5.4)
+           order ─► payment.createIntent(orderId, merchantAccountId, amount) ─► client confirms with gateway
            payment webhook ─► PaymentSucceeded ─► order: CONFIRMED (+ OrderConfirmed)
   if cash: order: CONFIRMED immediately (+ OrderConfirmed)
 OrderConfirmed ─► promotion (redeem), notification (store alert, customer receipt), dispatch (prepare job)
@@ -159,7 +160,26 @@ Store accepts ─► OrderAccepted ─► dispatch starts matching (operator-fle
 
 The order snapshots everything it needs at placement (prices, commission rate, store name, address), so later changes to menus or commission never alter past orders and `ledger` never needs to call `store`.
 
-### 5.4 Dispatch algorithm (v1)
+### 5.4 Payment collection: operator or store merchant account
+
+Every payment intent is created against a **merchant account**. The operator has one (the default); a store can have its own when the operator allows it.
+
+```
+payment_merchant_accounts { id, owner: OPERATOR | STORE, storeId?, gateway, credentialsRef (encrypted),
+                            status: PENDING_VERIFICATION | ACTIVE | SUSPENDED | REVOKED }
+store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, creditLimit }
+```
+
+- `settings` holds the global switch (`payments.directCollection.enabled`, default `false`) and the default credit limit.
+- `store` owns the per-store permission (`mode`), changed only through an admin endpoint guarded by `store:payment-collection:manage`; changes emit `StorePaymentCollectionChanged`.
+- `payment` owns the store's merchant account. Credentials are encrypted with the PII key (or held in an external secret store through the gateway SPI) and verified by a test call before becoming `ACTIVE`.
+- At order placement, `order` asks `payment.resolveMerchant(storeId)`. It returns the store's account only when the global switch is on, the store's mode is `DIRECT`, the account is `ACTIVE` and the store is not over its credit limit; otherwise it returns the operator's account. The chosen account is snapshotted on the order, so refunds always go to the same account.
+- `ledger` posts different entries depending on the snapshot. Operator-collected: cash in to the operator, payable to the store for its share. Direct-collected: cash in to the store, **receivable from the store** for commission, operator delivery fee, service fee and rider tips. Settlement nets payables and receivables per store per period and reports who pays whom.
+- `ledger` tracks each store's outstanding receivable. When it passes the credit limit, it emits `StoreCreditLimitExceeded`; `payment` marks the store account `SUSPENDED` (collection falls back to the operator) and `notification` alerts the store and finance admins. `StoreBalanceSettled` reverses it.
+- Webhooks from a store's account are routed by account ID (`/api/v1/payment-webhooks/{accountId}`) and verified with that account's signing secret.
+- Later option: gateway-native split payments, adding a `SPLIT` mode to the same model.
+
+### 5.5 Dispatch algorithm (v1)
 
 1. On `OrderAccepted`, create a job with target pickup time = accepted time + prep estimate − travel time to store.
 2. Candidate riders: online, in the order's zone, within radius R (default 5 km) of the store, from Redis GEO (`GEOSEARCH`).
@@ -269,7 +289,7 @@ Every REST prefix belongs to exactly one module (section 5.2). The Helm chart ge
 | Pods | Non-root, read-only root filesystem, dropped capabilities, `seccompProfile: RuntimeDefault`, Pod Security Standard `restricted` |
 | Secrets | Referenced by `existingSecret`; optional External Secrets Operator integration; never baked into images or values |
 | Supply chain | SBOM (CycloneDX) per image, Trivy scan in CI, cosign keyless signing, Dependabot, CodeQL |
-| Payments | Gateway-hosted card fields; only gateway tokens stored; webhook signatures verified; idempotent handling |
+| Payments | Gateway-hosted card fields; only gateway tokens stored; webhook signatures verified per merchant account; store merchant credentials encrypted and write-only through the API; idempotent handling |
 | Data | PII field encryption, blind indexes, retention jobs, data export and deletion workflows |
 | Audit | Back-office writes and logins logged with actor, before and after |
 

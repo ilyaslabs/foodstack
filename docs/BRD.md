@@ -73,6 +73,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | API | Pure REST, so native mobile apps can be built later on the same API |
 | Payments | **Cash on delivery** and a pluggable gateway interface with **one card adapter** |
 | Money | **Commission per store**, a **ledger** for every order, **payout reports** exported for manual settlement |
+| Payment collection | By default the **operator collects** card payments and pays stores later. As an option the operator can **allow an individual store to collect card payments directly** into the store's own merchant account; FoodStack then records what the store owes the operator (commission, fees) and nets it in settlement |
 | Engagement | **Coupons**, **ratings and reviews**, **notifications** (email, SMS, push) |
 | Localisation | **Multi-language with RTL**, one currency and timezone per deployment (config) |
 | Branding | Name, logo, colours and fonts set from the admin panel **at runtime**, without a rebuild |
@@ -109,6 +110,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | BR-12 | A REST API, documented with OpenAPI, covers every capability of the web apps | Must |
 | BR-13 | Support staff can view any order's timeline and issue refunds or cancellations with a reason | Should |
 | BR-14 | Operators can run the platform in several cities, each with its own delivery zones | Should |
+| BR-15 | The operator can allow an individual store to receive card payments directly into its own merchant account. Only the operator can grant or revoke this, per store. For such orders the ledger records what the store owes the operator, and settlement nets it against what the operator owes the store | Must |
 
 ## 9. Assumptions
 
@@ -130,6 +132,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | Infrastructure footprint (Mongo, Redis, Kafka, Elasticsearch) is heavy for a small pilot | Higher running cost | `dev` profile runs everything in-cluster with small sizing; docs list managed-service options and minimum sizes |
 | Third-party licence changes (Liquibase FSL, Elasticsearch AGPL/ELv2) | Legal uncertainty for operators | Operators run unmodified upstream binaries; search behind an interface so an OpenSearch adapter is possible; licences documented in `docs/` |
 | Revenue share relies on self-reporting | Lost revenue for author | Clear licence notice in README, admin "About" page, and release notes |
+| Stores collecting payments directly may not pay what they owe | Lost commission for the operator | Off by default and granted per store by the operator; outstanding balance shown on dashboards; configurable credit limit after which direct collection is suspended automatically; dues netted against any amount the operator owes the store |
 | Payment and personal data | Regulatory exposure | No card data stored (gateway tokens only), PII encryption at rest, data-retention settings |
 | Rider supply is a marketplace cold-start problem | Slow operator launch | Per-store self-delivery option so stores can go live before a fleet exists |
 

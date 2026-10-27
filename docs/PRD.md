@@ -70,7 +70,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 
 | ID | Requirement | P |
 |---|---|---|
-| ST-1 | Admin onboards a store: legal name, display name, logo, cover image, address and location, cuisines, tax ID, commission rate, delivery mode (operator fleet or self-delivery), pickup enabled | M |
+| ST-1 | Admin onboards a store: legal name, display name, logo, cover image, address and location, cuisines, tax ID, commission rate, delivery mode (operator fleet or self-delivery), pickup enabled, payment collection (operator, or direct when allowed, see 4.14) | M |
 | ST-2 | Opening hours per weekday, holiday closures, and a "pause orders" switch with reason and duration | M |
 | ST-3 | Menu: categories, items (name, description, photos, price, tax class, dietary tags, allergens), modifier groups (required or optional, min and max choices, price deltas) | M |
 | ST-4 | Item and modifier availability toggles (sold out today) | M |
@@ -101,6 +101,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | CO-3 | Choose delivery or pickup; delivery address must be inside a zone served by the store | M |
 | CO-4 | Apply one coupon per order; validation explains why a coupon fails | M |
 | CO-5 | Pay by cash on delivery or card through the configured gateway; saved cards via gateway tokens | M |
+| CO-10 | For a store that collects payments directly (see 4.14), card payment goes to the store's own merchant account; the customer experience is the same and the receipt names the store as the merchant | M |
 | CO-6 | Price and availability re-validated at order placement; customer is told about any change | M |
 | CO-7 | Idempotent order placement (double tap never creates two orders) | M |
 | CO-8 | ETA shown before ordering and updated live after | M |
@@ -177,6 +178,23 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | FI-4 | Tax rates configurable per tax class; tax shown on receipts | M |
 | FI-5 | Customer receipt (email and downloadable) | M |
 | FI-6 | Reconciliation report: gateway settlements vs ledger | S |
+| FI-7 | Per-store balance showing both directions: what the operator owes the store (operator-collected orders) and what the store owes the operator (direct-collected orders, store-collected cash). Settlement reports show the **net** amount and who pays whom | M |
+
+### 4.14 Store direct payment collection (optional)
+
+By default the operator collects every card payment and pays stores later. The operator can instead let a store collect card payments straight into the store's own merchant account.
+
+| ID | Requirement | P |
+|---|---|---|
+| DP-1 | A global setting enables the feature; it is **off** by default | M |
+| DP-2 | Only an admin with the `finance` permission can allow or revoke direct collection **for an individual store**; every change is audit-logged with a reason | M |
+| DP-3 | Once allowed, the store owner connects their own merchant account in the store area (gateway credentials or the gateway's account-connect flow), using one of the gateway adapters the operator has enabled. Credentials are stored encrypted and never shown again | M |
+| DP-4 | The connection is verified (test call) before it becomes active; until then, and whenever it fails, card payments fall back to the operator's account | M |
+| DP-5 | For direct-collected orders the ledger records the full amount as collected by the store and creates a **receivable** from the store for commission, operator delivery fee (when the operator's riders deliver), service fee, and rider tips; store-funded and operator-funded discounts are accounted for as for any order | M |
+| DP-6 | Refunds of direct-collected orders are issued through the store's merchant account; the receivable is adjusted to match | M |
+| DP-7 | The operator sets a **credit limit** per store (default from settings). When the outstanding balance passes it, direct collection is automatically suspended (payments go back to the operator's account) and the store and admins are notified; it resumes when the balance is settled | M |
+| DP-8 | Store dashboard and admin finance view show the outstanding balance, due date and history; admins record received payments against it | M |
+| DP-9 | Gateway-native split payments (the gateway splits each payment between store and operator automatically) as a later option, to remove the receivable entirely | C |
 
 ### 4.12 Settings and branding (`settings`)
 
@@ -215,7 +233,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | App | Screens |
 |---|---|
 | Customer web | Address picker, Home (sections and store list), Search, Store page (menu with sticky categories), Item sheet (modifiers), Cart, Checkout, Order tracking, Orders history, Rate order, Profile and addresses, Content pages |
-| Back office: store | Live order board, Order detail, Menu editor, Availability, Hours and pause, Reviews, Earnings, Store settings |
+| Back office: store | Live order board, Order detail, Menu editor, Availability, Hours and pause, Reviews, Earnings and balance, Payment account (when direct collection is allowed), Store settings |
 | Back office: rider | Go online, Job offer, Active job (pickup, drop-off steps), Earnings, Profile |
 | Back office: admin | Dashboard, Live map, Orders, Stores (onboarding wizard), Riders, Customers, Zones (map editor), Coupons, Reviews moderation, Finance (ledger, payouts), Notifications templates, Branding and settings, Users and roles, Audit log |
 
@@ -243,7 +261,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | **M1 Catalogue** | `store`, `geo`, `search`; store onboarding, menus, zones; customer browse and search | Customer finds a store and sees its menu in two languages, one RTL |
 | **M2 Ordering** | `cart`, `order`, `payment` (cash and card adapter), `promotion`, `notification` | Customer places and pays for an order; store accepts and completes a pickup order |
 | **M3 Delivery** | `dispatch`, `rider`, live tracking, rider PWA, admin live map | End-to-end delivery with rider and live map |
-| **M4 Money and trust** | `ledger`, payout reports, `review`, audit log, data export and deletion | Ledger balances for every test order; payout CSV reconciles |
+| **M4 Money and trust** | `ledger`, payout reports with netting, store direct payment collection, `review`, audit log, data export and deletion | Ledger balances for every test order; payout CSV reconciles |
 | **M5 Production hardening** | `split` preset, Istio ambient mTLS, observability chart, load tests, security review, docs and quick start | NFR targets met in load test; quick start verified on a clean cluster |
 | **v1.0 GA** | Release to Maven Central, Docker Hub, GHCR | Tagged release, changelog, upgrade notes |
 
