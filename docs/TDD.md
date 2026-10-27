@@ -13,7 +13,7 @@
 3. **Synchronous calls for queries and validation, Kafka events for consequences.** A module calls another module's `-api` when it needs an answer now; it publishes an event when something happened that others may react to.
 4. **Pure REST.** Web apps and future native apps use the same documented API.
 5. **Secure by default.** mTLS everywhere, least privilege, no secrets in images, PII encrypted.
-6. **Boring, portable infrastructure.** Any conformant Kubernetes, no cloud-specific services in the default chart.
+6. **One server first, Kubernetes when needed.** The modular monolith launches on one server with Docker Compose; the optional Helm chart runs on any conformant Kubernetes. No cloud-specific services in either.
 
 ## 2. Decision record (from grooming)
 
@@ -27,29 +27,35 @@
 | D6 | Cache | Redis, keys prefixed `foodstack:<module>:` |
 | D7 | Search | Elasticsearch 9 behind a `search` module SPI, so an OpenSearch adapter remains possible |
 | D8 | Events | **Kafka from day one**, with a transactional outbox per module |
-| D9 | Identity | Own `identity` module on Spring Authorization Server (OIDC, JWT): phone OTP, email and password, social login |
+| D9 | Identity | Own `identity` module on Spring Authorization Server (OIDC, JWT): email and password, email one-time code, social login. No SMS in v1, so phone OTP comes later |
 | D10 | Real time | Server-Sent Events for web, FCM push for devices |
 | D11 | Maps | Provider SPI; default OpenStreetMap stack (MapLibre, Nominatim, OSRM); Google Maps adapter |
 | D12 | Front-end | Angular workspace, two apps (`web`, `backoffice`), Angular Material 3 with design tokens, no micro-frontends |
 | D13 | Repository | Monorepo: backend, frontend, `k8s/helm`, docs |
 | D14 | Artifacts | Maven `io.github.ilyaslabs:foodstack-*`; images `ilyaslabs/foodstack-server`, `ilyaslabs/foodstack-web`, `ilyaslabs/foodstack-backoffice` on Docker Hub, mirrored to GHCR |
-| D15 | Kubernetes | Helm chart; managed datastores in production, in-cluster datastores with `values-dev.yaml`; monolith by default, `values-split.yaml` preset |
+| D15 | Kubernetes | **Optional.** Helm chart; managed datastores in production, in-cluster datastores with `values-dev.yaml`; monolith by default, `values-split.yaml` preset |
 | D16 | Service mesh | Istio ambient mode (ztunnel mTLS, waypoints for L7), Gateway API for ingress |
 | D17 | Observability | OpenTelemetry; optional Prometheus, Grafana, Tempo and Loki stack |
+| D18 | Launch deployment | **Unit deployer**: `unit-deployer-<version>.zip` with the jar, Docker Compose and install, start, stop and restart scripts running everything on one server (section 17) |
+| D19 | Media | S3-compatible object storage through a `media` module, with resizing and WebP compression on upload (section 13) |
+| D20 | Time | Stored in UTC; the API exchanges date-times as UTC epoch seconds |
+| D21 | Local development | One-click run with Testcontainers; `test-seed` profile loads demo data (section 16) |
+| D22 | Sharding | Every collection designed with a shard key from day one (section 6.3) |
+| D23 | Notifications | In-app, email and push; no SMS in v1 |
 
 ## 3. System context
 
 ```
-                         ┌────────────────────────── Kubernetes cluster ───────────────────────────┐
+                         ┌──────────── one server (unit deployer) or Kubernetes cluster ───────────┐
  Customer browser ──┐    │                                                                          │
- Store tablet ──────┤    │  Gateway API (Istio) ──► foodstack-web (nginx, Angular SSR)               │
- Rider phone (PWA) ─┼────┼─►  TLS, cert-manager  ──► foodstack-backoffice (nginx, Angular)          │
+ Store tablet ──────┤    │  Caddy (server) or     ──► foodstack-web (Angular SSR)                    │
+ Rider phone (PWA) ─┼────┼─►  Gateway API (k8s)   ──► foodstack-backoffice (nginx, Angular)          │
  Admin desktop ─────┤    │                      └─► foodstack-server (Spring Boot, all modules)      │
  Future mobile app ─┘    │                              │  ▲ module-switch http (internal :8081)     │
                          │                              ▼  │   when split into several Deployments   │
-                         │   MongoDB   Redis   Kafka   Elasticsearch   (managed in prod, in-cluster dev)
+                         │   MongoDB   Redis   Kafka   Elasticsearch   S3 (MinIO on one server)       
                          └──────────────────────────────────────────────────────────────────────────┘
- External: payment gateway, SMTP, SMS provider, FCM, map tiles / geocoding / routing
+ External: payment gateway, SMTP, FCM, map tiles / geocoding / routing
 ```
 
 ## 4. Repository layout
@@ -67,6 +73,7 @@ foodstack/
 ├─ modules/
 │  ├─ identity/   identity-api/   identity-impl/
 │  ├─ settings/   settings-api/   settings-impl/
+│  ├─ media/      media-api/      media-impl/      (S3 object storage adapter)
 │  ├─ geo/        geo-api/        geo-impl/        geo-provider-osm/   geo-provider-google/
 │  ├─ store/      store-api/      store-impl/
 │  ├─ search/     search-api/     search-impl/     (Elasticsearch adapter inside impl)
@@ -77,14 +84,16 @@ foodstack/
 │  ├─ dispatch/   dispatch-api/   dispatch-impl/
 │  ├─ rider/      rider-api/      rider-impl/
 │  ├─ review/     review-api/     review-impl/
-│  ├─ notification/ notification-api/ notification-impl/ (email, SMS, FCM channel adapters)
+│  ├─ notification/ notification-api/ notification-impl/ (in-app, email, FCM channel adapters)
 │  └─ ledger/     ledger-api/     ledger-impl/
 ├─ app/
 │  └─ foodstack-server/            @SpringBootApplication, depends on every *-impl; application*.yaml; Dockerfile
-├─ frontend/                       Angular workspace (section 13)
-├─ k8s/
+├─ frontend/                       Angular workspace (section 14)
+├─ deploy/
+│  └─ unit-deployer/               docker-compose.yml, scripts, Maven assembly for unit-deployer-<version>.zip (section 17)
+├─ k8s/                            optional Kubernetes deployment
 │  └─ helm/
-│     ├─ foodstack/                main chart (section 15)
+│     ├─ foodstack/                main chart (section 18)
 │     └─ foodstack-observability/  optional monitoring chart
 ├─ docs/                           BRD, PRD, TDD, ADRs, guides
 ├─ tools/                          load tests (k6), seed data, scripts
@@ -124,19 +133,20 @@ Rules (enforced by Module-Switch at startup and by `ModuleRules.verify("io.githu
 
 | Module | Responsibility | REST prefixes | Sync dependencies (`-api`) | Publishes | Consumes |
 |---|---|---|---|---|---|
-| `identity` | Users, credentials, OTP, OIDC authorization server, roles and permissions, back-office invitations, data export/delete orchestration | `/oauth2`, `/login`, `/.well-known`, `/api/v1/auth`, `/api/v1/users`, `/api/v1/me` | none | `UserRegistered`, `UserDeleted`, `RoleChanged` | none |
+| `identity` | Users, credentials, email one-time codes, OIDC authorization server, roles and permissions, back-office invitations, data export/delete orchestration | `/oauth2`, `/login`, `/.well-known`, `/api/v1/auth`, `/api/v1/users`, `/api/v1/me` | none | `UserRegistered`, `UserDeleted`, `RoleChanged` | none |
 | `settings` | Branding, locale, business rules, content pages, feature flags | `/api/v1/settings`, `/api/v1/content` | none | `SettingsChanged` | none |
-| `geo` | Zones, address geocoding, routing and ETA, maps provider SPI | `/api/v1/geo`, `/api/v1/zones` | none | `ZoneChanged` | none |
-| `store` | Stores, branches, hours, pause, menus, items, modifiers, availability, commission config | `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `StorePaymentCollectionChanged` | none |
+| `geo` | Operator zones and store-owned zones with their charges, address geocoding, routing and ETA, maps provider SPI | `/api/v1/geo`, `/api/v1/zones` | none | `ZoneChanged` | none |
+| `store` | Stores, branches, opening hours, temporary-close switch, default delivery, menus, items, modifiers, availability, commission config, QR menu codes | `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `StorePaymentCollectionChanged` | none |
 | `search` | Search and discovery read model in Elasticsearch, home sections | `/api/v1/search`, `/api/v1/discovery` | `geo` | none | `store.*`, `review.*` (rating), `settings.*` (languages) |
 | `cart` | Carts, pricing preview | `/api/v1/carts` | `store`, `geo`, `promotion` | none | `store.*` (invalidate) |
-| `promotion` | Coupons, store offers, validation, redemption | `/api/v1/coupons`, `/api/v1/offers` | none | `CouponRedeemed`, `CouponReleased` | `order.*` (redeem on confirm, release on cancel) |
+| `promotion` | Operator and store promotions, coupons, payment-method and merchant-account restrictions, validation, redemption | `/api/v1/coupons`, `/api/v1/offers` | none | `CouponRedeemed`, `CouponReleased` | `order.*` (redeem on confirm, release on cancel) |
 | `payment` | Payment intents, gateway SPI, merchant accounts (operator and store-owned), webhooks, refunds, saved card tokens | `/api/v1/payments`, `/api/v1/payment-webhooks` | none | `PaymentSucceeded`, `PaymentFailed`, `RefundSucceeded` | `order.*` (refund on cancel), `store.*` (collection mode), `ledger.*` (credit limit) |
 | `order` | Order placement, state machine, timeline, support actions, SSE stream | `/api/v1/orders` | `cart`, `store`, `promotion`, `payment`, `geo` | `OrderPlaced`, `OrderConfirmed`, `OrderAccepted`, `OrderReady`, `OrderPickedUp`, `OrderDelivered`, `OrderCancelled`, `OrderRefunded` | `payment.*`, `dispatch.*` |
-| `dispatch` | Delivery jobs, rider matching, offers, proof of delivery | `/api/v1/deliveries`, `/api/v1/dispatch` | `rider`, `geo` | `RiderAssigned`, `DeliveryPickedUp`, `DeliveryCompleted`, `DeliveryFailed` | `order.*` |
-| `rider` | Rider profiles, documents, online state, live location, earnings view | `/api/v1/riders`, `/api/v1/rider` | `geo` | `RiderStatusChanged` | `dispatch.*`, `ledger.*` |
+| `dispatch` | Delivery jobs for operator and store riders, operator rider matching, offers, proof of delivery | `/api/v1/deliveries`, `/api/v1/dispatch` | `rider`, `geo` | `RiderAssigned`, `DeliveryPickedUp`, `DeliveryCompleted`, `DeliveryFailed` | `order.*` |
+| `rider` | Operator riders and store-owned riders, documents, online state, live location, earnings view | `/api/v1/riders`, `/api/v1/rider` | `geo` | `RiderStatusChanged` | `dispatch.*`, `ledger.*` |
 | `review` | Ratings, reviews, replies, moderation | `/api/v1/reviews` | `order` | `ReviewPublished`, `ReviewHidden` | none |
-| `notification` | Templates, channels (email, SMS, push), preferences, delivery log, device tokens | `/api/v1/notifications`, `/api/v1/devices` | `identity` | none | events from all modules |
+| `notification` | Templates, channels (in-app inbox, email, push), preferences, delivery log, device tokens | `/api/v1/notifications`, `/api/v1/devices` | `identity` | none | events from all modules |
+| `media` | Uploads, image processing, variants, signed URLs, cleanup | `/api/v1/media` | none | `MediaReady` | none |
 | `ledger` | Double-entry ledger, commissions, store receivables and credit limits, netted payouts, receipts, reports | `/api/v1/ledger`, `/api/v1/payouts`, `/api/v1/receipts` | none | `PayoutSettled`, `StoreCreditLimitExceeded`, `StoreBalanceSettled` | `order.*`, `payment.*`, `dispatch.*`, `promotion.*` |
 
 The synchronous dependency graph is acyclic: `order → cart → store → geo/settings`, `order → promotion/payment`, `dispatch → rider → geo`, `review → order`, `notification → identity`. Back-references go through events (for example `dispatch` tells `order` about pickup with `DeliveryPickedUp`, never by calling `OrderApi`).
@@ -147,7 +157,7 @@ The synchronous dependency graph is acyclic: `order → cart → store → geo/s
 Customer ─POST /api/v1/orders (Idempotency-Key)─► order
   order ─► cart.checkoutSnapshot(cartId)                 (items, store, address)
   order ─► store.validateOrder(storeId, lines, time)     (open? items available? current prices)
-  order ─► geo.quote(storeLocation, address)              (in zone? fee, distance, ETA)
+  order ─► geo.quote(storeId, defaultDelivery, address)   (store zones or operator zones: in zone? fee, distance, ETA)
   order ─► promotion.validate(couponCode, context)        (discount, funding split)
   order    computes totals, persists order + outbox(OrderPlaced) in one Mongo transaction
   if card: order ─► payment.resolveMerchant(storeId)       (operator account, or store's own; see 5.4)
@@ -155,7 +165,10 @@ Customer ─POST /api/v1/orders (Idempotency-Key)─► order
            payment webhook ─► PaymentSucceeded ─► order: CONFIRMED (+ OrderConfirmed)
   if cash: order: CONFIRMED immediately (+ OrderConfirmed)
 OrderConfirmed ─► promotion (redeem), notification (store alert, customer receipt), dispatch (prepare job)
-Store accepts ─► OrderAccepted ─► dispatch starts matching (operator-fleet stores)
+Store accepts and picks who delivers ─► OrderAccepted{deliveredBy: STORE | OPERATOR, storeRiderId?}
+  STORE:    dispatch creates a job assigned to the chosen store rider (or the store marks steps itself)
+  OPERATOR: allowed only if the operator rider service is on; dispatch starts matching; if the order was
+            priced with store charges, ledger bills the operator delivery charge to the store
 ```
 
 The order snapshots everything it needs at placement (prices, commission rate, store name, address), so later changes to menus or commission never alter past orders and `ledger` never needs to call `store`.
@@ -178,10 +191,19 @@ store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, 
 - `ledger` tracks each store's outstanding receivable. When it passes the credit limit, it emits `StoreCreditLimitExceeded`; `payment` marks the store account `SUSPENDED` (collection falls back to the operator) and `notification` alerts the store and finance admins. `StoreBalanceSettled` reverses it.
 - Webhooks from a store's account are routed by account ID (`/api/v1/payment-webhooks/{accountId}`) and verified with that account's signing secret.
 - Later option: gateway-native split payments, adding a `SPLIT` mode to the same model.
+- Card payments can be switched off (`payments.card.enabled`). Integration style per gateway adapter: `HOSTED_PAGE` (redirect to the gateway's hosted payment page; default, keeps card data entirely off our pages) or `EMBEDDED` (gateway fields in our checkout). Saved cards (`payments.savedCards.enabled`) are off by default; when on, only gateway tokens are stored.
 
-### 5.5 Dispatch algorithm (v1)
+### 5.5 Promotions: who creates them and where they apply
 
-1. On `OrderAccepted`, create a job with target pickup time = accepted time + prep estimate − travel time to store.
+- `promotion_promotions { owner: OPERATOR | STORE, storeIds, zoneIds, funding: {operatorPct, storePct}, paymentMethods: [CASH, CARD]?, merchantAccount: ANY | OPERATOR_ONLY }`.
+- Store owners create promotions for their own store only, always store-funded.
+- Operator promotions can be limited to payment methods and to `OPERATOR_ONLY`, meaning they apply only when the payment is collected on the operator's merchant account. `order` passes the payment method and resolved merchant account in the validation context, so the check happens at placement.
+
+### 5.6 Dispatch algorithm (v1)
+
+For `deliveredBy: STORE`, the job goes straight to the chosen store rider (or stays with the store). The steps below apply to operator riders:
+
+1. On `OrderAccepted` with `deliveredBy: OPERATOR`, create a job with target pickup time = accepted time + prep estimate − travel time to store.
 2. Candidate riders: online, in the order's zone, within radius R (default 5 km) of the store, from Redis GEO (`GEOSEARCH`).
 3. Score = w1·distance-to-store + w2·active-jobs + w3·(1 − acceptance-rate) + w4·idle-time bonus. Weights in settings.
 4. Offer to the best rider; lock the rider in Redis (`SET NX PX`) for the offer timeout (30 s). On decline or timeout, move to the next; widen radius after N failures; alert admins after the configured limit.
@@ -202,7 +224,7 @@ store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, 
 |---|---|
 | IDs | Time-ordered string IDs (UUIDv7) generated in the application; human order number `FS-YYMMDD-XXXXX` for support |
 | Money | `Money { long minor; String currency }` (minor units); never floating point |
-| Time | `Instant` in UTC; store-local times (opening hours) as `LocalTime` + store timezone |
+| Time | Always stored in UTC as `Instant` (BSON date). In DTOs, requests, responses and events every date-time is **UTC epoch seconds** (`long`, field names ending in `At`, for example `placedAt`). The only exception is a time of day that is not an instant, such as opening hours, stored as `HH:mm` plus the store's timezone |
 | Translated text | `Map<String,String>` keyed by language tag, with fallback to the default language |
 | Concurrency | `@Version` optimistic locking on aggregates |
 | Geo | GeoJSON with `2dsphere` indexes (stores, zones) |
@@ -210,7 +232,34 @@ store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, 
 | Audit | `createdAt`, `createdBy`, `updatedAt`, `updatedBy` on every document; back-office writes also go to `identity_audit_log` |
 | PII | Phone and email encrypted with AES-GCM (key from Kubernetes Secret or external KMS); a keyed HMAC blind index supports lookup |
 
-### 6.3 Migrations (Liquibase)
+### 6.3 Designed for sharding
+
+The default install runs MongoDB unsharded, but every collection is designed so it can be sharded later without changing code.
+
+Rules:
+- Every collection has a documented shard key (in its Liquibase changelog and in the module's README), chosen so the hot queries include it and go to one shard.
+- No unbounded arrays inside documents (use the bucket pattern or a child collection), and no document that grows forever.
+- Unique indexes must start with the shard key, as MongoDB requires. Uniqueness that cannot include the shard key (for example email) lives in a small lookup collection keyed by that value.
+- IDs are UUIDv7 (time-ordered), so any key on `_id` uses a **hashed** shard key to avoid a single hot shard.
+- Transactions stay inside one module and touch as few documents as possible (aggregate plus outbox row).
+- Small, rarely written collections (settings, zones, outbox, inbox with TTL) stay unsharded.
+
+| Collection | Shard key | Why |
+|---|---|---|
+| `order_orders` | `{ _id: hashed }` | Lookups and updates by order ID are the hottest path; the live store board reads the small `order_active` collection |
+| `order_active` | unsharded | Only orders in progress; removed on completion |
+| `store_stores`, `store_menu_items` | `{ storeId: hashed }` | Menus are always read per store |
+| `ledger_entries` | `{ accountId: 1, postedAt: 1 }` | Statements and balances are range reads per account |
+| `payment_intents` | `{ orderId: hashed }` | Looked up by order and by webhook (stored with order ID) |
+| `dispatch_jobs` | `{ _id: hashed }` | Updated by job ID |
+| `rider_locations` | time-series, meta `riderId` | Append-only; time-series collections shard on the meta field |
+| `review_reviews` | `{ storeId: hashed }` | Read per store |
+| `notification_inbox` | `{ userId: hashed }` | In-app notifications read per user |
+| `identity_users` | `{ _id: hashed }` | Read by user ID from the token |
+| `identity_login_keys` | `{ loginKey: 1 }` (unique) | Email-hash to user ID lookup |
+| `media_assets` | `{ _id: hashed }` | Read by media ID |
+
+### 6.4 Migrations (Liquibase)
 
 - Each module ships `db/changelog/<module>/db.changelog-master.yaml` using the `liquibase-mongodb` change types (`createCollection`, `createIndex`, `insertMany`, `runCommand`).
 - Liquibase tracking collections are per module: `<module>_databasechangelog` and `<module>_databasechangeloglock`, so migrations of one module never block another and travel with it when extracted.
@@ -248,7 +297,7 @@ This gives at-least-once delivery with effectively-once processing, and no event
 
 ### 8.1 Conventions
 
-- Base path `/api/v1`; resources are plural nouns; JSON with camelCase; ISO-8601 times.
+- Base path `/api/v1`; resources are plural nouns; JSON with camelCase; date-times as UTC epoch seconds (section 6.2).
 - OpenAPI 3.1 generated by springdoc per module and merged into one document at `/api/v1/openapi.json`; the Angular API client is generated from it in CI.
 - Errors: RFC 9457 `application/problem+json` with `code`, `traceId` and `errors[]` for validation, matching Module-Switch's wire format.
 - Pagination: cursor-based (`?cursor=&limit=`), response `{ items, nextCursor }`.
@@ -273,7 +322,7 @@ Every REST prefix belongs to exactly one module (section 5.2). The Helm chart ge
 ### 9.1 Identity and access
 
 - `identity` embeds Spring Authorization Server. Clients: `web` and `backoffice` (public, Authorization Code + PKCE), future mobile apps (same), internal service clients (client credentials, for jobs).
-- The login UI is served by `identity` and themed from `settings` branding. It supports phone OTP (OTP stored hashed in Redis with 5 minute TTL, attempt limits), email and password (Argon2id), social login (OIDC federation), and TOTP for back-office users.
+- The login UI is served by `identity` and themed from `settings` branding. It supports email one-time codes (stored hashed in Redis with 5 minute TTL, attempt limits), email and password (Argon2id), social login (OIDC federation), and TOTP for back-office users.
 - Access tokens: JWT signed with ES256, 10 minute lifetime; refresh tokens rotated, 30 days for customers and 12 hours for back office. Signing keys come from a Kubernetes Secret and are published through JWKS; rotation keeps the previous key valid.
 - Token claims: `sub`, `roles`, `perms`, `storeIds` (store staff), `riderId`.
 - Every module is an OAuth2 resource server validating JWTs locally (JWKS cached). Authorization uses method security with permissions such as `order:refund` and store-scoped checks (`storeIds` contains the target store).
@@ -318,13 +367,22 @@ Redis is a cache and coordination store only; losing it never loses business dat
 
 ## 12. Geo and maps
 
-- `geo` owns zones (GeoJSON polygons, `geo_zones`), fee rules and quoting.
+- `geo` owns zones (GeoJSON polygons, `geo_zones`) with an owner: `OPERATOR` (used when operator riders deliver) or `STORE` (drawn by the store owner, used when the store delivers). Each zone has its charge, minimum order and free-delivery threshold. `quote` picks the zones for the store's default delivery.
 - Provider SPI: `GeocodingProvider`, `RoutingProvider`, `TileConfig`. Default adapter: Nominatim and OSRM (operator self-hosts or uses a hosted provider; public instances are only for demos). Optional Google Maps adapter.
 - ETA = prep estimate + routing duration × zone traffic factor (configurable); quotes are cached briefly.
 
-## 13. Front-end design
+## 13. Media storage (S3)
 
-### 13.1 Workspace
+- The `media` module owns uploads. Other modules store only media IDs; `media` resolves them to URLs.
+- Storage goes through an `ObjectStorage` SPI. The default adapter uses the AWS SDK v2 S3 client, so it works with AWS S3 and with S3-compatible stores (MinIO in the unit deployer and in local development, and other providers).
+- Upload flow: the client asks `POST /api/v1/media/uploads` (type, size, purpose) → receives a short-lived presigned `PUT` URL for `<bucket>/<owningModule>/<entityId>/<uuid>` → uploads directly → calls `complete`. The server never streams large files through the JVM.
+- Processing (on `complete`, on virtual threads): check magic bytes and size limits, strip EXIF/metadata, auto-rotate, resize to fixed variants (`thumb` 160 px, `card` 480 px, `detail` 1080 px), encode as WebP (quality about 80) and optionally AVIF, then delete the raw upload unless keeping originals is switched on. Processing uses libvips, bundled in the server image.
+- Buckets: `public` (menu, store and branding images; served with `Cache-Control: public, max-age=31536000, immutable` and content-hashed names, so a CDN can sit in front) and `private` (rider documents; access only through 5-minute signed `GET` URLs).
+- `media_assets` records owner module, entity, variants, sizes and reference count; a nightly job deletes unreferenced assets after a grace period.
+
+## 14. Front-end design
+
+### 14.1 Workspace
 
 ```
 frontend/
@@ -341,7 +399,7 @@ frontend/
 │     └─ realtime/                   SSE client with reconnect and Last-Event-ID
 ```
 
-### 13.2 Patterns
+### 14.2 Patterns
 
 - Standalone components, signals and zoneless change detection; NgRx SignalStore for feature state; lazy-loaded routes per area and feature.
 - **Runtime branding:** on boot the app loads `/api/v1/settings/branding` and writes Material 3 design tokens as CSS custom properties (colour palettes generated from the operator's primary and secondary colours, typography, logo URLs). Components never hard-code colours.
@@ -350,44 +408,105 @@ frontend/
 - Accessibility: Material components plus axe checks in CI; light and dark themes.
 - Testing: unit tests with Vitest, end-to-end with Playwright against the `dev` Helm install.
 
-### 13.3 Images
+### 14.3 Images
 
 `ilyaslabs/foodstack-web` runs the SSR Node server; `ilyaslabs/foodstack-backoffice` is static assets on `nginx-unprivileged`. Both are non-root with read-only filesystems.
 
-## 14. Build, CI/CD and releases
+## 15. Build, CI/CD and releases
 
-### 14.1 Backend build
+### 15.1 Backend build
 
 - Parent POM inherits `spring-boot-starter-parent` 4.x, imports `module-switch-bom`, sets `java.version=25`, uses `${revision}` with the flatten plugin (as `ilyaslabs/cicd` `mvn-release.yml` passes `-Drevision=<tag>`).
 - All `-api`, `-impl`, `platform-*` and `foodstack-bom` jars are published to Maven Central, so operators can build a custom server that adds or replaces modules.
 - `foodstack-server` image: multi-stage Dockerfile, Spring Boot layered jar on a JRE 25 base, non-root, multi-arch (amd64, arm64), virtual threads on.
 
-### 14.2 Workflows
+### 15.2 Workflows
 
 | Workflow | Trigger | Does |
 |---|---|---|
 | `pr-checks.yml` | Pull request | Calls `ilyaslabs/cicd/.github/workflows/mvn-pr-checks.yml@main`; frontend lint, test and build; Helm lint and `kubeconform`; `ModuleRules.verify`; Trivy filesystem scan |
 | `snapshot-release.yml` | Push to `main` | Calls `mvn-snapshot-release.yml`; pushes `:edge` images |
-| `release.yml` | GitHub release `vX.Y.Z` | Calls `mvn-release.yml` (Maven Central); builds, signs and pushes images to Docker Hub and GHCR; packages the Helm chart and pushes it to GHCR as an OCI artifact |
-| `e2e.yml` | Nightly and before release | kind cluster, `values-dev.yaml` and `values-split.yaml` installs, Playwright suite, k6 smoke test |
+| `release.yml` | GitHub release `vX.Y.Z` | Calls `mvn-release.yml` (Maven Central); builds, signs and pushes images to Docker Hub and GHCR; builds `unit-deployer-<version>.zip` and attaches it to the GitHub release; packages the Helm chart and pushes it to GHCR as an OCI artifact |
+| `e2e.yml` | Nightly and before release | Unit deployer install on a fresh VM-like runner (`install.sh`, `restart.sh`, `upgrade.sh`); kind cluster, `values-dev.yaml` and `values-split.yaml` installs, Playwright suite, k6 smoke test |
 
 A reusable `docker-release.yml` and `helm-release.yml` will be added to `ilyaslabs/cicd` so other ilyasLabs projects can share them.
 
-### 14.3 Testing strategy
+### 15.3 Testing strategy
 
 | Level | Tooling | Scope |
 |---|---|---|
 | Unit | JUnit 5, AssertJ | Domain logic, state machines, pricing, ledger balancing |
 | Architecture | `ModuleRules.verify`, ArchUnit | Module boundaries, package rules, collection prefix rule |
-| Integration | Spring Boot tests, Testcontainers (MongoDB replica set, Redis, Kafka, Elasticsearch) | Each module with its real datastores |
+| Integration | Spring Boot tests, Testcontainers (MongoDB replica set, Redis, Kafka, Elasticsearch, MinIO) | Each module with its real datastores |
 | Split topology | Two app contexts, one module in `http` mode | Every module's API works remotely exactly as locally |
 | Contract | OpenAPI diff in CI | No breaking change within `/api/v1` |
 | End-to-end | Playwright | Main journeys from the PRD |
 | Load | k6 | NFR targets before each release |
 
-## 15. Kubernetes and Helm
+## 16. Local development and seed data
 
-### 15.1 Chart layout
+- **One click:** `app/foodstack-server/src/test/java/.../LocalFoodstackApplication.java` starts the real application with `SpringApplication.from(FoodstackApplication::main).with(LocalContainers.class)`. `LocalContainers` declares Testcontainers beans with `@ServiceConnection`: MongoDB (single-node replica set), Redis, Kafka (KRaft), Elasticsearch, MinIO and Mailpit. Containers are reused between restarts. Run it from the IDE with one click, or `./mvnw -pl app/foodstack-server spring-boot:test-run`. Docker is the only prerequisite.
+- The Angular apps run with `pnpm start` and proxy `/api` to `localhost:8080`.
+- **Seed data:** when the `test-seed` profile is active, each module seeds its own data through a `@Profile("test-seed")` seeder inside its own `-impl` package, so only `local` modules seed and a module never writes another module's collections. Seeders are idempotent (a `<module>_seed` marker document) and run in dependency order (identity, settings, geo, media, store, rider, promotion, then sample orders through the public APIs).
+- Seed content: an admin, a finance user and support user, two cities with operator zones, about 10 stores with menus, photos, opening hours and their own zones, store riders and operator riders, customers with addresses, coupons, and orders in every state. Logins are printed once in the startup log.
+- Safety: startup fails if `test-seed` is active together with `foodstack.environment=production`.
+
+## 17. Single-server deployment: unit deployer
+
+The default way to launch. The whole platform runs on one server with Docker, as a modular monolith.
+
+### 17.1 Package
+
+Each release attaches `unit-deployer-<version>.zip`, built by a Maven assembly in `deploy/unit-deployer/`:
+
+```
+unit-deployer-<version>/
+├─ foodstack-server.jar            the application (all modules local)
+├─ web/  backoffice/               built Angular apps (SSR server bundle and static files)
+├─ docker-compose.yml
+├─ .env.example                    every setting, documented
+├─ config/                         application.yaml, Caddyfile, MongoDB replica-set init, Kafka and Elasticsearch settings
+├─ install.sh  start.sh  stop.sh  restart.sh
+├─ status.sh  logs.sh  backup.sh  upgrade.sh
+└─ README.md
+```
+
+### 17.2 Compose stack
+
+All services share one Docker network, `foodstack`. Only the reverse proxy publishes ports (80 and 443).
+
+| Service | Image | Notes |
+|---|---|---|
+| `proxy` | Caddy | Automatic HTTPS for the operator's domains; routes `/api`, `/oauth2`, `/login` to the server and the rest to the web apps |
+| `server` | Eclipse Temurin 25 JRE | Runs the mounted `foodstack-server.jar`; healthcheck on actuator readiness |
+| `web` | Node (LTS) | Customer app SSR server from the mounted bundle |
+| `backoffice` | nginx-unprivileged | Static back-office app |
+| `mongodb` | MongoDB | Single-node replica set (needed for transactions), auth on |
+| `kafka` | Apache Kafka | Single node, KRaft mode |
+| `redis` | Redis | Password, AOF persistence |
+| `elasticsearch` | Elasticsearch | Single node, security on, heap sized from `.env` |
+| `minio` | MinIO | S3-compatible storage for media |
+
+Every service has a healthcheck; `server` starts only when its dependencies are healthy. All data and logs are bind-mounted under the install directory, and every service uses `restart: unless-stopped` with log rotation.
+
+### 17.3 Scripts
+
+| Script | Does |
+|---|---|
+| `install.sh <install-dir> [--domain example.com]` | Checks Docker and Compose v2, CPU, RAM, disk and ports; sets `vm.max_map_count` for Elasticsearch; creates `<dir>/{data/{mongodb,kafka,redis,elasticsearch,minio},logs,config,backups}`; generates strong secrets, JWT signing keys and the PII key into `<dir>/.env` (mode 600); copies the jar, apps and config; runs migrations once (`--foodstack.migrate-only=true`); starts the stack; optionally installs a systemd unit to start on boot; prints the admin first-login link |
+| `start.sh` / `stop.sh` | `docker compose up -d` / `down` (data is kept) |
+| `restart.sh [service]` | Restarts everything or one service |
+| `status.sh` / `logs.sh [service]` | Health summary / follow logs |
+| `backup.sh` | `mongodump`, MinIO mirror and config into `<dir>/backups/<timestamp>` |
+| `upgrade.sh <new-zip>` | Backup, replace jar, apps and compose file, run migrations, restart |
+
+Moving to Kubernetes later is a data migration (dump and restore) plus configuration; no code changes.
+
+## 18. Kubernetes and Helm
+
+Optional. Use it when one server is no longer enough; at launch the unit deployer (section 17) runs the whole modular monolith on one server.
+
+### 18.1 Chart layout
 
 ```
 k8s/helm/foodstack/
@@ -405,7 +524,7 @@ k8s/helm/foodstack/
    └─ dev/                datastore StatefulSets (rendered only with values-dev.yaml)
 ```
 
-### 15.2 Module topology from values
+### 18.2 Module topology from values
 
 ```yaml
 server:
@@ -424,7 +543,7 @@ server:
 
 The chart computes Module-Switch configuration for each Deployment: its own modules are `local` and exposed on port 8081; every other module is `http` with `url: http://foodstack-<deployment>.<namespace>.svc.cluster.local:8081`; modules nobody runs are `off`. It also generates the `HTTPRoute` rules that send each module's REST prefixes to the right Service. Operators never edit Module-Switch YAML by hand.
 
-### 15.3 Networking, mesh and load balancing
+### 18.3 Networking, mesh and load balancing
 
 - Services: `foodstack-<deployment>` (ports `http` 8080 public API, `internal` 8081 Module-Switch), `foodstack-web`, `foodstack-backoffice`. Cluster-local DNS names such as `foodstack-order.foodstack.svc.cluster.local`.
 - Istio ambient: the namespace is labelled `istio.io/dataplane-mode=ambient`; ztunnel gives mTLS and L4 authorization with no sidecars. A waypoint proxy for the namespace gives L7 load balancing (least request), retries for idempotent routes and per-route timeouts.
@@ -432,19 +551,19 @@ The chart computes Module-Switch configuration for each Deployment: its own modu
 - Ingress: Gateway API `Gateway` (Istio implementation) with hosts for `web`, `backoffice` and `api`, TLS from cert-manager; HTTP→HTTPS redirect; HSTS.
 - Without Istio (`mesh.enabled=false`) the chart still works, using any Gateway API implementation and NetworkPolicies, but without mTLS.
 
-### 15.4 Reliability and scaling
+### 18.4 Reliability and scaling
 
 - Readiness and liveness from Spring Boot actuator groups; startup probe for slow starts; graceful shutdown (30 s) drains SSE connections.
 - HPA on CPU and on request rate (Prometheus adapter, optional). PDB `minAvailable: 1` (2 for `order` in split). Topology spread across zones and nodes.
 - Resource requests and limits set per Deployment; JVM sized with `MaxRAMPercentage`.
 - Datastores in production: managed or operator-run MongoDB replica set, Redis with replicas, Kafka with 3 brokers, Elasticsearch with 3 nodes. Connection details come from Secrets referenced in values.
 
-### 15.5 Observability
+### 18.5 Observability
 
 - Spring Boot with Micrometer and the OpenTelemetry exporter: traces (W3C context through HTTP, Module-Switch calls and Kafka headers), metrics (including `module.switch.call`, outbox lag, consumer lag, dispatch timings, order funnel), structured JSON logs with `traceId`.
 - `foodstack-observability` chart (optional): OpenTelemetry Collector, Prometheus, Grafana with FoodStack dashboards (golden signals per module, order funnel, dispatch, Kafka lag), Tempo, Loki, and alert rules (error rate, latency, outbox lag, DLT growth, certificate expiry).
 
-## 16. Configuration reference (excerpt)
+## 19. Configuration reference (excerpt)
 
 ```yaml
 foodstack:
@@ -464,20 +583,25 @@ foodstack:
   security:
     issuer: https://api.example.com
     pii-key: ${PII_KEY}                     # from Secret
+  storage:
+    endpoint: ${S3_ENDPOINT:}               # empty = AWS S3; MinIO URL on one server
+    public-bucket: foodstack-public
+    private-bucket: foodstack-private
   migrate-only: false
+  environment: production                  # test-seed profile refuses to run here
 module-switch:                              # generated by Helm per Deployment
   modules: { … }
   expose: { port: 8081, modules: [ … ], token: ${INTERNAL_TOKEN} }
   propagate-headers: [Authorization, Accept-Language]
 ```
 
-## 17. Risks and open technical questions
+## 20. Risks and open technical questions
 
 | # | Item | Proposal |
 |---|---|---|
-| T1 | Kafka adds operational weight for small pilots | `values-dev.yaml` runs single-node KRaft; docs list managed Kafka options; outbox keeps the app working while Kafka is briefly down |
-| T2 | Spring Authorization Server support for phone OTP login | Implement OTP as a login step in the hosted login page (not a custom grant), keeping standard Authorization Code + PKCE for all clients |
-| T3 | Choice of first card gateway and SMS provider | Decide at M2 (PRD open questions) |
+| T1 | Kafka adds operational weight for small pilots | The unit deployer and `values-dev.yaml` run single-node KRaft with small heap; docs list managed Kafka options; outbox keeps the app working while Kafka is briefly down |
+| T2 | One-time-code login on Spring Authorization Server | Implement email codes (and phone codes once SMS exists) as a step in the hosted login page, not a custom grant, keeping standard Authorization Code + PKCE for all clients |
+| T3 | Choice of first card gateway (hosted payment page support required) | Decide at M2 (PRD open questions) |
 | T4 | Public OSM services have strict usage policies | Default chart ships optional self-hosted Nominatim and OSRM sub-components; docs explain data import per region |
 | T5 | Licences of third-party servers (Liquibase FSL, Elasticsearch) | Document in `docs/licensing.md`; operators run unmodified upstream software |
 | T6 | Module-Switch is new (0.x) | FoodStack pins a released version and contributes fixes upstream; split-topology tests run in CI |

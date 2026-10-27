@@ -51,10 +51,10 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 
 | # | Objective | Measure (target for v1) |
 |---|---|---|
-| BO-1 | Time to launch | A new operator goes from `helm install` to a branded, working marketplace in **under 1 day** with the quick-start guide |
+| BO-1 | Time to launch | A new operator goes from unzipping the unit deployer on one server to a branded, working marketplace in **under 1 day** with the quick-start guide |
 | BO-2 | No team needed to start | Operator launches without code changes: branding, currency, language, commission and zones are all configuration |
-| BO-3 | Low cost at small scale | Monolith mode runs a city pilot (≤ 200 orders per hour) on a 3-node cluster plus managed datastores |
-| BO-4 | Scale without rewrite | Any module can move to its own deployment by Helm values only, proven by the `split` preset in CI |
+| BO-3 | Low cost at small scale | The unit deployer runs a city pilot (≤ 200 orders per hour) on **one server** (8 vCPU, 32 GB RAM reference) with every dependency included |
+| BO-4 | Scale without rewrite | Moving from one server to Kubernetes, and splitting any module into its own deployment, needs configuration only; proven by the `split` preset in CI |
 | BO-5 | Trust and safety | No critical or high open security findings at release; all service-to-service traffic encrypted (mTLS) |
 | BO-6 | Money is traceable | Every order produces balanced ledger entries; payout reports reconcile to the cent |
 | BO-7 | Community adoption | Public docs, quick start, contribution guide; first external operator pilot after v1 |
@@ -67,17 +67,20 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 |---|---|
 | Deployment model | **One operator per deployment**, running its own branded marketplace with many stores (white-label). Not multi-tenant SaaS |
 | Verticals | **Restaurants**, modelled as a generic *store* so grocery or pharmacy can be added later without a rewrite |
-| Delivery | Operator's **own rider fleet**, plus a per-store **"delivers itself"** option |
+| Delivery | **Stores deliver with their own riders** by default. The operator can switch on an **operator rider service**; then, after accepting each order, the store chooses to deliver itself or request an operator rider. Stores draw their own delivery zones and charges; operator zones and charges apply to operator riders |
 | Fulfilment types | **Delivery** and **pickup** |
 | Front-ends | **Customer web app** and **one back-office app** with role-based areas for admin, store and rider (rider area installable as a PWA). All Angular |
 | API | Pure REST, so native mobile apps can be built later on the same API |
-| Payments | **Cash on delivery** and a pluggable gateway interface with **one card adapter** |
-| Money | **Commission per store**, a **ledger** for every order, **payout reports** exported for manual settlement |
+| Payments | **Cash on delivery** and a pluggable gateway interface with **one card adapter**. Card payments can be switched off entirely, or taken on the gateway's **hosted payment page**; saved cards are optional and off by default |
+| Money | **Commission per store** as a percentage, a fixed amount per order, or both; a **ledger** for every order, **payout reports** exported for manual settlement |
 | Payment collection | By default the **operator collects** card payments and pays stores later. As an option the operator can **allow an individual store to collect card payments directly** into the store's own merchant account; FoodStack then records what the store owes the operator (commission, fees) and nets it in settlement |
-| Engagement | **Coupons**, **ratings and reviews**, **notifications** (email, SMS, push) |
+| Engagement | **Promotions and coupons** by the operator or by a store, **ratings and reviews**, **notifications** (in-app, email, push) |
+| In-store | Printable **QR code** per store that opens its menu, for customers at the table (view only in v1) |
 | Localisation | **Multi-language with RTL**, one currency and timezone per deployment (config) |
 | Branding | Name, logo, colours and fonts set from the admin panel **at runtime**, without a rebuild |
-| Operations | Docker images, Helm chart with service mesh (mTLS), observability stack, CI/CD |
+| Operations | **Unit deployer** for launch: one zip (`unit-deployer-<version>.zip`) with the application, a Docker Compose file and install, start, stop and restart scripts that run everything, including MongoDB, Kafka, Redis, Elasticsearch and object storage, on one server. **Kubernetes** Helm chart with service mesh (mTLS) is optional, for when the operator outgrows one server. Docker images, observability, CI/CD |
+| Media | Images stored in S3-compatible object storage, resized and compressed on upload to keep storage small |
+| Developer experience | One-click local run with Testcontainers, plus demo data when the `test-seed` profile is active |
 
 ### 7.2 Out of scope for v1 (candidates for later)
 
@@ -85,6 +88,8 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 - Grocery and pharmacy specifics (inventory by SKU, prescriptions, substitutions)
 - Third-party logistics adapters
 - Native iOS and Android apps
+- SMS notifications and phone-number OTP login (an SMS adapter can be added later)
+- Ordering from the table (dine-in); the QR code only shows the menu in v1
 - Customer wallet, loyalty points, subscriptions
 - Scheduled (future-time) orders, group orders, dine-in
 - Automated payouts to stores and riders
@@ -97,14 +102,14 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | ID | Requirement | Priority |
 |---|---|---|
 | BR-1 | Customers can discover nearby open stores, browse menus, order for delivery or pickup, pay by cash or card, and track the order live | Must |
-| BR-2 | Stores can be onboarded by the operator, manage their own menu, hours and availability, and accept, prepare and hand over orders | Must |
-| BR-3 | Riders can go online, receive and accept delivery jobs, navigate to pickup and drop-off, and confirm delivery | Must |
+| BR-2 | Stores can be onboarded by the operator, manage their own menu, opening hours, temporary closure, delivery zones and charges, own riders and QR menu, and accept, prepare and hand over orders | Must |
+| BR-3 | Riders (the operator's, or a store's own) can go online, receive and accept delivery jobs, navigate to pickup and drop-off, and confirm delivery | Must |
 | BR-4 | Operator admins can manage stores, riders, customers, delivery zones, fees, commissions, coupons, content and branding | Must |
 | BR-5 | Each order records commission, fees, taxes and rider earnings in a ledger; admins export payout reports per period | Must |
 | BR-6 | Customers, stores and riders receive notifications for every order state change that affects them | Must |
 | BR-7 | Customers can rate and review stores and riders after delivery; admins can moderate | Must |
 | BR-8 | Operators can brand the platform and choose language, currency and timezone without code changes | Must |
-| BR-9 | The platform can be deployed to any conformant Kubernetes cluster with one Helm chart, secure by default | Must |
+| BR-9 | The platform can be installed on a single server with the unit deployer, and optionally on any conformant Kubernetes cluster with one Helm chart, secure by default | Must |
 | BR-10 | Any backend module can be split into its own service by configuration only | Must |
 | BR-11 | All personal data handling supports data export and deletion requests (GDPR-style) | Must |
 | BR-12 | A REST API, documented with OpenAPI, covers every capability of the web apps | Must |
@@ -114,14 +119,15 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 
 ## 9. Assumptions
 
-- The operator provides: a domain, a Kubernetes cluster, managed MongoDB, Redis, Kafka and Elasticsearch (or uses the in-cluster `dev` setup for trials), an SMTP server, an SMS provider account, a push (FCM) project, and a payment gateway account.
+- The operator provides: a domain, one Linux server with Docker (or a Kubernetes cluster with managed MongoDB, Redis, Kafka, Elasticsearch and S3-compatible storage), an SMTP server, a push (FCM) project, and a payment gateway account if cards are accepted.
 - The operator handles its own legal entity, tax registration, food-safety compliance and rider employment or contracting terms. FoodStack supplies configurable tax rates and invoices but not legal advice.
 - Default maps use OpenStreetMap-based services; operators with high volume either self-host them or switch to a commercial maps adapter.
 
 ## 10. Constraints
 
 - Backend: Java 25, Spring Boot 4, built on the **Module-Switch** library so every module can run in-process, remotely, or off.
-- Data: MongoDB only for persistence, with every collection **prefixed by its module name**; Redis for caching; Elasticsearch for search; Kafka for events; Liquibase migrations per module.
+- Data: MongoDB only for persistence, with every collection **prefixed by its module name** and designed for sharding; Redis for caching; Elasticsearch for search; Kafka for events; S3-compatible storage for media; Liquibase migrations per module.
+- Time: stored in UTC; exchanged in the API as UTC epoch seconds.
 - Front-end: Angular (no micro-frontends).
 - Real company names of existing delivery platforms must never appear in code or documentation.
 
@@ -134,7 +140,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | Revenue share relies on self-reporting | Lost revenue for author | Clear licence notice in README, admin "About" page, and release notes |
 | Stores collecting payments directly may not pay what they owe | Lost commission for the operator | Off by default and granted per store by the operator; outstanding balance shown on dashboards; configurable credit limit after which direct collection is suspended automatically; dues netted against any amount the operator owes the store |
 | Payment and personal data | Regulatory exposure | No card data stored (gateway tokens only), PII encryption at rest, data-retention settings |
-| Rider supply is a marketplace cold-start problem | Slow operator launch | Per-store self-delivery option so stores can go live before a fleet exists |
+| Rider supply is a marketplace cold-start problem | Slow operator launch | Stores deliver with their own riders by default; the operator rider service is switched on only when a fleet exists |
 
 ## 12. Glossary
 

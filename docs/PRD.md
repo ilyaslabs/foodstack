@@ -32,7 +32,7 @@ Role-based areas in the back office:
 |---|---|
 | `/admin` | `ADMIN`, `SUPPORT`, `FINANCE`, `MARKETING` (fine-grained permissions) |
 | `/store` | `STORE_OWNER`, `STORE_STAFF` (scoped to their store or stores) |
-| `/rider` | `RIDER` |
+| `/rider` | `RIDER` (operator rider) or `STORE_RIDER` (scoped to one store) |
 
 ## 3. Core order lifecycle
 
@@ -46,7 +46,7 @@ PLACED ─► PAYMENT_PENDING ─► CONFIRMED ─► ACCEPTED ─► PREPARING 
 
 - Cash orders skip `PAYMENT_PENDING`.
 - A store must accept within a configurable time (default 3 minutes) or the order auto-rejects and the customer is refunded.
-- Dispatch starts at `ACCEPTED` for operator-fleet stores so the rider arrives around `READY`; self-delivery stores mark `PICKED_UP` and `DELIVERED` themselves.
+- On accepting a delivery order, the store chooses **who delivers**: its own riders, or an operator rider (offered only when the operator rider service is on). Operator dispatch starts right away so the rider arrives around `READY`; a store's own riders get the job in the rider app, or the store marks `PICKED_UP` and `DELIVERED` itself.
 - Every transition is timestamped, attributed to an actor, and visible on the order timeline.
 
 ## 4. Functional requirements
@@ -57,7 +57,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 
 | ID | Requirement | P |
 |---|---|---|
-| ID-1 | Customer sign-up and login by **phone OTP**; email and password as an alternative | M |
+| ID-1 | Customer sign-up and login by **email and password** or **email one-time code**. A phone number is collected at checkout so the rider can call (not verified in v1). Phone login arrives with a future SMS adapter | M |
 | ID-2 | Social login (Google, Apple) through OIDC, enabled per deployment | S |
 | ID-3 | Guest browsing; login required at checkout | M |
 | ID-4 | Admins invite back-office users by email; roles and permissions assigned by admin | M |
@@ -70,8 +70,9 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 
 | ID | Requirement | P |
 |---|---|---|
-| ST-1 | Admin onboards a store: legal name, display name, logo, cover image, address and location, cuisines, tax ID, commission rate, delivery mode (operator fleet or self-delivery), pickup enabled, payment collection (operator, or direct when allowed, see 4.14) | M |
-| ST-2 | Opening hours per weekday, holiday closures, and a "pause orders" switch with reason and duration | M |
+| ST-1 | Admin onboards a store: legal name, display name, logo, cover image, address and location, cuisines, tax ID, commission (percentage, fixed amount per order, or both), default delivery (own riders, or operator riders when the operator rider service is on), pickup enabled, payment collection (operator, or direct when allowed, see 4.14) | M |
+| ST-2 | The **store owner** sets opening hours per weekday (several time ranges per day allowed) and holiday closures; within those hours the store receives orders automatically | M |
+| ST-2a | **Temporarily closed** safety switch: the store owner turns the store off at any time; it shows as "Temporarily closed" and takes no orders **until the owner turns it back on**, whatever the timetable says. An optional reason is shown to customers. Admins can see and override it | M |
 | ST-3 | Menu: categories, items (name, description, photos, price, tax class, dietary tags, allergens), modifier groups (required or optional, min and max choices, price deltas) | M |
 | ST-4 | Item and modifier availability toggles (sold out today) | M |
 | ST-5 | All menu text translatable per configured language | M |
@@ -79,6 +80,9 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | ST-7 | Average preparation time per store, used for ETA | M |
 | ST-8 | Bulk menu import from CSV | S |
 | ST-9 | Store groups (one owner, many branches) | S |
+| ST-10 | **Own riders:** the store owner invites their own riders, who use the same rider app and see only that store's jobs | M |
+| ST-11 | **Own delivery zones:** the store owner draws delivery zones on a map, each with its own delivery charge, minimum order and optional free-delivery threshold | M |
+| ST-12 | **QR menu:** the store owner prints a QR code (A4/A5/table-tent PDF, store branding) that opens the store's menu in the customer web app; an optional table number is carried in the link for later dine-in ordering | M |
 
 ### 4.3 Discovery and search (`search`, `geo`)
 
@@ -90,7 +94,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | SE-4 | Autocomplete suggestions under 150 ms p95 | M |
 | SE-5 | Admin-curated home sections (banners, featured stores, collections) | S |
 | SE-6 | Address search and reverse geocoding on the map pin | M |
-| SE-7 | Delivery zones drawn as polygons on a map by admins, each with fee rules and min order | M |
+| SE-7 | **Operator zones** drawn by admins (polygons with fee rules and min order) apply when operator riders deliver; **store zones** (ST-11) apply when the store delivers itself | M |
 
 ### 4.4 Cart and checkout (`cart`, `order`, `promotion`, `payment`)
 
@@ -98,9 +102,10 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 |---|---|---|
 | CO-1 | One cart per customer, one store per cart; switching store asks to clear | M |
 | CO-2 | Checkout shows itemised subtotal, delivery fee, service fee, discounts, tax, tip (optional), total | M |
-| CO-3 | Choose delivery or pickup; delivery address must be inside a zone served by the store | M |
+| CO-3 | Choose delivery or pickup; the address must be inside a zone for the store's **default delivery**: its own zones and charges, or the operator's when operator riders are its default. The delivery charge the customer pays is fixed at checkout and never changes because of the store's later choice of who delivers (see OF-8) | M |
 | CO-4 | Apply one coupon per order; validation explains why a coupon fails | M |
-| CO-5 | Pay by cash on delivery or card through the configured gateway; saved cards via gateway tokens | M |
+| CO-5 | Pay by cash on delivery or by card through the configured gateway. The operator can **switch card payments off** entirely, and choose the integration style: the gateway's **hosted payment page** (redirect, recommended at launch) or embedded gateway fields | M |
+| CO-5a | **Saved cards** (gateway tokens) are a separate setting, **off by default** | M |
 | CO-10 | For a store that collects payments directly (see 4.14), card payment goes to the store's own merchant account; the customer experience is the same and the receipt names the store as the merchant | M |
 | CO-6 | Price and availability re-validated at order placement; customer is told about any change | M |
 | CO-7 | Idempotent order placement (double tap never creates two orders) | M |
@@ -113,8 +118,9 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 |---|---|---|
 | OF-1 | Store order board (new, preparing, ready, out) updates live with a loud, repeating alert for new orders | M |
 | OF-2 | Store accepts with a prep-time estimate or rejects with a reason | M |
+| OF-8 | When accepting a delivery order, the store chooses **deliver myself** (and optionally assigns one of its own riders) or **request operator rider**. The second option is shown only when the operator rider service is on and the store is allowed to use it. If the store requests an operator rider for an order priced with its own charges, the operator's delivery charge is billed to the store in the ledger; if the store delivers an order priced with operator charges, the store keeps that charge | M |
 | OF-3 | Store marks preparing and ready; prints a kitchen ticket (browser print) | M |
-| OF-4 | Self-delivery stores mark picked up and delivered | M |
+| OF-4 | For self-delivered orders, the store's rider (or the store) marks picked up and delivered | M |
 | OF-5 | Customer can cancel before acceptance; after that, only support can cancel | M |
 | OF-6 | Support sees the full timeline and can cancel, refund fully or partly, or reassign a rider, always with a reason | M |
 | OF-7 | Store dashboard: today's orders, revenue, average prep time, rating | S |
@@ -123,7 +129,8 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 
 | ID | Requirement | P |
 |---|---|---|
-| DR-1 | Rider onboarding by admin: identity documents, vehicle type, zone, payout details | M |
+| DR-1 | Operator rider onboarding by admin: identity documents, vehicle type, zone, payout details. Store riders are invited by the store owner and belong only to that store | M |
+| DR-1a | The **operator rider service** is a global setting, off by default, so a new operator can launch with stores delivering themselves | M |
 | DR-2 | Rider goes online or offline; location reported every 10 s while online (adaptive when stationary) | M |
 | DR-3 | Dispatch offers a job to the best-ranked available rider (distance to store, current load, acceptance rate); offer expires after 30 s and moves to the next rider | M |
 | DR-4 | Job card shows store, drop-off area, distance, and earning before accepting | M |
@@ -147,7 +154,8 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 |---|---|---|
 | PR-1 | Coupon types: percent off (with cap), fixed amount off, free delivery | M |
 | PR-2 | Rules: min order, valid dates, total and per-customer usage limits, first order only, specific stores or zones | M |
-| PR-3 | Funding split: operator-funded, store-funded or shared (recorded in the ledger) | M |
+| PR-3 | Promotions are created by the **operator** (any stores, zones) or by a **store owner** (own store only, store-funded); operator promotions can be operator-funded or shared with participating stores (recorded in the ledger) | M |
+| PR-3a | An operator promotion can be restricted to **payment methods** (for example card only, or cash only) and to **payments collected on the operator's merchant account**, so it does not apply to orders paid into a store's own account | M |
 | PR-4 | Automatic store offers shown on store cards (no code needed) | S |
 
 ### 4.9 Ratings and reviews (`review`)
@@ -163,7 +171,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 
 | ID | Requirement | P |
 |---|---|---|
-| NO-1 | Channels: email (SMTP), SMS (provider adapter), web and mobile push (FCM) | M |
+| NO-1 | Channels: **in-app notification centre** (bell with unread count in both apps), email (SMTP), web and mobile push (FCM). SMS is out of scope for v1; the channel interface allows adding it later | M |
 | NO-2 | Templates per event, per channel and per language, editable by admin | M |
 | NO-3 | Customer notification preferences (marketing opt-in separate from transactional) | M |
 | NO-4 | Delivery log with retry and failure reasons | M |
@@ -173,12 +181,32 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | ID | Requirement | P |
 |---|---|---|
 | FI-1 | Double-entry ledger for every money event: order paid, commission, delivery fee, tip, discount funding, refund, rider earning, cash collected | M |
-| FI-2 | Commission rate per store (percent and optional fixed fee), with history | M |
+| FI-2 | Commission per store as a percentage, a fixed amount per order, or both, with effective dates and history | M |
 | FI-3 | Payout report per store and per rider for a period, as CSV and PDF; mark as settled with reference | M |
 | FI-4 | Tax rates configurable per tax class; tax shown on receipts | M |
 | FI-5 | Customer receipt (email and downloadable) | M |
 | FI-6 | Reconciliation report: gateway settlements vs ledger | S |
 | FI-7 | Per-store balance showing both directions: what the operator owes the store (operator-collected orders) and what the store owes the operator (direct-collected orders, store-collected cash). Settlement reports show the **net** amount and who pays whom | M |
+
+### 4.12 Settings and branding (`settings`)
+
+| ID | Requirement | P |
+|---|---|---|
+| SG-1 | Branding: platform name, logo (light and dark), favicon, primary and secondary colours, font family, applied at runtime to both apps | M |
+| SG-2 | Locale: enabled languages, default language, currency, timezone, distance unit | M |
+| SG-3 | Business rules: auto-reject timeout, service fee, cancellation policy, tip options, rider offer timeout | M |
+| SG-4 | Content pages (terms, privacy, FAQ, about) editable per language | M |
+| SG-5 | Optional "Powered by ilyasLabs" footer toggle | M |
+| SG-6 | Feature flags for optional features (pickup, social login, reviews, operator rider service, card payments, saved cards, store direct payment collection) | M |
+
+### 4.13 Admin back office (cross-cutting)
+
+| ID | Requirement | P |
+|---|---|---|
+| AD-1 | Dashboard: live orders, orders today, GMV, average delivery time, online riders, store acceptance rate | M |
+| AD-2 | List, filter and export: orders, customers, stores, riders, reviews, coupons | M |
+| AD-3 | Audit log of every back-office write (who, what, when, before and after) | M |
+| AD-4 | Customer support view: customer profile, order history, notes | M |
 
 ### 4.14 Store direct payment collection (optional)
 
@@ -196,25 +224,14 @@ By default the operator collects every card payment and pays stores later. The o
 | DP-8 | Store dashboard and admin finance view show the outstanding balance, due date and history; admins record received payments against it | M |
 | DP-9 | Gateway-native split payments (the gateway splits each payment between store and operator automatically) as a later option, to remove the receivable entirely | C |
 
-### 4.12 Settings and branding (`settings`)
+### 4.15 Media (`media`)
 
 | ID | Requirement | P |
 |---|---|---|
-| SG-1 | Branding: platform name, logo (light and dark), favicon, primary and secondary colours, font family, applied at runtime to both apps | M |
-| SG-2 | Locale: enabled languages, default language, currency, timezone, distance unit | M |
-| SG-3 | Business rules: auto-reject timeout, service fee, cancellation policy, tip options, rider offer timeout | M |
-| SG-4 | Content pages (terms, privacy, FAQ, about) editable per language | M |
-| SG-5 | Optional "Powered by ilyasLabs" footer toggle | M |
-| SG-6 | Feature flags for optional features (pickup, social login, reviews) | S |
-
-### 4.13 Admin back office (cross-cutting)
-
-| ID | Requirement | P |
-|---|---|---|
-| AD-1 | Dashboard: live orders, orders today, GMV, average delivery time, online riders, store acceptance rate | M |
-| AD-2 | List, filter and export: orders, customers, stores, riders, reviews, coupons | M |
-| AD-3 | Audit log of every back-office write (who, what, when, before and after) | M |
-| AD-4 | Customer support view: customer profile, order history, notes | M |
+| ME-1 | Images (store logos and covers, menu photos, review photos, rider documents, branding assets) are uploaded straight to S3-compatible storage with short-lived signed URLs | M |
+| ME-2 | On upload, images are validated (type, size), stripped of metadata, resized to fixed variants (thumbnail, card, detail) and stored as WebP (AVIF where supported); the original is kept only when an admin setting asks for it | M |
+| ME-3 | Public images are served with long cache lifetimes so a CDN can sit in front; private documents (rider IDs) are served only through short-lived signed URLs | M |
+| ME-4 | Images no longer referenced are cleaned up by a scheduled job | S |
 
 ## 5. UX principles
 
@@ -232,9 +249,9 @@ By default the operator collects every card payment and pays stores later. The o
 
 | App | Screens |
 |---|---|
-| Customer web | Address picker, Home (sections and store list), Search, Store page (menu with sticky categories), Item sheet (modifiers), Cart, Checkout, Order tracking, Orders history, Rate order, Profile and addresses, Content pages |
-| Back office: store | Live order board, Order detail, Menu editor, Availability, Hours and pause, Reviews, Earnings and balance, Payment account (when direct collection is allowed), Store settings |
-| Back office: rider | Go online, Job offer, Active job (pickup, drop-off steps), Earnings, Profile |
+| Customer web | Address picker, Home (sections and store list), Search, Store page (menu with sticky categories), Item sheet (modifiers), Cart, Checkout, Order tracking, Orders history, Rate order, Profile and addresses, Notification centre, In-store menu (from QR), Content pages |
+| Back office: store | Live order board, Order detail (with delivery choice), Menu editor, Availability, Opening hours and temporary close, Delivery zones and charges (map), Riders, QR menu print, Reviews, Earnings and balance, Payment account (when direct collection is allowed), Store settings |
+| Back office: rider | Go online, Job offer (operator or store jobs), Active job (pickup, drop-off steps), Earnings, Profile |
 | Back office: admin | Dashboard, Live map, Orders, Stores (onboarding wizard), Riders, Customers, Zones (map editor), Coupons, Reviews moderation, Finance (ledger, payouts), Notifications templates, Branding and settings, Users and roles, Audit log |
 
 ## 6. Non-functional requirements
@@ -250,19 +267,22 @@ By default the operator collects every card payment and pays stores later. The o
 | Observability | Traces, metrics and logs for every request, correlated by trace ID |
 | Localisation | All user-facing strings externalised; RTL layout verified for Arabic and Urdu |
 | Accessibility | WCAG 2.2 AA |
-| Portability | Runs on any CNCF-conformant Kubernetes 1.31+; no cloud-specific dependency in the default chart |
+| Portability | Runs on one Linux server with Docker through the unit deployer; optionally on any CNCF-conformant Kubernetes 1.31+; no cloud-specific dependency |
+| Media | Images resized to fixed variants and stored as WebP (AVIF where supported); originals over 10 MB rejected; typical menu photo under 80 KB |
+| Time | Stored in UTC; API requests and responses carry date-times as UTC epoch seconds |
+| Developer setup | Clone and run the server from the IDE or one Maven command with Testcontainers starting every dependency; `test-seed` profile loads demo data |
 | Upgrade | Rolling upgrades with backward-compatible migrations; API changes are additive within `/api/v1` |
 
 ## 7. Release plan
 
 | Milestone | Content | Exit criteria |
 |---|---|---|
-| **M0 Foundation** | Repo skeleton, Maven multi-module build, Angular workspace, CI, Docker images, Helm chart with `dev` values, `identity` and `settings` modules | `helm install` brings up an empty branded platform; admin can log in |
+| **M0 Foundation** | Repo skeleton, Maven multi-module build, Angular workspace, CI, Docker images, Testcontainers local run and `test-seed` seeder, **unit deployer**, `identity`, `settings` and `media` modules | `install.sh` from the unit deployer brings up an empty branded platform on a clean server; admin can log in |
 | **M1 Catalogue** | `store`, `geo`, `search`; store onboarding, menus, zones; customer browse and search | Customer finds a store and sees its menu in two languages, one RTL |
 | **M2 Ordering** | `cart`, `order`, `payment` (cash and card adapter), `promotion`, `notification` | Customer places and pays for an order; store accepts and completes a pickup order |
 | **M3 Delivery** | `dispatch`, `rider`, live tracking, rider PWA, admin live map | End-to-end delivery with rider and live map |
 | **M4 Money and trust** | `ledger`, payout reports with netting, store direct payment collection, `review`, audit log, data export and deletion | Ledger balances for every test order; payout CSV reconciles |
-| **M5 Production hardening** | `split` preset, Istio ambient mTLS, observability chart, load tests, security review, docs and quick start | NFR targets met in load test; quick start verified on a clean cluster |
+| **M5 Production hardening** | Optional Kubernetes path: Helm chart, `split` preset, Istio ambient mTLS, observability chart; load tests, security review, docs and quick start | NFR targets met in load test; quick start verified on a clean server and on a clean cluster |
 | **v1.0 GA** | Release to Maven Central, Docker Hub, GHCR | Tagged release, changelog, upgrade notes |
 
 ## 8. Out of scope for v1
@@ -272,5 +292,4 @@ See [BRD section 7.2](BRD.md#72-out-of-scope-for-v1-candidates-for-later).
 ## 9. Open questions
 
 1. Card adapter to ship first: one global gateway (recommended) or a regional one for the first pilot market.
-2. SMS provider adapter to ship first.
-3. Rider earning formula defaults (base + per-km + per-minute waiting) and whether operators can configure it per zone in v1.
+2. Rider earning formula defaults (base + per-km + per-minute waiting) and whether operators can configure it per zone in v1.
