@@ -81,7 +81,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | ST-8 | Bulk menu import from CSV | S |
 | ST-9 | Store groups (one owner, many branches) | S |
 | ST-10 | **Own riders:** the store owner invites their own riders, who use the same rider app and see only that store's jobs | M |
-| ST-11 | **Own delivery zones:** the store owner draws delivery zones on a map, each with its own delivery charge, minimum order and optional free-delivery threshold | M |
+| ST-11 | **Own delivery zones:** the store owner draws delivery zones on a map, each with a **fixed delivery charge** (no per-km calculation; the owner knows the distance of each area, so typical setups are rings such as 0-3 km and 3-6 km), minimum order and optional free-delivery threshold | M |
 | ST-12 | **QR menu:** the store owner prints a QR code (A4/A5/table-tent PDF, store branding) that opens the store's menu in the customer web app; an optional table number is carried in the link for later dine-in ordering | M |
 
 ### 4.3 Discovery and search (`search`, `geo`)

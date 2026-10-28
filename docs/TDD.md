@@ -367,7 +367,7 @@ Redis is a cache and coordination store only; losing it never loses business dat
 
 ## 12. Geo and maps
 
-- `geo` owns delivery zones (GeoJSON polygons, `geo_zones`). Zones are drawn **only by stores**: each belongs to one store and has its charge, minimum order and free-delivery threshold. There are no operator zones, so the quote is the same whoever delivers. `geo` also holds cities (for grouping stores, riders and reports).
+- `geo` owns delivery zones (GeoJSON polygons, `geo_zones`). Zones are drawn **only by stores**: each belongs to one store and has a fixed charge (no distance formula), minimum order and free-delivery threshold. There are no operator zones, so the quote is the same whoever delivers. `geo` also holds cities (for grouping stores, riders and reports).
 - The operator rider fee (fixed plus optional per km, optional per-store override) lives in `settings` and is applied by `ledger` when `dispatch` reports an operator delivery.
 - Provider SPI: `GeocodingProvider`, `RoutingProvider`, `TileConfig`. Default adapter: Nominatim and OSRM (operator self-hosts or uses a hosted provider; public instances are only for demos). Optional Google Maps adapter.
 - ETA = prep estimate + routing duration × city traffic factor (configurable); quotes are cached briefly.
