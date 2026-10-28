@@ -33,7 +33,7 @@
 | D12 | Front-end | Angular workspace, two apps (`web`, `backoffice`), Angular Material 3 with design tokens, no micro-frontends |
 | D13 | Repository | Monorepo: backend, frontend, `k8s/helm`, docs |
 | D14 | Artifacts | Maven `io.github.ilyaslabs:foodstack-*`; images `ilyaslabs/foodstack-server`, `ilyaslabs/foodstack-web`, `ilyaslabs/foodstack-backoffice` on Docker Hub, mirrored to GHCR |
-| D15 | Kubernetes | **Optional.** Helm chart; managed datastores in production, in-cluster datastores with `values-dev.yaml`; monolith by default, `values-split.yaml` preset |
+| D15 | Kubernetes | **Optional.** Helm chart; managed datastores in production, in-cluster datastores with `values-dev.yaml`; one `topology` value (`monolith` default, `split`, `microservices`, `custom`) generates every Deployment, route and Module-Switch setting (section 18.2) |
 | D16 | Service mesh | Istio ambient mode (ztunnel mTLS, waypoints for L7), Gateway API for ingress |
 | D17 | Observability | OpenTelemetry; optional Prometheus, Grafana, Tempo and Loki stack |
 | D18 | Launch deployment | **Unit deployer**: `unit-deployer-<version>.zip` with the jar, Docker Compose and install, start, stop and restart scripts running everything on one server (section 17) |
@@ -325,8 +325,15 @@ Every REST prefix belongs to exactly one module (section 5.2). The Helm chart ge
 - The login UI is served by `identity` and themed from `settings` branding. It supports email one-time codes (stored hashed in Redis with 5 minute TTL, attempt limits), email and password (Argon2id), social login (OIDC federation), and TOTP for back-office users.
 - Access tokens: JWT signed with ES256, 10 minute lifetime; refresh tokens rotated, 30 days for customers and 12 hours for back office. Signing keys come from a Kubernetes Secret and are published through JWKS; rotation keeps the previous key valid.
 - Token claims: `sub`, `roles`, `perms`, `storeIds` (store staff), `riderId`.
-- Every module is an OAuth2 resource server validating JWTs locally (JWKS cached). Authorization uses method security with permissions such as `order:refund` and store-scoped checks (`storeIds` contains the target store).
-- Module-to-module: Module-Switch forwards the `Authorization` header, so the callee enforces the same user permissions. The internal port (8081) also requires `X-Module-Switch-Token`, and Istio `AuthorizationPolicy` restricts it to FoodStack service accounts.
+- **No per-request call to `identity`.** Every module is an OAuth2 resource server that validates the JWT itself, in memory: signature (ES256) against `identity`'s public keys, plus issuer, audience, expiry and not-before. The public keys (JWKS) are fetched once at startup and cached; a token signed with an unknown key ID triggers one refresh. Validation costs microseconds and keeps working even if `identity` is briefly down. `identity` is called only to log in, refresh a token, or fetch keys.
+- Authorization uses method security with permissions such as `order:refund` and store-scoped checks (`storeIds` contains the target store), read from the token claims, so no lookup is needed.
+- **Immediate revocation** (account blocked, password changed, role removed, logout everywhere): `identity` stores a per-user `tokenVersion` (also a token claim) and publishes `UserTokensRevoked`. Each module keeps revoked versions in Redis (`foodstack:identity:revoked:<userId>`) with a short in-memory cache, and rejects tokens whose version is older. Without this check a revoked token would still work until it expires (at most 10 minutes).
+- **Edge check (Kubernetes):** an Istio `RequestAuthentication` + `AuthorizationPolicy` at the Gateway also validates the JWT for `/api/**`, so forged or expired tokens are rejected before reaching any pod. Public endpoints (menus, search, login) are listed explicitly.
+- **Module-to-module, after a split**, three independent layers:
+  1. *Who is the user:* Module-Switch forwards the caller's `Authorization` header, so the called module validates the same JWT locally and applies the same permissions. A module can never do more than the user who started the request.
+  2. *Is the caller one of our modules:* the internal port 8081 requires `X-Module-Switch-Token` (a generated Secret) and is not routed by the Gateway, so it is unreachable from outside the cluster.
+  3. *Is the network path trusted:* Istio ambient mTLS encrypts and authenticates every pod-to-pod connection with a workload identity, and `AuthorizationPolicy` allows port 8081 only from FoodStack server service accounts.
+- Background work with no user (Kafka consumers, scheduled jobs) calls other modules with a short-lived service token from the `identity` client-credentials flow, carrying only the permissions that job needs. Events carry the acting user ID for audit, never a token.
 - Web apps keep the access token in memory only and use refresh-token rotation; strict CSP, `SameSite` cookies for the refresh token on the identity origin.
 
 ### 9.2 Platform security
@@ -428,7 +435,7 @@ frontend/
 | `pr-checks.yml` | Pull request | Calls `ilyaslabs/cicd/.github/workflows/mvn-pr-checks.yml@main`; frontend lint, test and build; Helm lint and `kubeconform`; `ModuleRules.verify`; Trivy filesystem scan |
 | `snapshot-release.yml` | Push to `main` | Calls `mvn-snapshot-release.yml`; pushes `:edge` images |
 | `release.yml` | GitHub release `vX.Y.Z` | Calls `mvn-release.yml` (Maven Central); builds, signs and pushes images to Docker Hub and GHCR; builds `unit-deployer-<version>.zip` and attaches it to the GitHub release; packages the Helm chart and pushes it to GHCR as an OCI artifact |
-| `e2e.yml` | Nightly and before release | Unit deployer install on a fresh VM-like runner (`install.sh`, `restart.sh`, `upgrade.sh`); kind cluster, `values-dev.yaml` and `values-split.yaml` installs, Playwright suite, k6 smoke test |
+| `e2e.yml` | Nightly and before release | Unit deployer install on a fresh VM-like runner (`install.sh`, `restart.sh`, `upgrade.sh`); kind cluster installs of the `monolith`, `split` and `microservices` topologies, Playwright suite, k6 smoke test |
 
 A reusable `docker-release.yml` and `helm-release.yml` will be added to `ilyaslabs/cicd` so other ilyasLabs projects can share them.
 
@@ -513,7 +520,8 @@ Optional. Use it when one server is no longer enough; at launch the unit deploye
 k8s/helm/foodstack/
 ├─ Chart.yaml
 ├─ values.yaml            production defaults: monolith, external datastores, Istio ambient
-├─ values-split.yaml      order, dispatch, search in their own Deployments
+├─ values-split.yaml      example: topology=split with sizing
+├─ values-microservices.yaml example: topology=microservices with sizing
 ├─ values-dev.yaml        in-cluster MongoDB (single-node replica set), Redis, Kafka (KRaft), Elasticsearch, Mailpit
 └─ templates/
    ├─ server/             Deployment, Service, HPA, PDB, ServiceAccount, ConfigMap per entry in .Values.server.deployments
@@ -525,24 +533,52 @@ k8s/helm/foodstack/
    └─ dev/                datastore StatefulSets (rendered only with values-dev.yaml)
 ```
 
-### 18.2 Module topology from values
+### 18.2 Module topology: one setting, any shape
+
+The operator picks a topology with **one value**. Everything else (Deployments, Services, Module-Switch modes and URLs, internal tokens, routes, autoscaling, mesh policies) is generated by the chart. Every topology uses the same image.
 
 ```yaml
-server:
-  image: ilyaslabs/foodstack-server
-  deployments:
-    core:                                   # default monolith: every module local
-      modules: [identity, settings, geo, store, search, cart, promotion, payment,
-                order, dispatch, rider, review, notification, ledger]
-      replicas: 3
-# values-split.yaml overrides:
-#   core:     { modules: [identity, settings, geo, store, cart, promotion, payment, rider, review, notification, ledger] }
-#   order:    { modules: [order],    replicas: 3, hpa: { max: 20 } }
-#   dispatch: { modules: [dispatch], replicas: 2 }
-#   search:   { modules: [search],   replicas: 2 }
+topology: monolith          # monolith | split | microservices | custom
 ```
 
-The chart computes Module-Switch configuration for each Deployment: its own modules are `local` and exposed on port 8081; every other module is `http` with `url: http://foodstack-<deployment>.<namespace>.svc.cluster.local:8081`; modules nobody runs are `off`. It also generates the `HTTPRoute` rules that send each module's REST prefixes to the right Service. Operators never edit Module-Switch YAML by hand.
+| Preset | Deployments | When |
+|---|---|---|
+| `monolith` (default) | `core` runs every module | Launch, and as long as one Deployment with several replicas is enough |
+| `split` | `core` plus `order`, `dispatch`, `search` on their own | The busiest modules need independent scaling |
+| `microservices` | One Deployment per module (14) | Large scale, separate teams, or per-module datastores |
+| `custom` | Whatever `server.deployments` lists | Any grouping in between |
+
+```yaml
+# custom example: group any modules, size each group independently
+topology: custom
+server:
+  deployments:
+    core:     { modules: [identity, settings, geo, media, store, cart, promotion, payment, rider, review, notification, ledger] }
+    order:    { modules: [order],    replicas: 3, autoscaling: { min: 3, max: 20 } }
+    dispatch: { modules: [dispatch], replicas: 2, autoscaling: { min: 2, max: 10 } }
+    search:   { modules: [search],   replicas: 2 }
+  moduleDefaults:                     # optional per-module datastore overrides when a module is extracted
+    order: { mongodbUriSecret: order-mongodb }
+```
+
+For each Deployment the chart:
+
+1. Sets its modules to `local` and exposes them on the internal port 8081.
+2. Sets every module owned by another Deployment to `http` with `url: http://foodstack-<deployment>.<namespace>.svc.cluster.local:8081`, and the rest to `off`.
+3. Generates the internal Module-Switch token (Secret) and the Istio `AuthorizationPolicy` allowing only FoodStack server service accounts on port 8081.
+4. Generates `HTTPRoute` rules sending each module's public REST prefixes to that Deployment's Service.
+5. Creates a `HorizontalPodAutoscaler`, a `PodDisruptionBudget` and topology spread for that Deployment.
+6. Fails `helm install` with a clear message if a module is listed twice, a listed module is unknown, or a module needed by another is not run anywhere (the same checks Module-Switch runs at startup).
+
+**Moving between topologies** is `helm upgrade --set topology=split` (or a new `custom` list). Pods are rolled one Deployment at a time; Module-Switch retries calls that never ran while a target is starting, so traffic keeps flowing. Data does not move: modules keep their collections, so a split is a pure deployment change. Moving a module to its own database is a separate, optional step (dump and restore the module's prefixed collections, then set its datastore override).
+
+**Load balancing** happens at two layers, both automatic:
+
+- **Public traffic:** Gateway → Service of the Deployment that owns the path → its pods. In ambient mode, the namespace waypoint balances HTTP requests per request (least-request), not per connection, so long-lived keep-alive connections never pin traffic to one pod.
+- **Module-to-module traffic:** Module-Switch calls the Service DNS name; ztunnel/waypoint spreads requests across that Deployment's pods with mTLS. More replicas, or autoscaling, are picked up with no configuration change.
+- Without Istio (`mesh.enabled=false`) both still work through the Kubernetes Service (connection-level balancing); the chart then lowers HTTP keep-alive time on the Module-Switch client so connections rebalance.
+
+**CI proof:** the `e2e.yml` workflow installs each preset (`monolith`, `split`, `microservices`) on a kind cluster and runs the same Playwright and API suites, so every topology is tested on every release.
 
 ### 18.3 Networking, mesh and load balancing
 
