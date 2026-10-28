@@ -52,7 +52,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | # | Objective | Measure (target for v1) |
 |---|---|---|
 | BO-1 | Time to launch | A new operator goes from unzipping the unit deployer on one server to a branded, working marketplace in **under 1 day** with the quick-start guide |
-| BO-2 | No team needed to start | Operator launches without code changes: branding, currency, language, commission and the operator rider fee are all configuration |
+| BO-2 | No team needed to start | Operator launches without code changes: branding, currency, language, commission and zones are all configuration |
 | BO-3 | Low cost at small scale | The unit deployer runs a city pilot (≤ 200 orders per hour) on **one server** (8 vCPU, 32 GB RAM reference) with every dependency included |
 | BO-4 | Scale without rewrite | Moving from one server to Kubernetes, and splitting any module into its own deployment, needs configuration only; proven by the `split` preset in CI |
 | BO-5 | Trust and safety | No critical or high open security findings at release; all service-to-service traffic encrypted (mTLS) |
@@ -67,7 +67,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 |---|---|
 | Deployment model | **One operator per deployment**, running its own branded marketplace with many stores (white-label). Not multi-tenant SaaS |
 | Verticals | **Restaurants**, modelled as a generic *store* so grocery or pharmacy can be added later without a rewrite |
-| Delivery | **Stores deliver with their own riders** by default. The operator can switch on an **operator rider service**; then, after accepting each order, the store chooses to deliver itself or request an operator rider. Delivery zones and charges are set **only by the store**, so the customer sees one delivery price whoever delivers. When an operator rider delivers, the operator bills the store an **operator rider fee** that the operator sets; the customer never sees it |
+| Delivery | **Stores deliver with their own riders** by default. The operator can switch on an **operator rider service**; then, after accepting each order, the store chooses to deliver itself or request an operator rider. Stores draw their own delivery zones and charges; operator zones and charges apply to operator riders |
 | Fulfilment types | **Delivery** and **pickup** |
 | Front-ends | **Customer web app** and **one back-office app** with role-based areas for admin, store and rider (rider area installable as a PWA). All Angular |
 | API | Pure REST, so native mobile apps can be built later on the same API |
@@ -104,7 +104,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | BR-1 | Customers can discover nearby open stores, browse menus, order for delivery or pickup, pay by cash or card, and track the order live | Must |
 | BR-2 | Stores can be onboarded by the operator, manage their own menu, opening hours, temporary closure, delivery zones and charges, own riders and QR menu, and accept, prepare and hand over orders | Must |
 | BR-3 | Riders (the operator's, or a store's own) can go online, receive and accept delivery jobs, navigate to pickup and drop-off, and confirm delivery | Must |
-| BR-4 | Operator admins can manage stores, riders, customers, the operator rider fee, service fees, commissions, coupons, content and branding | Must |
+| BR-4 | Operator admins can manage stores, riders, customers, delivery zones, fees, commissions, coupons, content and branding | Must |
 | BR-5 | Each order records commission, fees, taxes and rider earnings in a ledger; admins export payout reports per period | Must |
 | BR-6 | Customers, stores and riders receive notifications for every order state change that affects them | Must |
 | BR-7 | Customers can rate and review stores and riders after delivery; admins can moderate | Must |
@@ -114,7 +114,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | BR-11 | All personal data handling supports data export and deletion requests (GDPR-style) | Must |
 | BR-12 | A REST API, documented with OpenAPI, covers every capability of the web apps | Must |
 | BR-13 | Support staff can view any order's timeline and issue refunds or cancellations with a reason | Should |
-| BR-14 | Operators can run the platform in several cities, with stores, riders and reports grouped by city | Should |
+| BR-14 | Operators can run the platform in several cities, each with its own delivery zones | Should |
 | BR-15 | The operator can allow an individual store to receive card payments directly into its own merchant account. Only the operator can grant or revoke this, per store. For such orders the ledger records what the store owes the operator, and settlement nets it against what the operator owes the store | Must |
 
 ## 9. Assumptions
@@ -148,7 +148,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 |---|---|
 | Operator | The business that deploys and runs a FoodStack marketplace |
 | Store | A seller on the marketplace; a restaurant in v1 |
-| Zone | A geographic polygon drawn by a store where it delivers, with its delivery charge |
+| Zone | A geographic polygon where delivery is offered, with its own fees |
 | Dispatch | Assigning a delivery job to a rider |
 | Ledger | Double-entry record of every money movement |
 | Module | A bounded part of the backend (for example `order`) that can run in-process, remotely or off via Module-Switch |

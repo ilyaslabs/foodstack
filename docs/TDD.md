@@ -135,8 +135,8 @@ Rules (enforced by Module-Switch at startup and by `ModuleRules.verify("io.githu
 |---|---|---|---|---|---|
 | `identity` | Users, credentials, email one-time codes, OIDC authorization server, roles and permissions, back-office invitations, data export/delete orchestration | `/oauth2`, `/login`, `/.well-known`, `/api/v1/auth`, `/api/v1/users`, `/api/v1/me` | none | `UserRegistered`, `UserDeleted`, `RoleChanged` | none |
 | `settings` | Branding, locale, business rules, content pages, feature flags | `/api/v1/settings`, `/api/v1/content` | none | `SettingsChanged` | none |
-| `geo` | Store delivery zones with their charges, cities, address geocoding, routing and ETA, maps provider SPI | `/api/v1/geo`, `/api/v1/zones` | none | `ZoneChanged` | none |
-| `store` | Stores, branches, opening hours, temporary-close switch, menus, items, modifiers, availability, commission config, QR menu codes | `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `StorePaymentCollectionChanged` | none |
+| `geo` | Operator zones and store-owned zones with their charges, address geocoding, routing and ETA, maps provider SPI | `/api/v1/geo`, `/api/v1/zones` | none | `ZoneChanged` | none |
+| `store` | Stores, branches, opening hours, temporary-close switch, default delivery, menus, items, modifiers, availability, commission config, QR menu codes | `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `StorePaymentCollectionChanged` | none |
 | `search` | Search and discovery read model in Elasticsearch, home sections | `/api/v1/search`, `/api/v1/discovery` | `geo` | none | `store.*`, `review.*` (rating), `settings.*` (languages) |
 | `cart` | Carts, pricing preview | `/api/v1/carts` | `store`, `geo`, `promotion` | none | `store.*` (invalidate) |
 | `promotion` | Operator and store promotions, coupons, payment-method and merchant-account restrictions, validation, redemption | `/api/v1/coupons`, `/api/v1/offers` | none | `CouponRedeemed`, `CouponReleased` | `order.*` (redeem on confirm, release on cancel) |
@@ -157,7 +157,7 @@ The synchronous dependency graph is acyclic: `order → cart → store → geo/s
 Customer ─POST /api/v1/orders (Idempotency-Key)─► order
   order ─► cart.checkoutSnapshot(cartId)                 (items, store, address)
   order ─► store.validateOrder(storeId, lines, time)     (open? items available? current prices)
-  order ─► geo.quote(storeId, address)                    (store's zones: in zone? fee, distance, ETA)
+  order ─► geo.quote(storeId, defaultDelivery, address)   (store zones or operator zones: in zone? fee, distance, ETA)
   order ─► promotion.validate(couponCode, context)        (discount, funding split)
   order    computes totals, persists order + outbox(OrderPlaced) in one Mongo transaction
   if card: order ─► payment.resolveMerchant(storeId)       (operator account, or store's own; see 5.4)
@@ -167,8 +167,8 @@ Customer ─POST /api/v1/orders (Idempotency-Key)─► order
 OrderConfirmed ─► promotion (redeem), notification (store alert, customer receipt), dispatch (prepare job)
 Store accepts and picks who delivers ─► OrderAccepted{deliveredBy: STORE | OPERATOR, storeRiderId?}
   STORE:    dispatch creates a job assigned to the chosen store rider (or the store marks steps itself)
-  OPERATOR: allowed only if the operator rider service is on; dispatch starts matching; ledger bills the
-            operator rider fee to the store (the customer's delivery charge still belongs to the store)
+  OPERATOR: allowed only if the operator rider service is on; dispatch starts matching; if the order was
+            priced with store charges, ledger bills the operator delivery charge to the store
 ```
 
 The order snapshots everything it needs at placement (prices, commission rate, store name, address), so later changes to menus or commission never alter past orders and `ledger` never needs to call `store`.
@@ -187,7 +187,7 @@ store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, 
 - `store` owns the per-store permission (`mode`), changed only through an admin endpoint guarded by `store:payment-collection:manage`; changes emit `StorePaymentCollectionChanged`.
 - `payment` owns the store's merchant account. Credentials are encrypted with the PII key (or held in an external secret store through the gateway SPI) and verified by a test call before becoming `ACTIVE`.
 - At order placement, `order` asks `payment.resolveMerchant(storeId)`. It returns the store's account only when the global switch is on, the store's mode is `DIRECT`, the account is `ACTIVE` and the store is not over its credit limit; otherwise it returns the operator's account. The chosen account is snapshotted on the order, so refunds always go to the same account.
-- `ledger` posts different entries depending on the snapshot. Operator-collected: cash in to the operator, payable to the store for its share. Direct-collected: cash in to the store, **receivable from the store** for commission, operator rider fee, service fee and rider tips. Settlement nets payables and receivables per store per period and reports who pays whom.
+- `ledger` posts different entries depending on the snapshot. Operator-collected: cash in to the operator, payable to the store for its share. Direct-collected: cash in to the store, **receivable from the store** for commission, operator delivery fee, service fee and rider tips. Settlement nets payables and receivables per store per period and reports who pays whom.
 - `ledger` tracks each store's outstanding receivable. When it passes the credit limit, it emits `StoreCreditLimitExceeded`; `payment` marks the store account `SUSPENDED` (collection falls back to the operator) and `notification` alerts the store and finance admins. `StoreBalanceSettled` reverses it.
 - Webhooks from a store's account are routed by account ID (`/api/v1/payment-webhooks/{accountId}`) and verified with that account's signing secret.
 - Later option: gateway-native split payments, adding a `SPLIT` mode to the same model.
@@ -195,7 +195,7 @@ store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, 
 
 ### 5.5 Promotions: who creates them and where they apply
 
-- `promotion_promotions { owner: OPERATOR | STORE, storeIds, cityIds, funding: {operatorPct, storePct}, paymentMethods: [CASH, CARD]?, merchantAccount: ANY | OPERATOR_ONLY }`.
+- `promotion_promotions { owner: OPERATOR | STORE, storeIds, zoneIds, funding: {operatorPct, storePct}, paymentMethods: [CASH, CARD]?, merchantAccount: ANY | OPERATOR_ONLY }`.
 - Store owners create promotions for their own store only, always store-funded.
 - Operator promotions can be limited to payment methods and to `OPERATOR_ONLY`, meaning they apply only when the payment is collected on the operator's merchant account. `order` passes the payment method and resolved merchant account in the validation context, so the check happens at placement.
 
@@ -204,7 +204,7 @@ store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, 
 For `deliveredBy: STORE`, the job goes straight to the chosen store rider (or stays with the store). The steps below apply to operator riders:
 
 1. On `OrderAccepted` with `deliveredBy: OPERATOR`, create a job with target pickup time = accepted time + prep estimate − travel time to store.
-2. Candidate riders: online, in the store's city, within radius R (default 5 km) of the store, from Redis GEO (`GEOSEARCH`).
+2. Candidate riders: online, in the order's zone, within radius R (default 5 km) of the store, from Redis GEO (`GEOSEARCH`).
 3. Score = w1·distance-to-store + w2·active-jobs + w3·(1 − acceptance-rate) + w4·idle-time bonus. Weights in settings.
 4. Offer to the best rider; lock the rider in Redis (`SET NX PX`) for the offer timeout (30 s). On decline or timeout, move to the next; widen radius after N failures; alert admins after the configured limit.
 5. All transitions are persisted and emitted as events; the admin live map subscribes over SSE.
@@ -361,16 +361,15 @@ Redis is a cache and coordination store only; losing it never loses business dat
 
 - Indices prefixed by module: `search_stores_v<N>` and `search_dishes_v<N>`, accessed through aliases `search_stores` and `search_dishes`; reindex by building a new version and swapping the alias.
 - Built only from events (`StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `ReviewPublished`), never by reading another module's database; a full rebuild job replays from `store` through its API.
-- Per-language fields with language analyzers (including Arabic and Urdu), `search_as_you_type` for autocomplete, `geo_point` for distance sorting, and each store's zone polygons (`geo_shape`) so search returns only stores that deliver to the customer's address.
+- Per-language fields with language analyzers (including Arabic and Urdu), `search_as_you_type` for autocomplete, `geo_point` for distance sorting, and zone IDs for filtering.
 - Ranking: open now, distance, rating, ETA, plus admin boosts.
 - `SearchEngine` SPI in `search-impl`; the Elasticsearch Java client is the default adapter.
 
 ## 12. Geo and maps
 
-- `geo` owns delivery zones (GeoJSON polygons, `geo_zones`). Zones are drawn **only by stores**: each belongs to one store and has its charge, minimum order and free-delivery threshold. There are no operator zones, so the quote is the same whoever delivers. `geo` also holds cities (for grouping stores, riders and reports).
-- The operator rider fee (fixed plus optional per km, optional per-store override) lives in `settings` and is applied by `ledger` when `dispatch` reports an operator delivery.
+- `geo` owns zones (GeoJSON polygons, `geo_zones`) with an owner: `OPERATOR` (used when operator riders deliver) or `STORE` (drawn by the store owner, used when the store delivers). Each zone has its charge, minimum order and free-delivery threshold. `quote` picks the zones for the store's default delivery.
 - Provider SPI: `GeocodingProvider`, `RoutingProvider`, `TileConfig`. Default adapter: Nominatim and OSRM (operator self-hosts or uses a hosted provider; public instances are only for demos). Optional Google Maps adapter.
-- ETA = prep estimate + routing duration × city traffic factor (configurable); quotes are cached briefly.
+- ETA = prep estimate + routing duration × zone traffic factor (configurable); quotes are cached briefly.
 
 ## 13. Media storage (S3)
 
@@ -449,7 +448,7 @@ A reusable `docker-release.yml` and `helm-release.yml` will be added to `ilyasla
 - **One click:** `app/foodstack-server/src/test/java/.../LocalFoodstackApplication.java` starts the real application with `SpringApplication.from(FoodstackApplication::main).with(LocalContainers.class)`. `LocalContainers` declares Testcontainers beans with `@ServiceConnection`: MongoDB (single-node replica set), Redis, Kafka (KRaft), Elasticsearch, MinIO and Mailpit. Containers are reused between restarts. Run it from the IDE with one click, or `./mvnw -pl app/foodstack-server spring-boot:test-run`. Docker is the only prerequisite.
 - The Angular apps run with `pnpm start` and proxy `/api` to `localhost:8080`.
 - **Seed data:** when the `test-seed` profile is active, each module seeds its own data through a `@Profile("test-seed")` seeder inside its own `-impl` package, so only `local` modules seed and a module never writes another module's collections. Seeders are idempotent (a `<module>_seed` marker document) and run in dependency order (identity, settings, geo, media, store, rider, promotion, then sample orders through the public APIs).
-- Seed content: an admin, a finance user and support user, two cities, about 10 stores with menus, photos, opening hours and their own zones, store riders and operator riders, customers with addresses, coupons, and orders in every state. Logins are printed once in the startup log.
+- Seed content: an admin, a finance user and support user, two cities with operator zones, about 10 stores with menus, photos, opening hours and their own zones, store riders and operator riders, customers with addresses, coupons, and orders in every state. Logins are printed once in the startup log.
 - Safety: startup fails if `test-seed` is active together with `foodstack.environment=production`.
 
 ## 17. Single-server deployment: unit deployer
