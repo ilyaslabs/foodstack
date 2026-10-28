@@ -118,7 +118,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 |---|---|---|
 | OF-1 | Store order board (new, preparing, ready, out) updates live with a loud, repeating alert for new orders | M |
 | OF-2 | Store accepts with a prep-time estimate or rejects with a reason | M |
-| OF-8 | When accepting a delivery order, the store chooses **deliver myself** (and optionally assigns one of its own riders) or **request operator rider**. The second option is shown only when the operator rider service is on and the store is allowed to use it. The customer's delivery charge always belongs to the store. When an operator rider delivers, the ledger bills the store the operator rider fee (DR-1b) | M |
+| OF-8 | When accepting a delivery order, the store chooses **deliver myself** (and optionally assigns one of its own riders) or **request operator rider**. The second option is shown only when the operator rider service is on and the store is allowed to use it. The customer's delivery charge (from the store's zone) goes to whoever delivers: the store when it delivers itself, the **operator in full** when an operator rider delivers. The ledger records it accordingly | M |
 | OF-3 | Store marks preparing and ready; prints a kitchen ticket (browser print) | M |
 | OF-4 | For self-delivered orders, the store's rider (or the store) marks picked up and delivered | M |
 | OF-5 | Customer can cancel before acceptance; after that, only support can cancel | M |
@@ -131,7 +131,6 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 |---|---|---|
 | DR-1 | Operator rider onboarding by admin: identity documents, vehicle type, city, payout details. Store riders are invited by the store owner and belong only to that store | M |
 | DR-1a | The **operator rider service** is a global setting, off by default, so a new operator can launch with stores delivering themselves | M |
-| DR-1b | The operator sets the **operator rider fee** billed to a store for each delivery by an operator rider: a fixed amount plus an optional amount per km, with an optional override per store | M |
 | DR-2 | Rider goes online or offline; location reported every 10 s while online (adaptive when stationary) | M |
 | DR-3 | Dispatch offers a job to the best-ranked available rider (distance to store, current load, acceptance rate); offer expires after 30 s and moves to the next rider | M |
 | DR-4 | Job card shows store, drop-off area, distance, and earning before accepting | M |
@@ -219,7 +218,7 @@ By default the operator collects every card payment and pays stores later. The o
 | DP-2 | Only an admin with the `finance` permission can allow or revoke direct collection **for an individual store**; every change is audit-logged with a reason | M |
 | DP-3 | Once allowed, the store owner connects their own merchant account in the store area (gateway credentials or the gateway's account-connect flow), using one of the gateway adapters the operator has enabled. Credentials are stored encrypted and never shown again | M |
 | DP-4 | The connection is verified (test call) before it becomes active; until then, and whenever it fails, card payments fall back to the operator's account | M |
-| DP-5 | For direct-collected orders the ledger records the full amount as collected by the store and creates a **receivable** from the store for commission, operator rider fee (when the operator's riders deliver), service fee, and rider tips; store-funded and operator-funded discounts are accounted for as for any order | M |
+| DP-5 | For direct-collected orders the ledger records the full amount as collected by the store and creates a **receivable** from the store for commission, the full delivery charge (when the operator's riders deliver), service fee, and rider tips; store-funded and operator-funded discounts are accounted for as for any order | M |
 | DP-6 | Refunds of direct-collected orders are issued through the store's merchant account; the receivable is adjusted to match | M |
 | DP-7 | The operator sets a **credit limit** per store (default from settings). When the outstanding balance passes it, direct collection is automatically suspended (payments go back to the operator's account) and the store and admins are notified; it resumes when the balance is settled | M |
 | DP-8 | Store dashboard and admin finance view show the outstanding balance, due date and history; admins record received payments against it | M |
@@ -253,7 +252,7 @@ By default the operator collects every card payment and pays stores later. The o
 | Customer web | Address picker, Home (sections and store list), Search, Store page (menu with sticky categories), Item sheet (modifiers), Cart, Checkout, Order tracking, Orders history, Rate order, Profile and addresses, Notification centre, In-store menu (from QR), Content pages |
 | Back office: store | Live order board, Order detail (with delivery choice), Menu editor, Availability, Opening hours and temporary close, Delivery zones and charges (map), Riders, QR menu print, Reviews, Earnings and balance, Payment account (when direct collection is allowed), Store settings |
 | Back office: rider | Go online, Job offer (operator or store jobs), Active job (pickup, drop-off steps), Earnings, Profile |
-| Back office: admin | Dashboard, Live map, Orders, Stores (onboarding wizard), Riders, Customers, Store delivery zones (view and correct), Operator rider fee, Coupons, Reviews moderation, Finance (ledger, payouts), Notifications templates, Branding and settings, Users and roles, Audit log |
+| Back office: admin | Dashboard, Live map, Orders, Stores (onboarding wizard), Riders, Customers, Store delivery zones (view and correct), Coupons, Reviews moderation, Finance (ledger, payouts), Notifications templates, Branding and settings, Users and roles, Audit log |
 
 ## 6. Non-functional requirements
 

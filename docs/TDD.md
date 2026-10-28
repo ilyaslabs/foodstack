@@ -167,8 +167,8 @@ Customer ─POST /api/v1/orders (Idempotency-Key)─► order
 OrderConfirmed ─► promotion (redeem), notification (store alert, customer receipt), dispatch (prepare job)
 Store accepts and picks who delivers ─► OrderAccepted{deliveredBy: STORE | OPERATOR, storeRiderId?}
   STORE:    dispatch creates a job assigned to the chosen store rider (or the store marks steps itself)
-  OPERATOR: allowed only if the operator rider service is on; dispatch starts matching; ledger bills the
-            operator rider fee to the store (the customer's delivery charge still belongs to the store)
+  OPERATOR: allowed only if the operator rider service is on; dispatch starts matching; the customer's
+            delivery charge goes to the operator in full (ledger credits the operator, not the store)
 ```
 
 The order snapshots everything it needs at placement (prices, commission rate, store name, address), so later changes to menus or commission never alter past orders and `ledger` never needs to call `store`.
@@ -187,7 +187,7 @@ store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, 
 - `store` owns the per-store permission (`mode`), changed only through an admin endpoint guarded by `store:payment-collection:manage`; changes emit `StorePaymentCollectionChanged`.
 - `payment` owns the store's merchant account. Credentials are encrypted with the PII key (or held in an external secret store through the gateway SPI) and verified by a test call before becoming `ACTIVE`.
 - At order placement, `order` asks `payment.resolveMerchant(storeId)`. It returns the store's account only when the global switch is on, the store's mode is `DIRECT`, the account is `ACTIVE` and the store is not over its credit limit; otherwise it returns the operator's account. The chosen account is snapshotted on the order, so refunds always go to the same account.
-- `ledger` posts different entries depending on the snapshot. Operator-collected: cash in to the operator, payable to the store for its share. Direct-collected: cash in to the store, **receivable from the store** for commission, operator rider fee, service fee and rider tips. Settlement nets payables and receivables per store per period and reports who pays whom.
+- `ledger` posts different entries depending on the snapshot. Operator-collected: cash in to the operator, payable to the store for its share. Direct-collected: cash in to the store, **receivable from the store** for commission, the delivery charge when an operator rider delivered, service fee and rider tips. Settlement nets payables and receivables per store per period and reports who pays whom.
 - `ledger` tracks each store's outstanding receivable. When it passes the credit limit, it emits `StoreCreditLimitExceeded`; `payment` marks the store account `SUSPENDED` (collection falls back to the operator) and `notification` alerts the store and finance admins. `StoreBalanceSettled` reverses it.
 - Webhooks from a store's account are routed by account ID (`/api/v1/payment-webhooks/{accountId}`) and verified with that account's signing secret.
 - Later option: gateway-native split payments, adding a `SPLIT` mode to the same model.
@@ -368,7 +368,7 @@ Redis is a cache and coordination store only; losing it never loses business dat
 ## 12. Geo and maps
 
 - `geo` owns delivery zones (GeoJSON polygons, `geo_zones`). Zones are drawn **only by stores**: each belongs to one store and has a fixed charge (no distance formula), minimum order and free-delivery threshold. There are no operator zones, so the quote is the same whoever delivers. `geo` also holds cities (for grouping stores, riders and reports).
-- The operator rider fee (fixed plus optional per km, optional per-store override) lives in `settings` and is applied by `ledger` when `dispatch` reports an operator delivery.
+- The delivery charge is credited by `ledger` to whoever delivered, based on `deliveredBy` in `OrderAccepted` and the delivery events from `dispatch`: the store for self-delivery, the operator in full for operator riders.
 - Provider SPI: `GeocodingProvider`, `RoutingProvider`, `TileConfig`. Default adapter: Nominatim and OSRM (operator self-hosts or uses a hosted provider; public instances are only for demos). Optional Google Maps adapter.
 - ETA = prep estimate + routing duration × city traffic factor (configurable); quotes are cached briefly.
 
