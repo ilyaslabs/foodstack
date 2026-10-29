@@ -491,7 +491,7 @@ unit-deployer-<version>/
 ├─ .env.example                    every setting, documented
 ├─ config/                         application.yaml, Caddyfile, MongoDB replica-set init, Kafka and Elasticsearch settings
 ├─ install.sh  start.sh  stop.sh  restart.sh
-├─ status.sh  logs.sh  backup.sh  upgrade.sh
+├─ status.sh  logs.sh  backup.sh  restore.sh  upgrade.sh
 └─ README.md
 ```
 
@@ -522,7 +522,10 @@ Every service has a healthcheck; `server` starts only when its dependencies are 
 | `restart.sh [service]` | Restarts everything or one service |
 | `status.sh` / `logs.sh [service]` | Health summary / follow logs |
 | `backup.sh` | `mongodump`, MinIO mirror and config into `<dir>/backups/<timestamp>` |
-| `upgrade.sh <new-zip>` | Backup, replace jar, apps and compose file, run migrations, restart |
+| `restore.sh <backup-dir>` | Stop the application, restore MongoDB and media, rebuild search, start |
+| `upgrade.sh <new-zip>` / `--rollback` | Backup, replace jar, apps and compose file, run migrations, restart / restore the previous version |
+
+Step-by-step operator instructions are in the [Deployment Guide](deployment-guide.md).
 
 Moving to Kubernetes later is a data migration (dump and restore) plus configuration; no code changes.
 
