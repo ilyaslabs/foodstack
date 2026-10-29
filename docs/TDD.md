@@ -22,7 +22,7 @@
 | D1 | Deployment model | One operator per deployment (white-label), not multi-tenant |
 | D2 | Language and framework | Java 25, Spring Boot 4, Module-Switch |
 | D3 | Build | Maven multi-module, `${revision}` versioning, published to Maven Central via `ilyaslabs/cicd` reusable workflows |
-| D4 | Persistence | MongoDB, collections prefixed `<module>_` |
+| D4 | Persistence | MongoDB, one database per module (`foodstack_<module>`) on a shared cluster, collections also prefixed `<module>_` |
 | D5 | Migrations | Liquibase 5 with `liquibase-mongodb`, one changelog per module (Liquibase 5 is FSL licensed: free to use, only competing Liquibase products are restricted) |
 | D6 | Cache | Redis, keys prefixed `foodstack:<module>:` |
 | D7 | Search | Elasticsearch 9 behind a `search` module SPI, so an OpenSearch adapter remains possible |
@@ -214,7 +214,9 @@ For `deliveredBy: STORE`, the job goes straight to the chosen store rider (or st
 ### 6.1 Naming and isolation
 
 - Collections: `<module>_<plural>`, for example `order_orders`, `order_outbox`, `store_menus`, `ledger_entries`.
-- Each module has its own `MongoTemplate` (bean `<module>MongoTemplate`) built from `foodstack.modules.<module>.mongodb.uri`, falling back to `foodstack.mongodb.uri`. In the monolith every module points at one database `foodstack`; extracting a module means giving it its own URI.
+- **Database per module from day one:** each module uses its own database, `foodstack_<module>` (for example `foodstack_order`, `foodstack_store`), on the same MongoDB cluster. Collections keep the module prefix as well (`order_orders`), so names stay unambiguous in tools, logs and backups.
+- Each module has its own `MongoTemplate` (bean `<module>MongoTemplate`) built from `foodstack.modules.<module>.mongodb.uri`, falling back to `foodstack.mongodb.uri` (the cluster) with database `foodstack_<module>`.
+- **Splitting the application never moves data:** an extracted module keeps using its database on the shared cluster. **Splitting the data** (only when the cluster is the bottleneck or isolation is required) is a whole-database move: `mongodump --db foodstack_<module>` and restore, or MongoDB's live sync tooling for near-zero downtime, then set that module's URI. Its Liquibase history collections live in the same database and move with it.
 - No cross-module queries, joins (`$lookup`) or transactions. A transaction never spans two modules.
 - MongoDB must run as a replica set (single-node replica set in dev) because the outbox needs multi-document transactions.
 
@@ -570,7 +572,7 @@ For each Deployment the chart:
 5. Creates a `HorizontalPodAutoscaler`, a `PodDisruptionBudget` and topology spread for that Deployment.
 6. Fails `helm install` with a clear message if a module is listed twice, a listed module is unknown, or a module needed by another is not run anywhere (the same checks Module-Switch runs at startup).
 
-**Moving between topologies** is `helm upgrade --set topology=split` (or a new `custom` list). Pods are rolled one Deployment at a time; Module-Switch retries calls that never ran while a target is starting, so traffic keeps flowing. Data does not move: modules keep their collections, so a split is a pure deployment change. Moving a module to its own database is a separate, optional step (dump and restore the module's prefixed collections, then set its datastore override).
+**Moving between topologies** is `helm upgrade --set topology=split` (or a new `custom` list). Pods are rolled one Deployment at a time; Module-Switch retries calls that never ran while a target is starting, so traffic keeps flowing. Data does not move: modules keep their collections, so a split is a pure deployment change. Moving a module to its own database is a separate, optional step (copy the whole `foodstack_<module>` database to the new cluster, then set its datastore override).
 
 **Load balancing** happens at two layers, both automatic:
 
@@ -605,10 +607,11 @@ For each Deployment the chart:
 ```yaml
 foodstack:
   mongodb:
-    uri: ${MONGODB_URI}                     # default for every module
+    uri: ${MONGODB_URI}                     # cluster shared by default; database is foodstack_<module>
+    database-prefix: foodstack_
   modules:
     order:
-      mongodb.uri: ${ORDER_MONGODB_URI:}    # optional: dedicated database when extracted
+      mongodb.uri: ${ORDER_MONGODB_URI:}    # optional: dedicated cluster for this module's database
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP}
     topic-partitions: 12
