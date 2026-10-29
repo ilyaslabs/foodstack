@@ -72,23 +72,23 @@ foodstack/
 │  ├─ platform-security/           resource-server config, permission model, PII crypto
 │  └─ platform-test/               Testcontainers fixtures, ModuleRules test, contract test helpers
 ├─ modules/
-│  ├─ identity/   identity-api/   identity-impl/
-│  ├─ settings/   settings-api/   settings-impl/
-│  ├─ media/      media-api/      media-impl/      (S3 object storage adapter)
-│  ├─ geo/        geo-api/        geo-impl/        geo-provider-osm/   geo-provider-google/
-│  ├─ store/      store-api/      store-impl/
-│  ├─ search/     search-api/     search-impl/     (Elasticsearch adapter inside impl)
-│  ├─ cart/       cart-api/       cart-impl/
-│  ├─ promotion/  promotion-api/  promotion-impl/
-│  ├─ payment/    payment-api/    payment-impl/    payment-gateway-card/  (first card adapter)
-│  ├─ order/      order-api/      order-impl/
-│  ├─ dispatch/   dispatch-api/   dispatch-impl/
-│  ├─ rider/      rider-api/      rider-impl/
-│  ├─ review/     review-api/     review-impl/
-│  ├─ notification/ notification-api/ notification-impl/ (in-app, email, FCM channel adapters)
-│  └─ ledger/     ledger-api/     ledger-impl/
+│  ├─ identity/   identity-api/   identity-impl/  identity-web/
+│  ├─ settings/   settings-api/   settings-impl/  settings-web/
+│  ├─ media/      media-api/      media-impl/  media-web/      (S3 object storage adapter)
+│  ├─ geo/        geo-api/        geo-impl/  geo-web/        geo-provider-osm/   geo-provider-google/
+│  ├─ store/      store-api/      store-impl/  store-web/
+│  ├─ search/     search-api/     search-impl/  search-web/     (Elasticsearch adapter inside impl)
+│  ├─ cart/       cart-api/       cart-impl/  cart-web/
+│  ├─ promotion/  promotion-api/  promotion-impl/  promotion-web/
+│  ├─ payment/    payment-api/    payment-impl/  payment-web/    payment-gateway-card/  (first card adapter)
+│  ├─ order/      order-api/      order-impl/  order-web/
+│  ├─ dispatch/   dispatch-api/   dispatch-impl/  dispatch-web/
+│  ├─ rider/      rider-api/      rider-impl/  rider-web/
+│  ├─ review/     review-api/     review-impl/  review-web/
+│  ├─ notification/ notification-api/ notification-impl/  notification-web/ (in-app, email, FCM channel adapters)
+│  └─ ledger/     ledger-api/     ledger-impl/  ledger-web/
 ├─ app/
-│  └─ foodstack-server/            @SpringBootApplication, depends on every *-impl; application*.yaml; Dockerfile
+│  └─ foodstack-server/            @SpringBootApplication, depends on every *-impl and *-web; application*.yaml; Dockerfile
 ├─ frontend/                       Angular workspace (section 14)
 ├─ deploy/
 │  └─ unit-deployer/               docker-compose.yml, scripts, Maven assembly for unit-deployer-<version>.zip (section 17)
@@ -101,7 +101,7 @@ foodstack/
 └─ .github/workflows/              CI calling ilyaslabs/cicd reusable workflows
 ```
 
-Java packages: `io.github.ilyaslabs.foodstack.<module>.api` and `io.github.ilyaslabs.foodstack.<module>.impl`. Maven artifacts: `foodstack-<module>-api`, `foodstack-<module>-impl`.
+Java packages: `io.github.ilyaslabs.foodstack.<module>.api`, `.impl` and `.web`. Maven artifacts: `foodstack-<module>-api`, `foodstack-<module>-impl`, `foodstack-<module>-web`.
 
 ## 5. Backend module design
 
@@ -117,20 +117,33 @@ order-impl/                         @Module("order")     (package-info.java)
                                     MongoTemplate bean, Liquibase runner, Kafka listeners, caches
   domain/                           aggregates, state machine, domain services
   persistence/                      @Document("order_orders") entities, repositories
-  web/                              REST controllers under /api/v1/orders…
   messaging/                        outbox publisher, event consumers
   OrderService.java                 implements OrderApi
   src/main/resources/db/changelog/order/db.changelog-master.yaml
+order-web/                          @Module("order")     (package-info.java on ...order.web)
+  OrderController.java…             REST controllers under /api/v1/orders…, SSE endpoints
+  dto/                              public request/response records (separate from internal api records)
+  OrderWebMapper.java               maps between REST DTOs and the module's services
 ```
 
-**What goes where.** `-api` is the module's *internal Java contract* for other modules (interfaces, DTO records, event records), not its public REST API: it has no Spring beans, no controllers and no logic. `-impl` holds everything else, **including the public REST controllers** (`web/`). Controllers must live in `-impl` because Module-Switch only loads a module's implementation packages where the module is `local`; that way a module's public endpoints exist only in the Deployment that runs it, and the gateway routes there. This follows the Module-Switch convention and its example app (`CatalogController` sits in `catalog-impl`).
+**What goes where.** Each module has three Maven sub-modules:
+
+| Sub-module | Contains | May depend on |
+|---|---|---|
+| `<m>-api` | The module's *internal Java contract* for other modules: `@ModuleApi` interfaces, DTO records, event records. No Spring beans, no controllers, no logic | `module-switch-api`, `platform-core` |
+| `<m>-impl` | The implementation of the api: domain, persistence, messaging, Liquibase changelog, configuration | own `-api`, other modules' `-api`, `platform-*` |
+| `<m>-web` | The module's **public REST API**: controllers, SSE endpoints, REST request/response DTOs, mapping, OpenAPI annotations | own `-api` and own `-impl` (application services), `platform-*` |
+
+- The public REST DTOs in `-web` are deliberately separate from the internal records in `-api`, so the public API can evolve (versioning, field names) without breaking other modules, and vice versa.
+- `-web`'s package (`io.github.ilyaslabs.foodstack.<m>.web`) is also declared `@Module("<m>")`. Module-Switch accepts several implementation packages per module, so the controllers are loaded only where the module is `local`, and the gateway routes the module's paths to that Deployment.
+- No module may depend on another module's `-web` or `-impl`; this is checked by `ModuleRules.verify` and an ArchUnit rule in CI.
 
 Rules (enforced by Module-Switch at startup and by `ModuleRules.verify("io.github.ilyaslabs.foodstack")` in CI):
 
 - A module depends only on other modules' `-api` artifacts and on `platform-*`.
 - Errors cross module boundaries only as `ModuleException` subtypes with stable `code` values (for example `STORE_CLOSED`, `COUPON_EXPIRED`).
 - All Spring Data, Kafka listener and cache configuration lives in the module's own configuration class, so it disappears when the module is `off` or `http`.
-- REST controllers live in the `-impl` of the module that owns the resource, under that module's path prefixes (section 8.2), so the gateway can route a path to whichever Deployment runs the module.
+- REST controllers live in the `-web` of the module that owns the resource, under that module's path prefixes (section 8.2), so the gateway can route a path to whichever Deployment runs the module.
 
 ### 5.2 Module catalogue
 
@@ -442,7 +455,7 @@ frontend/
 ### 15.1 Backend build
 
 - Parent POM inherits `spring-boot-starter-parent` 4.x, imports `module-switch-bom`, sets `java.version=25`, uses `${revision}` with the flatten plugin (as `ilyaslabs/cicd` `mvn-release.yml` passes `-Drevision=<tag>`).
-- All `-api`, `-impl`, `platform-*` and `foodstack-bom` jars are published to Maven Central, so operators can build a custom server that adds or replaces modules.
+- All `-api`, `-impl`, `-web`, `platform-*` and `foodstack-bom` jars are published to Maven Central, so operators can build a custom server that adds or replaces modules.
 - `foodstack-server` image: multi-stage Dockerfile, Spring Boot layered jar on a JRE 25 base, non-root, multi-arch (amd64, arm64), virtual threads on.
 
 ### 15.2 Workflows
