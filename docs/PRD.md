@@ -291,5 +291,5 @@ See [BRD section 7.2](BRD.md#72-out-of-scope-for-v1-candidates-for-later).
 
 ## 9. Open questions
 
-1. Card adapter to ship first: one global gateway (recommended) or a regional one for the first pilot market.
+1. ~~Card adapter to ship first~~ **Decided:** one global gateway with a hosted payment page as the first adapter; regional gateways are added later through the same interface.
 2. Rider earning formula defaults (base + per-km + per-minute waiting) and whether operators can configure it per city in v1.
