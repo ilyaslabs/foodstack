@@ -245,6 +245,9 @@ Rules:
 - IDs are UUIDv7 (time-ordered), so any key on `_id` uses a **hashed** shard key to avoid a single hot shard.
 - Transactions stay inside one module and touch as few documents as possible (aggregate plus outbox row).
 - Small, rarely written collections (settings, zones, outbox, inbox with TTL) stay unsharded.
+- **Replicas:** MongoDB always runs as a replica set, even with one member on a single server, so adding secondaries later is a config change with no downtime. The app reads from the primary by default; reads that tolerate slight staleness (reports, search rebuilds) use `secondaryPreferred`.
+- **Adding shards later:** an existing replica set becomes the first shard of a sharded cluster online. The app then connects through `mongos` instead of the replica set (a connection-string change only), and each collection is sharded with the key in the table below.
+- **Enforced, not just documented:** each repository declares its shard key, and CI runs the integration suite against a **two-shard MongoDB** (Testcontainers) with every collection pre-sharded. Unique indexes without the shard key, missing shard keys on writes, and accidental scatter-gather on hot paths fail the build, long before production needs shards.
 
 | Collection | Shard key | Why |
 |---|---|---|
@@ -449,6 +452,7 @@ A reusable `docker-release.yml` and `helm-release.yml` will be added to `ilyasla
 | Architecture | `ModuleRules.verify`, ArchUnit | Module boundaries, package rules, collection prefix rule |
 | Integration | Spring Boot tests, Testcontainers (MongoDB replica set, Redis, Kafka, Elasticsearch, MinIO) | Each module with its real datastores |
 | Split topology | Two app contexts, one module in `http` mode | Every module's API works remotely exactly as locally |
+| Shard readiness | Testcontainers two-shard MongoDB, collections pre-sharded | Every query and index works on a sharded cluster |
 | Contract | OpenAPI diff in CI | No breaking change within `/api/v1` |
 | End-to-end | Playwright | Main journeys from the PRD |
 | Load | k6 | NFR targets before each release |
