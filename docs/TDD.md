@@ -254,7 +254,7 @@ Rules:
 | `order_orders` | `{ _id: hashed }` | Lookups and updates by order ID are the hottest path; the live store board reads the small `order_active` collection |
 | `order_active` | unsharded | Only orders in progress; removed on completion |
 | `order_by_customer` | `{ customerId: hashed }` | Projection: order summaries for a customer's history |
-| `order_by_store` | `{ storeId: hashed }` | Projection: order summaries for a store's history and reports |
+| `order_by_store` | `{ storeId: 1, placedAt: 1 }` | Projection: order summaries for a store's history and reports; the compound key lets one very busy store's history split across shards instead of overloading one |
 | `store_stores`, `store_menu_items` | `{ storeId: hashed }` | Menus are always read per store |
 | `ledger_entries` | `{ accountId: 1, postedAt: 1 }` | Statements and balances are range reads per account |
 | `payment_intents` | `{ orderId: hashed }` | Looked up by order and by webhook (stored with order ID) |
@@ -271,6 +271,7 @@ Rules:
 - The main collection is the only source of truth; projections are never written by API calls directly.
 - Projections are updated from the module's own outbox events by an idempotent consumer inside the same module (milliseconds behind, eventually consistent). Screens that must be exact (order detail, tracking) always read the main collection by ID.
 - Every projection can be rebuilt from the main collection with one admin job, so a bug or a new field never means data loss.
+- Shard keys are expensive to change later (MongoDB can reshard, but it is a heavy online operation), so each key is checked in the pre-release load test with skewed data (a few very busy stores and customers), not just uniform data.
 - A projection is added only for a hot query on another key. Rare queries (admin search, exports) accept scatter-gather or use Elasticsearch.
 
 ### 6.4 Migrations (Liquibase)
