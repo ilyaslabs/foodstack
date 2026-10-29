@@ -35,6 +35,7 @@
 | D14 | Artifacts | Maven `io.github.ilyaslabs:foodstack-*`; images `ilyaslabs/foodstack-server`, `ilyaslabs/foodstack-web`, `ilyaslabs/foodstack-backoffice` on Docker Hub, mirrored to GHCR |
 | D15 | Kubernetes | **Optional.** Helm chart; managed datastores in production, in-cluster datastores with `values-dev.yaml`; one `topology` value (`monolith` default, `split`, `microservices`, `custom`) generates every Deployment, route and Module-Switch setting (section 18.2) |
 | D16 | Service mesh | Istio ambient mode (ztunnel mTLS, waypoints for L7), Gateway API for ingress |
+| D24 | API gateway | No separate gateway service. The Envoy-based Istio Gateway is the API gateway on Kubernetes (Caddy on a single server): TLS, routing, JWT validation, retries, timeouts, CORS, size limits and **global edge rate limiting**. Kong or APISIX can be added in front later if partner API products are needed |
 | D17 | Observability | OpenTelemetry; optional Prometheus, Grafana, Tempo and Loki stack |
 | D18 | Launch deployment | **Unit deployer**: `unit-deployer-<version>.zip` with the jar, Docker Compose and install, start, stop and restart scripts running everything on one server (section 17) |
 | D19 | Media | S3-compatible object storage through a `media` module, with resizing and WebP compression on upload (section 13) |
@@ -318,7 +319,7 @@ This gives at-least-once delivery with effectively-once processing, and no event
 - Pagination: cursor-based (`?cursor=&limit=`), response `{ items, nextCursor }`.
 - `Idempotency-Key` header required on order placement, payments and refunds; responses cached 24 h in Redis under `foodstack:<module>:idem:<key>`.
 - `ETag` / `If-None-Match` on settings, branding and menus; `If-Match` for back-office edits to prevent lost updates.
-- Rate limits per IP and per user (Redis token bucket), stricter on OTP and login.
+- Rate limiting in two layers: **at the edge** (gateway, per IP and per client, before traffic reaches any pod; section 18.3) and **in the app** (per user and per action, Redis token bucket, stricter on login codes, order placement and coupon checks).
 - Additive changes only within `v1`; deprecations announced with a `Deprecation` header.
 
 ### 8.2 Routing in split deployments
@@ -501,7 +502,7 @@ All services share one Docker network, `foodstack`. Only the reverse proxy publi
 
 | Service | Image | Notes |
 |---|---|---|
-| `proxy` | Caddy | Automatic HTTPS for the operator's domains; routes `/api`, `/oauth2`, `/login` to the server and the rest to the web apps |
+| `proxy` | Caddy | The API gateway on a single server: automatic HTTPS for the operator's domains, routing of `/api`, `/oauth2`, `/login` to the server and the rest to the web apps, per-IP rate limiting, request-size limits and security headers |
 | `server` | Eclipse Temurin 25 JRE | Runs the mounted `foodstack-server.jar`; healthcheck on actuator readiness |
 | `web` | Node (LTS) | Customer app SSR server from the mounted bundle |
 | `backoffice` | nginx-unprivileged | Static back-office app |
@@ -604,7 +605,8 @@ For each Deployment the chart:
 - Services: `foodstack-<deployment>` (ports `http` 8080 public API, `internal` 8081 Module-Switch), `foodstack-web`, `foodstack-backoffice`. Cluster-local DNS names such as `foodstack-order.foodstack.svc.cluster.local`.
 - Istio ambient: the namespace is labelled `istio.io/dataplane-mode=ambient`; ztunnel gives mTLS and L4 authorization with no sidecars. A waypoint proxy for the namespace gives L7 load balancing (least request), retries for idempotent routes and per-route timeouts.
 - `AuthorizationPolicy`: port 8081 only from FoodStack server service accounts; public port only from the Gateway; datastores only from the server.
-- Ingress: Gateway API `Gateway` (Istio implementation) with hosts for `web`, `backoffice` and `api`, TLS from cert-manager; HTTP→HTTPS redirect; HSTS.
+- **API gateway:** Gateway API `Gateway` (Istio implementation, Envoy) with hosts for `web`, `backoffice` and `api`, TLS from cert-manager; HTTP→HTTPS redirect; HSTS. It does path routing to module Deployments, JWT validation (`RequestAuthentication`), CORS, request-size limits, per-route timeouts and retries for idempotent routes. The gateway Deployment autoscales on its own HPA.
+- **Global edge rate limiting:** the chart deploys Envoy's rate-limit service (2+ replicas, backed by the same Redis, keys `foodstack:gateway:rl:*`) and attaches it to the Gateway. Default limits are per client IP and per OAuth client, with tighter limits on `/login`, `/oauth2/token` and order placement; all limits are values in `gateway.rateLimits`. Exceeding a limit returns `429` with `Retry-After`. If the rate-limit service is unreachable, the gateway fails open so an outage there never takes the platform down; the app-level limits still apply.
 - Without Istio (`mesh.enabled=false`) the chart still works, using any Gateway API implementation and NetworkPolicies, but without mTLS.
 
 ### 18.4 Reliability and scaling

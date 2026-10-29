@@ -305,6 +305,7 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 
 - [ ] Namespace in Istio ambient mode; `PeerAuthentication` STRICT (default in the chart).
 - [ ] Gateway JWT validation enabled (`security.edgeJwt.enabled=true`, default).
+- [ ] Edge rate limiting enabled (`gateway.rateLimits.enabled=true`, default) and limits reviewed for your traffic (`gateway.rateLimits.*`).
 - [ ] NetworkPolicies enabled (default deny).
 - [ ] Datastores reachable only from the cluster, with TLS and authentication.
 - [ ] Secrets from a secret manager, not committed values files.
