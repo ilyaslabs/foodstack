@@ -10,6 +10,7 @@ The backend is a Spring Boot 4 / Java 25 modular monolith built on [Module-Switc
 - [Product Requirements (PRD)](docs/PRD.md)
 - [Technical Design (TDD)](docs/TDD.md)
 - [Deployment Guide](docs/deployment-guide.md)
+- [Testing Strategy](docs/testing-strategy.md)
 
 ## License
 

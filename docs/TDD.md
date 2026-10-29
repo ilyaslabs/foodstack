@@ -97,6 +97,7 @@ foodstack/
 │     ├─ foodstack/                main chart (section 18)
 │     └─ foodstack-observability/  optional monitoring chart
 ├─ docs/                           BRD, PRD, TDD, ADRs, guides
+├─ integration-tests/              the only full-application tests; every scenario runs as monolith and as microservices
 ├─ tools/                          load tests (k6), seed data, scripts
 └─ .github/workflows/              CI calling ilyaslabs/cicd reusable workflows
 ```
@@ -262,7 +263,7 @@ Rules:
 - Small, rarely written collections (settings, zones, outbox, inbox with TTL) stay unsharded.
 - **Replicas:** MongoDB always runs as a replica set, even with one member on a single server, so adding secondaries later is a config change with no downtime. The app reads from the primary by default; reads that tolerate slight staleness (reports, search rebuilds) use `secondaryPreferred`.
 - **Adding shards later:** an existing replica set becomes the first shard of a sharded cluster online. The app then connects through `mongos` instead of the replica set (a connection-string change only), and each collection is sharded with the key in the table below.
-- **Enforced, not just documented:** each repository declares its shard key, and CI runs the integration suite against a **two-shard MongoDB** (Testcontainers) with every collection pre-sharded. Unique indexes without the shard key, missing shard keys on writes, and accidental scatter-gather on hot paths fail the build, long before production needs shards.
+- **Enforced, not just documented:** each repository declares its shard key, and every repository test runs against a **two-shard MongoDB** (Testcontainers) with every collection pre-sharded. Unique indexes without the shard key, missing shard keys on writes, and accidental scatter-gather on hot paths fail the build, long before production needs shards.
 
 | Collection | Shard key | Why |
 |---|---|---|
@@ -471,16 +472,17 @@ A reusable `docker-release.yml` and `helm-release.yml` will be added to `ilyasla
 
 ### 15.3 Testing strategy
 
-| Level | Tooling | Scope |
+Full rules are in the [Testing Strategy](testing-strategy.md). In short:
+
+| Level | Where | Rule |
 |---|---|---|
-| Unit | JUnit 5, AssertJ | Domain logic, state machines, pricing, ledger balancing |
-| Architecture | `ModuleRules.verify`, ArchUnit | Module boundaries, package rules, collection prefix rule |
-| Integration | Spring Boot tests, Testcontainers (MongoDB replica set, Redis, Kafka, Elasticsearch, MinIO) | Each module with its real datastores |
-| Split topology | Two app contexts, one module in `http` mode | Every module's API works remotely exactly as locally |
-| Shard readiness | Testcontainers two-shard MongoDB, collections pre-sharded | Every query and index works on a sharded cluster |
-| Contract | OpenAPI diff in CI | No breaking change within `/api/v1` |
-| End-to-end | Playwright | Main journeys from the PRD |
-| Load | k6 | NFR targets before each release |
+| Lowest layer (repositories, outbox, Kafka, Redis, Elasticsearch, S3, provider adapters) | `<m>-impl` | Runs against real infrastructure in Testcontainers (two-shard MongoDB) or WireMock for external providers; nothing mocked |
+| Services, consumers, jobs | `<m>-impl` | Class runs for real; the layer below and other modules' `-api` are mocked |
+| Controllers | `<m>-web` | `@WebMvcTest`; service mocked |
+| Contracts | `<m>-api`, CI | Event JSON snapshots, `ModuleRules.verify`, ArchUnit layer rules, OpenAPI diff |
+| Integration | `integration-tests` module only | A short list of business journeys through the public REST API, **each run twice: monolith and microservices** (one context per module) |
+| Front-end | `frontend/` | Vitest components, Playwright journeys, visual and accessibility checks |
+| Performance | `tools/k6` | Nightly smoke; full load before release |
 
 ## 16. Local development and seed data
 
