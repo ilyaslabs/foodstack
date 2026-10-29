@@ -72,23 +72,23 @@ foodstack/
 │  ├─ platform-security/           resource-server config, permission model, PII crypto
 │  └─ platform-test/               Testcontainers fixtures, ModuleRules test, contract test helpers
 ├─ modules/
-│  ├─ identity/   identity-api/   identity-impl/  identity-web/
-│  ├─ settings/   settings-api/   settings-impl/  settings-web/
-│  ├─ media/      media-api/      media-impl/  media-web/      (S3 object storage adapter)
-│  ├─ geo/        geo-api/        geo-impl/  geo-web/        geo-provider-osm/   geo-provider-google/
-│  ├─ store/      store-api/      store-impl/  store-web/
-│  ├─ search/     search-api/     search-impl/  search-web/     (Elasticsearch adapter inside impl)
-│  ├─ cart/       cart-api/       cart-impl/  cart-web/
-│  ├─ promotion/  promotion-api/  promotion-impl/  promotion-web/
-│  ├─ payment/    payment-api/    payment-impl/  payment-web/    payment-gateway-card/  (first card adapter)
-│  ├─ order/      order-api/      order-impl/  order-web/
-│  ├─ dispatch/   dispatch-api/   dispatch-impl/  dispatch-web/
-│  ├─ rider/      rider-api/      rider-impl/  rider-web/
-│  ├─ review/     review-api/     review-impl/  review-web/
-│  ├─ notification/ notification-api/ notification-impl/  notification-web/ (in-app, email, FCM channel adapters)
-│  └─ ledger/     ledger-api/     ledger-impl/  ledger-web/
+│  ├─ identity/   identity-api/  identity-core/  identity-impl/  identity-web/
+│  ├─ settings/   settings-api/  settings-core/  settings-impl/  settings-web/
+│  ├─ media/      media-api/  media-core/  media-impl/  media-web/      (S3 object storage adapter)
+│  ├─ geo/        geo-api/  geo-core/  geo-impl/  geo-web/        geo-provider-osm/   geo-provider-google/
+│  ├─ store/      store-api/  store-core/  store-impl/  store-web/
+│  ├─ search/     search-api/  search-core/  search-impl/  search-web/     (Elasticsearch adapter inside core)
+│  ├─ cart/       cart-api/  cart-core/  cart-impl/  cart-web/
+│  ├─ promotion/  promotion-api/  promotion-core/  promotion-impl/  promotion-web/
+│  ├─ payment/    payment-api/  payment-core/  payment-impl/  payment-web/    payment-gateway-card/  (first card adapter)
+│  ├─ order/      order-api/  order-core/  order-impl/  order-web/
+│  ├─ dispatch/   dispatch-api/  dispatch-core/  dispatch-impl/  dispatch-web/
+│  ├─ rider/      rider-api/  rider-core/  rider-impl/  rider-web/
+│  ├─ review/     review-api/  review-core/  review-impl/  review-web/
+│  ├─ notification/ notification-api/  notification-core/  notification-impl/  notification-web/ (in-app, email, FCM channel adapters)
+│  └─ ledger/     ledger-api/  ledger-core/  ledger-impl/  ledger-web/
 ├─ app/
-│  └─ foodstack-server/            @SpringBootApplication, depends on every *-impl and *-web; application*.yaml; Dockerfile
+│  └─ foodstack-server/            @SpringBootApplication, depends on every *-core, *-impl and *-web; application*.yaml; Dockerfile
 ├─ frontend/                       Angular workspace (section 14)
 ├─ deploy/
 │  └─ unit-deployer/               docker-compose.yml, scripts, Maven assembly for unit-deployer-<version>.zip (section 17)
@@ -102,7 +102,7 @@ foodstack/
 └─ .github/workflows/              CI calling ilyaslabs/cicd reusable workflows
 ```
 
-Java packages: `io.github.ilyaslabs.foodstack.<module>.api`, `.impl` and `.web`. Maven artifacts: `foodstack-<module>-api`, `foodstack-<module>-impl`, `foodstack-<module>-web`.
+Java packages: `io.github.ilyaslabs.foodstack.<module>.api`, `.core`, `.impl` and `.web`. Maven artifacts: `foodstack-<module>-api`, `-core`, `-impl`, `-web`.
 
 ## 5. Backend module design
 
@@ -113,32 +113,36 @@ order-api/                          @ModuleApi("order")  (package-info.java)
   OrderApi.java                     interface; every param @Param; no overloads
   model/  OrderView, OrderLine…     records (Jackson-serializable)
   events/ OrderEvent (sealed) + OrderPlaced, OrderAccepted…   records, published to Kafka
-order-impl/                         @Module("order")     (package-info.java)
+order-core/                         @Module("order")     (package-info.java on ...order.core)
   OrderModuleConfiguration.java     @EnableMongoRepositories(mongoTemplateRef = "orderMongoTemplate"),
                                     MongoTemplate bean, Liquibase runner, Kafka listeners, caches
-  domain/                           aggregates, state machine, domain services
+  application/                      use-case services: PlaceOrderService, OrderQueries, SupportActions…
+  domain/                           aggregates, state machine, pricing, domain services
   persistence/                      @Document("order_orders") entities, repositories
   messaging/                        outbox publisher, event consumers
-  OrderService.java                 implements OrderApi
   src/main/resources/db/changelog/order/db.changelog-master.yaml
+order-impl/                         @Module("order")     (package-info.java on ...order.impl)
+  OrderApiImpl.java                 implements OrderApi by calling core application services
+  OrderApiMapper.java               maps core results to api records; core errors to ModuleException
 order-web/                          @Module("order")     (package-info.java on ...order.web)
   OrderController.java…             REST controllers under /api/v1/orders…, SSE endpoints
   dto/                              public request/response records (separate from internal api records)
-  OrderWebMapper.java               maps between REST DTOs and the module's services
+  OrderWebMapper.java               maps between REST DTOs and core application services
 ```
 
-**What goes where.** Each module has three Maven sub-modules:
+**What goes where.** Each module has four Maven sub-modules. `impl` and `web` are two thin doors into the same `core`:
 
 | Sub-module | Contains | May depend on |
 |---|---|---|
 | `<m>-api` | The module's *internal Java contract* for other modules: `@ModuleApi` interfaces, DTO records, event records. No Spring beans, no controllers, no logic | `module-switch-api`, `platform-core` |
-| `<m>-impl` | The implementation of the api: domain, persistence, messaging, Liquibase changelog, configuration | own `-api`, other modules' `-api`, `platform-*` |
-| `<m>-web` | The module's **public REST API**: controllers, SSE endpoints, REST request/response DTOs, mapping, OpenAPI annotations. **No business logic and no data access** | own `-api`, the `application` package of own `-impl`, `platform-*` |
+| `<m>-core` | **All business logic and data:** application services, domain, persistence, messaging (outbox, consumers), Liquibase changelog, configuration. Knows nothing about HTTP or about being called by other modules | own `-api` (event and shared records), other modules' `-api`, `platform-*` |
+| `<m>-impl` | Only the implementation of the module's `-api`: delegates to `core` application services and maps results and errors. No logic, no data access | own `-api`, the `application` package of own `-core` |
+| `<m>-web` | The module's **public REST API**: controllers, SSE endpoints, REST request/response DTOs, mapping, OpenAPI annotations. No logic, no data access | the `application` package of own `-core`, `platform-*` |
 
-- The public REST DTOs in `-web` are deliberately separate from the internal records in `-api`, so the public API can evolve (versioning, field names) without breaking other modules, and vice versa.
-- `-web`'s package (`io.github.ilyaslabs.foodstack.<m>.web`) is also declared `@Module("<m>")`. Module-Switch accepts several implementation packages per module, so the controllers are loaded only where the module is `local`, and the gateway routes the module's paths to that Deployment.
-- **No duplicated logic:** all business rules and every database operation live once, in `-impl`. `-impl` exposes its use cases as application services in an `application` package (for example `PlaceOrderService`, `StoreMenuQueries`); both its `OrderApi` implementation (for other modules) and the `-web` controllers (for HTTP) call those same services. `-web` only translates HTTP to a service call and the result back to JSON.
-- ArchUnit rules in CI: `-web` may use only the `application` package of its own `-impl` (never `domain`, `persistence` or `messaging`), so a controller can never reach a repository; and no module may depend on another module's `-web` or `-impl` (also checked by `ModuleRules.verify`).
+- **No duplicated logic:** every business rule and database operation exists once, in `-core`. Both doors call the same application services.
+- The public REST DTOs in `-web` are separate from the internal records in `-api`, so the public API and the internal contract evolve independently.
+- `core`, `impl` and `web` packages are all declared `@Module("<m>")`. Module-Switch accepts several implementation packages per module, so all three load only where the module is `local`, and the gateway routes the module's paths to that Deployment.
+- ArchUnit rules in CI: `-impl` and `-web` may use only the `application` package of their own `-core` (never `domain`, `persistence` or `messaging`); `-core` never depends on `-impl` or `-web`; no module may depend on another module's `-core`, `-impl` or `-web` (also checked by `ModuleRules.verify`).
 
 Rules (enforced by Module-Switch at startup and by `ModuleRules.verify("io.github.ilyaslabs.foodstack")` in CI):
 
@@ -402,7 +406,7 @@ Redis is a cache and coordination store only; losing it never loses business dat
 - Built only from events (`StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `ReviewPublished`), never by reading another module's database; a full rebuild job replays from `store` through its API.
 - Per-language fields with language analyzers (including Arabic and Urdu), `search_as_you_type` for autocomplete, `geo_point` for distance sorting, and a delivery shape per store (`geo_shape`): its zone polygons for self-delivery stores, or a circle of the operator's maximum delivery distance for operator-delivery stores, so search returns only stores that deliver to the customer's address.
 - Ranking: open now, distance, rating, ETA, plus admin boosts.
-- `SearchEngine` SPI in `search-impl`; the Elasticsearch Java client is the default adapter.
+- `SearchEngine` SPI in `search-core`; the Elasticsearch Java client is the default adapter.
 
 ## 12. Geo and maps
 
@@ -457,7 +461,7 @@ frontend/
 ### 15.1 Backend build
 
 - Parent POM inherits `spring-boot-starter-parent` 4.x, imports `module-switch-bom`, sets `java.version=25`, uses `${revision}` with the flatten plugin (as `ilyaslabs/cicd` `mvn-release.yml` passes `-Drevision=<tag>`).
-- All `-api`, `-impl`, `-web`, `platform-*` and `foodstack-bom` jars are published to Maven Central, so operators can build a custom server that adds or replaces modules.
+- All `-api`, `-core`, `-impl`, `-web`, `platform-*` and `foodstack-bom` jars are published to Maven Central, so operators can build a custom server that adds or replaces modules.
 - `foodstack-server` image: multi-stage Dockerfile, Spring Boot layered jar on a JRE 25 base, non-root, multi-arch (amd64, arm64), virtual threads on.
 
 ### 15.2 Workflows
@@ -477,8 +481,9 @@ Full rules are in the [Testing Strategy](testing-strategy.md). In short:
 
 | Level | Where | Rule |
 |---|---|---|
-| Lowest layer (repositories, outbox, Kafka, Redis, Elasticsearch, S3, provider adapters) | `<m>-impl` | Runs against real infrastructure in Testcontainers (two-shard MongoDB) or WireMock for external providers; nothing mocked |
-| Services, consumers, jobs | `<m>-impl` | Class runs for real; the layer below and other modules' `-api` are mocked |
+| Lowest layer (repositories, outbox, Kafka, Redis, Elasticsearch, S3, provider adapters) | `<m>-core` | Runs against real infrastructure in Testcontainers (two-shard MongoDB) or WireMock for external providers; nothing mocked |
+| Services, consumers, jobs | `<m>-core` | Class runs for real; the layer below and other modules' `-api` are mocked |
+| Api implementation | `<m>-impl` | Runs for real; core services mocked |
 | Controllers | `<m>-web` | `@WebMvcTest`; service mocked |
 | Contracts | `<m>-api`, CI | Event JSON snapshots, `ModuleRules.verify`, ArchUnit layer rules, OpenAPI diff |
 | Integration | `integration-tests` module only | A short list of business journeys through the public REST API, **each run twice: monolith and microservices** (one context per module) |
@@ -489,7 +494,7 @@ Full rules are in the [Testing Strategy](testing-strategy.md). In short:
 
 - **One click:** `app/foodstack-server/src/test/java/.../LocalFoodstackApplication.java` starts the real application with `SpringApplication.from(FoodstackApplication::main).with(LocalContainers.class)`. `LocalContainers` declares Testcontainers beans with `@ServiceConnection`: MongoDB (single-node replica set), Redis, Kafka (KRaft), Elasticsearch, MinIO and Mailpit. Containers are reused between restarts. Run it from the IDE with one click, or `./mvnw -pl app/foodstack-server spring-boot:test-run`. Docker is the only prerequisite.
 - The Angular apps run with `pnpm start` and proxy `/api` to `localhost:8080`.
-- **Seed data:** when the `test-seed` profile is active, each module seeds its own data through a `@Profile("test-seed")` seeder inside its own `-impl` package, so only `local` modules seed and a module never writes another module's collections. Seeders are idempotent (a `<module>_seed` marker document) and run in dependency order (identity, settings, geo, media, store, rider, promotion, then sample orders through the public APIs).
+- **Seed data:** when the `test-seed` profile is active, each module seeds its own data through a `@Profile("test-seed")` seeder inside its own `-core` package, so only `local` modules seed and a module never writes another module's collections. Seeders are idempotent (a `<module>_seed` marker document) and run in dependency order (identity, settings, geo, media, store, rider, promotion, then sample orders through the public APIs).
 - Seed content: an admin, a finance user and support user, two cities, about 10 stores with menus, photos, opening hours and their own zones, store riders and operator riders, customers with addresses, coupons, and orders in every state. Logins are printed once in the startup log.
 - Safety: startup fails if `test-seed` is active together with `foodstack.environment=production`.
 

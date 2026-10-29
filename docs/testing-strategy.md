@@ -19,9 +19,10 @@ For a chain `Controller → Service → Repository` (or `ClassA → ClassB → C
 
 | Class under test | Runs for real | Mocked | Where | How |
 |---|---|---|---|---|
-| **Repository / ClassC** (lowest layer, touches infrastructure) | The repository and a real MongoDB | Nothing | `<m>-impl` | `@DataMongoTest` with the shared Testcontainers MongoDB |
-| **Service / ClassB** | The service and its domain objects | The repository, other modules' `-api` interfaces, the clock, external providers | `<m>-impl` | Plain JUnit + Mockito; no Spring context |
-| **Controller / ClassA** | The controller plus the MVC stack: routing, validation, JSON, security rules, error mapping | The service | `<m>-web` | `@WebMvcTest` with `@MockitoBean` for the service |
+| **Repository / ClassC** (lowest layer, touches infrastructure) | The repository and a real MongoDB | Nothing | `<m>-core` | `@DataMongoTest` with the shared Testcontainers MongoDB |
+| **Service / ClassB** | The service and its domain objects | The repository, other modules' `-api` interfaces, the clock, external providers | `<m>-core` | Plain JUnit + Mockito; no Spring context |
+| **Controller / ClassA** | The controller plus the MVC stack: routing, validation, JSON, security rules, error mapping | The core service | `<m>-web` | `@WebMvcTest` with `@MockitoBean` for the service |
+| **Api implementation** (`OrderApiImpl`) | The class and its mapping, including error translation to `ModuleException` | The core service | `<m>-impl` | Plain JUnit + Mockito |
 
 The same rule applies to every other kind of class:
 
@@ -48,7 +49,7 @@ Rules:
 
 - **Events:** each event record in `<m>-api` has a JSON snapshot test. A change that removes or renames a field fails the build; additive changes update the snapshot.
 - **Internal module APIs:** `ModuleRules.verify("io.github.ilyaslabs.foodstack")` checks every `@ModuleApi` interface (no overloads, `@Param` everywhere, no cross-module `-impl` or `-web` use).
-- **Architecture:** ArchUnit rules enforce the layer rule above (controllers only in `-web`, repositories only used by their own module's services, no module depends on another module's `-impl` or `-web`).
+- **Architecture:** ArchUnit rules enforce the layer rule above (controllers only in `-web`, `-impl` and `-web` use only `-core` application services, repositories only used inside their own `-core`, no module depends on another module's `-core`, `-impl` or `-web`).
 
 ## 3. Integration tests (`integration-tests` module)
 
@@ -118,7 +119,7 @@ Each scenario class is annotated `@BothTopologies`, which runs it twice:
 
 ## 7. Test data
 
-- Each module publishes **builders** for its own objects as test fixtures (Maven `test-jar` of `<m>-impl`), for example `anOrder().paid().withCoupon("SAVE10").build()`.
+- Each module publishes **builders** for its own objects as test fixtures (Maven `test-jar` of `<m>-core`), for example `anOrder().paid().withCoupon("SAVE10").build()`.
 - Instancio fills fields a test does not care about, so tests state only what matters.
 - Integration scenarios create data through the public API, never by writing to databases directly.
 - Fixed `Clock` and seeded randomness everywhere, so tests are repeatable.
