@@ -137,7 +137,7 @@ Rules (enforced by Module-Switch at startup and by `ModuleRules.verify("io.githu
 | `identity` | Users, credentials, email one-time codes, OIDC authorization server, roles and permissions, back-office invitations, data export/delete orchestration | `/oauth2`, `/login`, `/.well-known`, `/api/v1/auth`, `/api/v1/users`, `/api/v1/me` | none | `UserRegistered`, `UserDeleted`, `RoleChanged` | none |
 | `settings` | Branding, locale, business rules, content pages, feature flags | `/api/v1/settings`, `/api/v1/content` | none | `SettingsChanged` | none |
 | `geo` | Store delivery zones with their charges, cities, address geocoding, routing and ETA, maps provider SPI | `/api/v1/geo`, `/api/v1/zones` | none | `ZoneChanged` | none |
-| `store` | Stores, branches, opening hours, temporary-close switch, menus, items, modifiers, availability, commission config, QR menu codes | `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `StorePaymentCollectionChanged` | none |
+| `store` | Stores, branches, delivery mode (self or operator), opening hours, temporary-close switch, menus, items, modifiers, availability, commission config, QR menu codes | `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `StorePaymentCollectionChanged` | none |
 | `search` | Search and discovery read model in Elasticsearch, home sections | `/api/v1/search`, `/api/v1/discovery` | `geo` | none | `store.*`, `review.*` (rating), `settings.*` (languages) |
 | `cart` | Carts, pricing preview | `/api/v1/carts` | `store`, `geo`, `promotion` | none | `store.*` (invalidate) |
 | `promotion` | Operator and store promotions, coupons, payment-method and merchant-account restrictions, validation, redemption | `/api/v1/coupons`, `/api/v1/offers` | none | `CouponRedeemed`, `CouponReleased` | `order.*` (redeem on confirm, release on cancel) |
@@ -158,7 +158,7 @@ The synchronous dependency graph is acyclic: `order → cart → store → geo/s
 Customer ─POST /api/v1/orders (Idempotency-Key)─► order
   order ─► cart.checkoutSnapshot(cartId)                 (items, store, address)
   order ─► store.validateOrder(storeId, lines, time)     (open? items available? current prices)
-  order ─► geo.quote(storeId, address)                    (store's zones: in zone? fee, distance, ETA)
+  order ─► geo.quote(storeId, deliveryMode, address)      (self: store zones; operator: operator pricing; fee, distance, ETA)
   order ─► promotion.validate(couponCode, context)        (discount, funding split)
   order    computes totals, persists order + outbox(OrderPlaced) in one Mongo transaction
   if card: order ─► payment.resolveMerchant(storeId)       (operator account, or store's own; see 5.4)
@@ -166,10 +166,9 @@ Customer ─POST /api/v1/orders (Idempotency-Key)─► order
            payment webhook ─► PaymentSucceeded ─► order: CONFIRMED (+ OrderConfirmed)
   if cash: order: CONFIRMED immediately (+ OrderConfirmed)
 OrderConfirmed ─► promotion (redeem), notification (store alert, customer receipt), dispatch (prepare job)
-Store accepts and picks who delivers ─► OrderAccepted{deliveredBy: STORE | OPERATOR, storeRiderId?}
-  STORE:    dispatch creates a job assigned to the chosen store rider (or the store marks steps itself)
-  OPERATOR: allowed only if the operator rider service is on; dispatch starts matching; the customer's
-            delivery charge goes to the operator in full (ledger credits the operator, not the store)
+Store accepts ─► OrderAccepted{deliveryMode: STORE | OPERATOR (snapshotted at placement), storeRiderId?}
+  STORE:    dispatch creates a job for the chosen store rider (or the store marks steps itself)
+  OPERATOR: dispatch starts matching operator riders; the delivery charge (operator pricing) goes to the operator
 ```
 
 The order snapshots everything it needs at placement (prices, commission rate, store name, address), so later changes to menus or commission never alter past orders and `ledger` never needs to call `store`.
@@ -202,9 +201,9 @@ store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, 
 
 ### 5.6 Dispatch algorithm (v1)
 
-For `deliveredBy: STORE`, the job goes straight to the chosen store rider (or stays with the store). The steps below apply to operator riders:
+For `deliveryMode: STORE`, the job goes straight to the chosen store rider (or stays with the store). The steps below apply to operator riders:
 
-1. On `OrderAccepted` with `deliveredBy: OPERATOR`, create a job with target pickup time = accepted time + prep estimate − travel time to store.
+1. On `OrderAccepted` with `deliveryMode: OPERATOR`, create a job with target pickup time = accepted time + prep estimate − travel time to store.
 2. Candidate riders: online, in the store's city, within radius R (default 5 km) of the store, from Redis GEO (`GEOSEARCH`).
 3. Score = w1·distance-to-store + w2·active-jobs + w3·(1 − acceptance-rate) + w4·idle-time bonus. Weights in settings.
 4. Offer to the best rider; lock the rider in Redis (`SET NX PX`) for the offer timeout (30 s). On decline or timeout, move to the next; widen radius after N failures; alert admins after the configured limit.
@@ -390,8 +389,8 @@ Redis is a cache and coordination store only; losing it never loses business dat
 
 ## 12. Geo and maps
 
-- `geo` owns delivery zones (GeoJSON polygons, `geo_zones`). Zones are drawn **only by stores**: each belongs to one store and has a fixed charge (no distance formula), minimum order and free-delivery threshold. There are no operator zones, so the quote is the same whoever delivers. `geo` also holds cities (for grouping stores, riders and reports).
-- The delivery charge is credited by `ledger` to whoever delivered, based on `deliveredBy` in `OrderAccepted` and the delivery events from `dispatch`: the store for self-delivery, the operator in full for operator riders.
+- `geo` owns store delivery zones (GeoJSON polygons, `geo_zones`), each belonging to one store with a fixed charge, minimum order and free-delivery threshold, and the **operator delivery pricing** (base + per km of road distance, maximum distance, optional peak multiplier, optional city override). `quote` uses the store's zones for self-delivery stores and the operator pricing for operator-delivery stores. `geo` also holds cities.
+- The delivery mode is snapshotted on the order at placement, so the price the customer saw and the party paid always match. `ledger` credits the delivery charge to the store (self-delivery) or the operator (operator delivery), and posts operator rider pay as a percentage of the operator charge (optional minimum) plus tips. If support hands an operator-delivery order back to the store, the charge is re-credited to the store.
 - Provider SPI: `GeocodingProvider`, `RoutingProvider`, `TileConfig`. Default adapter: Nominatim and OSRM (operator self-hosts or uses a hosted provider; public instances are only for demos). Optional Google Maps adapter.
 - ETA = prep estimate + routing duration × city traffic factor (configurable); quotes are cached briefly.
 

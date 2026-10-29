@@ -67,7 +67,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 |---|---|
 | Deployment model | **One operator per deployment**, running its own branded marketplace with many stores (white-label). Not multi-tenant SaaS |
 | Verticals | **Restaurants**, modelled as a generic *store* so grocery or pharmacy can be added later without a rewrite |
-| Delivery | **Stores deliver with their own riders** by default. The operator can switch on an **operator rider service**; then, after accepting each order, the store chooses to deliver itself or request an operator rider. Delivery zones and charges are set **only by the store**, so the customer sees one delivery price whoever delivers. The delivery charge goes to **whoever delivers**: the store when it delivers itself, the **operator in full** when an operator rider delivers |
+| Delivery | **Each store chooses its delivery mode in its settings.** *Self-delivery* (default): the store delivers with its own riders, draws its own delivery zones on the map and sets their charges; the customer sees those charges and the store keeps them. *Operator delivery* (only when the operator has switched on its rider service and allows the store): operator riders deliver, the customer sees the **operator's delivery charges**, and the operator keeps them. The price shown at checkout always belongs to whoever delivers, so the operator never subsidises a cheap store price |
 | Fulfilment types | **Delivery** and **pickup** |
 | Front-ends | **Customer web app** and **one back-office app** with role-based areas for admin, store and rider (rider area installable as a PWA). All Angular |
 | API | Pure REST, so native mobile apps can be built later on the same API |

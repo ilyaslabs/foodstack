@@ -46,7 +46,7 @@ PLACED ─► PAYMENT_PENDING ─► CONFIRMED ─► ACCEPTED ─► PREPARING 
 
 - Cash orders skip `PAYMENT_PENDING`.
 - A store must accept within a configurable time (default 3 minutes) or the order auto-rejects and the customer is refunded.
-- On accepting a delivery order, the store chooses **who delivers**: its own riders, or an operator rider (offered only when the operator rider service is on). Operator dispatch starts right away so the rider arrives around `READY`; a store's own riders get the job in the rider app, or the store marks `PICKED_UP` and `DELIVERED` itself.
+- Who delivers is fixed by the store's **delivery mode** setting at the time of the order (see ST-13), not chosen per order. For operator delivery, dispatch starts at `ACCEPTED` so the rider arrives around `READY`; for self-delivery the store's own rider gets the job in the rider app, or the store marks `PICKED_UP` and `DELIVERED` itself.
 - Every transition is timestamped, attributed to an actor, and visible on the order timeline.
 
 ## 4. Functional requirements
@@ -83,6 +83,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | ST-10 | **Own riders:** the store owner invites their own riders, who use the same rider app and see only that store's jobs | M |
 | ST-11 | **Own delivery zones:** the store owner draws delivery zones on a map, each with a **fixed delivery charge** (no per-km calculation; the owner knows the distance of each area, so typical setups are rings such as 0-3 km and 3-6 km), minimum order and optional free-delivery threshold | M |
 | ST-12 | **QR menu:** the store owner prints a QR code (A4/A5/table-tent PDF, store branding) that opens the store's menu in the customer web app; an optional table number is carried in the link for later dine-in ordering | M |
+| ST-13 | **Delivery mode** (store setting): *self-delivery* (default; own riders, own zones and charges) or *operator delivery* (operator riders and operator charges). Operator delivery is offered only when the operator rider service is on and the admin allows that store. Changing the mode affects new orders only | M |
 
 ### 4.3 Discovery and search (`search`, `geo`)
 
@@ -94,7 +95,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | SE-4 | Autocomplete suggestions under 150 ms p95 | M |
 | SE-5 | Admin-curated home sections (banners, featured stores, collections) | S |
 | SE-6 | Address search and reverse geocoding on the map pin | M |
-| SE-7 | Delivery zones are drawn **only by stores** (ST-11). There are no operator zones, so one delivery price applies whoever delivers. Admins can view any store's zones and correct them for support | M |
+| SE-7 | Delivery area and charge depend on the store's delivery mode: **self-delivery** uses the store's own zones and charges (ST-11); **operator delivery** uses the operator's delivery pricing (DR-1b) within the operator's maximum delivery distance. Admins can view any store's zones and correct them for support | M |
 
 ### 4.4 Cart and checkout (`cart`, `order`, `promotion`, `payment`)
 
@@ -102,7 +103,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 |---|---|---|
 | CO-1 | One cart per customer, one store per cart; switching store asks to clear | M |
 | CO-2 | Checkout shows itemised subtotal, delivery fee, service fee, discounts, tax, tip (optional), total | M |
-| CO-3 | Choose delivery or pickup; the address must be inside one of the store's delivery zones, and the delivery charge comes from that zone. It is fixed at checkout and is the same whoever delivers (see OF-8) | M |
+| CO-3 | Choose delivery or pickup. For a self-delivery store the address must be inside one of its zones and the charge comes from that zone; for an operator-delivery store the address must be within the operator's maximum distance and the charge comes from the operator's pricing. The charge is fixed at checkout | M |
 | CO-4 | Apply one coupon per order; validation explains why a coupon fails | M |
 | CO-5 | Pay by cash on delivery or by card through the configured gateway. The operator can **switch card payments off** entirely, and choose the integration style: the gateway's **hosted payment page** (redirect, recommended at launch) or embedded gateway fields | M |
 | CO-5a | **Saved cards** (gateway tokens) are a separate setting, **off by default** | M |
@@ -118,7 +119,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 |---|---|---|
 | OF-1 | Store order board (new, preparing, ready, out) updates live with a loud, repeating alert for new orders | M |
 | OF-2 | Store accepts with a prep-time estimate or rejects with a reason | M |
-| OF-8 | When accepting a delivery order, the store chooses **deliver myself** (and optionally assigns one of its own riders) or **request operator rider**. The second option is shown only when the operator rider service is on and the store is allowed to use it. The customer's delivery charge (from the store's zone) goes to whoever delivers: the store when it delivers itself, the **operator in full** when an operator rider delivers. The ledger records it accordingly | M |
+| OF-8 | Self-delivery store: when accepting, the store optionally assigns one of its own riders. Operator-delivery store: an operator rider is dispatched automatically on acceptance. If no operator rider accepts within the configured time, support is alerted and can reassign, or ask the store to deliver (the delivery charge then goes to the store) | M |
 | OF-3 | Store marks preparing and ready; prints a kitchen ticket (browser print) | M |
 | OF-4 | For self-delivered orders, the store's rider (or the store) marks picked up and delivered | M |
 | OF-5 | Customer can cancel before acceptance; after that, only support can cancel | M |
@@ -131,6 +132,8 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 |---|---|---|
 | DR-1 | Operator rider onboarding by admin: identity documents, vehicle type, city, payout details. Store riders are invited by the store owner and belong only to that store | M |
 | DR-1a | The **operator rider service** is a global setting, off by default, so a new operator can launch with stores delivering themselves | M |
+| DR-1b | **Operator delivery pricing** (what customers of operator-delivery stores pay): base charge + charge per km of road distance from store to customer, a maximum delivery distance, optional minimum order and free-delivery threshold, and an optional peak-hour multiplier. Set by the operator; optional override per city | M |
+| DR-1c | **Operator rider pay:** a configurable percentage of the operator delivery charge (default 70%), an optional minimum per delivery, plus 100% of tips. The operator keeps the rest. Store riders are paid by their store outside FoodStack | M |
 | DR-2 | Rider goes online or offline; location reported every 10 s while online (adaptive when stationary) | M |
 | DR-3 | Dispatch offers a job to the best-ranked available rider (distance to store, current load, acceptance rate); offer expires after 30 s and moves to the next rider | M |
 | DR-4 | Job card shows store, drop-off area, distance, and earning before accepting | M |
@@ -250,7 +253,7 @@ By default the operator collects every card payment and pays stores later. The o
 | App | Screens |
 |---|---|
 | Customer web | Address picker, Home (sections and store list), Search, Store page (menu with sticky categories), Item sheet (modifiers), Cart, Checkout, Order tracking, Orders history, Rate order, Profile and addresses, Notification centre, In-store menu (from QR), Content pages |
-| Back office: store | Live order board, Order detail (with delivery choice), Menu editor, Availability, Opening hours and temporary close, Delivery zones and charges (map), Riders, QR menu print, Reviews, Earnings and balance, Payment account (when direct collection is allowed), Store settings |
+| Back office: store | Live order board, Order detail, Menu editor, Availability, Opening hours and temporary close, Delivery mode, Delivery zones and charges (map, self-delivery), Riders, QR menu print, Reviews, Earnings and balance, Payment account (when direct collection is allowed), Store settings |
 | Back office: rider | Go online, Job offer (operator or store jobs), Active job (pickup, drop-off steps), Earnings, Profile |
 | Back office: admin | Dashboard, Live map, Orders, Stores (onboarding wizard), Riders, Customers, Store delivery zones (view and correct), Coupons, Reviews moderation, Finance (ledger, payouts), Notifications templates, Branding and settings, Users and roles, Audit log |
 
@@ -292,4 +295,4 @@ See [BRD section 7.2](BRD.md#72-out-of-scope-for-v1-candidates-for-later).
 ## 9. Open questions
 
 1. ~~Card adapter to ship first~~ **Decided:** one global gateway with a hosted payment page as the first adapter; regional gateways are added later through the same interface.
-2. Rider earning formula defaults (base + per-km + per-minute waiting) and whether operators can configure it per city in v1.
+2. ~~Rider earning formula~~ **Decided:** operator riders get a percentage of the operator delivery charge (default 70%), optional minimum per delivery, plus all tips (DR-1c).
