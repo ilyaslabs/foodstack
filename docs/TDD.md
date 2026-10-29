@@ -133,11 +133,12 @@ order-web/                          @Module("order")     (package-info.java on .
 |---|---|---|
 | `<m>-api` | The module's *internal Java contract* for other modules: `@ModuleApi` interfaces, DTO records, event records. No Spring beans, no controllers, no logic | `module-switch-api`, `platform-core` |
 | `<m>-impl` | The implementation of the api: domain, persistence, messaging, Liquibase changelog, configuration | own `-api`, other modules' `-api`, `platform-*` |
-| `<m>-web` | The module's **public REST API**: controllers, SSE endpoints, REST request/response DTOs, mapping, OpenAPI annotations | own `-api` and own `-impl` (application services), `platform-*` |
+| `<m>-web` | The module's **public REST API**: controllers, SSE endpoints, REST request/response DTOs, mapping, OpenAPI annotations. **No business logic and no data access** | own `-api`, the `application` package of own `-impl`, `platform-*` |
 
 - The public REST DTOs in `-web` are deliberately separate from the internal records in `-api`, so the public API can evolve (versioning, field names) without breaking other modules, and vice versa.
 - `-web`'s package (`io.github.ilyaslabs.foodstack.<m>.web`) is also declared `@Module("<m>")`. Module-Switch accepts several implementation packages per module, so the controllers are loaded only where the module is `local`, and the gateway routes the module's paths to that Deployment.
-- No module may depend on another module's `-web` or `-impl`; this is checked by `ModuleRules.verify` and an ArchUnit rule in CI.
+- **No duplicated logic:** all business rules and every database operation live once, in `-impl`. `-impl` exposes its use cases as application services in an `application` package (for example `PlaceOrderService`, `StoreMenuQueries`); both its `OrderApi` implementation (for other modules) and the `-web` controllers (for HTTP) call those same services. `-web` only translates HTTP to a service call and the result back to JSON.
+- ArchUnit rules in CI: `-web` may use only the `application` package of its own `-impl` (never `domain`, `persistence` or `messaging`), so a controller can never reach a repository; and no module may depend on another module's `-web` or `-impl` (also checked by `ModuleRules.verify`).
 
 Rules (enforced by Module-Switch at startup and by `ModuleRules.verify("io.github.ilyaslabs.foodstack")` in CI):
 
