@@ -290,10 +290,10 @@ Rules:
 |---|---|
 | Topic | One per publishing module: `foodstack.<module>.events` (for example `foodstack.order.events`) |
 | Key | Aggregate ID, so events of one order stay ordered |
-| Partitions | 12 by default (configurable); replication factor 3 in production |
+| Partitions | 24 by default (configurable), set high from day one because adding partitions later re-maps keys and briefly breaks per-order ordering; replication factor 3 in production (1 on a single server) |
 | Envelope | CloudEvents 1.0 JSON: `id`, `source` (`foodstack/<module>`), `type` (`foodstack.order.OrderPlaced.v1`), `time`, `subject` (aggregate ID), `traceparent`, `data` |
 | Schema | Event payloads are records in `<module>-api/events`, versioned by type suffix; changes are additive, breaking changes get a new `vN` type |
-| Consumer group | `foodstack-<consumingModule>` |
+| Consumer group | `foodstack-<consumingModule>`: every consuming module gets every event independently; inside a group each partition is processed by one consumer thread at a time, so a module's maximum parallelism per topic equals the partition count. The Helm chart sets listener concurrency so that replicas × concurrency ≤ partitions, and warns otherwise |
 | Retry | Spring Kafka retry with backoff (3 attempts), then `foodstack.<module>.events.dlt`; admin UI lists DLT messages for replay |
 | Retention | 7 days (topic), DLT 30 days |
 
@@ -628,7 +628,7 @@ foodstack:
       mongodb.uri: ${ORDER_MONGODB_URI:}    # optional: dedicated cluster for this module's database
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP}
-    topic-partitions: 12
+    topic-partitions: 24
   redis:
     url: ${REDIS_URL}
   search:
