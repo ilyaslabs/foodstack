@@ -105,8 +105,9 @@ Everything else (branding, languages, currency, timezone, fees, commission, feat
 4. **Settings → Business rules:** service fee, cancellation policy, auto-reject timeout, tip options.
 5. **Settings → Features:** pickup, operator rider service, card payments, saved cards, store direct payment collection.
 6. **Notifications:** send a test email and a test push.
-7. **Stores:** onboard the first store; let the owner set hours, zones and menu.
-8. Place a test order end to end, then delete it from the admin panel.
+7. **Delivery:** if you run your own riders, switch on the operator rider service and set operator delivery pricing and rider pay; otherwise stores deliver themselves.
+8. **Stores:** onboard the first store and choose whether it may use operator delivery; let the owner set delivery mode, hours, zones and menu.
+9. Place a test order end to end, then delete it from the admin panel.
 
 ### 3.5 Day-to-day operations
 

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft v1, agreed in grooming with ilyas on 2026-10-27 |
+| Status | Draft v1, agreed in grooming with ilyas (2026-10-27, last updated 2026-10-29) |
 | Owner | ilyas |
 | Related | [BRD](BRD.md), [TDD](TDD.md) |
 
@@ -16,7 +16,7 @@ This document describes what FoodStack v1 does for each user and how it should f
 | **Omar, store owner** | Runs a busy restaurant, tablet at the counter | Never miss an order, keep the menu accurate, see what he earns |
 | **Bilal, rider** | Motorbike, Android phone, patchy data | Get many jobs, short waits, clear directions, transparent pay |
 | **Ayesha, operator admin** | Runs operations and support | Onboard stores and riders, fix problems, run promotions, settle money |
-| **Daniyal, operator DevOps** | Small team, one Kubernetes cluster | Install, secure, observe and upgrade without surprises |
+| **Daniyal, operator DevOps** | Small team; one server at launch, Kubernetes later | Install, secure, observe and upgrade without surprises |
 
 ## 2. Applications
 
@@ -107,11 +107,11 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | CO-4 | Apply one coupon per order; validation explains why a coupon fails | M |
 | CO-5 | Pay by cash on delivery or by card through the configured gateway. The operator can **switch card payments off** entirely, and choose the integration style: the gateway's **hosted payment page** (redirect, recommended at launch) or embedded gateway fields | M |
 | CO-5a | **Saved cards** (gateway tokens) are a separate setting, **off by default** | M |
-| CO-10 | For a store that collects payments directly (see 4.14), card payment goes to the store's own merchant account; the customer experience is the same and the receipt names the store as the merchant | M |
 | CO-6 | Price and availability re-validated at order placement; customer is told about any change | M |
 | CO-7 | Idempotent order placement (double tap never creates two orders) | M |
 | CO-8 | ETA shown before ordering and updated live after | M |
 | CO-9 | Re-order from history in one tap | S |
+| CO-10 | For a store that collects payments directly (see 4.14), card payment goes to the store's own merchant account; the customer experience is the same and the receipt names the store as the merchant | M |
 
 ### 4.5 Order fulfilment (`order`) and store experience
 
@@ -119,12 +119,12 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 |---|---|---|
 | OF-1 | Store order board (new, preparing, ready, out) updates live with a loud, repeating alert for new orders | M |
 | OF-2 | Store accepts with a prep-time estimate or rejects with a reason | M |
-| OF-8 | Self-delivery store: when accepting, the store optionally assigns one of its own riders. Operator-delivery store: an operator rider is dispatched automatically on acceptance. If no operator rider accepts within the configured time, support is alerted and can reassign, or ask the store to deliver (the delivery charge then goes to the store) | M |
 | OF-3 | Store marks preparing and ready; prints a kitchen ticket (browser print) | M |
 | OF-4 | For self-delivered orders, the store's rider (or the store) marks picked up and delivered | M |
 | OF-5 | Customer can cancel before acceptance; after that, only support can cancel | M |
 | OF-6 | Support sees the full timeline and can cancel, refund fully or partly, or reassign a rider, always with a reason | M |
 | OF-7 | Store dashboard: today's orders, revenue, average prep time, rating | S |
+| OF-8 | Self-delivery store: when accepting, the store optionally assigns one of its own riders. Operator-delivery store: an operator rider is dispatched automatically on acceptance. If no operator rider accepts within the configured time, support is alerted and can reassign, or ask the store to deliver (the delivery charge then goes to the store) | M |
 
 ### 4.6 Dispatch and riders (`dispatch`, `rider`)
 
@@ -138,7 +138,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | DR-3 | Dispatch offers a job to the best-ranked available rider (distance to store, current load, acceptance rate); offer expires after 30 s and moves to the next rider | M |
 | DR-4 | Job card shows store, drop-off area, distance, and earning before accepting | M |
 | DR-5 | Navigation hand-off to the device's maps app | M |
-| DR-6 | Proof of delivery: tap to confirm, optional photo, OTP for high-value orders (configurable) | M |
+| DR-6 | Proof of delivery: tap to confirm, optional photo, and for high-value orders (configurable) a 4-digit code shown in the customer's app and order email that the rider enters (no SMS needed) | M |
 | DR-7 | Rider earnings view per day and week; cash collected vs owed for cash orders | M |
 | DR-8 | Admin live map of riders and active orders | M |
 | DR-9 | Batching two orders from the same store to one rider | C |
@@ -255,7 +255,7 @@ By default the operator collects every card payment and pays stores later. The o
 | Customer web | Address picker, Home (sections and store list), Search, Store page (menu with sticky categories), Item sheet (modifiers), Cart, Checkout, Order tracking, Orders history, Rate order, Profile and addresses, Notification centre, In-store menu (from QR), Content pages |
 | Back office: store | Live order board, Order detail, Menu editor, Availability, Opening hours and temporary close, Delivery mode, Delivery zones and charges (map, self-delivery), Riders, QR menu print, Reviews, Earnings and balance, Payment account (when direct collection is allowed), Store settings |
 | Back office: rider | Go online, Job offer (operator or store jobs), Active job (pickup, drop-off steps), Earnings, Profile |
-| Back office: admin | Dashboard, Live map, Orders, Stores (onboarding wizard), Riders, Customers, Store delivery zones (view and correct), Coupons, Reviews moderation, Finance (ledger, payouts), Notifications templates, Branding and settings, Users and roles, Audit log |
+| Back office: admin | Dashboard, Live map, Orders, Stores (onboarding wizard), Riders, Customers, Store delivery zones (view and correct), Operator delivery pricing and rider pay, Coupons, Reviews moderation, Finance (ledger, payouts), Notifications templates, Branding and settings, Users and roles, Audit log |
 
 ## 6. Non-functional requirements
 
@@ -263,7 +263,7 @@ By default the operator collects every card payment and pays stores later. The o
 |---|---|
 | Performance | API p95 < 300 ms for reads and < 600 ms for order placement at target load; search autocomplete p95 < 150 ms; customer web LCP < 2.5 s on mid-range phone over 4G |
 | Scale (reference) | Monolith: 200 orders per hour sustained. Split preset: 5,000 orders per hour with horizontal scaling of `order`, `dispatch`, `search` |
-| Availability | 99.9% monthly for order placement in the reference production setup (3 replicas, multi-AZ datastores) |
+| Availability | Kubernetes reference setup (3 replicas, multi-zone datastores): 99.9% monthly for order placement. Single server: no high availability; restart within minutes and restore from daily backups |
 | Real time | Order status and rider position reach the customer within 3 s |
 | Security | OWASP ASVS L2 targets; mTLS between all pods; TLS 1.2+ at the edge; secrets never in images; PII encrypted at rest; no card data stored |
 | Privacy | Data export and deletion; configurable retention for location history (default 30 days) |
@@ -285,7 +285,7 @@ By default the operator collects every card payment and pays stores later. The o
 | **M2 Ordering** | `cart`, `order`, `payment` (cash and card adapter), `promotion`, `notification` | Customer places and pays for an order; store accepts and completes a pickup order |
 | **M3 Delivery** | `dispatch`, `rider`, live tracking, rider PWA, admin live map | End-to-end delivery with rider and live map |
 | **M4 Money and trust** | `ledger`, payout reports with netting, store direct payment collection, `review`, audit log, data export and deletion | Ledger balances for every test order; payout CSV reconciles |
-| **M5 Production hardening** | Optional Kubernetes path: Helm chart, `split` preset, Istio ambient mTLS, observability chart; load tests, security review, docs and quick start | NFR targets met in load test; quick start verified on a clean server and on a clean cluster |
+| **M5 Production hardening** | Optional Kubernetes path: Helm chart with `monolith`, `split`, `microservices` and `custom` topologies, edge rate limiting, Istio ambient mTLS, observability chart; load tests, security review, docs and quick start | NFR targets met in load test; quick start verified on a clean server and on a clean cluster |
 | **v1.0 GA** | Release to Maven Central, Docker Hub, GHCR | Tagged release, changelog, upgrade notes |
 
 ## 8. Out of scope for v1

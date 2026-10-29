@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft v1, agreed in grooming with ilyas on 2026-10-27 |
+| Status | Draft v1, agreed in grooming with ilyas (2026-10-27, last updated 2026-10-29) |
 | Owner | ilyas (decisions), Claude (architecture draft) |
 | Related | [BRD](BRD.md), [PRD](PRD.md), [Module-Switch](https://github.com/ilyaslabs/module-switch), [Module-Switch example](https://github.com/ilyaslabs/module-switch-example) |
 
@@ -35,7 +35,6 @@
 | D14 | Artifacts | Maven `io.github.ilyaslabs:foodstack-*`; images `ilyaslabs/foodstack-server`, `ilyaslabs/foodstack-web`, `ilyaslabs/foodstack-backoffice` on Docker Hub, mirrored to GHCR |
 | D15 | Kubernetes | **Optional.** Helm chart; managed datastores in production, in-cluster datastores with `values-dev.yaml`; one `topology` value (`monolith` default, `split`, `microservices`, `custom`) generates every Deployment, route and Module-Switch setting (section 18.2) |
 | D16 | Service mesh | Istio ambient mode (ztunnel mTLS, waypoints for L7), Gateway API for ingress |
-| D24 | API gateway | No separate gateway service. The Envoy-based Istio Gateway is the API gateway on Kubernetes (Caddy on a single server): TLS, routing, JWT validation, retries, timeouts, CORS, size limits and **global edge rate limiting**. Kong or APISIX can be added in front later if partner API products are needed |
 | D17 | Observability | OpenTelemetry; optional Prometheus, Grafana, Tempo and Loki stack |
 | D18 | Launch deployment | **Unit deployer**: `unit-deployer-<version>.zip` with the jar, Docker Compose and install, start, stop and restart scripts running everything on one server (section 17) |
 | D19 | Media | S3-compatible object storage through a `media` module, with resizing and WebP compression on upload (section 13) |
@@ -43,6 +42,7 @@
 | D21 | Local development | One-click run with Testcontainers; `test-seed` profile loads demo data (section 16) |
 | D22 | Sharding | Every collection designed with a shard key from day one (section 6.3) |
 | D23 | Notifications | In-app, email and push; no SMS in v1 |
+| D24 | API gateway | No separate gateway service. The Envoy-based Istio Gateway is the API gateway on Kubernetes (Caddy on a single server): TLS, routing, JWT validation, retries, timeouts, CORS, size limits and **global edge rate limiting**. Kong or APISIX can be added in front later if partner API products are needed |
 
 ## 3. System context
 
@@ -134,11 +134,11 @@ Rules (enforced by Module-Switch at startup and by `ModuleRules.verify("io.githu
 
 | Module | Responsibility | REST prefixes | Sync dependencies (`-api`) | Publishes | Consumes |
 |---|---|---|---|---|---|
-| `identity` | Users, credentials, email one-time codes, OIDC authorization server, roles and permissions, back-office invitations, data export/delete orchestration | `/oauth2`, `/login`, `/.well-known`, `/api/v1/auth`, `/api/v1/users`, `/api/v1/me` | none | `UserRegistered`, `UserDeleted`, `RoleChanged` | none |
+| `identity` | Users, credentials, email one-time codes, OIDC authorization server, roles and permissions, back-office invitations, data export/delete orchestration | `/oauth2`, `/login`, `/.well-known`, `/api/v1/auth`, `/api/v1/users`, `/api/v1/me` | none | `UserRegistered`, `UserDeleted`, `RoleChanged`, `UserTokensRevoked` | none |
 | `settings` | Branding, locale, business rules, content pages, feature flags | `/api/v1/settings`, `/api/v1/content` | none | `SettingsChanged` | none |
-| `geo` | Store delivery zones with their charges, cities, address geocoding, routing and ETA, maps provider SPI | `/api/v1/geo`, `/api/v1/zones` | none | `ZoneChanged` | none |
+| `geo` | Store delivery zones with their charges, operator delivery pricing, cities, address geocoding, routing and ETA, maps provider SPI | `/api/v1/geo`, `/api/v1/zones` | none | `ZoneChanged`, `OperatorDeliveryPricingChanged` | none |
 | `store` | Stores, branches, delivery mode (self or operator), opening hours, temporary-close switch, menus, items, modifiers, availability, commission config, QR menu codes | `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `StorePaymentCollectionChanged` | none |
-| `search` | Search and discovery read model in Elasticsearch, home sections | `/api/v1/search`, `/api/v1/discovery` | `geo` | none | `store.*`, `review.*` (rating), `settings.*` (languages) |
+| `search` | Search and discovery read model in Elasticsearch, home sections | `/api/v1/search`, `/api/v1/discovery` | `geo` | none | `store.*` (incl. delivery mode), `geo.*` (zones, operator max distance), `review.*` (rating), `settings.*` (languages) |
 | `cart` | Carts, pricing preview | `/api/v1/carts` | `store`, `geo`, `promotion` | none | `store.*` (invalidate) |
 | `promotion` | Operator and store promotions, coupons, payment-method and merchant-account restrictions, validation, redemption | `/api/v1/coupons`, `/api/v1/offers` | none | `CouponRedeemed`, `CouponReleased` | `order.*` (redeem on confirm, release on cancel) |
 | `payment` | Payment intents, gateway SPI, merchant accounts (operator and store-owned), webhooks, refunds, saved card tokens | `/api/v1/payments`, `/api/v1/payment-webhooks` | none | `PaymentSucceeded`, `PaymentFailed`, `RefundSucceeded` | `order.*` (refund on cancel), `store.*` (collection mode), `ledger.*` (credit limit) |
@@ -158,7 +158,7 @@ The synchronous dependency graph is acyclic: `order → cart → store → geo/s
 Customer ─POST /api/v1/orders (Idempotency-Key)─► order
   order ─► cart.checkoutSnapshot(cartId)                 (items, store, address)
   order ─► store.validateOrder(storeId, lines, time)     (open? items available? current prices)
-  order ─► geo.quote(storeId, deliveryMode, address)      (self: store zones; operator: operator pricing; fee, distance, ETA)
+  order ─► geo.quote(storeId, storeLocation, deliveryMode, address)  (self: store zones; operator: operator pricing)
   order ─► promotion.validate(couponCode, context)        (discount, funding split)
   order    computes totals, persists order + outbox(OrderPlaced) in one Mongo transaction
   if card: order ─► payment.resolveMerchant(storeId)       (operator account, or store's own; see 5.4)
@@ -232,7 +232,7 @@ For `deliveryMode: STORE`, the job goes straight to the chosen store rider (or s
 | Geo | GeoJSON with `2dsphere` indexes (stores, zones) |
 | Soft delete | `deletedAt` for business records; hard delete only for data-deletion requests |
 | Audit | `createdAt`, `createdBy`, `updatedAt`, `updatedBy` on every document; back-office writes also go to `identity_audit_log` |
-| PII | Phone and email encrypted with AES-GCM (key from Kubernetes Secret or external KMS); a keyed HMAC blind index supports lookup |
+| PII | Phone and email encrypted with AES-GCM (key from a Kubernetes Secret, external KMS, or `.env` on a single server); a keyed HMAC blind index supports lookup |
 
 ### 6.3 Designed for sharding
 
@@ -279,7 +279,7 @@ Rules:
 - Each module ships `db/changelog/<module>/db.changelog-master.yaml` using the `liquibase-mongodb` change types (`createCollection`, `createIndex`, `insertMany`, `runCommand`).
 - Liquibase tracking collections are per module: `<module>_databasechangelog` and `<module>_databasechangeloglock`, so migrations of one module never block another and travel with it when extracted.
 - `platform-mongo` provides `ModuleLiquibaseRunner`, registered by each module's configuration class, so only `local` modules migrate.
-- Production: migrations run in a Helm `pre-install,pre-upgrade` hook Job (`foodstack-server --foodstack.migrate-only=true`). Dev and tests: they run at startup.
+- Production: migrations run once per install or upgrade before the application starts: a Helm `pre-install,pre-upgrade` hook Job on Kubernetes, `install.sh` / `upgrade.sh` on a single server (`foodstack-server --foodstack.migrate-only=true`). In migrate-only mode **every** module is `local` whatever the topology, and each uses its own datastore override, so all module databases are migrated in one step. Dev and tests: migrations run at startup.
 - Migrations must be backward compatible with the previous release (expand, then contract in a later release) so rolling upgrades work.
 
 ## 7. Events (Kafka)
@@ -338,7 +338,7 @@ Every REST prefix belongs to exactly one module (section 5.2). The Helm chart ge
 
 - `identity` embeds Spring Authorization Server. Clients: `web` and `backoffice` (public, Authorization Code + PKCE), future mobile apps (same), internal service clients (client credentials, for jobs).
 - The login UI is served by `identity` and themed from `settings` branding. It supports email one-time codes (stored hashed in Redis with 5 minute TTL, attempt limits), email and password (Argon2id), social login (OIDC federation), and TOTP for back-office users.
-- Access tokens: JWT signed with ES256, 10 minute lifetime; refresh tokens rotated, 30 days for customers and 12 hours for back office. Signing keys come from a Kubernetes Secret and are published through JWKS; rotation keeps the previous key valid.
+- Access tokens: JWT signed with ES256, 10 minute lifetime; refresh tokens rotated, 30 days for customers and 12 hours for back office. Signing keys come from a Kubernetes Secret (or `.env` on a single server) and are published through JWKS; rotation keeps the previous key valid.
 - Token claims: `sub`, `roles`, `perms`, `storeIds` (store staff), `riderId`.
 - **No per-request call to `identity`.** Every module is an OAuth2 resource server that validates the JWT itself, in memory: signature (ES256) against `identity`'s public keys, plus issuer, audience, expiry and not-before. The public keys (JWKS) are fetched once at startup and cached; a token signed with an unknown key ID triggers one refresh. Validation costs microseconds and keeps working even if `identity` is briefly down. `identity` is called only to log in, refresh a token, or fetch keys.
 - Authorization uses method security with permissions such as `order:refund` and store-scoped checks (`storeIds` contains the target store), read from the token claims, so no lookup is needed.
@@ -370,8 +370,8 @@ Every REST prefix belongs to exactly one module (section 5.2). The Helm chart ge
 |---|---|---|
 | Spring Cache (menus, store cards, settings, branding, zones) | `foodstack:<module>:cache:<name>:<key>` | 1 to 10 min; evicted on the module's own change events |
 | Idempotency | `foodstack:<module>:idem:<key>` | 24 h |
-| Rate limiting | `foodstack:identity:rl:<scope>:<id>` | token bucket |
-| OTP | `foodstack:identity:otp:<phoneHash>` | 5 min |
+| Rate limiting (app) | `foodstack:<module>:rl:<scope>:<id>` | token bucket; edge limits use `foodstack:gateway:rl:*` |
+| Login codes | `foodstack:identity:otp:<emailHash>` | 5 min |
 | Rider live location | `foodstack:rider:geo` (GEO set) | refreshed on each ping; stale riders pruned |
 | Dispatch offer locks | `foodstack:dispatch:offer:<riderId>` | offer timeout |
 | Outbox relay leader lock | `foodstack:<module>:outbox:leader` | 10 s, renewed |
@@ -383,7 +383,7 @@ Redis is a cache and coordination store only; losing it never loses business dat
 
 - Indices prefixed by module: `search_stores_v<N>` and `search_dishes_v<N>`, accessed through aliases `search_stores` and `search_dishes`; reindex by building a new version and swapping the alias.
 - Built only from events (`StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `ReviewPublished`), never by reading another module's database; a full rebuild job replays from `store` through its API.
-- Per-language fields with language analyzers (including Arabic and Urdu), `search_as_you_type` for autocomplete, `geo_point` for distance sorting, and each store's zone polygons (`geo_shape`) so search returns only stores that deliver to the customer's address.
+- Per-language fields with language analyzers (including Arabic and Urdu), `search_as_you_type` for autocomplete, `geo_point` for distance sorting, and a delivery shape per store (`geo_shape`): its zone polygons for self-delivery stores, or a circle of the operator's maximum delivery distance for operator-delivery stores, so search returns only stores that deliver to the customer's address.
 - Ranking: open now, distance, rating, ETA, plus admin boosts.
 - `SearchEngine` SPI in `search-impl`; the Elasticsearch Java client is the default adapter.
 
@@ -427,9 +427,9 @@ frontend/
 - Standalone components, signals and zoneless change detection; NgRx SignalStore for feature state; lazy-loaded routes per area and feature.
 - **Runtime branding:** on boot the app loads `/api/v1/settings/branding` and writes Material 3 design tokens as CSS custom properties (colour palettes generated from the operator's primary and secondary colours, typography, logo URLs). Components never hard-code colours.
 - **Runtime i18n:** Transloco with translations fetched per language, because languages are chosen at runtime. `dir="rtl"` is set from the active locale; styles use logical properties.
-- **Runtime config:** each nginx image serves `/config.json` built from environment variables at container start (API URL, OIDC issuer, maps tile URL), so one image works for every operator.
+- **Runtime config:** each front-end container serves `/config.json` built from environment variables at container start (API URL, OIDC issuer, maps tile URL), so one image works for every operator.
 - Accessibility: Material components plus axe checks in CI; light and dark themes.
-- Testing: unit tests with Vitest, end-to-end with Playwright against the `dev` Helm install.
+- Testing: unit tests with Vitest, end-to-end with Playwright against the unit deployer and the Kubernetes topologies (section 15.2).
 
 ### 14.3 Images
 
@@ -510,6 +510,7 @@ All services share one Docker network, `foodstack`. Only the reverse proxy publi
 | `redis` | Redis | Password, AOF persistence |
 | `elasticsearch` | Elasticsearch | Single node, security on, heap sized from `.env` |
 | `minio` | MinIO | S3-compatible storage for media |
+| `nominatim`, `osrm` (optional) | Nominatim, OSRM | Self-hosted address search and routing for the operator's region; enabled with a Compose profile when not using a hosted maps provider |
 
 Every service has a healthcheck; `server` starts only when its dependencies are healthy. All data and logs are bind-mounted under the install directory, and every service uses `restart: unless-stopped` with log rotation.
 
@@ -660,6 +661,6 @@ module-switch:                              # generated by Helm per Deployment
 | T1 | Kafka adds operational weight for small pilots | The unit deployer and `values-dev.yaml` run single-node KRaft with small heap; docs list managed Kafka options; outbox keeps the app working while Kafka is briefly down |
 | T2 | One-time-code login on Spring Authorization Server | Implement email codes (and phone codes once SMS exists) as a step in the hosted login page, not a custom grant, keeping standard Authorization Code + PKCE for all clients |
 | T3 | Choice of first card gateway (hosted payment page support required) | **Decided:** one global gateway with a hosted payment page first; regional adapters later through the same SPI |
-| T4 | Public OSM services have strict usage policies | Default chart ships optional self-hosted Nominatim and OSRM sub-components; docs explain data import per region |
+| T4 | Public OSM services have strict usage policies | The Helm chart and the unit deployer ship optional self-hosted Nominatim and OSRM services (off by default, enabled per region); the deployment guide explains the data import |
 | T5 | Licences of third-party servers (Liquibase FSL, Elasticsearch) | Document in `docs/licensing.md`; operators run unmodified upstream software |
 | T6 | Module-Switch is new (0.x) | FoodStack pins a released version and contributes fixes upstream; split-topology tests run in CI |

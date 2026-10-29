@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft v1, agreed in grooming with ilyas on 2026-10-27 |
+| Status | Draft v1, agreed in grooming with ilyas (2026-10-27, last updated 2026-10-29) |
 | Owner | ilyas (product owner, decision maker) |
 | Related | [PRD](PRD.md), [TDD](TDD.md) |
 | License | [Fair Revenue Share License v1](https://ilyaslabs.github.io/docs/licenses/fair-revenue-v1) |
@@ -31,7 +31,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 ## 4. Business model and licensing
 
 - FoodStack is released under the **Fair Revenue Share License v1**: free for personal, educational and commercial use until the operator's project passes **USD 10,000 total revenue**, after which **5% of monthly gross revenue** is shared with the author. Copyright notices must be kept and the code may not be relicensed to remove the revenue share.
-- Artifacts are public: jars on Maven Central, images on Docker Hub (mirrored to GHCR), Helm chart in the repository.
+- Artifacts are public: jars on Maven Central, images on Docker Hub (mirrored to GHCR), the unit deployer zip on GitHub releases, and the Helm chart as an OCI artifact on GHCR.
 - Attribution ("Powered by ilyasLabs") is appreciated but not mandatory. The product UI exposes an optional footer toggle for it.
 
 ## 5. Stakeholders
@@ -54,7 +54,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | BO-1 | Time to launch | A new operator goes from unzipping the unit deployer on one server to a branded, working marketplace in **under 1 day** with the quick-start guide |
 | BO-2 | No team needed to start | Operator launches without code changes: branding, currency, language, commission and the operator rider service are all configuration |
 | BO-3 | Low cost at small scale | The unit deployer runs a city pilot (≤ 200 orders per hour) on **one server** (8 vCPU, 32 GB RAM reference) with every dependency included |
-| BO-4 | Scale without rewrite | Moving from one server to Kubernetes, and splitting any module into its own deployment, needs configuration only; proven by the `split` preset in CI |
+| BO-4 | Scale without rewrite | Moving from one server to Kubernetes, and splitting any module into its own deployment, needs configuration only; proven in CI by installing the `monolith`, `split` and `microservices` topologies on every release |
 | BO-5 | Trust and safety | No critical or high open security findings at release; all service-to-service traffic encrypted (mTLS) |
 | BO-6 | Money is traceable | Every order produces balanced ledger entries; payout reports reconcile to the cent |
 | BO-7 | Community adoption | Public docs, quick start, contribution guide; first external operator pilot after v1 |
@@ -91,7 +91,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 - SMS notifications and phone-number OTP login (an SMS adapter can be added later)
 - Ordering from the table (dine-in); the QR code only shows the menu in v1
 - Customer wallet, loyalty points, subscriptions
-- Scheduled (future-time) orders, group orders, dine-in
+- Scheduled (future-time) orders, group orders
 - Automated payouts to stores and riders
 - Multi-currency within one deployment
 - Dynamic surge pricing and ML-based dispatch optimisation
@@ -104,7 +104,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | BR-1 | Customers can discover nearby open stores, browse menus, order for delivery or pickup, pay by cash or card, and track the order live | Must |
 | BR-2 | Stores can be onboarded by the operator, manage their own menu, opening hours, temporary closure, delivery zones and charges, own riders and QR menu, and accept, prepare and hand over orders | Must |
 | BR-3 | Riders (the operator's, or a store's own) can go online, receive and accept delivery jobs, navigate to pickup and drop-off, and confirm delivery | Must |
-| BR-4 | Operator admins can manage stores, riders, customers, service fees, commissions, coupons, content and branding | Must |
+| BR-4 | Operator admins can manage stores, riders, customers, service fees, commissions, operator delivery pricing and rider pay, coupons, content and branding | Must |
 | BR-5 | Each order records commission, fees, taxes and rider earnings in a ledger; admins export payout reports per period | Must |
 | BR-6 | Customers, stores and riders receive notifications for every order state change that affects them | Must |
 | BR-7 | Customers can rate and review stores and riders after delivery; admins can moderate | Must |
@@ -126,7 +126,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 ## 10. Constraints
 
 - Backend: Java 25, Spring Boot 4, built on the **Module-Switch** library so every module can run in-process, remotely, or off.
-- Data: MongoDB only for persistence, with every collection **prefixed by its module name** and designed for sharding; Redis for caching; Elasticsearch for search; Kafka for events; S3-compatible storage for media; Liquibase migrations per module.
+- Data: MongoDB only for persistence, with **one database per module** and every collection **prefixed by its module name**, designed for sharding; Redis for caching; Elasticsearch for search; Kafka for events; S3-compatible storage for media; Liquibase migrations per module.
 - Time: stored in UTC; exchanged in the API as UTC epoch seconds.
 - Front-end: Angular (no micro-frontends).
 - Real company names of existing delivery platforms must never appear in code or documentation.
@@ -135,7 +135,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Infrastructure footprint (Mongo, Redis, Kafka, Elasticsearch) is heavy for a small pilot | Higher running cost | `dev` profile runs everything in-cluster with small sizing; docs list managed-service options and minimum sizes |
+| Infrastructure footprint (Mongo, Redis, Kafka, Elasticsearch) is heavy for a small pilot | Higher running cost | The unit deployer runs everything on one server with small sizing; the deployment guide lists minimum sizes and managed-service options for later |
 | Third-party licence changes (Liquibase FSL, Elasticsearch AGPL/ELv2) | Legal uncertainty for operators | Operators run unmodified upstream binaries; search behind an interface so an OpenSearch adapter is possible; licences documented in `docs/` |
 | Revenue share relies on self-reporting | Lost revenue for author | Clear licence notice in README, admin "About" page, and release notes |
 | Stores collecting payments directly may not pay what they owe | Lost commission for the operator | Off by default and granted per store by the operator; outstanding balance shown on dashboards; configurable credit limit after which direct collection is suspended automatically; dues netted against any amount the operator owes the store |
