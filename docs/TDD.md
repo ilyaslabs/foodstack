@@ -123,6 +123,8 @@ order-impl/                         @Module("order")     (package-info.java)
   src/main/resources/db/changelog/order/db.changelog-master.yaml
 ```
 
+**What goes where.** `-api` is the module's *internal Java contract* for other modules (interfaces, DTO records, event records), not its public REST API: it has no Spring beans, no controllers and no logic. `-impl` holds everything else, **including the public REST controllers** (`web/`). Controllers must live in `-impl` because Module-Switch only loads a module's implementation packages where the module is `local`; that way a module's public endpoints exist only in the Deployment that runs it, and the gateway routes there. This follows the Module-Switch convention and its example app (`CatalogController` sits in `catalog-impl`).
+
 Rules (enforced by Module-Switch at startup and by `ModuleRules.verify("io.github.ilyaslabs.foodstack")` in CI):
 
 - A module depends only on other modules' `-api` artifacts and on `platform-*`.
