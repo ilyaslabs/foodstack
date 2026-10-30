@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.ilyaslabs</groupId>
+        <artifactId>foodstack</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>foodstack-platform</artifactId>
+    <packaging>pom</packaging>
+    <name>FoodStack platform</name>
+
+    <modules>
+        <module>platform-test</module>
+        <module>platform-core</module>
+        <module>platform-web</module>
+        <module>platform-mongo</module>
+        <module>platform-kafka</module>
+        <module>platform-security</module>
+    </modules>
+</project>

@@ -1,0 +1,64 @@
+# Liquibase changelog of the identity module (database foodstack_identity).
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: identity-1
+      author: foodstack
+      comment: "identity_users; shard key { _id: hashed } (read by user id from the token)"
+      changes:
+        - createCollection:
+            collectionName: identity_users
+        - createIndex:
+            collectionName: identity_users
+            keys: '{ "roles": 1, "_id": -1 }'
+            options: '{ "name": "roles_id" }'
+  - changeSet:
+      id: identity-2
+      author: foodstack
+      comment: "identity_login_keys; shard key { loginKey: 1 }, unique (email to user id)"
+      changes:
+        - createCollection:
+            collectionName: identity_login_keys
+        - createIndex:
+            collectionName: identity_login_keys
+            keys: '{ "loginKey": 1 }'
+            options: '{ "name": "login_key", "unique": true }'
+  - changeSet:
+      id: identity-3
+      author: foodstack
+      comment: "identity_authorizations: OAuth2 authorizations (codes, tokens); unsharded, pruned by TTL"
+      changes:
+        - createCollection:
+            collectionName: identity_authorizations
+        - createIndex:
+            collectionName: identity_authorizations
+            keys: '{ "state": 1 }'
+            options: '{ "name": "state", "sparse": true }'
+        - createIndex:
+            collectionName: identity_authorizations
+            keys: '{ "authorizationCode.hash": 1 }'
+            options: '{ "name": "code_hash", "sparse": true }'
+        - createIndex:
+            collectionName: identity_authorizations
+            keys: '{ "accessToken.hash": 1 }'
+            options: '{ "name": "access_hash", "sparse": true }'
+        - createIndex:
+            collectionName: identity_authorizations
+            keys: '{ "refreshToken.hash": 1 }'
+            options: '{ "name": "refresh_hash", "sparse": true }'
+        - createIndex:
+            collectionName: identity_authorizations
+            keys: '{ "oidcIdToken.hash": 1 }'
+            options: '{ "name": "id_token_hash", "sparse": true }'
+        - createIndex:
+            collectionName: identity_authorizations
+            keys: '{ "expiresAt": 1 }'
+            options: '{ "name": "expires_ttl", "expireAfterSeconds": 0 }'
+  - changeSet:
+      id: identity-4
+      author: foodstack
+      comment: "identity_seed: marker of the test-seed profile"
+      changes:
+        - createCollection:
+            collectionName: identity_seed

@@ -1,0 +1,27 @@
+# Liquibase changelog of the settings module (database foodstack_settings).
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: settings-1
+      author: foodstack
+      comment: "settings_settings: one document per section; unsharded (tiny, rarely written)"
+      changes:
+        - createCollection:
+            collectionName: settings_settings
+        - insertMany:
+            collectionName: settings_settings
+            documents: >-
+              [
+                { "_id": "branding", "name": "FoodStack", "tagline": "Food from your favourite places, delivered",
+                  "primaryColor": "#D84315", "secondaryColor": "#00695C", "fontFamily": "Roboto", "version": { "$numberLong": "0" } },
+                { "_id": "locale", "defaultLanguage": "en", "languages": ["en"], "currency": "USD", "timezone": "UTC",
+                  "version": { "$numberLong": "0" } }
+              ]
+  - changeSet:
+      id: settings-2
+      author: foodstack
+      comment: "settings_seed: marker of the test-seed profile"
+      changes:
+        - createCollection:
+            collectionName: settings_seed

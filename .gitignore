@@ -1,0 +1,11 @@
+target/
+.flattened-pom.xml
+*.iml
+.idea/
+.vscode/
+.DS_Store
+node_modules/
+dist/
+.angular/
+.env
+deploy/unit-deployer/data/

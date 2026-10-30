@@ -1,0 +1,15 @@
+# Liquibase changelog of the media module (database foodstack_media).
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: media-1
+      author: foodstack
+      comment: "media_assets; shard key { _id: hashed } (read by media id)"
+      changes:
+        - createCollection:
+            collectionName: media_assets
+        - createIndex:
+            collectionName: media_assets
+            keys: '{ "status": 1, "createdAt": 1 }'
+            options: '{ "name": "status_created" }'

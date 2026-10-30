@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in</title>
+  <style>
+    :root { --primary: #D84315; --on-primary: #fff; --surface: #fafafa; --text: #1c1b1f; --muted: #5f5f66; --font: Roboto, system-ui, sans-serif; }
+    @media (prefers-color-scheme: dark) { :root { --surface: #121212; --text: #e6e1e5; --muted: #a8a4ab; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--surface); color: var(--text); font-family: var(--font); }
+    main { width: min(400px, 100% - 32px); padding: 32px 24px; border-radius: 16px; background: color-mix(in srgb, var(--surface) 92%, var(--text)); }
+    header { text-align: center; margin-block-end: 24px; }
+    header img { max-height: 64px; max-width: 160px; }
+    h1 { font-size: 1.5rem; margin: 8px 0 4px; }
+    .tagline { margin: 0; color: var(--muted); }
+    label { display: block; font-size: .875rem; margin-block: 16px 6px; }
+    input { width: 100%; padding: 12px 14px; font: inherit; color: inherit; background: transparent; border: 1px solid var(--muted); border-radius: 8px; }
+    input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+    button { width: 100%; margin-block-start: 24px; padding: 12px; font: inherit; font-weight: 600; border: 0; border-radius: 999px; background: var(--primary); color: var(--on-primary); cursor: pointer; }
+    .message { padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--primary) 12%, transparent); }
+    .error { color: #b3261e; }
+  </style>
+  <script src="/login/branding.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <img id="logo" alt="" hidden>
+      <h1 id="brand-name">Sign in</h1>
+      <p class="tagline" id="brand-tagline"></p>
+    </header>
+    {{message}}
+    <form method="post" action="/login">
+      <input type="hidden" name="{{csrfParameter}}" value="{{csrfToken}}">
+      <label for="username">Email</label>
+      <input id="username" name="username" type="email" autocomplete="username" required autofocus>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+    </form>
+  </main>
+</body>
+</html>
