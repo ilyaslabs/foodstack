@@ -1,0 +1,55 @@
+name: PR checks
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # Every class-level test, the contract snapshots, the architecture rules and the integration
+  # journeys in both topologies (Testing Strategy 11). Uses Docker on the runner for Testcontainers.
+  backend:
+    uses: ilyaslabs/cicd/.github/workflows/mvn-pr-checks.yml@main
+    with:
+      java-version: '25'
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm test
+      - run: pnpm build
+
+  # The release artefacts still build: the unit deployer zip and the three images (not pushed).
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build the server and the unit deployer zip
+        run: mvn -B -DskipTests -pl deploy/unit-deployer -am package
+      - name: Build images
+        run: |
+          docker build -t foodstack-server:ci app/foodstack-server
+          docker build -f frontend/docker/web.Dockerfile -t foodstack-web:ci frontend
+          docker build -f frontend/docker/backoffice.Dockerfile -t foodstack-backoffice:ci frontend

@@ -1,0 +1,39 @@
+name: Release
+
+# A GitHub release named vX.Y.Z publishes the libraries to Maven Central, the images to Docker Hub
+# and GHCR, and attaches unit-deployer-X.Y.Z.zip to the release (TDD 15.2).
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      minor: ${{ steps.version.outputs.minor }}
+    steps:
+      - id: version
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "minor=${version%.*}" >> "$GITHUB_OUTPUT"
+
+  maven:
+    uses: ilyaslabs/cicd/.github/workflows/mvn-release.yml@main
+    with:
+      java-version: '25'
+    secrets: inherit
+
+  images:
+    needs: [version, maven]
+    uses: ./.github/workflows/images.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      tags: ${{ needs.version.outputs.version }} ${{ needs.version.outputs.minor }} latest
+      attach-to-release: ${{ github.event.release.tag_name }}
+    secrets: inherit
