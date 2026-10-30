@@ -35,16 +35,14 @@ describe('BrandingPage', () => {
       .mockReturnValue(
         of({ value: { ...DEFAULT_BRANDING, name: 'Spice Route' }, etag: '"branding-2"' }),
       );
-    const upload = vi
-      .fn()
-      .mockReturnValue(
-        of({
-          id: 'media-1',
-          purpose: 'BRANDING',
-          status: 'READY',
-          variants: { card: { url: 'https://cdn/card.webp' } },
-        }),
-      );
+    const upload = vi.fn().mockReturnValue(
+      of({
+        id: 'media-1',
+        purpose: 'BRANDING',
+        status: 'READY',
+        variants: { card: { url: 'https://cdn/card.webp' } },
+      }),
+    );
     const fixture = render({ updateBranding }, { upload });
     const input: HTMLInputElement = fixture.nativeElement.querySelector(
       '[data-testid="logo-input"]',
