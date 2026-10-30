@@ -14,7 +14,8 @@ import org.testcontainers.utility.MountableFile;
  */
 public class ShardedMongoContainer extends GenericContainer<ShardedMongoContainer> {
 
-    public static final String IMAGE = "mongo:8.0";
+    /** 8.2: MongoDB 8.0 refuses to start on Linux 6.19+ kernels (SERVER-121912), as on current CI runners. */
+    public static final String IMAGE = "mongo:8.2";
 
     private static final int MONGOS_PORT = 27017;
 
