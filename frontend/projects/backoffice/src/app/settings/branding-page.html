@@ -1,0 +1,66 @@
+<h1>Branding</h1>
+<mat-card appearance="outlined">
+  <form [formGroup]="form" (ngSubmit)="save()" class="form">
+    <mat-form-field>
+      <mat-label>Platform name</mat-label>
+      <input matInput formControlName="name" maxlength="60" required />
+      @if (form.controls.name.hasError('required')) {
+        <mat-error>Enter a name</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field>
+      <mat-label>Tagline</mat-label>
+      <input matInput formControlName="tagline" maxlength="120" />
+    </mat-form-field>
+
+    <div class="colors">
+      <label>
+        Primary colour
+        <input type="color" formControlName="primaryColor" aria-label="Primary colour" />
+      </label>
+      <label>
+        Secondary colour
+        <input type="color" formControlName="secondaryColor" aria-label="Secondary colour" />
+      </label>
+    </div>
+
+    <mat-form-field>
+      <mat-label>Font</mat-label>
+      <mat-select formControlName="fontFamily">
+        @for (font of fonts; track font) {
+          <mat-option [value]="font">{{ font }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <div class="logo">
+      @if (logoPreview(); as preview) {
+        <img [src]="preview" alt="Logo preview" width="120" height="120" />
+      }
+      <label class="upload">
+        <span>{{ logoPreview() ? 'Replace logo' : 'Upload logo' }}</span>
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          (change)="onLogoSelected($event)"
+          [disabled]="uploading()"
+          data-testid="logo-input"
+        />
+      </label>
+      @if (uploading()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+    </div>
+
+    @if (message(); as message) {
+      <p [class]="message.kind" role="status">{{ message.text }}</p>
+    }
+
+    <div class="actions">
+      <button mat-flat-button type="submit" [disabled]="saving() || uploading() || form.pristine">
+        Save
+      </button>
+    </div>
+  </form>
+</mat-card>

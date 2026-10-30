@@ -1,0 +1,12 @@
+.shell {
+  min-height: calc(100vh - 64px);
+}
+
+.nav {
+  width: 220px;
+  border-inline-end: 1px solid var(--mat-sys-outline-variant);
+}
+
+.content {
+  padding: 24px;
+}

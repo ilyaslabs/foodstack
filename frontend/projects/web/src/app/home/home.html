@@ -1,0 +1,20 @@
+<section class="hero">
+  @if (branding.branding().logo; as logo) {
+    <img
+      class="hero-logo"
+      [src]="logo.urls['card']"
+      alt="{{ branding.branding().name }} logo"
+      width="160"
+      height="160"
+    />
+  }
+  <h1>{{ branding.branding().name }}</h1>
+  @if (branding.branding().tagline; as tagline) {
+    <p class="tagline">{{ tagline }}</p>
+  }
+  @if (auth.signedIn()) {
+    <p>You are signed in. Ordering opens soon.</p>
+  } @else {
+    <button mat-flat-button type="button" (click)="signIn()">Sign in</button>
+  }
+</section>
