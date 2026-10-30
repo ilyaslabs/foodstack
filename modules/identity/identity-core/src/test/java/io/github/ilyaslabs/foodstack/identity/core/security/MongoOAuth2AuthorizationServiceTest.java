@@ -81,6 +81,8 @@ class MongoOAuth2AuthorizationServiceTest {
         assertThat(found.getAccessToken().getToken().getTokenValue()).isEqualTo("access-auth-1");
         assertThat(found.getAccessToken().getToken().getExpiresAt()).isEqualTo(now.plusSeconds(600));
         assertThat(found.getToken(OidcIdToken.class).getToken().getSubject()).isEqualTo("user-1");
+        assertThat(found.getToken(OidcIdToken.class).getClaims()).containsEntry("tv", 3L).containsEntry("iat", now)
+            .containsEntry("roles", List.of("ADMIN"));
         UsernamePasswordAuthenticationToken principal = found.getAttribute("java.security.Principal");
         assertThat(principal.getName()).isEqualTo("user-1");
         assertThat((OAuth2AuthorizationRequest) found.getAttribute(OAuth2AuthorizationRequest.class.getName()))
@@ -142,7 +144,10 @@ class MongoOAuth2AuthorizationServiceTest {
                     (metadata) -> metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, new HashMap<>(Map.of("sub", "user-1",
                             "roles", new ArrayList<>(List.of("ADMIN"))))))
             .token(new OidcIdToken("id-" + id, now, now.plusSeconds(1800), Map.of("sub", "user-1")),
-                    (metadata) -> metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME, new HashMap<>(Map.of("sub", "user-1"))))
+                    // As issued: the token version is a Long, times are Instants (read back on logout).
+                    (metadata) -> metadata.put(OAuth2Authorization.Token.CLAIMS_METADATA_NAME,
+                            new HashMap<>(Map.of("sub", "user-1", "tv", 3L, "iat", now, "auth_time", now,
+                                    "roles", List.of("ADMIN"), "perms", Set.of("settings:manage")))))
             .build();
     }
 }

@@ -108,6 +108,13 @@
                 </executions>
                 <configuration>
                     <mainClass>io.github.ilyaslabs.foodstack.FoodstackApplication</mainClass>
+                    <requiresUnpack>
+                        <!-- liquibase-mongodb reads its own manifest through a jar URL, which fails for nested jars. -->
+                        <dependency>
+                            <groupId>org.liquibase.ext</groupId>
+                            <artifactId>liquibase-mongodb</artifactId>
+                        </dependency>
+                    </requiresUnpack>
                 </configuration>
             </plugin>
         </plugins>

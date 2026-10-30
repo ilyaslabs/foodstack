@@ -13,6 +13,7 @@ const FLOW_KEY = 'foodstack.auth.flow';
 
 interface StoredToken {
   accessToken: string;
+  idToken: string | null;
   expiresAt: number;
 }
 
@@ -24,6 +25,7 @@ interface PendingFlow {
 
 interface TokenResponse {
   access_token: string;
+  id_token?: string;
   expires_in: number;
 }
 
@@ -95,6 +97,7 @@ export class AuthService {
     );
     const token: StoredToken = {
       accessToken: response.access_token,
+      idToken: response.id_token ?? null,
       expiresAt: Date.now() + response.expires_in * 1000,
     };
     this.storage()?.setItem(TOKEN_KEY, JSON.stringify(token));
@@ -102,10 +105,19 @@ export class AuthService {
     return flow.returnTo;
   }
 
+  /** Ends the identity session too (OIDC RP-initiated logout), so the next sign-in asks again. */
   signOut(): void {
+    const idToken = this.token()?.idToken;
     this.storage()?.removeItem(TOKEN_KEY);
     this.token.set(null);
-    this.navigation.assign(`${this.config.issuer}/logout`);
+    const params = new HttpParams({
+      fromObject: {
+        client_id: this.config.clientId,
+        post_logout_redirect_uri: this.document.baseURI,
+        ...(idToken ? { id_token_hint: idToken } : {}),
+      },
+    });
+    this.navigation.assign(`${this.config.issuer}/connect/logout?${params.toString()}`);
   }
 
   /** The callback URL registered for this app: `<base href>auth/callback`. */

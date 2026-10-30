@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.platform.web;
 
+import java.util.regex.Pattern;
+
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 
 /**
@@ -7,6 +9,8 @@ import io.github.ilyaslabs.moduleswitch.ModuleException;
  * {@code If-Match} for back-office edits, so concurrent edits never overwrite each other (TDD 8.1).
  */
 public final class ETags {
+
+    private static final Pattern ENCODING_SUFFIX = Pattern.compile("-(gzip|zstd|br|deflate)\"$");
 
     private ETags() {
     }
@@ -24,10 +28,7 @@ public final class ETags {
         if (ifMatch == null || ifMatch.isBlank()) {
             return null;
         }
-        String value = ifMatch.trim();
-        if (value.startsWith("W/")) {
-            value = value.substring(2);
-        }
+        String value = normalize(ifMatch);
         String prefix = "\"" + resource + "-";
         if (!value.startsWith(prefix) || !value.endsWith("\"")) {
             throw new ModuleException.BadRequest("If-Match does not name a " + resource + " version", "INVALID_IF_MATCH");
@@ -38,5 +39,22 @@ public final class ETags {
         catch (NumberFormatException ex) {
             throw new ModuleException.BadRequest("If-Match does not name a " + resource + " version", "INVALID_IF_MATCH");
         }
+    }
+
+    /** Whether an {@code If-None-Match} header names this tag, so a 304 can be sent. */
+    public static boolean matches(String etag, String ifNoneMatch) {
+        return ifNoneMatch != null && normalize(etag).equals(normalize(ifNoneMatch));
+    }
+
+    /**
+     * Drops the weak prefix and the encoding suffix compressing proxies (Caddy, nginx) add, as in
+     * {@code W/"branding-7-zstd"}.
+     */
+    private static String normalize(String tag) {
+        String value = tag.trim();
+        if (value.startsWith("W/")) {
+            value = value.substring(2);
+        }
+        return ENCODING_SUFFIX.matcher(value).replaceFirst("\"");
     }
 }

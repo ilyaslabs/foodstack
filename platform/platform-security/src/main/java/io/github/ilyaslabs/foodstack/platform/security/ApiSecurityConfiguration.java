@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.platform.security;
 import java.util.List;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -21,6 +22,7 @@ import org.springframework.security.web.servlet.util.matcher.PathPatternRequestM
  * identity module's login and authorization server) claims it.
  */
 @Configuration(proxyBeanMethods = false)
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @EnableMethodSecurity
 public class ApiSecurityConfiguration {
 

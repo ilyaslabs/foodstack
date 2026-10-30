@@ -82,12 +82,13 @@ foodstack:
       email: ${FOODSTACK_ADMIN_EMAIL:}
       password: ${FOODSTACK_ADMIN_PASSWORD:}
     clients:
+      # The customer app and the back office may live on their own hostnames (deployment guide 2.1).
       foodstack-web:
-        redirect-uris: ${FOODSTACK_PUBLIC_URL:http://localhost:8080}/auth/callback
-        post-logout-redirect-uris: ${FOODSTACK_PUBLIC_URL:http://localhost:8080}/
+        redirect-uris: ${FOODSTACK_WEB_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/auth/callback
+        post-logout-redirect-uris: ${FOODSTACK_WEB_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/
       foodstack-backoffice:
-        redirect-uris: ${FOODSTACK_PUBLIC_URL:http://localhost:8080}/admin/auth/callback
-        post-logout-redirect-uris: ${FOODSTACK_PUBLIC_URL:http://localhost:8080}/admin/
+        redirect-uris: ${FOODSTACK_ADMIN_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/admin/auth/callback
+        post-logout-redirect-uris: ${FOODSTACK_ADMIN_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/admin/
   storage:
     endpoint: ${S3_ENDPOINT:http://localhost:9000}
     public-endpoint: ${S3_PUBLIC_ENDPOINT:${FOODSTACK_PUBLIC_URL:http://localhost:9000}}

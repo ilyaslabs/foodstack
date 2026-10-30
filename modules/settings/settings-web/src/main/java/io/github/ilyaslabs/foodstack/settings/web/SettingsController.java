@@ -54,7 +54,7 @@ class SettingsController {
     ResponseEntity<BrandingResponse> branding(@RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
         BrandingDetails branding = this.settingsService.getBranding();
         String etag = ETags.of("branding", branding.version());
-        if (etag.equals(ifNoneMatch)) {
+        if (ETags.matches(etag, ifNoneMatch)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).cacheControl(PUBLIC_CACHE).build();
         }
         return ResponseEntity.ok().eTag(etag).cacheControl(PUBLIC_CACHE).body(toResponse(branding));
@@ -74,7 +74,7 @@ class SettingsController {
     ResponseEntity<LocaleResponse> locale(@RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
         LocaleDetails locale = this.settingsService.getLocale();
         String etag = ETags.of("locale", locale.version());
-        if (etag.equals(ifNoneMatch)) {
+        if (ETags.matches(etag, ifNoneMatch)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).cacheControl(PUBLIC_CACHE).build();
         }
         return ResponseEntity.ok().eTag(etag).cacheControl(PUBLIC_CACHE).body(toResponse(locale));

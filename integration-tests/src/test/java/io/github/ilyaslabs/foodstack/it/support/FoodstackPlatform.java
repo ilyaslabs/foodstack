@@ -32,6 +32,8 @@ public final class FoodstackPlatform {
 
     public static final String BACKOFFICE_REDIRECT = "http://backoffice.it.foodstack.local/admin/auth/callback";
 
+    public static final String BACKOFFICE_POST_LOGOUT = "http://backoffice.it.foodstack.local/admin/";
+
     private static final String INTERNAL_TOKEN = "integration-internal-token";
 
     private static final String PII_KEY = "aW50ZWdyYXRpb24tdGVzdHMtcGlpLWtleS1ub3Qtc2VjcmV0";
@@ -155,6 +157,7 @@ public final class FoodstackPlatform {
         properties.put("foodstack.identity.bootstrap-admin.email", ADMIN_EMAIL);
         properties.put("foodstack.identity.bootstrap-admin.password", ADMIN_PASSWORD);
         properties.put("foodstack.identity.clients." + BACKOFFICE_CLIENT + ".redirect-uris", BACKOFFICE_REDIRECT);
+        properties.put("foodstack.identity.clients." + BACKOFFICE_CLIENT + ".post-logout-redirect-uris", BACKOFFICE_POST_LOGOUT);
         properties.put("foodstack.identity.clients.foodstack-web.redirect-uris", "http://web.it.foodstack.local/auth/callback");
         properties.put("foodstack.storage.endpoint", FoodstackContainers.s3Endpoint());
         properties.put("foodstack.storage.public-endpoint", FoodstackContainers.s3Endpoint());

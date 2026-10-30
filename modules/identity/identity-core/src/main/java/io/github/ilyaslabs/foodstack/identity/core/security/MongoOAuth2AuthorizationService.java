@@ -16,6 +16,7 @@ import java.util.Set;
 import org.bson.Document;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -66,8 +67,15 @@ public class MongoOAuth2AuthorizationService implements OAuth2AuthorizationServi
     public MongoOAuth2AuthorizationService(MongoTemplate mongo, RegisteredClientRepository clients) {
         this.mongo = mongo;
         this.clients = clients;
+        // Token claims hold numbers (tv), instants (iat, auth_time) and JDK collections (roles, perms),
+        // including the immutable ones List.of and Set.of create.
+        BasicPolymorphicTypeValidator.Builder types = BasicPolymorphicTypeValidator.builder()
+            .allowIfSubType(Number.class)
+            .allowIfSubType(Boolean.class)
+            .allowIfSubType(java.time.Instant.class)
+            .allowIfSubType("java.util.");
         this.jsonMapper = JsonMapper.builder()
-            .addModules(SecurityJacksonModules.getModules(MongoOAuth2AuthorizationService.class.getClassLoader()))
+            .addModules(SecurityJacksonModules.getModules(MongoOAuth2AuthorizationService.class.getClassLoader(), types))
             .build();
     }
 

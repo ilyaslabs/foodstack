@@ -32,6 +32,10 @@ public final class ApiClient {
 
     private String accessToken;
 
+    private String idToken;
+
+    private final Map<String, String> sessionCookies = new HashMap<>();
+
     ApiClient(FoodstackPlatform platform) {
         this.platform = platform;
     }
@@ -120,7 +124,35 @@ public final class ApiClient {
             throw new AssertionError("Token exchange failed: " + token.statusCode() + " " + token.asString());
         }
         this.accessToken = token.path("access_token");
+        this.idToken = token.path("id_token");
+        this.sessionCookies.putAll(cookies);
         return this;
+    }
+
+    /**
+     * Signs out as the apps do (OIDC RP-initiated logout), ending the identity session. Returns the
+     * response, which redirects to the post-logout URI.
+     */
+    public Response logOut(String postLogoutRedirectUri) {
+        return browser("/connect/logout", this.sessionCookies)
+            .queryParam("client_id", FoodstackPlatform.BACKOFFICE_CLIENT)
+            .queryParam("post_logout_redirect_uri", postLogoutRedirectUri)
+            .queryParam("id_token_hint", this.idToken)
+            .get("/connect/logout");
+    }
+
+    /** Whether the identity session still signs the browser in without the login page. */
+    public boolean hasIdentitySession() {
+        Response authorize = browser("/oauth2/authorize", this.sessionCookies)
+            .queryParam("response_type", "code")
+            .queryParam("client_id", FoodstackPlatform.BACKOFFICE_CLIENT)
+            .queryParam("redirect_uri", FoodstackPlatform.BACKOFFICE_REDIRECT)
+            .queryParam("scope", "openid")
+            .queryParam("code_challenge", challenge(randomUrlSafe(48)))
+            .queryParam("code_challenge_method", "S256")
+            .get("/oauth2/authorize");
+        String location = authorize.header("Location");
+        return location != null && location.startsWith(FoodstackPlatform.BACKOFFICE_REDIRECT);
     }
 
     private RequestSpecification browser(String path, Map<String, String> cookies) {

@@ -125,4 +125,20 @@ class PlatformSetupScenario {
         ApiClient again = this.platform.client().logIn(FoodstackPlatform.ADMIN_EMAIL, FoodstackPlatform.ADMIN_PASSWORD);
         assertThat(again.get("/api/v1/users").statusCode()).isEqualTo(200);
     }
+
+    @Test
+    @DisplayName("signing out ends the identity session, so the next sign-in asks for the password again")
+    void signOutEndsTheSession() {
+        // given
+        ApiClient admin = this.platform.client().logIn(FoodstackPlatform.ADMIN_EMAIL, FoodstackPlatform.ADMIN_PASSWORD);
+        assertThat(admin.hasIdentitySession()).isTrue();
+
+        // when
+        Response logout = admin.logOut(FoodstackPlatform.BACKOFFICE_POST_LOGOUT);
+
+        // then
+        assertThat(logout.statusCode()).isEqualTo(302);
+        assertThat(logout.header("Location")).isEqualTo(FoodstackPlatform.BACKOFFICE_POST_LOGOUT);
+        assertThat(admin.hasIdentitySession()).isFalse();
+    }
 }
