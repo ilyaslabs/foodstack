@@ -11,7 +11,7 @@
 |---|---|---|
 | Best for | Launch, pilots, one city, up to about 200 orders per hour | Growth, high availability, several cities, independent scaling |
 | You need | One Linux server with Docker | A Kubernetes cluster, plus managed or operator-run datastores |
-| Datastores | Included and installed for you (MongoDB, Kafka, Redis, Elasticsearch, MinIO) | Bring your own (recommended) or run them in-cluster for trials |
+| Datastores | Included and installed for you (MongoDB, Kafka, Redis, Elasticsearch, RustFS for media) | Bring your own (recommended) or run them in-cluster for trials |
 | Topologies | Monolith | `monolith`, `split`, `microservices` or `custom`, switchable at any time |
 | High availability | No (one machine) | Yes (replicas across nodes and zones) |
 | Effort to run | Low | Medium |
@@ -29,7 +29,7 @@ Start on a single server. Moving to Kubernetes later is a data copy plus configu
 | Firebase Cloud Messaging project | Push notifications | Service-account JSON key |
 | Payment gateway account | Card payments | Only if cards are enabled; hosted payment page recommended at launch |
 | Map services | Address search, routing, ETAs | Public OpenStreetMap services are for demos only; for production self-host Nominatim and OSRM for your region, or use the Google Maps adapter with an API key |
-| S3-compatible storage (Kubernetes only) | Images | AWS S3 or any compatible provider; the single server includes MinIO |
+| S3-compatible storage (Kubernetes only) | Images | AWS S3 or any compatible provider; the single server includes RustFS |
 
 ### 2.2 Secrets you will hold
 
@@ -40,7 +40,7 @@ Generated for you on a single server; created by you on Kubernetes.
 | JWT signing key pair (ES256) | Signs login tokens. Rotating it keeps the previous key valid until old tokens expire |
 | PII encryption key (32 random bytes) | Encrypts emails and phone numbers at rest. **Back it up separately; losing it makes that data unreadable** |
 | Module-Switch internal token | Protects module-to-module calls |
-| Datastore passwords | MongoDB, Redis, Elasticsearch, MinIO or S3, Kafka (if secured) |
+| Datastore passwords | MongoDB, Redis, Elasticsearch, RustFS or S3, Kafka (if secured) |
 | SMTP, FCM, payment gateway and maps credentials | External providers |
 
 ## 3. Single server (unit deployer)
@@ -80,7 +80,9 @@ sudo ./install.sh /opt/foodstack \
 5. Copies the application, web apps and configuration.
 6. Starts the datastores, waits for them to be healthy, runs database migrations once, then starts the application and the web apps.
 7. Optionally installs a systemd unit so FoodStack starts on boot (`--systemd`).
-8. Prints a one-time link to set the first admin password.
+8. Prints the first administrator's email and generated password once (also kept in `.env` as `FOODSTACK_ADMIN_PASSWORD`). A password-change screen arrives with the notification module.
+
+For a quick local trial without DNS or certificates: `sudo ./install.sh /opt/foodstack --domain localhost --http --http-port 8088`, then open `http://localhost:8088/admin/`.
 
 ### 3.3 Configure
 
@@ -123,7 +125,7 @@ Everything else (branding, languages, currency, timezone, fees, commission, feat
 
 ### 3.6 Backups and restore
 
-- `backup.sh` writes `backups/<timestamp>/` with a MongoDB dump (all `foodstack_*` databases), a MinIO mirror of the media buckets, and the configuration including `.env`.
+- `backup.sh` writes `backups/<timestamp>/` with a MongoDB dump (all `foodstack_*` databases), a copy of the media storage, and the configuration including `.env`.
 - Schedule it daily with cron or the systemd timer installed by `--systemd`, and **copy backups off the server** (for example to S3 or another machine). Keep the PII key and `.env` in a password manager as well.
 - Kafka, Redis and Elasticsearch need no backup: events are delivered from MongoDB's outbox, Redis is a cache, and search is rebuilt from the data.
 - Restore: `./restore.sh backups/<timestamp>` stops the application, restores MongoDB and media, rebuilds search, and starts again.
@@ -318,7 +320,7 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 1. Prepare the cluster and datastores (sections 4.1 and 4.2) and install FoodStack with **the same JWT keys and PII key** from `/opt/foodstack/.env`, so existing logins and encrypted data keep working.
 2. Announce a short maintenance window. On the single server: `./stop.sh server web backoffice` (datastores keep running).
 3. `mongodump` all `foodstack_*` databases and restore them into the new MongoDB.
-4. Copy media: `mc mirror` from MinIO to your S3 buckets.
+4. Copy media: any S3 sync tool (for example `aws s3 sync` or `rclone`) from the server's storage (`https://<admin-domain>/foodstack-public/…` or `data/storage`) to your S3 buckets.
 5. `helm upgrade` with `--set maintenance.reindex=true` to rebuild search indices.
 6. Switch DNS to the cluster's Gateway address.
 7. Keep the old server stopped but intact for a week as a fallback.

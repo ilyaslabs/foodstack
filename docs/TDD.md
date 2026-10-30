@@ -54,7 +54,7 @@
  Admin desktop ─────┤    │                      └─► foodstack-server (Spring Boot, all modules)      │
  Future mobile app ─┘    │                              │  ▲ module-switch http (internal :8081)     │
                          │                              ▼  │   when split into several Deployments   │
-                         │   MongoDB   Redis   Kafka   Elasticsearch   S3 (MinIO on one server)       
+                         │   MongoDB   Redis   Kafka   Elasticsearch   S3 (RustFS on one server)         
                          └──────────────────────────────────────────────────────────────────────────┘
  External: payment gateway, SMTP, FCM, map tiles / geocoding / routing
 ```
@@ -418,9 +418,9 @@ Redis is a cache and coordination store only; losing it never loses business dat
 ## 13. Media storage (S3)
 
 - The `media` module owns uploads. Other modules store only media IDs; `media` resolves them to URLs.
-- Storage goes through an `ObjectStorage` SPI. The default adapter uses the AWS SDK v2 S3 client, so it works with AWS S3 and with S3-compatible stores (MinIO in the unit deployer and in local development, and other providers).
+- Storage goes through an `ObjectStorage` SPI. The default adapter uses the AWS SDK v2 S3 client, so it works with AWS S3 and with S3-compatible stores (RustFS in the unit deployer, local development and tests, and other providers).
 - Upload flow: the client asks `POST /api/v1/media/uploads` (type, size, purpose) → receives a short-lived presigned `PUT` URL for `<bucket>/<owningModule>/<entityId>/<uuid>` → uploads directly → calls `complete`. The server never streams large files through the JVM.
-- Processing (on `complete`, on virtual threads): check magic bytes and size limits, strip EXIF/metadata, auto-rotate, resize to fixed variants (`thumb` 160 px, `card` 480 px, `detail` 1080 px), encode as WebP (quality about 80) and optionally AVIF, then delete the raw upload unless keeping originals is switched on. Processing uses libvips, bundled in the server image.
+- Processing (on `complete`, on virtual threads): check magic bytes and size limits, strip EXIF/metadata, auto-rotate, resize to fixed variants (`thumb` 160 px, `card` 480 px, `detail` 1080 px), encode as WebP (quality about 80) and optionally AVIF, then delete the raw upload unless keeping originals is switched on. Processing is pure Java (ImageIO, metadata-extractor for EXIF orientation, webp-imageio for WebP, which bundles native libwebp), so it runs in plain `mvn test` and in the JRE image without system packages. AVIF and libvips are follow-ups if throughput needs them.
 - Buckets: `public` (menu, store and branding images; served with `Cache-Control: public, max-age=31536000, immutable` and content-hashed names, so a CDN can sit in front) and `private` (rider documents; access only through 5-minute signed `GET` URLs).
 - `media_assets` records owner module, entity, variants, sizes and reference count; a nightly job deletes unreferenced assets after a grace period.
 
@@ -492,7 +492,7 @@ Full rules are in the [Testing Strategy](testing-strategy.md). In short:
 
 ## 16. Local development and seed data
 
-- **One click:** `app/foodstack-server/src/test/java/.../LocalFoodstackApplication.java` starts the real application with `SpringApplication.from(FoodstackApplication::main).with(LocalContainers.class)`. `LocalContainers` declares Testcontainers beans with `@ServiceConnection`: MongoDB (single-node replica set), Redis, Kafka (KRaft), Elasticsearch, MinIO and Mailpit. Containers are reused between restarts. Run it from the IDE with one click, or `./mvnw -pl app/foodstack-server spring-boot:test-run`. Docker is the only prerequisite.
+- **One click:** `app/foodstack-server/src/test/java/.../LocalFoodstackApplication.java` starts the real application with starts reusable containers from `foodstack-platform-test` (two-shard MongoDB, Redis, Kafka, RustFS; Elasticsearch and Mailpit join when the modules that need them land) and runs `FoodstackApplication` with the `local` and `test-seed` profiles. Run it from the IDE with one click, or `mvn -pl app/foodstack-server spring-boot:test-run`. Docker is the only prerequisite.
 - The Angular apps run with `pnpm start` and proxy `/api` to `localhost:8080`.
 - **Seed data:** when the `test-seed` profile is active, each module seeds its own data through a `@Profile("test-seed")` seeder inside its own `-core` package, so only `local` modules seed and a module never writes another module's collections. Seeders are idempotent (a `<module>_seed` marker document) and run in dependency order (identity, settings, geo, media, store, rider, promotion, then sample orders through the public APIs).
 - Seed content: an admin, a finance user and support user, two cities, about 10 stores with menus, photos, opening hours and their own zones, store riders and operator riders, customers with addresses, coupons, and orders in every state. Logins are printed once in the startup log.
@@ -532,7 +532,7 @@ All services share one Docker network, `foodstack`. Only the reverse proxy publi
 | `kafka` | Apache Kafka | Single node, KRaft mode |
 | `redis` | Redis | Password, AOF persistence |
 | `elasticsearch` | Elasticsearch | Single node, security on, heap sized from `.env` |
-| `minio` | MinIO | S3-compatible storage for media |
+| `storage` | RustFS | S3-compatible storage for media (MinIO no longer publishes images) |
 | `nominatim`, `osrm` (optional) | Nominatim, OSRM | Self-hosted address search and routing for the operator's region; enabled with a Compose profile when not using a hosted maps provider |
 
 Every service has a healthcheck; `server` starts only when its dependencies are healthy. All data and logs are bind-mounted under the install directory, and every service uses `restart: unless-stopped` with log rotation.
@@ -541,11 +541,11 @@ Every service has a healthcheck; `server` starts only when its dependencies are 
 
 | Script | Does |
 |---|---|
-| `install.sh <install-dir> [--domain example.com]` | Checks Docker and Compose v2, CPU, RAM, disk and ports; sets `vm.max_map_count` for Elasticsearch; creates `<dir>/{data/{mongodb,kafka,redis,elasticsearch,minio},logs,config,backups}`; generates strong secrets, JWT signing keys and the PII key into `<dir>/.env` (mode 600); copies the jar, apps and config; runs migrations once (`--foodstack.migrate-only=true`); starts the stack; optionally installs a systemd unit to start on boot; prints the admin first-login link |
+| `install.sh <install-dir> [--domain example.com]` | Checks Docker and Compose v2, CPU, RAM, disk and ports; sets `vm.max_map_count` for Elasticsearch; creates `<dir>/{data/{mongodb,kafka,redis,elasticsearch,storage,caddy},logs,config,backups}`; generates strong secrets, JWT signing keys and the PII key into `<dir>/.env` (mode 600); copies the jar, apps and config; runs migrations once (`--foodstack.migrate-only=true`); starts the stack; optionally installs a systemd unit to start on boot; prints the first administrator sign-in |
 | `start.sh` / `stop.sh` | `docker compose up -d` / `down` (data is kept) |
 | `restart.sh [service]` | Restarts everything or one service |
 | `status.sh` / `logs.sh [service]` | Health summary / follow logs |
-| `backup.sh` | `mongodump`, MinIO mirror and config into `<dir>/backups/<timestamp>` |
+| `backup.sh` | `mongodump`, a copy of the media storage and config into `<dir>/backups/<timestamp>` |
 | `restore.sh <backup-dir>` | Stop the application, restore MongoDB and media, rebuild search, start |
 | `upgrade.sh <new-zip>` / `--rollback` | Backup, replace jar, apps and compose file, run migrations, restart / restore the previous version |
 
@@ -666,7 +666,7 @@ foodstack:
     issuer: https://api.example.com
     pii-key: ${PII_KEY}                     # from Secret
   storage:
-    endpoint: ${S3_ENDPOINT:}               # empty = AWS S3; MinIO URL on one server
+    endpoint: ${S3_ENDPOINT:}               # empty = AWS S3; RustFS URL on one server
     public-bucket: foodstack-public
     private-bucket: foodstack-private
   migrate-only: false
@@ -687,3 +687,23 @@ module-switch:                              # generated by Helm per Deployment
 | T4 | Public OSM services have strict usage policies | The Helm chart and the unit deployer ship optional self-hosted Nominatim and OSRM services (off by default, enabled per region); the deployment guide explains the data import |
 | T5 | Licences of third-party servers (Liquibase FSL, Elasticsearch) | Document in `docs/licensing.md`; operators run unmodified upstream software |
 | T6 | Module-Switch is new (0.x) | FoodStack pins a released version and contributes fixes upstream; split-topology tests run in CI |
+
+## 21. M0 implementation notes
+
+What M0 built differs from the design above in these places. Each is deliberate; the follow-up column says when it changes.
+
+| Area | Design | M0 | Follow-up |
+|---|---|---|---|
+| Object storage | MinIO | RustFS (Apache-2.0, S3-compatible) in the unit deployer, local runs and tests, because MinIO stopped publishing images. The code only uses the S3 API, so AWS S3 and other providers work unchanged | None needed |
+| Image processing | libvips | Pure Java with webp-imageio (section 13) | Add libvips or AVIF only if throughput needs it |
+| Web tokens | Refresh-token rotation, access token in memory | Public SPA clients get no refresh token from Spring Authorization Server. The apps keep the access token in `sessionStorage` (tab-scoped) and, when it expires, send the user through `/oauth2/authorize` again, which signs them straight back in while the identity session lasts. Sign-out uses OIDC RP-initiated logout (`/connect/logout`) | Refresh tokens through a backend-for-frontend, or in-memory tokens with silent renew in an iframe |
+| Identity session | Not specified | The login session lives in the server's memory, so it ends on restart and is not shared between replicas | Spring Session on Redis before running identity with more than one replica |
+| Login methods | Email codes, password, social, TOTP | Email and password (Argon2id) only. Email codes need the notification module and SMTP | M2 (notifications), M5 (TOTP, social) |
+| First admin | One-time link to set the password | `install.sh` generates the password, stores it in `.env` and prints it once | Password change and reset with the notification module |
+| Elasticsearch | Always in the Compose stack | Compose profile `search`, off by default; no module uses it yet | Switched on by default with the search module (M1) |
+| OpenAPI and API client | springdoc per module, generated Angular client | Hand-written typed clients in `frontend/projects/api-client` | Add springdoc and generate the client in CI |
+| Rate limiting | Edge plus per-user limits in Redis | Only Caddy request-size limits on one server | Per-IP and per-user limits with the first public write endpoints beyond sign-up |
+| Libraries | `platform-core`, `-mongo`, `-kafka`, `-security`, `-test` | Also `platform-web` (problem+json errors, ETags), shared by every `-web` module | None |
+| Module dependencies | | `settings` calls `media` through `MediaApi` (claim and release the logo), the first synchronous module-to-module call; it runs over HTTP in the microservices topology | None |
+| Authorization documents | | `identity_authorizations` is not sharded (short-lived, small) | Shard by `_id` hash if volume calls for it |
+
