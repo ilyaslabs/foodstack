@@ -29,6 +29,8 @@ spring:
       fail-fast: false
   autoconfigure:
     exclude:
+      # One MongoTemplate per module instead of Boot's single one (FoodstackMongoAutoConfiguration).
+      - org.springframework.boot.data.mongodb.autoconfigure.DataMongoAutoConfiguration
       # The identity module configures the authorization server itself, only where it is local.
       - org.springframework.boot.security.oauth2.server.authorization.autoconfigure.servlet.OAuth2AuthorizationServerAutoConfiguration
       - org.springframework.boot.security.oauth2.server.authorization.autoconfigure.servlet.OAuth2AuthorizationServerJwtAutoConfiguration

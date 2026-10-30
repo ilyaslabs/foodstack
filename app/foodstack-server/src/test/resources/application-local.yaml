@@ -1,0 +1,25 @@
+# Local development only (LocalFoodstackApplication). Never use these values anywhere else.
+foodstack:
+  environment: development
+  mongodb:
+    sharding:
+      enabled: true
+  kafka:
+    topic-partitions: 3
+  security:
+    issuer: http://localhost:8080
+    # A fixed development key so encrypted test data survives restarts. Not a secret.
+    pii-key: ZGV2ZWxvcG1lbnQta2V5LW5vdC1mb3ItcHJvZHVjdGlvbiEhISE=
+  identity:
+    bootstrap-admin:
+      email: admin@local.foodstack.local
+      password: foodstack-local
+    clients:
+      foodstack-web:
+        redirect-uris: http://localhost:4200/auth/callback
+        post-logout-redirect-uris: http://localhost:4200/
+      foodstack-backoffice:
+        redirect-uris: http://localhost:4300/admin/auth/callback
+        post-logout-redirect-uris: http://localhost:4300/admin/
+  storage:
+    create-buckets: true

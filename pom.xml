@@ -52,7 +52,7 @@
         <module>platform</module>
         <module>modules</module>
         <module>app</module>
-        <!--IT-->
+        <module>integration-tests</module>
         <!--DEPLOY-->
     </modules>
 

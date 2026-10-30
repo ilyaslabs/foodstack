@@ -50,7 +50,8 @@ public class IdentitySecurityConfiguration {
     JWKSource<SecurityContext> identityJwkSource(IdentityProperties properties,
             @Value("${foodstack.environment:development}") String environment) {
         JWKSet keys;
-        if (properties.getSigningKeys().isEmpty()) {
+        List<String> configured = properties.getSigningKeys().stream().filter(key -> !key.isBlank()).toList();
+        if (configured.isEmpty()) {
             if ("production".equals(environment)) {
                 throw new IllegalStateException("foodstack.identity.signing-keys must be set in production");
             }
@@ -58,7 +59,7 @@ public class IdentitySecurityConfiguration {
             keys = SigningKeys.ephemeral();
         }
         else {
-            keys = SigningKeys.fromConfiguration(properties.getSigningKeys());
+            keys = SigningKeys.fromConfiguration(configured);
         }
         return new ImmutableJWKSet<>(keys);
     }

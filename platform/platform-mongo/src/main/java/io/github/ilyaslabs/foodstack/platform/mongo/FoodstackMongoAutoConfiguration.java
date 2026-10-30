@@ -1,6 +1,7 @@
 package io.github.ilyaslabs.foodstack.platform.mongo;
 
 import java.time.Clock;
+import java.util.List;
 
 import com.mongodb.client.MongoClient;
 
@@ -20,6 +21,10 @@ import org.springframework.data.mongodb.core.mapping.MongoMappingContext;
  * {@link ModuleMongo}. Repository auto-configuration must stay off
  * ({@code spring.data.mongodb.repositories.type=none}): every module enables its own repositories
  * in its configuration class, so they disappear when the module is not local.
+ * <p>
+ * The server excludes Boot's {@link DataMongoAutoConfiguration}: it expects one
+ * {@code MongoTemplate} (for GridFS), while the server has one per module. The mapping context and
+ * conversions it would provide are then declared here.
  */
 @AutoConfiguration(after = DataMongoAutoConfiguration.class)
 @ConditionalOnBean(MongoClient.class)
@@ -33,6 +38,21 @@ public final class FoodstackMongoAutoConfiguration {
             FoodstackMongoProperties properties, Environment environment) {
         return new ModuleMongoFactory(mongoClient, connectionDetails.getConnectionString().getConnectionString(),
                 mappingContext, conversions, properties, environment);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    MongoCustomConversions mongoCustomConversions() {
+        return new MongoCustomConversions(List.of());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    MongoMappingContext mongoMappingContext(MongoCustomConversions conversions) {
+        MongoMappingContext context = new MongoMappingContext();
+        context.setSimpleTypeHolder(conversions.getSimpleTypeHolder());
+        context.setAutoIndexCreation(false);
+        return context;
     }
 
     @Bean
