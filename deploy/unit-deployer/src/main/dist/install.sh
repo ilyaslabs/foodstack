@@ -40,8 +40,14 @@ info "Checking the server"
 command -v docker > /dev/null || fail "Docker is not installed (Docker Engine 27+ with Compose v2 is required)."
 docker compose version > /dev/null 2>&1 || fail "Docker Compose v2 is not available (docker compose)."
 command -v openssl > /dev/null || fail "openssl is required."
-cpus=$(nproc 2> /dev/null || echo 0)
-mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1024 / 1024}' /proc/meminfo 2> /dev/null || echo 0)
+macos=false; [[ $(uname -s) == Darwin ]] && macos=true
+if $macos; then
+  cpus=$(sysctl -n hw.ncpu 2> /dev/null || echo 0)
+  mem_gb=$(( $(sysctl -n hw.memsize 2> /dev/null || echo 0) / 1024 / 1024 / 1024 ))
+else
+  cpus=$(nproc 2> /dev/null || echo 0)
+  mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1024 / 1024}' /proc/meminfo 2> /dev/null || echo 0)
+fi
 disk_gb=$(df -P "$(dirname "$target")" 2> /dev/null | awk 'NR==2 {printf "%d", $4 / 1024 / 1024}')
 (( cpus >= 4 )) || warn "$cpus CPUs found; 4 or more are recommended."
 (( mem_gb >= 15 )) || warn "${mem_gb} GB memory found; 16 GB or more are recommended."
@@ -55,8 +61,8 @@ if [[ -f "$target/.env" ]]; then
   fail "$target already holds an installation. Use upgrade.sh to update it."
 fi
 
-# Elasticsearch (search module) needs a larger mmap count.
-if [[ $(sysctl -n vm.max_map_count 2> /dev/null || echo 0) -lt 262144 ]]; then
+# Elasticsearch (search module) needs a larger mmap count. Docker Desktop manages its own VM.
+if ! $macos && [[ $(sysctl -n vm.max_map_count 2> /dev/null || echo 0) -lt 262144 ]]; then
   if sysctl -w vm.max_map_count=262144 > /dev/null 2>&1; then
     echo 'vm.max_map_count=262144' > /etc/sysctl.d/99-foodstack.conf 2> /dev/null || true
   else
@@ -148,6 +154,13 @@ chmod +x "$target"/*.sh
 
 # --- 5. Datastores, migrations, application -----------------------------------------------------
 export FOODSTACK_HOME="$target"
+# Docker Desktop on macOS keeps registry sign-in in the user's keychain, which root cannot read.
+if $macos && [[ -n ${SUDO_USER:-} ]]; then
+  info "Pulling images as $SUDO_USER"
+  for image in $(compose config --images); do
+    sudo -H -u "$SUDO_USER" docker pull -q "$image" > /dev/null
+  done
+fi
 info "Starting the datastores"
 compose up -d "${datastores[@]}"
 for service in "${datastores[@]}"; do wait_healthy "$service" 300; done
