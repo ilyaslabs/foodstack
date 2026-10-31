@@ -31,3 +31,10 @@ databaseChangeLog:
                 { "_id": "operator-delivery", "enabled": false, "baseChargeMinor": { "$numberLong": "0" },
                   "perKmMinor": { "$numberLong": "0" }, "maxDistanceMeters": 8000, "version": { "$numberLong": "0" } }
               ]
+  - changeSet:
+      id: geo-3
+      author: foodstack
+      comment: "geo_seed: marker of the test-seed profile"
+      changes:
+        - createCollection:
+            collectionName: geo_seed
