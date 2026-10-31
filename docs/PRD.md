@@ -31,7 +31,7 @@ Role-based areas in the back office:
 | Area | Roles |
 |---|---|
 | `/admin` | `ADMIN`, `SUPPORT`, `FINANCE`, `MARKETING` (fine-grained permissions) |
-| `/store` | `STORE_OWNER`, `STORE_STAFF` (scoped to their store or stores) |
+| `/store` | `BRAND_OWNER` (all branches of a brand), `STORE_OWNER` (a branch, for example a franchisee), `STORE_STAFF` (scoped to their branch or branches); see 4.2.1 |
 | `/rider` | `RIDER` (operator rider) or `STORE_RIDER` (scoped to one store) |
 
 ## 3. Core order lifecycle
@@ -79,11 +79,32 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | ST-6 | Store owner edits menu; changes to price can be set to require admin approval | S |
 | ST-7 | Average preparation time per store, used for ETA | M |
 | ST-8 | Bulk menu import from CSV | S |
-| ST-9 | Store groups (one owner, many branches) | S |
+| ST-9 | Every store is a **branch** of a **brand**; restaurants with several branches are supported as described in 4.2.1 | M |
 | ST-10 | **Own riders:** the store owner invites their own riders, who use the same rider app and see only that store's jobs | M |
 | ST-11 | **Own delivery zones:** the store owner draws delivery zones on a map, each with a **fixed delivery charge** (no per-km calculation; the owner knows the distance of each area, so typical setups are rings such as 0-3 km and 3-6 km), minimum order and optional free-delivery threshold | M |
 | ST-12 | **QR menu:** the store owner prints a QR code (A4/A5/table-tent PDF, store branding) that opens the store's menu in the customer web app; an optional table number is carried in the link for later dine-in ordering | M |
 | ST-13 | **Delivery mode** (store setting): *self-delivery* (default; own riders, own zones and charges) or *operator delivery* (operator riders and operator charges). Operator delivery is offered only when the operator rider service is on and the admin allows that store. Changing the mode affects new orders only | M |
+
+#### 4.2.1 Brands and branches
+
+A restaurant with several locations is one **brand** with several **branches**. In the rest of this document a "store" is a branch: it is what customers order from, and orders, delivery zones, opening hours, riders and payouts all belong to it. The brand holds what the branches share. The UI uses the words *Brand* and *Branch*.
+
+Decided in grooming on 2026-10-31. The data model ships in M1 with single-branch screens; the multi-branch screens arrive in M4 (section 7).
+
+| ID | Requirement | P |
+|---|---|---|
+| BB-1 | Every branch belongs to exactly one brand. Onboarding a single restaurant creates its brand automatically with the same name; the brand stays hidden in the UI until a second branch is added | M |
+| BB-2 | The **brand** holds name, logo, cover image, description, cuisines, the menu, default prices and the default commission. A **branch** holds its own name suffix (for example "Gulberg"), address and location, opening hours and holiday closures, temporarily-closed switch, preparation time, delivery mode, delivery zones and charges, pickup setting, QR codes, riders, and payouts | M |
+| BB-3 | **One menu per brand**, shared by all its branches. Each branch can mark items and modifiers sold out (ST-4) on its own, and the brand can add **branch-only items** that appear in chosen branches only | M |
+| BB-4 | Prices are set on the brand menu; a branch can **override** the price of an item or modifier. Overrides follow the same approval rule as ST-6 | M |
+| BB-5 | Roles: the `BRAND_OWNER` manages the brand, its menu and every branch. A branch manager (`STORE_OWNER`) and `STORE_STAFF` work on their branch only: opening hours, temporarily-closed switch, sold-out toggles, orders and riders. They cannot edit the brand menu or prices | M |
+| BB-6 | **Franchises:** a branch can have its own owner, distinct from the brand owner, with its own bank details and payouts. The brand owner still controls the menu and brand details | M |
+| BB-7 | Customers see a brand **once** in search and on the home page: the nearest branch that delivers to their address (or, for pickup, the nearest open branch, with the option to choose another). The store page shows the brand name with the branch name, for example "Spice Route · Gulberg" | M |
+| BB-8 | Commission is set on the brand and can be **overridden per branch** (FI-2). Ledger balances, settlement and payouts stay **per branch** (FI-3, FI-7); the brand owner also gets a **roll-up report** across branches | M |
+| BB-9 | Direct payment collection (4.14): the merchant account is connected **once per brand** and used by all its branches; a branch (for example a franchisee) can connect its **own** account instead. Permission and credit limit stay per branch | M |
+| BB-10 | Ratings are given **per branch**; the store page also shows the brand-wide average and count | M |
+| BB-11 | A store promotion created by the brand owner targets **all branches or chosen branches**; a branch manager can create promotions for their branch only when the brand owner allows it | M |
+| BB-12 | Store riders (ST-10) can be **shared across branches** of the same brand; each delivery job still belongs to one branch | M |
 
 ### 4.3 Discovery and search (`search`, `geo`)
 
@@ -157,7 +178,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 |---|---|---|
 | PR-1 | Coupon types: percent off (with cap), fixed amount off, free delivery | M |
 | PR-2 | Rules: min order, valid dates, total and per-customer usage limits, first order only, specific stores or cities | M |
-| PR-3 | Promotions are created by the **operator** (any stores or cities) or by a **store owner** (own store only, store-funded); operator promotions can be operator-funded or shared with participating stores (recorded in the ledger) | M |
+| PR-3 | Promotions are created by the **operator** (any stores or cities) or by a **store owner** (own brand's branches only, all or chosen ones, store-funded; see BB-11); operator promotions can be operator-funded or shared with participating stores (recorded in the ledger) | M |
 | PR-3a | An operator promotion can be restricted to **payment methods** (for example card only, or cash only) and to **payments collected on the operator's merchant account**, so it does not apply to orders paid into a store's own account | M |
 | PR-4 | Automatic store offers shown on store cards (no code needed) | S |
 
@@ -168,7 +189,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | RV-1 | After delivery, customer rates the store (1 to 5, text, optional photo) and the rider (1 to 5, tags) | M |
 | RV-2 | Store owner can reply publicly once | S |
 | RV-3 | Admin moderation queue; profanity filter; hide with reason | M |
-| RV-4 | Store rating shown as average with count; rider rating private to operator | M |
+| RV-4 | Store rating shown as average with count, per branch and brand-wide (BB-10); rider rating private to operator | M |
 
 ### 4.10 Notifications (`notification`)
 
@@ -184,8 +205,8 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | ID | Requirement | P |
 |---|---|---|
 | FI-1 | Double-entry ledger for every money event: order paid, commission, delivery fee, tip, discount funding, refund, rider earning, cash collected | M |
-| FI-2 | Commission per store as a percentage, a fixed amount per order, or both, with effective dates and history | M |
-| FI-3 | Payout report per store and per rider for a period, as CSV and PDF; mark as settled with reference | M |
+| FI-2 | Commission per brand as a percentage, a fixed amount per order, or both, with optional per-branch overrides (BB-8), effective dates and history | M |
+| FI-3 | Payout report per branch and per rider for a period, as CSV and PDF, plus a brand roll-up; mark as settled with reference | M |
 | FI-4 | Tax rates configurable per tax class; tax shown on receipts | M |
 | FI-5 | Customer receipt (email and downloadable) | M |
 | FI-6 | Reconciliation report: gateway settlements vs ledger | S |
@@ -219,7 +240,7 @@ By default the operator collects every card payment and pays stores later. The o
 |---|---|---|
 | DP-1 | A global setting enables the feature; it is **off** by default | M |
 | DP-2 | Only an admin with the `finance` permission can allow or revoke direct collection **for an individual store**; every change is audit-logged with a reason | M |
-| DP-3 | Once allowed, the store owner connects their own merchant account in the store area (gateway credentials or the gateway's account-connect flow), using one of the gateway adapters the operator has enabled. Credentials are stored encrypted and never shown again | M |
+| DP-3 | Once allowed, the store owner connects their own merchant account in the store area (once per brand, or per branch for a franchisee, see BB-9) (gateway credentials or the gateway's account-connect flow), using one of the gateway adapters the operator has enabled. Credentials are stored encrypted and never shown again | M |
 | DP-4 | The connection is verified (test call) before it becomes active; until then, and whenever it fails, card payments fall back to the operator's account | M |
 | DP-5 | For direct-collected orders the ledger records the full amount as collected by the store and creates a **receivable** from the store for commission, the full delivery charge (when the operator's riders deliver), service fee, and rider tips; store-funded and operator-funded discounts are accounted for as for any order | M |
 | DP-6 | Refunds of direct-collected orders are issued through the store's merchant account; the receivable is adjusted to match | M |
@@ -281,10 +302,10 @@ By default the operator collects every card payment and pays stores later. The o
 | Milestone | Content | Exit criteria |
 |---|---|---|
 | **M0 Foundation** | Repo skeleton, Maven multi-module build, Angular workspace, CI, Docker images, Testcontainers local run and `test-seed` seeder, **unit deployer**, `identity`, `settings` and `media` modules | `install.sh` from the unit deployer brings up an empty branded platform on a clean server; admin can log in |
-| **M1 Catalogue** | `store`, `geo`, `search`; store onboarding, menus, store delivery zones; customer browse and search | Customer finds a store and sees its menu in two languages, one RTL |
+| **M1 Catalogue** | `store`, `geo`, `search`; store onboarding, menus, store delivery zones; customer browse and search. Brand and branch data model (4.2.1) with single-branch screens | Customer finds a store and sees its menu in two languages, one RTL |
 | **M2 Ordering** | `cart`, `order`, `payment` (cash and card adapter), `promotion`, `notification` | Customer places and pays for an order; store accepts and completes a pickup order |
 | **M3 Delivery** | `dispatch`, `rider`, live tracking, rider PWA, admin live map | End-to-end delivery with rider and live map |
-| **M4 Money and trust** | `ledger`, payout reports with netting, store direct payment collection, `review`, audit log, data export and deletion | Ledger balances for every test order; payout CSV reconciles |
+| **M4 Money and trust** | `ledger`, payout reports with netting, store direct payment collection, `review`, audit log, data export and deletion. Multi-branch screens: add branches, `BRAND_OWNER` role, franchise owners, branch price overrides and branch-only items, brand roll-up reports (4.2.1) | Ledger balances for every test order; payout CSV reconciles |
 | **M5 Production hardening** | Optional Kubernetes path: Helm chart with `monolith`, `split`, `microservices` and `custom` topologies, edge rate limiting, Istio ambient mTLS, observability chart; load tests, security review, docs and quick start | NFR targets met in load test; quick start verified on a clean server and on a clean cluster |
 | **v1.0 GA** | Release to Maven Central, Docker Hub, GHCR | Tagged release, changelog, upgrade notes |
 
