@@ -1,25 +1,95 @@
 .hero {
+  background:
+    radial-gradient(
+      ellipse 140% 100% at 50% 0%,
+      color-mix(in srgb, var(--mat-sys-primary-container) 70%, transparent) 0%,
+      transparent 75%
+    ),
+    var(--mat-sys-surface-container-low);
+  border-block-end: 1px solid var(--mat-sys-outline-variant);
+}
+
+.hero-inner {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding-block: 48px;
+  gap: 12px;
+  max-width: 720px;
+  margin-inline: auto;
+  padding: 72px 24px 64px;
   text-align: center;
+
+  @media (max-width: 599.98px) {
+    padding: 48px 16px 40px;
+  }
 }
 
 .hero-logo {
-  border-radius: 24px;
+  border-radius: 28px;
   object-fit: cover;
+  box-shadow: var(--mat-sys-level2);
+  margin-block-end: 8px;
 }
 
 h1 {
-  font: var(--mat-sys-display-small);
-  font-family: var(--fs-font-family);
+  font: var(--mat-sys-display-medium);
+  font-weight: 600;
+  letter-spacing: -0.5px;
   margin: 0;
+
+  @media (max-width: 599.98px) {
+    font: var(--mat-sys-display-small);
+    font-weight: 600;
+  }
 }
 
 .tagline {
-  font: var(--mat-sys-title-medium);
+  font: var(--mat-sys-title-large);
+  font-weight: 400;
   color: var(--mat-sys-on-surface-variant);
   margin: 0;
+}
+
+.cta {
+  margin-block-start: 16px;
+  --mat-button-filled-container-height: 48px;
+  --mat-button-filled-horizontal-padding: 32px;
+}
+
+.status {
+  margin: 16px 0 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font: var(--mat-sys-label-large);
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.soon {
+  max-width: 720px;
+  margin-inline: auto;
+  padding: 40px 24px 64px;
+
+  @media (max-width: 599.98px) {
+    padding: 24px 16px 48px;
+  }
+}
+
+.soon-card {
+  padding: 24px;
+  border-radius: 20px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  background: var(--mat-sys-surface);
+  text-align: center;
+
+  h2 {
+    font: var(--mat-sys-title-large);
+    margin: 0 0 8px;
+  }
+
+  p {
+    font: var(--mat-sys-body-large);
+    color: var(--mat-sys-on-surface-variant);
+    margin: 0;
+  }
 }

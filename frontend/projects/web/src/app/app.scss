@@ -1,5 +1,4 @@
+// Pages own their width: the home hero runs edge to edge.
 main {
-  max-width: 1080px;
-  margin-inline: auto;
-  padding: 24px 16px;
+  display: block;
 }

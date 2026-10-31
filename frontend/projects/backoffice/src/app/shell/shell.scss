@@ -1,12 +1,112 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
 .shell {
-  min-height: calc(100vh - 64px);
+  flex: 1 1 auto;
+  --mat-sidenav-container-shape: 0;
+  --mat-sidenav-container-width: 256px;
+  --mat-sidenav-container-background-color: var(--mat-sys-surface-container-low);
+  --mat-sidenav-container-divider-color: var(--mat-sys-outline-variant);
+  --mat-sidenav-content-background-color: var(--mat-sys-surface);
 }
 
 .nav {
-  width: 220px;
+  padding: 12px;
+  box-sizing: border-box;
   border-inline-end: 1px solid var(--mat-sys-outline-variant);
+
+  mat-nav-list {
+    padding: 0;
+    --mat-list-active-indicator-color: var(--mat-sys-primary-container);
+    --mat-list-active-indicator-shape: 999px;
+    --mat-list-list-item-leading-icon-color: var(--mat-sys-on-surface-variant);
+    --mat-list-list-item-label-text-color: var(--mat-sys-on-surface-variant);
+    --mat-list-list-item-label-text-weight: 500;
+  }
+
+  a {
+    margin-block-end: 4px;
+    border-radius: 999px;
+  }
+
+  a.mdc-list-item--activated {
+    --mat-list-list-item-leading-icon-color: var(--mat-sys-on-primary-container);
+    --mat-list-list-item-label-text-color: var(--mat-sys-on-primary-container);
+    --mat-list-list-item-hover-label-text-color: var(--mat-sys-on-primary-container);
+    --mat-list-list-item-focus-label-text-color: var(--mat-sys-on-primary-container);
+  }
 }
 
-.content {
-  padding: 24px;
+.page {
+  max-width: 1120px;
+  margin-inline: auto;
+  padding: 32px 32px 64px;
+
+  @media (max-width: 599.98px) {
+    padding: 20px 16px 48px;
+  }
+}
+
+.account {
+  padding-inline: 4px 12px;
+  border-radius: 999px;
+
+  @media (max-width: 959.98px) {
+    min-width: 0;
+    padding-inline: 4px;
+  }
+}
+
+.account-name {
+  margin-inline-start: 8px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 50%;
+  background: color-mix(in srgb, currentColor 20%, transparent);
+  color: inherit;
+  font: var(--mat-sys-label-large);
+  font-weight: 600;
+}
+
+.account-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 16px;
+  min-width: 240px;
+
+  .avatar-large {
+    inline-size: 40px;
+    block-size: 40px;
+    background: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+  }
+}
+
+.account-card-name {
+  font: var(--mat-sys-title-small);
+}
+
+.account-card-email,
+.account-card-role {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+[mat-menu-item] fs-icon {
+  margin-inline-end: 12px;
+  align-self: center;
+  color: var(--mat-sys-on-surface-variant);
 }

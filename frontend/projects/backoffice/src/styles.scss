@@ -1,12 +1,21 @@
 @use '@angular/material' as mat;
 
+// Fonts are bundled from @fontsource (angular.json styles): no third-party requests, and the CSP stays 'self'.
+:root {
+  --fs-font-family: 'Roboto', 'Roboto Variable', system-ui, sans-serif;
+}
+
 html {
   color-scheme: light dark;
   // Placeholder palette; BrandingStore replaces every colour token with the operator's brand at runtime.
   @include mat.theme(
     (
       color: mat.$orange-palette,
-      typography: Roboto,
+      // The operator's font (BrandingStore), with fallbacks so text never drops to a serif face.
+      typography: (
+          plain-family: var(--fs-font-family),
+          brand-family: var(--fs-font-family),
+        ),
       density: 0,
     )
   );
@@ -16,5 +25,32 @@ body {
   margin: 0;
   background: var(--mat-sys-surface);
   color: var(--mat-sys-on-surface);
-  font-family: var(--fs-font-family, Roboto, system-ui, sans-serif);
+  font-family: var(--fs-font-family);
+}
+
+// Page titles: one style on every back-office page.
+.fs-page-header {
+  margin-block-end: 24px;
+
+  h1 {
+    font: var(--mat-sys-headline-medium);
+    letter-spacing: 0;
+    margin: 0;
+  }
+
+  p {
+    font: var(--mat-sys-body-large);
+    color: var(--mat-sys-on-surface-variant);
+    margin: 4px 0 0;
+  }
+}
+
+mat-card {
+  --mat-card-subtitle-text-color: var(--mat-sys-on-surface-variant);
+  --mat-card-subtitle-text-weight: 400;
+}
+
+mat-card[appearance='outlined'] {
+  --mat-card-outlined-outline-color: var(--mat-sys-outline-variant);
+  --mat-card-outlined-container-shape: 16px;
 }

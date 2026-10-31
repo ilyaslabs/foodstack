@@ -99,7 +99,7 @@ export function brandStylesheet(
       .join(' ');
   const font = fontFamily.replace(/[^A-Za-z0-9 \-]/g, '');
   return (
-    `:root { ${block(brandColors(primaryHex, secondaryHex, false))} --fs-font-family: '${font}', system-ui, sans-serif; }\n` +
+    `:root { ${block(brandColors(primaryHex, secondaryHex, false))} --fs-font-family: '${font}', '${font} Variable', system-ui, sans-serif; }\n` +
     `@media (prefers-color-scheme: dark) { :root { ${block(brandColors(primaryHex, secondaryHex, true))} } }`
   );
 }

@@ -1,29 +1,66 @@
 <fs-brand-header>
-  <button mat-button type="button" (click)="signOut()">Sign out</button>
+  @if (compact()) {
+    <button
+      fsHeaderStart
+      mat-icon-button
+      type="button"
+      aria-label="Open navigation"
+      (click)="drawer.toggle()"
+    >
+      <fs-icon name="menu" />
+    </button>
+  }
+  <button mat-button type="button" class="account" [matMenuTriggerFor]="account">
+    <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+    @if (!compact()) {
+      <span class="account-name">{{ me()?.displayName }}</span>
+    }
+    <span class="cdk-visually-hidden">Account menu</span>
+  </button>
 </fs-brand-header>
-<mat-sidenav-container class="shell">
-  <mat-sidenav mode="side" opened class="nav">
-    <mat-nav-list>
-      <a
-        mat-list-item
-        routerLink="/"
-        routerLinkActive
-        #home="routerLinkActive"
-        [routerLinkActiveOptions]="{ exact: true }"
-        [activated]="home.isActive"
-        >Overview</a
-      >
-      <a
-        mat-list-item
-        routerLink="/settings/branding"
-        routerLinkActive
-        #brand="routerLinkActive"
-        [activated]="brand.isActive"
-        >Branding</a
-      >
-    </mat-nav-list>
+
+<mat-menu #account="matMenu" xPosition="before" class="account-menu">
+  @if (me(); as me) {
+    <div class="account-card">
+      <span class="avatar avatar-large" aria-hidden="true">{{ initials() }}</span>
+      <div>
+        <div class="account-card-name">{{ me.displayName }}</div>
+        <div class="account-card-email">{{ me.email }}</div>
+        <div class="account-card-role">{{ role() }}</div>
+      </div>
+    </div>
+    <mat-divider />
+  }
+  <button mat-menu-item type="button" (click)="signOut()">
+    <fs-icon matMenuItemIcon name="logout" />
+    <span>Sign out</span>
+  </button>
+</mat-menu>
+
+<mat-sidenav-container class="shell" autosize>
+  <mat-sidenav #drawer class="nav" [mode]="compact() ? 'over' : 'side'" [opened]="!compact()">
+    <nav aria-label="Main">
+      <mat-nav-list>
+        @for (item of nav; track item.path) {
+          <a
+            mat-list-item
+            [routerLink]="item.path"
+            routerLinkActive
+            #link="routerLinkActive"
+            [routerLinkActiveOptions]="{ exact: item.exact }"
+            [activated]="link.isActive"
+            (click)="compact() && drawer.close()"
+          >
+            <fs-icon matListItemIcon [name]="item.icon" />
+            <span matListItemTitle>{{ item.label }}</span>
+          </a>
+        }
+      </mat-nav-list>
+    </nav>
   </mat-sidenav>
   <mat-sidenav-content class="content">
-    <router-outlet />
+    <div class="page">
+      <router-outlet />
+    </div>
   </mat-sidenav-content>
 </mat-sidenav-container>
