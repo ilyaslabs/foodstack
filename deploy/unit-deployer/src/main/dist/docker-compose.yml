@@ -1,0 +1,219 @@
+# FoodStack on one server (TDD 17). Started by the scripts in this folder; settings live in .env.
+# Only the proxy publishes ports. Data lives in named Docker volumes (foodstack_*), so no host
+# folder permissions are needed on Linux or Docker Desktop; logs are under ./logs.
+
+name: foodstack
+
+x-service: &service
+  restart: unless-stopped
+  networks: [foodstack]
+  logging:
+    driver: json-file
+    options:
+      max-size: 20m
+      max-file: "5"
+
+services:
+  proxy:
+    <<: *service
+    image: caddy:2.10-alpine
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      FOODSTACK_SITES: ${FOODSTACK_SITES}
+      FOODSTACK_ADMIN_ROOT_HOST: ${FOODSTACK_ADMIN_ROOT_HOST}
+    volumes:
+      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy:/data
+    depends_on:
+      server:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+      backoffice:
+        condition: service_healthy
+
+  server:
+    <<: *service
+    image: eclipse-temurin:25-jre
+    command: ["java", "--enable-native-access=ALL-UNNAMED", "-XX:MaxRAMPercentage=75", "-Xmx${JAVA_HEAP:-2g}", "-jar", "/app/foodstack-server.jar"]
+    env_file: .env
+    environment:
+      MONGODB_URI: mongodb://foodstack:${MONGODB_PASSWORD}@mongodb:27017/?replicaSet=rs0&authSource=admin
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      KAFKA_BOOTSTRAP: kafka:9092
+      S3_ENDPOINT: http://storage:9000
+      S3_CREATE_BUCKETS: "true"
+      LOGGING_FILE_NAME: /logs/server.log
+    volumes:
+      - ./app/foodstack-server.jar:/app/foodstack-server.jar:ro
+      - ./logs/server:/logs
+    healthcheck:
+      # The JRE image has no curl: ask over bash's /dev/tcp.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /actuator/health/readiness HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+
+  web:
+    <<: *service
+    image: node:24-alpine
+    user: node
+    working_dir: /app
+    command: ["node", "server/server.mjs"]
+    environment:
+      PORT: "4000"
+      FOODSTACK_API_URL: ""
+      FOODSTACK_ISSUER: ""
+      FOODSTACK_INTERNAL_API_URL: http://server:8080
+      FOODSTACK_ALLOWED_HOSTS: ${FOODSTACK_HOSTNAMES}
+    volumes:
+      - ./app/web:/app:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backoffice:
+    <<: *service
+    image: nginxinc/nginx-unprivileged:1.29-alpine
+    environment:
+      FOODSTACK_API_URL: ""
+      FOODSTACK_ISSUER: ""
+    volumes:
+      - ./app/backoffice:/usr/share/nginx/html/admin:ro
+      - ./config/backoffice.conf.template:/etc/nginx/templates/default.conf.template:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/admin/config.json || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongodb:
+    <<: *service
+    # 8.2: MongoDB 8.0 refuses to start on Linux 6.19+ kernels (SERVER-121912).
+    image: mongo:8.2
+    # mongod insists its key file is owned by it and not readable by others. Host file ownership
+    # differs between Linux and Docker Desktop, so copy it into place inside the container.
+    entrypoint:
+      - bash
+      - -c
+      - install -m 400 -o mongodb -g mongodb /etc/mongo/keyfile.src /data/configdb/keyfile && exec docker-entrypoint.sh "$$@"
+      - --
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/data/configdb/keyfile"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: foodstack
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD}
+    volumes:
+      - mongodb:/data/db
+      - ./config/mongodb-keyfile:/etc/mongo/keyfile.src:ro
+    healthcheck:
+      # Initiates the single-node replica set on first start, then reports healthy once it is primary.
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet -u foodstack -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval
+          "try { rs.status() } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongodb:27017'}]}) }; db.hello().isWritablePrimary"
+          | grep -q true || exit 1
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+
+  redis:
+    <<: *service
+    image: redis:8.2-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  kafka:
+    <<: *service
+    image: apache/kafka:4.1.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xmx${KAFKA_HEAP:-1g} -Xms${KAFKA_HEAP:-1g}
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID}
+    volumes:
+      - kafka:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 20s
+
+  storage:
+    <<: *service
+    # S3-compatible object storage for media (Apache-2.0).
+    image: rustfs/rustfs:1.0.4
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
+    volumes:
+      - storage:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health > /dev/null || wget -qO- http://localhost:9000/health > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  elasticsearch:
+    <<: *service
+    # Used by the search module from M1; start it with COMPOSE_PROFILES=search.
+    profiles: [search]
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      ELASTIC_PASSWORD: ${ELASTICSEARCH_PASSWORD}
+      ES_JAVA_OPTS: -Xms${ES_HEAP:-1g} -Xmx${ES_HEAP:-1g}
+    volumes:
+      - elasticsearch:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -u elastic:$${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  mongodb:
+  redis:
+  kafka:
+  storage:
+  elasticsearch:
+  caddy:
+
+networks:
+  foodstack:
+    name: foodstack

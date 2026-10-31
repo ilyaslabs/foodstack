@@ -1,0 +1,99 @@
+# FoodStack server defaults. Every value marked ${...} comes from the environment (.env on one
+# server, Secrets and ConfigMaps on Kubernetes). See docs/deployment-guide.md.
+spring:
+  application:
+    name: foodstack-server
+  threads:
+    virtual:
+      enabled: true
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  mongodb:
+    # The cluster; each module uses its own database foodstack_<module> on it (TDD 6.1).
+    uri: ${MONGODB_URI:mongodb://localhost:27017/?replicaSet=rs0}
+    database: foodstack
+  data:
+    mongodb:
+      # Each module enables its own repositories, so they vanish when it is not local.
+      repositories:
+        type: none
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    admin:
+      fail-fast: false
+  autoconfigure:
+    exclude:
+      # One MongoTemplate per module instead of Boot's single one (FoodstackMongoAutoConfiguration).
+      - org.springframework.boot.data.mongodb.autoconfigure.DataMongoAutoConfiguration
+      # The identity module configures the authorization server itself, only where it is local.
+      - org.springframework.boot.security.oauth2.server.authorization.autoconfigure.servlet.OAuth2AuthorizationServerAutoConfiguration
+      - org.springframework.boot.security.oauth2.server.authorization.autoconfigure.servlet.OAuth2AuthorizationServerJwtAutoConfiguration
+
+server:
+  port: 8080
+  shutdown: graceful
+  # Caddy (one server) or the Gateway (Kubernetes) terminates TLS in front of the server.
+  forward-headers-strategy: framework
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    elasticsearch:
+      enabled: false
+
+# Monolith by default: every module local. Helm and the integration tests override per deployment.
+module-switch:
+  modules:
+    identity:
+      mode: local
+    settings:
+      mode: local
+    media:
+      mode: local
+  propagate-headers: [Authorization, Accept-Language]
+
+foodstack:
+  environment: ${FOODSTACK_ENVIRONMENT:development}
+  namespace: foodstack
+  mongodb:
+    database-prefix: foodstack_
+  kafka:
+    topic-partitions: ${KAFKA_TOPIC_PARTITIONS:24}
+    replication-factor: ${KAFKA_REPLICATION_FACTOR:1}
+  security:
+    issuer: ${FOODSTACK_PUBLIC_URL:http://localhost:8080}
+    pii-key: ${FOODSTACK_PII_KEY:}
+  identity:
+    signing-keys: ${FOODSTACK_SIGNING_KEYS:}
+    bootstrap-admin:
+      email: ${FOODSTACK_ADMIN_EMAIL:}
+      password: ${FOODSTACK_ADMIN_PASSWORD:}
+    clients:
+      # The customer app and the back office may live on their own hostnames (deployment guide 2.1).
+      foodstack-web:
+        redirect-uris: ${FOODSTACK_WEB_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/auth/callback
+        post-logout-redirect-uris: ${FOODSTACK_WEB_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/
+      foodstack-backoffice:
+        redirect-uris: ${FOODSTACK_ADMIN_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/admin/auth/callback
+        post-logout-redirect-uris: ${FOODSTACK_ADMIN_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/admin/
+  storage:
+    endpoint: ${S3_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${S3_PUBLIC_ENDPOINT:${FOODSTACK_PUBLIC_URL:http://localhost:9000}}
+    access-key: ${S3_ACCESS_KEY:}
+    secret-key: ${S3_SECRET_KEY:}
+    public-bucket: ${S3_PUBLIC_BUCKET:foodstack-public}
+    private-bucket: ${S3_PRIVATE_BUCKET:foodstack-private}
+    create-buckets: ${S3_CREATE_BUCKETS:false}

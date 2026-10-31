@@ -1,0 +1,32 @@
+<section class="hero">
+  <div class="hero-inner">
+    @if (branding.branding().logo; as logo) {
+      <img
+        class="hero-logo"
+        [src]="logo.urls['card']"
+        alt="{{ branding.branding().name }} logo"
+        width="112"
+        height="112"
+      />
+    }
+    <h1>{{ branding.branding().name }}</h1>
+    @if (branding.branding().tagline; as tagline) {
+      <p class="tagline">{{ tagline }}</p>
+    }
+    @if (auth.signedIn()) {
+      <p class="status">You're signed in. Ordering opens soon.</p>
+    } @else {
+      <button mat-flat-button type="button" class="cta" (click)="signIn()">Sign in</button>
+    }
+  </div>
+</section>
+
+<section class="soon">
+  <div class="soon-card">
+    <h2>Restaurants are on their way</h2>
+    <p>
+      Browse menus from places near you, order in a few taps and follow your delivery live. We're
+      getting everything ready.
+    </p>
+  </div>
+</section>

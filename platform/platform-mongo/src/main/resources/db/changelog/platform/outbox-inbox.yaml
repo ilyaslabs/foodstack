@@ -1,0 +1,27 @@
+# Outbox and inbox collections of a module (TDD 7.2). Included by every module's master changelog;
+# ${module} is set by ModuleMigrations. Both stay unsharded (small, TTL-pruned).
+databaseChangeLog:
+  - changeSet:
+      id: platform-outbox-1
+      author: foodstack
+      changes:
+        - createCollection:
+            collectionName: ${module}_outbox
+        - createIndex:
+            collectionName: ${module}_outbox
+            keys: '{ "status": 1, "_id": 1 }'
+            options: '{ "name": "status_id" }'
+        - createIndex:
+            collectionName: ${module}_outbox
+            keys: '{ "sentAt": 1 }'
+            options: '{ "name": "sent_ttl", "expireAfterSeconds": 604800 }'
+  - changeSet:
+      id: platform-inbox-1
+      author: foodstack
+      changes:
+        - createCollection:
+            collectionName: ${module}_inbox
+        - createIndex:
+            collectionName: ${module}_inbox
+            keys: '{ "processedAt": 1 }'
+            options: '{ "name": "processed_ttl", "expireAfterSeconds": 2592000 }'

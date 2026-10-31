@@ -54,7 +54,7 @@
  Admin desktop ─────┤    │                      └─► foodstack-server (Spring Boot, all modules)      │
  Future mobile app ─┘    │                              │  ▲ module-switch http (internal :8081)     │
                          │                              ▼  │   when split into several Deployments   │
-                         │   MongoDB   Redis   Kafka   Elasticsearch   S3 (MinIO on one server)       
+                         │   MongoDB   Redis   Kafka   Elasticsearch   S3 (RustFS on one server)         
                          └──────────────────────────────────────────────────────────────────────────┘
  External: payment gateway, SMTP, FCM, map tiles / geocoding / routing
 ```
@@ -158,7 +158,7 @@ Rules (enforced by Module-Switch at startup and by `ModuleRules.verify("io.githu
 | `identity` | Users, credentials, email one-time codes, OIDC authorization server, roles and permissions, back-office invitations, data export/delete orchestration | `/oauth2`, `/login`, `/.well-known`, `/api/v1/auth`, `/api/v1/users`, `/api/v1/me` | none | `UserRegistered`, `UserDeleted`, `RoleChanged`, `UserTokensRevoked` | none |
 | `settings` | Branding, locale, business rules, content pages, feature flags | `/api/v1/settings`, `/api/v1/content` | none | `SettingsChanged` | none |
 | `geo` | Store delivery zones with their charges, operator delivery pricing, cities, address geocoding, routing and ETA, maps provider SPI | `/api/v1/geo`, `/api/v1/zones` | none | `ZoneChanged`, `OperatorDeliveryPricingChanged` | none |
-| `store` | Stores, branches, delivery mode (self or operator), opening hours, temporary-close switch, menus, items, modifiers, availability, commission config, QR menu codes | `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `StorePaymentCollectionChanged` | none |
+| `store` | Brands and their branches (stores), delivery mode (self or operator), opening hours, temporary-close switch, brand menus, items, modifiers, per-branch price and availability overrides, commission config, QR menu codes (section 5.7) | `/api/v1/brands`, `/api/v1/stores`, `/api/v1/menus` | `geo`, `settings` | `BrandChanged`, `StoreChanged`, `MenuChanged`, `ItemAvailabilityChanged`, `StoreAvailabilityChanged`, `StorePaymentCollectionChanged` | none |
 | `search` | Search and discovery read model in Elasticsearch, home sections | `/api/v1/search`, `/api/v1/discovery` | `geo` | none | `store.*` (incl. delivery mode), `geo.*` (zones, operator max distance), `review.*` (rating), `settings.*` (languages) |
 | `cart` | Carts, pricing preview | `/api/v1/carts` | `store`, `geo`, `promotion` | none | `store.*` (invalidate) |
 | `promotion` | Operator and store promotions, coupons, payment-method and merchant-account restrictions, validation, redemption | `/api/v1/coupons`, `/api/v1/offers` | none | `CouponRedeemed`, `CouponReleased` | `order.*` (redeem on confirm, release on cancel) |
@@ -199,7 +199,7 @@ The order snapshots everything it needs at placement (prices, commission rate, s
 Every payment intent is created against a **merchant account**. The operator has one (the default); a store can have its own when the operator allows it.
 
 ```
-payment_merchant_accounts { id, owner: OPERATOR | STORE, storeId?, gateway, credentialsRef (encrypted),
+payment_merchant_accounts { id, owner: OPERATOR | BRAND | STORE, brandId?, storeId?, gateway, credentialsRef (encrypted),
                             status: PENDING_VERIFICATION | ACTIVE | SUSPENDED | REVOKED }
 store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, creditLimit }
 ```
@@ -207,7 +207,7 @@ store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, 
 - `settings` holds the global switch (`payments.directCollection.enabled`, default `false`) and the default credit limit.
 - `store` owns the per-store permission (`mode`), changed only through an admin endpoint guarded by `store:payment-collection:manage`; changes emit `StorePaymentCollectionChanged`.
 - `payment` owns the store's merchant account. Credentials are encrypted with the PII key (or held in an external secret store through the gateway SPI) and verified by a test call before becoming `ACTIVE`.
-- At order placement, `order` asks `payment.resolveMerchant(storeId)`. It returns the store's account only when the global switch is on, the store's mode is `DIRECT`, the account is `ACTIVE` and the store is not over its credit limit; otherwise it returns the operator's account. The chosen account is snapshotted on the order, so refunds always go to the same account.
+- At order placement, `order` asks `payment.resolveMerchant(storeId)`. It looks for the branch's own account first, then its brand's account (section 5.7), and returns it only when the global switch is on, the branch's mode is `DIRECT`, the account is `ACTIVE` and the store is not over its credit limit; otherwise it returns the operator's account. The chosen account is snapshotted on the order, so refunds always go to the same account.
 - `ledger` posts different entries depending on the snapshot. Operator-collected: cash in to the operator, payable to the store for its share. Direct-collected: cash in to the store, **receivable from the store** for commission, the delivery charge when an operator rider delivered, service fee and rider tips. Settlement nets payables and receivables per store per period and reports who pays whom.
 - `ledger` tracks each store's outstanding receivable. When it passes the credit limit, it emits `StoreCreditLimitExceeded`; `payment` marks the store account `SUSPENDED` (collection falls back to the operator) and `notification` alerts the store and finance admins. `StoreBalanceSettled` reverses it.
 - Webhooks from a store's account are routed by account ID (`/api/v1/payment-webhooks/{accountId}`) and verified with that account's signing secret.
@@ -217,7 +217,7 @@ store_stores.paymentCollection { mode: OPERATOR | DIRECT, allowedBy, allowedAt, 
 ### 5.5 Promotions: who creates them and where they apply
 
 - `promotion_promotions { owner: OPERATOR | STORE, storeIds, cityIds, funding: {operatorPct, storePct}, paymentMethods: [CASH, CARD]?, merchantAccount: ANY | OPERATOR_ONLY }`.
-- Store owners create promotions for their own store only, always store-funded.
+- Store owners create promotions for their own brand's branches only (all or chosen ones, stored as `storeIds`), always store-funded. A branch manager can do so for their branch only when the brand owner allows it.
 - Operator promotions can be limited to payment methods and to `OPERATOR_ONLY`, meaning they apply only when the payment is collected on the operator's merchant account. `order` passes the payment method and resolved merchant account in the validation context, so the check happens at placement.
 
 ### 5.6 Dispatch algorithm (v1)
@@ -229,6 +229,31 @@ For `deliveryMode: STORE`, the job goes straight to the chosen store rider (or s
 3. Score = w1·distance-to-store + w2·active-jobs + w3·(1 − acceptance-rate) + w4·idle-time bonus. Weights in settings.
 4. Offer to the best rider; lock the rider in Redis (`SET NX PX`) for the offer timeout (30 s). On decline or timeout, move to the next; widen radius after N failures; alert admins after the configured limit.
 5. All transitions are persisted and emitted as events; the admin live map subscribes over SSE.
+
+### 5.7 Brands and branches
+
+Every store is a **branch** of a **brand** (PRD 4.2.1). The data model ships in M1, so single restaurants and chains use the same code from day one; the multi-branch screens come in M4. In code and APIs a branch keeps the name *store* (`storeId`); only the UI says Brand and Branch.
+
+```
+store_brands        { _id, name, description, logoMediaId, coverMediaId, cuisines, ownerUserIds,
+                      commission { percent, fixed }, version }
+store_stores        { _id, brandId, branchName, ownerUserIds, address, location, openingHours, closures,
+                      temporarilyClosed, prepMinutes, deliveryMode, pickupEnabled,
+                      commissionOverride?, paymentCollection, version }
+store_menu_items    { _id, brandId, sectionId, name, price, modifiers, branchIds?, version }
+store_item_overrides{ _id, storeId, itemId, modifierOptionId?, priceOverride?, soldOut, approval?, version }
+```
+
+- **Single restaurant:** onboarding creates a brand with the same name and one branch. The brand is hidden in the UI while it has one branch, so nothing changes for single restaurants.
+- **What lives where:** name, images, cuisines, the menu, default prices and default commission on the brand; address, hours, closures, delivery mode and zones, pickup, QR codes, riders and payouts on the branch. Orders, delivery zones, dispatch jobs, reviews and ledger accounts all stay keyed by `storeId`, so the order, geo, dispatch and ledger designs above are unchanged.
+- **Menu:** one menu per brand. `branchIds` limits a branch-only item to chosen branches (absent means all). A branch's effective menu is the brand menu filtered by `branchIds` and merged with that branch's overrides (price, sold out). It is built in `store-core` and cached in Redis per branch (`foodstack:store:menu:<storeId>`), evicted on `MenuChanged` for the brand or `ItemAvailabilityChanged` for the branch. Price overrides follow the same approval rule as other store price changes.
+- **Franchises:** `store_stores.ownerUserIds` can differ from the brand's owners. Payouts and bank details are per branch, so a franchisee is paid directly.
+- **Commission:** the branch's `commissionOverride` if set, else the brand's `commission`. `ledger` reads the resolved value from the order snapshot, as today.
+- **Merchant accounts:** `payment.resolveMerchant(storeId)` checks the branch's own account, then the brand's, then falls back to the operator (section 5.4).
+- **Riders:** store riders belong to the brand and can be assigned to jobs of any of its branches; each job still has one `storeId`.
+- **Reports:** ledger balances and payouts stay per branch; the brand roll-up sums the branches' accounts by `brandId` (copied onto ledger accounts at creation).
+- **Search:** one document per branch, with the brand fields copied in, collapsed on `brandId` at query time (Elasticsearch `collapse`), so a brand shows once: the nearest branch that delivers to the address. `BrandChanged` reindexes all of the brand's branches.
+- **Access:** see section 9.1 (`brandIds` claim).
 
 ## 6. Data design (MongoDB)
 
@@ -276,7 +301,10 @@ Rules:
 | `order_active` | unsharded | Only orders in progress; removed on completion |
 | `order_by_customer` | `{ customerId: hashed }` | Projection: order summaries for a customer's history |
 | `order_by_store` | `{ storeId: 1, placedAt: 1 }` | Projection: order summaries for a store's history and reports; the compound key lets one very busy store's history split across shards instead of overloading one |
-| `store_stores`, `store_menu_items` | `{ storeId: hashed }` | Menus are always read per store |
+| `store_brands` | `{ _id: hashed }` | Read by brand ID |
+| `store_stores` | `{ _id: hashed }` | A branch is read by its ID |
+| `store_menu_items` | `{ brandId: hashed }` | Menus are read per brand and shared by its branches |
+| `store_item_overrides` | `{ storeId: hashed }` | A branch's price and sold-out overrides are read together when its menu is built |
 | `ledger_entries` | `{ accountId: 1, postedAt: 1 }` | Statements and balances are range reads per account |
 | `payment_intents` | `{ orderId: hashed }` | Looked up by order and by webhook (stored with order ID) |
 | `dispatch_jobs` | `{ _id: hashed }` | Updated by job ID |
@@ -360,9 +388,9 @@ Every REST prefix belongs to exactly one module (section 5.2). The Helm chart ge
 - `identity` embeds Spring Authorization Server. Clients: `web` and `backoffice` (public, Authorization Code + PKCE), future mobile apps (same), internal service clients (client credentials, for jobs).
 - The login UI is served by `identity` and themed from `settings` branding. It supports email one-time codes (stored hashed in Redis with 5 minute TTL, attempt limits), email and password (Argon2id), social login (OIDC federation), and TOTP for back-office users.
 - Access tokens: JWT signed with ES256, 10 minute lifetime; refresh tokens rotated, 30 days for customers and 12 hours for back office. Signing keys come from a Kubernetes Secret (or `.env` on a single server) and are published through JWKS; rotation keeps the previous key valid.
-- Token claims: `sub`, `roles`, `perms`, `storeIds` (store staff), `riderId`.
+- Token claims: `sub`, `roles`, `perms`, `brandIds` (brand owners), `storeIds` (branch managers and staff), `riderId`.
 - **No per-request call to `identity`.** Every module is an OAuth2 resource server that validates the JWT itself, in memory: signature (ES256) against `identity`'s public keys, plus issuer, audience, expiry and not-before. The public keys (JWKS) are fetched once at startup and cached; a token signed with an unknown key ID triggers one refresh. Validation costs microseconds and keeps working even if `identity` is briefly down. `identity` is called only to log in, refresh a token, or fetch keys.
-- Authorization uses method security with permissions such as `order:refund` and store-scoped checks (`storeIds` contains the target store), read from the token claims, so no lookup is needed.
+- Authorization uses method security with permissions such as `order:refund` and store-scoped checks (`storeIds` contains the target branch, or `brandIds` contains the target's brand; brand-level actions such as editing the menu need `brandIds`), read from the token claims, so no lookup is needed.
 - **Immediate revocation** (account blocked, password changed, role removed, logout everywhere): `identity` stores a per-user `tokenVersion` (also a token claim) and publishes `UserTokensRevoked`. Each module keeps revoked versions in Redis (`foodstack:identity:revoked:<userId>`) with a short in-memory cache, and rejects tokens whose version is older. Without this check a revoked token would still work until it expires (at most 10 minutes).
 - **Edge check (Kubernetes):** an Istio `RequestAuthentication` + `AuthorizationPolicy` at the Gateway also validates the JWT for `/api/**`, so forged or expired tokens are rejected before reaching any pod. Public endpoints (menus, search, login) are listed explicitly.
 - **Module-to-module, after a split**, three independent layers:
@@ -403,7 +431,7 @@ Redis is a cache and coordination store only; losing it never loses business dat
 ## 11. Search (Elasticsearch)
 
 - Indices prefixed by module: `search_stores_v<N>` and `search_dishes_v<N>`, accessed through aliases `search_stores` and `search_dishes`; reindex by building a new version and swapping the alias.
-- Built only from events (`StoreChanged`, `MenuChanged`, `StoreAvailabilityChanged`, `ReviewPublished`), never by reading another module's database; a full rebuild job replays from `store` through its API.
+- Built only from events (`BrandChanged`, `StoreChanged`, `MenuChanged`, `ItemAvailabilityChanged`, `StoreAvailabilityChanged`, `ReviewPublished`), never by reading another module's database; a full rebuild job replays from `store` through its API.
 - Per-language fields with language analyzers (including Arabic and Urdu), `search_as_you_type` for autocomplete, `geo_point` for distance sorting, and a delivery shape per store (`geo_shape`): its zone polygons for self-delivery stores, or a circle of the operator's maximum delivery distance for operator-delivery stores, so search returns only stores that deliver to the customer's address.
 - Ranking: open now, distance, rating, ETA, plus admin boosts.
 - `SearchEngine` SPI in `search-core`; the Elasticsearch Java client is the default adapter.
@@ -418,9 +446,9 @@ Redis is a cache and coordination store only; losing it never loses business dat
 ## 13. Media storage (S3)
 
 - The `media` module owns uploads. Other modules store only media IDs; `media` resolves them to URLs.
-- Storage goes through an `ObjectStorage` SPI. The default adapter uses the AWS SDK v2 S3 client, so it works with AWS S3 and with S3-compatible stores (MinIO in the unit deployer and in local development, and other providers).
+- Storage goes through an `ObjectStorage` SPI. The default adapter uses the AWS SDK v2 S3 client, so it works with AWS S3 and with S3-compatible stores (RustFS in the unit deployer, local development and tests, and other providers).
 - Upload flow: the client asks `POST /api/v1/media/uploads` (type, size, purpose) → receives a short-lived presigned `PUT` URL for `<bucket>/<owningModule>/<entityId>/<uuid>` → uploads directly → calls `complete`. The server never streams large files through the JVM.
-- Processing (on `complete`, on virtual threads): check magic bytes and size limits, strip EXIF/metadata, auto-rotate, resize to fixed variants (`thumb` 160 px, `card` 480 px, `detail` 1080 px), encode as WebP (quality about 80) and optionally AVIF, then delete the raw upload unless keeping originals is switched on. Processing uses libvips, bundled in the server image.
+- Processing (on `complete`, on virtual threads): check magic bytes and size limits, strip EXIF/metadata, auto-rotate, resize to fixed variants (`thumb` 160 px, `card` 480 px, `detail` 1080 px), encode as WebP (quality about 80) and optionally AVIF, then delete the raw upload unless keeping originals is switched on. Processing is pure Java (ImageIO, metadata-extractor for EXIF orientation, webp-imageio for WebP, which bundles native libwebp), so it runs in plain `mvn test` and in the JRE image without system packages. AVIF and libvips are follow-ups if throughput needs them.
 - Buckets: `public` (menu, store and branding images; served with `Cache-Control: public, max-age=31536000, immutable` and content-hashed names, so a CDN can sit in front) and `private` (rider documents; access only through 5-minute signed `GET` URLs).
 - `media_assets` records owner module, entity, variants, sizes and reference count; a nightly job deletes unreferenced assets after a grace period.
 
@@ -492,7 +520,7 @@ Full rules are in the [Testing Strategy](testing-strategy.md). In short:
 
 ## 16. Local development and seed data
 
-- **One click:** `app/foodstack-server/src/test/java/.../LocalFoodstackApplication.java` starts the real application with `SpringApplication.from(FoodstackApplication::main).with(LocalContainers.class)`. `LocalContainers` declares Testcontainers beans with `@ServiceConnection`: MongoDB (single-node replica set), Redis, Kafka (KRaft), Elasticsearch, MinIO and Mailpit. Containers are reused between restarts. Run it from the IDE with one click, or `./mvnw -pl app/foodstack-server spring-boot:test-run`. Docker is the only prerequisite.
+- **One click:** `app/foodstack-server/src/test/java/.../LocalFoodstackApplication.java` starts the real application with starts reusable containers from `foodstack-platform-test` (two-shard MongoDB, Redis, Kafka, RustFS; Elasticsearch and Mailpit join when the modules that need them land) and runs `FoodstackApplication` with the `local` and `test-seed` profiles. Run it from the IDE with one click, or `mvn -pl app/foodstack-server spring-boot:test-run`. Docker is the only prerequisite.
 - The Angular apps run with `pnpm start` and proxy `/api` to `localhost:8080`.
 - **Seed data:** when the `test-seed` profile is active, each module seeds its own data through a `@Profile("test-seed")` seeder inside its own `-core` package, so only `local` modules seed and a module never writes another module's collections. Seeders are idempotent (a `<module>_seed` marker document) and run in dependency order (identity, settings, geo, media, store, rider, promotion, then sample orders through the public APIs).
 - Seed content: an admin, a finance user and support user, two cities, about 10 stores with menus, photos, opening hours and their own zones, store riders and operator riders, customers with addresses, coupons, and orders in every state. Logins are printed once in the startup log.
@@ -532,7 +560,7 @@ All services share one Docker network, `foodstack`. Only the reverse proxy publi
 | `kafka` | Apache Kafka | Single node, KRaft mode |
 | `redis` | Redis | Password, AOF persistence |
 | `elasticsearch` | Elasticsearch | Single node, security on, heap sized from `.env` |
-| `minio` | MinIO | S3-compatible storage for media |
+| `storage` | RustFS | S3-compatible storage for media (MinIO no longer publishes images) |
 | `nominatim`, `osrm` (optional) | Nominatim, OSRM | Self-hosted address search and routing for the operator's region; enabled with a Compose profile when not using a hosted maps provider |
 
 Every service has a healthcheck; `server` starts only when its dependencies are healthy. All data and logs are bind-mounted under the install directory, and every service uses `restart: unless-stopped` with log rotation.
@@ -541,13 +569,14 @@ Every service has a healthcheck; `server` starts only when its dependencies are 
 
 | Script | Does |
 |---|---|
-| `install.sh <install-dir> [--domain example.com]` | Checks Docker and Compose v2, CPU, RAM, disk and ports; sets `vm.max_map_count` for Elasticsearch; creates `<dir>/{data/{mongodb,kafka,redis,elasticsearch,minio},logs,config,backups}`; generates strong secrets, JWT signing keys and the PII key into `<dir>/.env` (mode 600); copies the jar, apps and config; runs migrations once (`--foodstack.migrate-only=true`); starts the stack; optionally installs a systemd unit to start on boot; prints the admin first-login link |
+| `install.sh <install-dir> [--domain example.com]` | Checks Docker and Compose v2, CPU, RAM, disk and ports; sets `vm.max_map_count` for Elasticsearch when run as root; creates `<dir>/{logs,config,backups}` (service data lives in named Docker volumes `foodstack_<service>`, so no sudo or folder ownership setup is needed); cleans up an unfinished earlier attempt so a re-run just works; `--local` presets a trial on `http://foodstack.localhost:8080`; generates strong secrets, JWT signing keys and the PII key into `<dir>/.env` (mode 600); copies the jar, apps and config; runs migrations once (`--foodstack.migrate-only=true`); starts the stack; optionally installs a systemd unit to start on boot; prints the first administrator sign-in |
 | `start.sh` / `stop.sh` | `docker compose up -d` / `down` (data is kept) |
 | `restart.sh [service]` | Restarts everything or one service |
 | `status.sh` / `logs.sh [service]` | Health summary / follow logs |
-| `backup.sh` | `mongodump`, MinIO mirror and config into `<dir>/backups/<timestamp>` |
+| `backup.sh` | `mongodump`, a copy of the media storage and config into `<dir>/backups/<timestamp>` |
 | `restore.sh <backup-dir>` | Stop the application, restore MongoDB and media, rebuild search, start |
 | `upgrade.sh <new-zip>` / `--rollback` | Backup, replace jar, apps and compose file, run migrations, restart / restore the previous version |
+| `uninstall.sh [--yes]` | Removes the containers and data volumes after confirmation; keeps `backups/` |
 
 Step-by-step operator instructions are in the [Deployment Guide](deployment-guide.md).
 
@@ -666,7 +695,7 @@ foodstack:
     issuer: https://api.example.com
     pii-key: ${PII_KEY}                     # from Secret
   storage:
-    endpoint: ${S3_ENDPOINT:}               # empty = AWS S3; MinIO URL on one server
+    endpoint: ${S3_ENDPOINT:}               # empty = AWS S3; RustFS URL on one server
     public-bucket: foodstack-public
     private-bucket: foodstack-private
   migrate-only: false
@@ -687,3 +716,24 @@ module-switch:                              # generated by Helm per Deployment
 | T4 | Public OSM services have strict usage policies | The Helm chart and the unit deployer ship optional self-hosted Nominatim and OSRM services (off by default, enabled per region); the deployment guide explains the data import |
 | T5 | Licences of third-party servers (Liquibase FSL, Elasticsearch) | Document in `docs/licensing.md`; operators run unmodified upstream software |
 | T6 | Module-Switch is new (0.x) | FoodStack pins a released version and contributes fixes upstream; split-topology tests run in CI |
+
+## 21. M0 implementation notes
+
+What M0 built differs from the design above in these places. Each is deliberate; the follow-up column says when it changes.
+
+| Area | Design | M0 | Follow-up |
+|---|---|---|---|
+| Object storage | MinIO | RustFS (Apache-2.0, S3-compatible) in the unit deployer, local runs and tests, because MinIO stopped publishing images. The code only uses the S3 API, so AWS S3 and other providers work unchanged | None needed |
+| Image processing | libvips | Pure Java with webp-imageio (section 13) | Add libvips or AVIF only if throughput needs it |
+| Web tokens | Refresh-token rotation, access token in memory | Public SPA clients get no refresh token from Spring Authorization Server. The apps keep the access token in `sessionStorage` (tab-scoped) and, when it expires, send the user through `/oauth2/authorize` again, which signs them straight back in while the identity session lasts. Sign-out uses OIDC RP-initiated logout (`/connect/logout`) | Refresh tokens through a backend-for-frontend, or in-memory tokens with silent renew in an iframe |
+| Identity session | Not specified | The login session lives in the server's memory, so it ends on restart and is not shared between replicas | Spring Session on Redis before running identity with more than one replica |
+| Login methods | Email codes, password, social, TOTP | Email and password (Argon2id) only. Email codes need the notification module and SMTP | M2 (notifications), M5 (TOTP, social) |
+| First admin | One-time link to set the password | `install.sh` generates the password, stores it in `.env` and prints it once | Password change and reset with the notification module |
+| Elasticsearch | Always in the Compose stack | Compose profile `search`, off by default; no module uses it yet | Switched on by default with the search module (M1) |
+| OpenAPI and API client | springdoc per module, generated Angular client | Hand-written typed clients in `frontend/projects/api-client` | Add springdoc and generate the client in CI |
+| Rate limiting | Edge plus per-user limits in Redis | Only Caddy request-size limits on one server | Per-IP and per-user limits with the first public write endpoints beyond sign-up |
+| Libraries | `platform-core`, `-mongo`, `-kafka`, `-security`, `-test` | Also `platform-web` (problem+json errors, ETags), shared by every `-web` module | None |
+| Module dependencies | | `settings` calls `media` through `MediaApi` (claim and release the logo), the first synchronous module-to-module call; it runs over HTTP in the microservices topology | None |
+| Authorization documents | | `identity_authorizations` is not sharded (short-lived, small) | Shard by `_id` hash if volume calls for it |
+| Brands and branches | Section 5.7 | Not built; designed after M0 | Data model with the store module (M1), multi-branch screens (M4) |
+

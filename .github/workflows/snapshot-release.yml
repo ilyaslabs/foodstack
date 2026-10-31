@@ -1,0 +1,24 @@
+name: Snapshot release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  maven:
+    uses: ilyaslabs/cicd/.github/workflows/mvn-snapshot-release.yml@main
+    with:
+      java-version: '25'
+    secrets: inherit
+
+  images:
+    uses: ./.github/workflows/images.yml
+    with:
+      # Same version scheme as the shared snapshot workflow: <branch>-SNAPSHOT.
+      version: main-SNAPSHOT
+      tags: edge sha-${{ github.sha }}
+    secrets: inherit

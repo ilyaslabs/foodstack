@@ -1,0 +1,14 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: testmod-1
+      author: foodstack
+      comment: "testmod_things, shard key { _id: hashed }"
+      changes:
+        - createCollection:
+            collectionName: testmod_things
+        - createIndex:
+            collectionName: testmod_things
+            keys: '{ "name": 1 }'
+            options: '{ "name": "name" }'

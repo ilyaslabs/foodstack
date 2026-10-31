@@ -1,0 +1,162 @@
+<header class="fs-page-header">
+  <h1>Branding</h1>
+  <p>How your platform looks to customers, stores and riders. Changes apply right away.</p>
+</header>
+
+<div class="layout">
+  <mat-card appearance="outlined" class="editor">
+    <form [formGroup]="form" (ngSubmit)="save()">
+      <section>
+        <h2>Identity</h2>
+        <mat-form-field appearance="outline">
+          <mat-label>Platform name</mat-label>
+          <input matInput formControlName="name" maxlength="60" required />
+          <mat-hint align="end">{{ form.controls.name.value.length }} / 60</mat-hint>
+          @if (form.controls.name.hasError('required')) {
+            <mat-error>Enter a name</mat-error>
+          }
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Tagline</mat-label>
+          <input matInput formControlName="tagline" maxlength="120" />
+          <mat-hint>Shown under the name on the home and sign-in pages.</mat-hint>
+        </mat-form-field>
+      </section>
+
+      <section>
+        <h2>Colours</h2>
+        <div class="colors">
+          @for (field of colorFields; track field.control) {
+            <div class="color-field">
+              <label class="swatch" [style.background]="swatch(field.control)">
+                <span class="cdk-visually-hidden">Pick {{ field.label | lowercase }}</span>
+                <input type="color" [formControlName]="field.control" />
+              </label>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>{{ field.label }}</mat-label>
+                <input
+                  matInput
+                  [formControlName]="field.control"
+                  maxlength="7"
+                  spellcheck="false"
+                />
+                <mat-hint>{{ field.hint }}</mat-hint>
+                <mat-error>Use a hex colour like #D84315</mat-error>
+              </mat-form-field>
+            </div>
+          }
+        </div>
+      </section>
+
+      <section>
+        <h2>Typography</h2>
+        <mat-form-field appearance="outline">
+          <mat-label>Font</mat-label>
+          <mat-select formControlName="fontFamily">
+            @for (font of fonts; track font) {
+              <mat-option [value]="font"
+                ><span [style.font-family]="fontStack(font)">{{ font }}</span></mat-option
+              >
+            }
+          </mat-select>
+          <mat-hint>Used for all text in every app.</mat-hint>
+        </mat-form-field>
+      </section>
+
+      <section>
+        <h2>Logo</h2>
+        <div class="logo">
+          <div class="logo-box">
+            @if (logoPreview(); as preview) {
+              <img [src]="preview" alt="Logo preview" width="96" height="96" />
+            } @else {
+              <fs-icon name="image" />
+            }
+          </div>
+          <div class="logo-actions">
+            <div class="logo-buttons">
+              <button
+                mat-stroked-button
+                type="button"
+                (click)="logoInput.click()"
+                [disabled]="uploading()"
+              >
+                <fs-icon name="upload" />
+                {{ logoPreview() ? 'Replace logo' : 'Upload logo' }}
+              </button>
+              @if (logoPreview()) {
+                <button mat-button type="button" (click)="removeLogo()" [disabled]="uploading()">
+                  Remove
+                </button>
+              }
+            </div>
+            <p class="hint">A square PNG, JPG or WebP image works best.</p>
+            @if (uploading()) {
+              <mat-progress-bar mode="indeterminate" />
+            }
+            <input
+              #logoInput
+              class="file-input"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              (change)="onLogoSelected($event)"
+              [disabled]="uploading()"
+              data-testid="logo-input"
+            />
+          </div>
+        </div>
+      </section>
+
+      @if (message(); as message) {
+        <div class="banner" [class]="message.kind" role="status">
+          <fs-icon [name]="message.kind === 'ok' ? 'check_circle' : 'error'" />
+          <span>{{ message.text }}</span>
+        </div>
+      }
+
+      <div class="actions">
+        <button
+          mat-button
+          type="button"
+          (click)="discard()"
+          [disabled]="saving() || uploading() || form.pristine"
+        >
+          Discard changes
+        </button>
+        <button mat-flat-button type="submit" [disabled]="saving() || uploading() || form.pristine">
+          {{ saving() ? 'Saving…' : 'Save changes' }}
+        </button>
+      </div>
+    </form>
+  </mat-card>
+
+  <aside class="preview" aria-label="Preview">
+    <h2>Preview</h2>
+    <div class="preview-frame" [style]="previewStyle()">
+      <div class="preview-bar">
+        @if (logoPreview(); as preview) {
+          <img [src]="preview" alt="" width="28" height="28" />
+        }
+        <span>{{ form.controls.name.value || 'Your platform' }}</span>
+      </div>
+      <div class="preview-body">
+        <div class="preview-title">{{ form.controls.name.value || 'Your platform' }}</div>
+        @if (form.controls.tagline.value) {
+          <div class="preview-tagline">{{ form.controls.tagline.value }}</div>
+        }
+        <div class="preview-actions">
+          <span class="preview-button">Order now</span>
+          <span class="preview-chip">Free delivery</span>
+        </div>
+        <div class="preview-card">
+          <div class="preview-card-media"></div>
+          <div>
+            <div class="preview-card-title">Sample store</div>
+            <div class="preview-card-meta">20–30 min · 4.8 ★</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="hint">Light mode. Dark mode is generated from the same colours.</p>
+  </aside>
+</div>

@@ -31,7 +31,7 @@ The same rule applies to every other kind of class:
 | Outbox relay, Kafka publisher | Lowest layer | Real MongoDB and Kafka containers |
 | Kafka consumer | Middle layer | Consumer for real; the service it calls is mocked |
 | Elasticsearch adapter | Lowest layer | Real Elasticsearch container |
-| S3 storage adapter, image processing | Lowest layer | Real MinIO container, real libvips |
+| S3 storage adapter, image processing | Lowest layer | Real S3-compatible container (RustFS), real image codecs |
 | Redis usage (cache, locks, rate limits, revocation) | Lowest layer | Real Redis container |
 | External provider adapters (payment gateway, maps, FCM, SMTP) | Lowest layer | WireMock (HTTP providers) or Mailpit (SMTP), playing the provider's real responses, including failures and timeouts |
 | Domain objects and value objects (pricing, state machine, money, delivery charge, commission) | Pure logic | Nothing to mock; tested directly with many cases |
@@ -76,7 +76,7 @@ Each scenario class is annotated `@BothTopologies`, which runs it twice:
 | `MONOLITH` | One application context, every module `local` | The production configuration of the unit deployer |
 | `MICROSERVICES` | One application context **per module** (14), each with only its own module `local`, every other module `http` to the owning context on a random internal port | The same configuration the Helm chart generates for `topology: microservices` |
 
-- Both runs share the same containers (MongoDB, Kafka, Redis, Elasticsearch, MinIO, Mailpit, WireMock) but use fresh databases, topics and buckets, so they never see each other's data.
+- Both runs share the same containers (MongoDB, Kafka, Redis, RustFS, and from later milestones Elasticsearch, Mailpit and WireMock) but use fresh databases, topics and buckets, so they never see each other's data.
 - In the microservices run, the test client routes each REST path to the context that owns it, using the same module → path map the gateway uses. This also proves the routing map is complete.
 - Asynchronous outcomes (notifications, ledger entries, search indexing) are awaited with Awaitility, with a short timeout.
 - Both runs must pass on every pull request.
