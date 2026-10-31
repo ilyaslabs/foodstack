@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Installs FoodStack on this server (TDD 17.3, deployment guide 3.2).
 #
-#   sudo ./install.sh /opt/foodstack --domain example.com \
-#       [--admin-domain admin.example.com] [--api-domain api.example.com] \
+#   ./install.sh <folder> --domain example.com [--admin-domain admin.example.com] [--api-domain api.example.com]
 #       [--admin-email ops@example.com] [--http] [--http-port 80] [--https-port 443] [--systemd]
+#   ./install.sh <folder> --local     (trial on this computer: http://foodstack.localhost:8080, no certificates)
 #
-# --http serves plain HTTP without certificates, for a local trial only.
+# Needs only Docker. Use sudo only for a folder you can't write to (like /opt) or for --systemd.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 source "$here/lib/common.sh"
@@ -24,6 +24,7 @@ while (( $# )); do
     --http-port) http_port=$2; shift 2 ;;
     --https-port) https_port=$2; shift 2 ;;
     --systemd) systemd=true; shift ;;
+    --local) domain=${domain:-foodstack.localhost}; scheme=http; http_port=8080; shift ;;
     -h|--help) usage ;;
     -*) fail "Unknown option $1" ;;
     *) [[ -z "$target" ]] || usage; target=$1; shift ;;
@@ -39,7 +40,9 @@ admin_email=${admin_email:-admin@$domain}
 info "Checking the server"
 command -v docker > /dev/null || fail "Docker is not installed (Docker Engine 27+ with Compose v2 is required)."
 docker compose version > /dev/null 2>&1 || fail "Docker Compose v2 is not available (docker compose)."
+docker info > /dev/null 2>&1 || fail "Cannot reach Docker. Start Docker (Docker Desktop on macOS); on Linux add your user to the docker group or use sudo."
 command -v openssl > /dev/null || fail "openssl is required."
+if $systemd && [[ $EUID -ne 0 ]]; then fail "--systemd installs a system service; run with sudo."; fi
 macos=false; [[ $(uname -s) == Darwin ]] && macos=true
 if $macos; then
   cpus=$(sysctl -n hw.ncpu 2> /dev/null || echo 0)
@@ -48,35 +51,46 @@ else
   cpus=$(nproc 2> /dev/null || echo 0)
   mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1024 / 1024}' /proc/meminfo 2> /dev/null || echo 0)
 fi
-disk_gb=$(df -P "$(dirname "$target")" 2> /dev/null | awk 'NR==2 {printf "%d", $4 / 1024 / 1024}')
+disk_gb=$(df -Pk "$(dirname "$target")" 2> /dev/null | awk 'NR==2 {printf "%d", $4 / 1024 / 1024}')
 (( cpus >= 4 )) || warn "$cpus CPUs found; 4 or more are recommended."
 (( mem_gb >= 15 )) || warn "${mem_gb} GB memory found; 16 GB or more are recommended."
 (( disk_gb >= 100 )) || warn "${disk_gb} GB free disk found; 100 GB or more are recommended."
+port_in_use() {
+  if command -v lsof > /dev/null; then lsof -nP -iTCP:"$1" -sTCP:LISTEN > /dev/null 2>&1 && return 0; fi
+  (ss -ltn 2> /dev/null || true) | awk '{print $4}' | grep -qE "[:.]$1\$"
+}
 for port in "$http_port" $([[ $scheme == https ]] && echo "$https_port"); do
-  if (ss -ltn 2> /dev/null || netstat -ltn 2> /dev/null) | awk '{print $4}' | grep -qE "[:.]$port\$"; then
-    fail "Port $port is already in use."
-  fi
+  port_in_use "$port" && fail "Port $port is already in use. Pick another with --http-port / --https-port."
 done
-if [[ -f "$target/.env" ]]; then
-  fail "$target already holds an installation. Use upgrade.sh to update it."
+if [[ -f "$target/.installed" ]]; then
+  fail "$target already holds an installation. Use upgrade.sh to update it, or uninstall.sh to remove it."
+fi
+target_abs=$(cd "$target" 2> /dev/null && pwd || echo "$target")
+project=(--filter label=com.docker.compose.project=foodstack)
+other=$(docker ps -a "${project[@]}" --format '{{.Label "com.docker.compose.project.working_dir"}}' \
+  | sort -u | grep -vxF "$target_abs" || true)
+[[ -z "$other" ]] || fail "FoodStack is already installed on this machine in $other. Run $other/uninstall.sh first."
+# Anything left now is from an attempt that stopped part way, or a folder deleted by hand.
+# Its secrets are gone, so its data can't be used: remove it and start clean.
+if [[ -f "$target/.env" || -n $(docker ps -aq "${project[@]}") || -n $(docker volume ls -q "${project[@]}") ]]; then
+  info "Removing an unfinished earlier install"
+  for id in $(docker ps -aq "${project[@]}"); do docker rm -f "$id" > /dev/null; done
+  for volume in $(docker volume ls -q "${project[@]}"); do docker volume rm "$volume" > /dev/null; done
+  rm -rf "${target:?}"/{.env,app,config,lib,docker-compose.yml}
 fi
 
-# Elasticsearch (search module) needs a larger mmap count. Docker Desktop manages its own VM.
-if ! $macos && [[ $(sysctl -n vm.max_map_count 2> /dev/null || echo 0) -lt 262144 ]]; then
-  if sysctl -w vm.max_map_count=262144 > /dev/null 2>&1; then
-    echo 'vm.max_map_count=262144' > /etc/sysctl.d/99-foodstack.conf 2> /dev/null || true
-  else
-    warn "Could not set vm.max_map_count=262144; set it before enabling search."
-  fi
+# Elasticsearch (search module, off until M1) needs a larger mmap count. Only root can set it;
+# the deployment guide covers it for anyone enabling search. Docker Desktop manages its own VM.
+if ! $macos && [[ $EUID -eq 0 ]] && [[ $(sysctl -n vm.max_map_count 2> /dev/null || echo 0) -lt 262144 ]]; then
+  sysctl -w vm.max_map_count=262144 > /dev/null 2>&1 \
+    && { echo 'vm.max_map_count=262144' > /etc/sysctl.d/99-foodstack.conf 2> /dev/null || true; }
 fi
 
 # --- 2. Directories --------------------------------------------------------------------------
 info "Creating $target"
-mkdir -p "$target"/{app,config,backups,lib} "$target"/logs/server \
-  "$target"/data/{mongodb,kafka,redis,storage,elasticsearch,caddy}
-chown 999:999 "$target/data/mongodb" "$target/data/redis"
-chown 1000:1000 "$target/data/kafka" "$target/data/elasticsearch"
-chown 10001:10001 "$target/data/storage"
+mkdir -p "$target"/{app,config,backups,lib} "$target"/logs/server 2> /dev/null \
+  || fail "Cannot create $target. Choose a folder you own (like ~/foodstack) or run with sudo."
+target="$(cd "$target" && pwd)"
 
 # --- 3. Secrets ------------------------------------------------------------------------------
 info "Generating secrets"
@@ -137,7 +151,6 @@ ES_HEAP=1g
 ENV
 chmod 600 "$target/.env"
 openssl rand -base64 756 > "$target/config/mongodb-keyfile"
-chown 999:999 "$target/config/mongodb-keyfile"
 chmod 400 "$target/config/mongodb-keyfile"
 umask 022
 
@@ -147,7 +160,7 @@ cp -a "$here/app/." "$target/app/"
 cp -a "$here/config/Caddyfile" "$here/config/backoffice.conf.template" "$target/config/"
 cp -a "$here/docker-compose.yml" "$here/.env.example" "$here/VERSION" "$here/README.md" "$target/"
 cp -a "$here/lib/." "$target/lib/"
-for script in start stop restart status logs backup restore upgrade; do
+for script in start stop restart status logs backup restore upgrade uninstall; do
   cp -a "$here/$script.sh" "$target/"
 done
 chmod +x "$target"/*.sh
@@ -193,6 +206,8 @@ UNIT
   systemctl daemon-reload && systemctl enable foodstack.service > /dev/null
   info "Installed the systemd unit foodstack.service"
 fi
+
+date -u +%Y-%m-%dT%H:%M:%SZ > "$target/.installed"
 
 cat << DONE
 

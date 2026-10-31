@@ -541,13 +541,14 @@ Every service has a healthcheck; `server` starts only when its dependencies are 
 
 | Script | Does |
 |---|---|
-| `install.sh <install-dir> [--domain example.com]` | Checks Docker and Compose v2, CPU, RAM, disk and ports; sets `vm.max_map_count` for Elasticsearch; creates `<dir>/{data/{mongodb,kafka,redis,elasticsearch,storage,caddy},logs,config,backups}`; generates strong secrets, JWT signing keys and the PII key into `<dir>/.env` (mode 600); copies the jar, apps and config; runs migrations once (`--foodstack.migrate-only=true`); starts the stack; optionally installs a systemd unit to start on boot; prints the first administrator sign-in |
+| `install.sh <install-dir> [--domain example.com]` | Checks Docker and Compose v2, CPU, RAM, disk and ports; sets `vm.max_map_count` for Elasticsearch when run as root; creates `<dir>/{logs,config,backups}` (service data lives in named Docker volumes `foodstack_<service>`, so no sudo or folder ownership setup is needed); cleans up an unfinished earlier attempt so a re-run just works; `--local` presets a trial on `http://foodstack.localhost:8080`; generates strong secrets, JWT signing keys and the PII key into `<dir>/.env` (mode 600); copies the jar, apps and config; runs migrations once (`--foodstack.migrate-only=true`); starts the stack; optionally installs a systemd unit to start on boot; prints the first administrator sign-in |
 | `start.sh` / `stop.sh` | `docker compose up -d` / `down` (data is kept) |
 | `restart.sh [service]` | Restarts everything or one service |
 | `status.sh` / `logs.sh [service]` | Health summary / follow logs |
 | `backup.sh` | `mongodump`, a copy of the media storage and config into `<dir>/backups/<timestamp>` |
 | `restore.sh <backup-dir>` | Stop the application, restore MongoDB and media, rebuild search, start |
 | `upgrade.sh <new-zip>` / `--rollback` | Backup, replace jar, apps and compose file, run migrations, restart / restore the previous version |
+| `uninstall.sh [--yes]` | Removes the containers and data volumes after confirmation; keeps `backups/` |
 
 Step-by-step operator instructions are in the [Deployment Guide](deployment-guide.md).
 

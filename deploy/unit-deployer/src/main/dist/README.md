@@ -1,6 +1,6 @@
 # FoodStack unit deployer
 
-Everything to run FoodStack on one Linux server with Docker: the server jar, the built web apps,
+Everything to run FoodStack on one Linux server (or, for a trial, any computer with Docker Desktop): the server jar, the built web apps,
 Docker Compose and the scripts below. Full instructions: `docs/deployment-guide.md` section 3.
 
 ```bash
@@ -8,7 +8,9 @@ sudo ./install.sh /opt/foodstack --domain example.com --admin-domain admin.examp
   --api-domain api.example.com --admin-email ops@example.com
 ```
 
-For a quick local trial without certificates: `sudo ./install.sh /opt/foodstack --domain localhost --http --http-port 8088`.
+For a quick trial on your own computer, no sudo needed: `./install.sh ~/foodstack --local`, then open
+`http://foodstack.localhost:8080/admin/`. `sudo` is only needed for a folder you can't write to (like `/opt`) or `--systemd`.
+If an install stops part way, fix the cause and run the same command again: it cleans up and starts over.
 
 | Script | Does |
 |---|---|
@@ -20,8 +22,9 @@ For a quick local trial without certificates: `sudo ./install.sh /opt/foodstack 
 | `backup.sh` | MongoDB dump, media and configuration into `backups/<timestamp>` |
 | `restore.sh <backup-dir>` | Restore a backup |
 | `upgrade.sh <zip>` / `--rollback` | Back up, replace the application, migrate, restart / go back to the previous files |
+| `uninstall.sh [--yes]` | Remove the containers and all data volumes (asks first); backups are kept |
 
 Services: `proxy` (Caddy), `server` (Temurin 25 JRE with the mounted jar), `web` (Node, SSR),
 `backoffice` (nginx-unprivileged), `mongodb` (single-node replica set), `kafka` (KRaft),
 `redis`, `storage` (RustFS, S3-compatible), and `elasticsearch` (Compose profile `search`, used
-from M1).
+from M1). Data lives in named Docker volumes `foodstack_<service>`; `backup.sh` covers what needs backing up.

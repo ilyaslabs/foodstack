@@ -1,5 +1,6 @@
 # FoodStack on one server (TDD 17). Started by the scripts in this folder; settings live in .env.
-# Only the proxy publishes ports. Data and logs are bind-mounted under the install directory.
+# Only the proxy publishes ports. Data lives in named Docker volumes (foodstack_*), so no host
+# folder permissions are needed on Linux or Docker Desktop; logs are under ./logs.
 
 name: foodstack
 
@@ -24,7 +25,7 @@ services:
       FOODSTACK_ADMIN_ROOT_HOST: ${FOODSTACK_ADMIN_ROOT_HOST}
     volumes:
       - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./data/caddy:/data
+      - caddy:/data
     depends_on:
       server:
         condition: service_healthy
@@ -104,13 +105,20 @@ services:
     <<: *service
     # 8.2: MongoDB 8.0 refuses to start on Linux 6.19+ kernels (SERVER-121912).
     image: mongo:8.2
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/etc/mongo/keyfile"]
+    # mongod insists its key file is owned by it and not readable by others. Host file ownership
+    # differs between Linux and Docker Desktop, so copy it into place inside the container.
+    entrypoint:
+      - bash
+      - -c
+      - install -m 400 -o mongodb -g mongodb /etc/mongo/keyfile.src /data/configdb/keyfile && exec docker-entrypoint.sh "$$@"
+      - --
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--keyFile", "/data/configdb/keyfile"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: foodstack
       MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD}
     volumes:
-      - ./data/mongodb:/data/db
-      - ./config/mongodb-keyfile:/etc/mongo/keyfile:ro
+      - mongodb:/data/db
+      - ./config/mongodb-keyfile:/etc/mongo/keyfile.src:ro
     healthcheck:
       # Initiates the single-node replica set on first start, then reports healthy once it is primary.
       test:
@@ -129,7 +137,7 @@ services:
     image: redis:8.2-alpine
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     volumes:
-      - ./data/redis:/data
+      - redis:/data
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" --no-auth-warning ping | grep -q PONG"]
       interval: 5s
@@ -157,7 +165,7 @@ services:
       KAFKA_HEAP_OPTS: -Xmx${KAFKA_HEAP:-1g} -Xms${KAFKA_HEAP:-1g}
       CLUSTER_ID: ${KAFKA_CLUSTER_ID}
     volumes:
-      - ./data/kafka:/var/lib/kafka/data
+      - kafka:/var/lib/kafka/data
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
       interval: 10s
@@ -173,7 +181,7 @@ services:
       RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
       RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
     volumes:
-      - ./data/storage:/data
+      - storage:/data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health > /dev/null || wget -qO- http://localhost:9000/health > /dev/null"]
       interval: 10s
@@ -191,12 +199,20 @@ services:
       ELASTIC_PASSWORD: ${ELASTICSEARCH_PASSWORD}
       ES_JAVA_OPTS: -Xms${ES_HEAP:-1g} -Xmx${ES_HEAP:-1g}
     volumes:
-      - ./data/elasticsearch:/usr/share/elasticsearch/data
+      - elasticsearch:/usr/share/elasticsearch/data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS -u elastic:$${ELASTIC_PASSWORD} http://localhost:9200/_cluster/health > /dev/null"]
       interval: 10s
       timeout: 5s
       retries: 30
+
+volumes:
+  mongodb:
+  redis:
+  kafka:
+  storage:
+  elasticsearch:
+  caddy:
 
 networks:
   foodstack:

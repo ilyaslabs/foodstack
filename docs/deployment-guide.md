@@ -74,15 +74,17 @@ sudo ./install.sh /opt/foodstack \
 `install.sh`:
 
 1. Checks Docker, Compose, CPU, memory, disk and that ports 80 and 443 are free.
-2. Sets `vm.max_map_count=262144` (needed by Elasticsearch) and makes it persistent.
-3. Creates `/opt/foodstack/{data,logs,config,backups}` with one data folder per service.
+2. When run as root on Linux, sets `vm.max_map_count=262144` (needed by Elasticsearch) and makes it persistent.
+3. Creates `/opt/foodstack/{logs,config,backups}`. Service data lives in named Docker volumes (`foodstack_mongodb`, `foodstack_storage`, …), so no folder ownership setup is needed.
 4. Generates strong passwords, the JWT key pair, the PII key and the internal token into `/opt/foodstack/.env` (permissions 600).
 5. Copies the application, web apps and configuration.
 6. Starts the datastores, waits for them to be healthy, runs database migrations once, then starts the application and the web apps.
 7. Optionally installs a systemd unit so FoodStack starts on boot (`--systemd`).
 8. Prints the first administrator's email and generated password once (also kept in `.env` as `FOODSTACK_ADMIN_PASSWORD`). A password-change screen arrives with the notification module.
 
-For a quick local trial without DNS or certificates: `sudo ./install.sh /opt/foodstack --domain localhost --http --http-port 8088`, then open `http://localhost:8088/admin/`.
+For a quick trial on your own computer (Linux, or macOS/Windows with Docker Desktop), without DNS, certificates or sudo: `./install.sh ~/foodstack --local`, then open `http://foodstack.localhost:8080/admin/`.
+
+`sudo` is only needed to install into a folder your user can't write to (like `/opt`) or with `--systemd`. If an install stops part way (for example a failed image download), fix the cause and run the same command again: it removes the unfinished attempt and starts over. `./uninstall.sh` removes an install and its data volumes, keeping `backups/`.
 
 ### 3.3 Configure
 
@@ -320,7 +322,7 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 1. Prepare the cluster and datastores (sections 4.1 and 4.2) and install FoodStack with **the same JWT keys and PII key** from `/opt/foodstack/.env`, so existing logins and encrypted data keep working.
 2. Announce a short maintenance window. On the single server: `./stop.sh server web backoffice` (datastores keep running).
 3. `mongodump` all `foodstack_*` databases and restore them into the new MongoDB.
-4. Copy media: any S3 sync tool (for example `aws s3 sync` or `rclone`) from the server's storage (`https://<admin-domain>/foodstack-public/…` or `data/storage`) to your S3 buckets.
+4. Copy media: any S3 sync tool (for example `aws s3 sync` or `rclone`) from the server's storage (`https://<admin-domain>/foodstack-public/…` or the `foodstack_storage` Docker volume) to your S3 buckets.
 5. `helm upgrade` with `--set maintenance.reindex=true` to rebuild search indices.
 6. Switch DNS to the cluster's Gateway address.
 7. Keep the old server stopped but intact for a week as a fallback.

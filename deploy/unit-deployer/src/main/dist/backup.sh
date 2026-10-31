@@ -7,10 +7,10 @@ set -a; source "$FOODSTACK_HOME/.env"; set +a
 target="$FOODSTACK_HOME/backups/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$target"
 info "MongoDB → $target/mongodb.archive.gz"
-compose exec -T mongodb mongodump --quiet --archive --gzip -u foodstack -p "$MONGODB_PASSWORD" \
-  --authenticationDatabase admin > "$target/mongodb.archive.gz"
+compose exec -T mongodb sh -c 'mongodump --quiet --archive --gzip -u foodstack -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin' \
+  > "$target/mongodb.archive.gz"
 info "Media → $target/storage.tar.gz"
-tar -C "$FOODSTACK_HOME/data" -czf "$target/storage.tar.gz" storage
+compose exec -T storage tar -C /data -czf - . > "$target/storage.tar.gz"
 info "Configuration → $target/config.tar.gz"
 tar -C "$FOODSTACK_HOME" -czf "$target/config.tar.gz" .env config VERSION
 chmod -R go-rwx "$target"
