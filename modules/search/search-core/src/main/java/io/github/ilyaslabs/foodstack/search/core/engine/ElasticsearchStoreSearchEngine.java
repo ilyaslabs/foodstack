@@ -66,21 +66,39 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         return alias() + "_v" + MAPPING_VERSION;
     }
 
+    /** Set once the index exists; writes check it so an early event never auto-creates an unmapped index. */
+    private volatile boolean ready;
+
+    /** Whether this process created the index and the bootstrap has not been told yet. */
+    private boolean createdHere;
+
     @Override
-    public boolean ensureIndex() {
+    public synchronized boolean ensureIndex() {
+        prepare();
+        boolean created = this.createdHere;
+        this.createdHere = false;
+        return created;
+    }
+
+    private synchronized void prepare() {
+        if (this.ready) {
+            return;
+        }
         String index = indexName();
         try {
-            if (this.client.indices().exists((e) -> e.index(index)).value()) {
-                return false;
+            if (!this.client.indices().exists((e) -> e.index(index)).value()) {
+                dropStrayIndexNamedLikeAlias();
+                String body = indexDefinition();
+                this.client.indices().create((c) -> c.index(index).withJson(new StringReader(body)));
+                log.info("Created search index {} with alias {}", index, alias());
+                this.createdHere = true;
             }
-            String body = indexDefinition();
-            this.client.indices().create((c) -> c.index(index).withJson(new StringReader(body)));
-            log.info("Created search index {} with alias {}", index, alias());
-            return true;
+            this.ready = true;
         }
         catch (ElasticsearchException ex) {
             if ("resource_already_exists_exception".equals(ex.error().type())) {
-                return false;
+                this.ready = true;
+                return;
             }
             throw unavailable(ex);
         }
@@ -89,11 +107,27 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         }
     }
 
+    /**
+     * A write that reached Elasticsearch before the index existed (older versions) auto-created a plain
+     * index under the alias name, which blocks the alias. The index is rebuildable, so it is dropped.
+     */
+    private void dropStrayIndexNamedLikeAlias() throws IOException {
+        String alias = alias();
+        boolean exists = this.client.indices().exists((e) -> e.index(alias)).value();
+        boolean isAlias = this.client.indices().existsAlias((e) -> e.name(alias)).value();
+        if (exists && !isAlias) {
+            log.warn("Dropping index {} that was created without the search mapping; it is rebuilt", alias);
+            this.client.indices().delete((d) -> d.index(alias));
+        }
+    }
+
     @Override
     public void index(IndexedStore store) {
+        prepare();
         Map<String, Object> source = toSource(store);
         try {
-            this.client.index((i) -> i.index(alias()).id(store.storeId()).document(source));
+            // requireAlias: never let a write create an unmapped index under the alias name
+            this.client.index((i) -> i.index(alias()).id(store.storeId()).requireAlias(true).document(source));
         }
         catch (IOException | ElasticsearchException ex) {
             throw unavailable(ex);
@@ -224,6 +258,7 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
 
     @SuppressWarnings("rawtypes")
     private SearchResponse<Map> search(ObjectNode body) {
+        prepare();
         String json = this.jsonMapper.writeValueAsString(body);
         try {
             return this.client.search(SearchRequest.of((r) -> r.withJson(new StringReader(json)).index(alias())), Map.class);
@@ -333,7 +368,7 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         ObjectNode analyzer = analysis.putObject("analyzer").putObject("foodstack_text");
         analyzer.put("type", "custom");
         analyzer.put("tokenizer", "standard");
-        analyzer.putArray("filter").add("lowercase").add("asciifolding").add("arabic_normalization");
+        analyzer.putArray("filter").add("lowercase").add("asciifolding").add("persian_normalization").add("arabic_normalization");
 
         ObjectNode mappings = root.putObject("mappings");
         mappings.put("dynamic", "false");

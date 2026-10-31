@@ -64,6 +64,9 @@ class ElasticsearchStoreSearchEngineTest {
     @Autowired
     ElasticsearchClient client;
 
+    @Autowired
+    JsonMapper jsonMapper;
+
     @BeforeAll
     void indexCatalogue() throws Exception {
         assertThat(this.engine.ensureIndex()).isTrue();
@@ -86,6 +89,27 @@ class ElasticsearchStoreSearchEngineTest {
     }
 
     @Test
+    @DisplayName("an event indexed before start-up finishes creates the mapped index, and a stray unmapped index is replaced")
+    void earlyWrite() throws Exception {
+        // given: an older version let a write auto-create a plain index under the alias name
+        ElasticsearchStoreSearchEngine early = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
+                new SearchProperties("early_", 0, 15_000));
+        this.client.indices().create((c) -> c.index(early.alias()));
+
+        // when: a catalogue event arrives before the bootstrap ran
+        early.index(store("early-1", "early", "Early Bird", null, List.of("bbq"), new GeoPoint(LAT, LNG),
+                ring(LAT, LNG, 2), Map.of("en", List.of("Seekh Kebab")), false));
+        this.client.indices().refresh((r) -> r.index(early.alias()));
+
+        // then: the alias points at the mapped index, geo search works, and the bootstrap still rebuilds once
+        assertThat(this.client.indices().existsAlias((e) -> e.name(early.alias())).value()).isTrue();
+        assertThat(early.search(query(null, null, Fulfilment.DELIVERY)).hits())
+            .extracting((h) -> h.store().storeId()).containsExactly("early-1");
+        assertThat(early.ensureIndex()).isTrue();
+        assertThat(early.ensureIndex()).isFalse();
+    }
+
+    @Test
     @DisplayName("finds branches whose delivery area contains the customer, nearest branch per brand, nearest first; chips count branches")
     void deliversHere() {
         StoreSearchEngine.Result result = this.engine.search(query(null, null, Fulfilment.DELIVERY));
@@ -102,11 +126,14 @@ class ElasticsearchStoreSearchEngineTest {
     }
 
     @Test
-    @DisplayName("matches dish names in Arabic and Urdu, and brand names with a typo")
+    @DisplayName("matches dish names in Arabic and Urdu across both alphabets, and brand names with a typo")
     void text() {
         assertThat(this.engine.search(query("برياني", null, Fulfilment.DELIVERY)).hits())
             .extracting((h) -> h.store().storeId()).containsExactly("spice-gulberg");
         assertThat(this.engine.search(query("بریانی", null, Fulfilment.DELIVERY)).hits())
+            .extracting((h) -> h.store().storeId()).containsExactly("spice-gulberg");
+        // Arabic kaf typed for the Urdu keheh in "چکن": Persian/Urdu letters are normalized to Arabic ones
+        assertThat(this.engine.search(query("چكن", null, Fulfilment.DELIVERY)).hits())
             .extracting((h) -> h.store().storeId()).containsExactly("spice-gulberg");
         assertThat(this.engine.search(query("napoly", null, Fulfilment.DELIVERY)).hits())
             .extracting((h) -> h.store().storeId()).containsExactly("napoli-dha");
