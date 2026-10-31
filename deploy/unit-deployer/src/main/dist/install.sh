@@ -10,7 +10,7 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 source "$here/lib/common.sh"
 
-usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
 target=""; domain=""; admin_domain=""; api_domain=""; admin_email=""; scheme=https
 http_port=80; https_port=443; systemd=false
