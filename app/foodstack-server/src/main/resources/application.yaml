@@ -27,6 +27,10 @@ spring:
         enable.idempotence: true
     admin:
       fail-fast: false
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
+    username: ${ELASTICSEARCH_USERNAME:}
+    password: ${ELASTICSEARCH_PASSWORD:}
   autoconfigure:
     exclude:
       # One MongoTemplate per module instead of Boot's single one (FoodstackMongoAutoConfiguration).
@@ -63,6 +67,12 @@ module-switch:
       mode: local
     media:
       mode: local
+    geo:
+      mode: local
+    store:
+      mode: local
+    search:
+      mode: local
   propagate-headers: [Authorization, Accept-Language]
 
 foodstack:
@@ -89,6 +99,16 @@ foodstack:
       foodstack-backoffice:
         redirect-uris: ${FOODSTACK_ADMIN_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/admin/auth/callback
         post-logout-redirect-uris: ${FOODSTACK_ADMIN_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/admin/
+  geo:
+    # Address search and reverse geocoding (OpenStreetMap Nominatim by default, "none" to switch off).
+    geocoding:
+      provider: ${GEOCODING_PROVIDER:nominatim}
+      url: ${GEOCODING_URL:https://nominatim.openstreetmap.org}
+      user-agent: FoodStack (${FOODSTACK_PUBLIC_URL:http://localhost:8080})
+      country-codes: ${GEOCODING_COUNTRY_CODES:}
+  search:
+    index-prefix: ${SEARCH_INDEX_PREFIX:foodstack_}
+    replicas: ${SEARCH_REPLICAS:0}
   storage:
     endpoint: ${S3_ENDPOINT:http://localhost:9000}
     public-endpoint: ${S3_PUBLIC_ENDPOINT:${FOODSTACK_PUBLIC_URL:http://localhost:9000}}

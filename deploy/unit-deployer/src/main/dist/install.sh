@@ -79,8 +79,8 @@ if [[ -f "$target/.env" || -n $(docker ps -aq "${project[@]}") || -n $(docker vo
   rm -rf "${target:?}"/{.env,app,config,lib,docker-compose.yml}
 fi
 
-# Elasticsearch (search module, off until M1) needs a larger mmap count. Only root can set it;
-# the deployment guide covers it for anyone enabling search. Docker Desktop manages its own VM.
+# Elasticsearch runs with node.store.allow_mmap=false, so it needs no vm.max_map_count change and
+# no root step. When run as root anyway, raise the limit so Elasticsearch may use mmap later.
 if ! $macos && [[ $EUID -eq 0 ]] && [[ $(sysctl -n vm.max_map_count 2> /dev/null || echo 0) -lt 262144 ]]; then
   sysctl -w vm.max_map_count=262144 > /dev/null 2>&1 \
     && { echo 'vm.max_map_count=262144' > /etc/sysctl.d/99-foodstack.conf 2> /dev/null || true; }

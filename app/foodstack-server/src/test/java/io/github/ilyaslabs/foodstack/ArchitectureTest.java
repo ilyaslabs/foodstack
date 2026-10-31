@@ -45,7 +45,10 @@ class ArchitectureTest {
                     ROOT + "." + module + ".core.domain..",
                     ROOT + "." + module + ".core.storage..",
                     ROOT + "." + module + ".core.processing..",
-                    ROOT + "." + module + ".core.seed..")
+                    ROOT + "." + module + ".core.seed..",
+                    ROOT + "." + module + ".core.engine..",
+                    ROOT + "." + module + ".core.events..",
+                    ROOT + "." + module + ".core.geocoding..")
                 .check(classes);
         }
     }
@@ -56,6 +59,8 @@ class ArchitectureTest {
         for (String module : FoodstackModules.ALL) {
             classes().that().resideInAPackage(ROOT + "." + module + ".core.persistence..")
                 .should().onlyBeAccessed().byAnyPackage(ROOT + "." + module + ".core..")
+                // search keeps no database of its own (its index is a read model)
+                .allowEmptyShould(true)
                 .check(classes);
         }
     }

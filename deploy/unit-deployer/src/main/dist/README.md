@@ -26,5 +26,4 @@ If an install stops part way, fix the cause and run the same command again: it c
 
 Services: `proxy` (Caddy), `server` (Temurin 25 JRE with the mounted jar), `web` (Node, SSR),
 `backoffice` (nginx-unprivileged), `mongodb` (single-node replica set), `kafka` (KRaft),
-`redis`, `storage` (RustFS, S3-compatible), and `elasticsearch` (Compose profile `search`, used
-from M1). Data lives in named Docker volumes `foodstack_<service>`; `backup.sh` covers what needs backing up.
+`redis`, `storage` (RustFS, S3-compatible), and `elasticsearch` (store search). Data lives in named Docker volumes `foodstack_<service>`; `backup.sh` covers what needs backing up.

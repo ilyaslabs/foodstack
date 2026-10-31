@@ -45,6 +45,8 @@ services:
       KAFKA_BOOTSTRAP: kafka:9092
       S3_ENDPOINT: http://storage:9000
       S3_CREATE_BUCKETS: "true"
+      ELASTICSEARCH_URIS: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: elastic
       LOGGING_FILE_NAME: /logs/server.log
     volumes:
       - ./app/foodstack-server.jar:/app/foodstack-server.jar:ro
@@ -64,6 +66,8 @@ services:
       kafka:
         condition: service_healthy
       storage:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
 
   web:
@@ -190,12 +194,14 @@ services:
 
   elasticsearch:
     <<: *service
-    # Used by the search module from M1; start it with COMPOSE_PROFILES=search.
-    profiles: [search]
-    image: docker.elastic.co/elasticsearch/elasticsearch:9.2.0
+    # Store search (M1). The official image from Docker Hub.
+    image: elasticsearch:9.4.0
     environment:
       discovery.type: single-node
       xpack.security.enabled: "true"
+      xpack.security.http.ssl.enabled: "false"
+      # No memory-mapped store: works without raising vm.max_map_count, so no root step is needed
+      node.store.allow_mmap: "false"
       ELASTIC_PASSWORD: ${ELASTICSEARCH_PASSWORD}
       ES_JAVA_OPTS: -Xms${ES_HEAP:-1g} -Xmx${ES_HEAP:-1g}
     volumes:

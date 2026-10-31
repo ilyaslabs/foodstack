@@ -66,6 +66,42 @@
             <groupId>io.github.ilyaslabs</groupId>
             <artifactId>foodstack-media-web</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-geo-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-geo-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-geo-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-store-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-store-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-store-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-search-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-search-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-search-web</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>

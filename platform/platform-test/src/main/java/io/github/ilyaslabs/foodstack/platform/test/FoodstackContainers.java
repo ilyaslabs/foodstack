@@ -31,7 +31,7 @@ public final class FoodstackContainers {
     public static final String S3_IMAGE = "rustfs/rustfs:1.0.4";
 
     /** Search engine of the search module; the unit deployer runs the same version. */
-    public static final String ELASTICSEARCH_IMAGE = "elasticsearch:9.2.0";
+    public static final String ELASTICSEARCH_IMAGE = "elasticsearch:9.4.0";
 
     public static final String ELASTICSEARCH_PASSWORD = "foodstack-test";
 
