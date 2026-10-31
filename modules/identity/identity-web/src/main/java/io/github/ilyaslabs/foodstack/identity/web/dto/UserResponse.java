@@ -15,7 +15,9 @@ import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
  * @param permissions permissions derived from the roles (the apps show or hide areas with them)
  * @param status account state
  * @param createdAt UTC epoch seconds
+ * @param brandIds brands the user owns (store users)
+ * @param storeIds branches the user manages (store users)
  */
 public record UserResponse(String id, String email, String displayName, Set<Role> roles, Set<String> permissions,
-        UserStatus status, long createdAt) {
+        UserStatus status, long createdAt, Set<String> brandIds, Set<String> storeIds) {
 }

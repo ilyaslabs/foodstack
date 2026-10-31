@@ -18,5 +18,8 @@
         <module>identity</module>
         <module>settings</module>
         <module>media</module>
+        <module>geo</module>
+        <module>store</module>
+        <module>search</module>
     </modules>
 </project>

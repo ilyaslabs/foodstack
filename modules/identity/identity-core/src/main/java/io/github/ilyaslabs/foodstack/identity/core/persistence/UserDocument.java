@@ -33,6 +33,12 @@ public class UserDocument {
 
     private Set<Role> roles = EnumSet.noneOf(Role.class);
 
+    /** Brands the user owns: the {@code brandIds} claim (TDD 9.1). */
+    private Set<String> brandIds = new java.util.TreeSet<>();
+
+    /** Branches the user manages or works at: the {@code storeIds} claim. */
+    private Set<String> storeIds = new java.util.TreeSet<>();
+
     private UserStatus status = UserStatus.ACTIVE;
 
     /** The {@code tv} claim of new tokens; raised to revoke all older tokens. */
@@ -141,5 +147,21 @@ public class UserDocument {
 
     public void setVersion(Long version) {
         this.version = version;
+    }
+
+    public Set<String> getBrandIds() {
+        return this.brandIds;
+    }
+
+    public void setBrandIds(Set<String> brandIds) {
+        this.brandIds = (brandIds != null) ? brandIds : new java.util.TreeSet<>();
+    }
+
+    public Set<String> getStoreIds() {
+        return this.storeIds;
+    }
+
+    public void setStoreIds(Set<String> storeIds) {
+        this.storeIds = (storeIds != null) ? storeIds : new java.util.TreeSet<>();
     }
 }

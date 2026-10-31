@@ -27,10 +27,11 @@ class IdentityApiImplTest {
     @DisplayName("maps a user account to the API record")
     void getUser() {
         given(this.service.get("u1")).willReturn(new UserAccount("u1", "a@example.com", "A", Set.of(Role.ADMIN),
-                Set.of("settings:manage"), UserStatus.ACTIVE, Instant.ofEpochSecond(1_800_000_000L)));
+                Set.of("settings:manage"), UserStatus.ACTIVE, Instant.ofEpochSecond(1_800_000_000L), Set.of(), Set.of()));
 
         assertThat(this.api.getUser("u1"))
-            .isEqualTo(new UserView("u1", "a@example.com", "A", Set.of(Role.ADMIN), UserStatus.ACTIVE, 1_800_000_000L));
+            .isEqualTo(new UserView("u1", "a@example.com", "A", Set.of(Role.ADMIN), UserStatus.ACTIVE, 1_800_000_000L, Set.of(),
+                    Set.of()));
     }
 
     @Test

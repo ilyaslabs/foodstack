@@ -15,7 +15,8 @@ import org.springframework.security.oauth2.server.authorization.token.JwtEncodin
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 
 /**
- * Signs every token with ES256 and puts {@code roles}, {@code perms} and {@code tv} into user
+ * Signs every token with ES256 and puts {@code roles}, {@code perms}, {@code tv} and, for store
+ * users, {@code brandIds} and {@code storeIds} into user
  * access tokens, so modules authorize without calling identity (TDD 9.1). Blocked users get no
  * new tokens, even with a live login session.
  */
@@ -45,5 +46,11 @@ public class FoodstackTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodi
             .claim(TokenClaims.ROLES, claims.roles().stream().map(Enum::name).sorted().toList())
             .claim(TokenClaims.PERMISSIONS, List.copyOf(claims.permissions()))
             .claim(TokenClaims.TOKEN_VERSION, claims.tokenVersion());
+        if (!claims.brandIds().isEmpty()) {
+            context.getClaims().claim(TokenClaims.BRAND_IDS, claims.brandIds().stream().sorted().toList());
+        }
+        if (!claims.storeIds().isEmpty()) {
+            context.getClaims().claim(TokenClaims.STORE_IDS, claims.storeIds().stream().sorted().toList());
+        }
     }
 }

@@ -107,6 +107,66 @@
                 <artifactId>foodstack-media-web</artifactId>
                 <version>${revision}</version>
             </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-geo-api</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-geo-core</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-geo-impl</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-geo-web</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-store-api</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-store-core</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-store-impl</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-store-web</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-search-api</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-search-core</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-search-impl</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-search-web</artifactId>
+                <version>${revision}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
