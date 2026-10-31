@@ -1,0 +1,172 @@
+package io.github.ilyaslabs.foodstack.search.core.engine;
+
+import java.util.List;
+import java.util.Map;
+
+import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
+import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
+import io.github.ilyaslabs.foodstack.search.api.CuisineCount;
+import io.github.ilyaslabs.foodstack.search.api.Fulfilment;
+import io.github.ilyaslabs.foodstack.search.api.StoreSearchQuery;
+import io.github.ilyaslabs.foodstack.search.core.SearchProperties;
+import io.github.ilyaslabs.foodstack.store.api.TimeRange;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import tools.jackson.databind.json.JsonMapper;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.SpringBootConfiguration;
+import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.elasticsearch.autoconfigure.ElasticsearchClientAutoConfiguration;
+import org.springframework.boot.elasticsearch.autoconfigure.ElasticsearchRestClientAutoConfiguration;
+import org.springframework.boot.jackson.autoconfigure.JacksonAutoConfiguration;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Bean;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/** The engine against a real Elasticsearch 9 (lowest layer, real infrastructure). */
+@SpringBootTest(classes = ElasticsearchStoreSearchEngineTest.App.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class ElasticsearchStoreSearchEngineTest {
+
+    // Customer in Gulberg, Lahore
+    private static final double LAT = 31.5160;
+
+    private static final double LNG = 74.3430;
+
+    @SpringBootConfiguration
+    @ImportAutoConfiguration({ JacksonAutoConfiguration.class, ElasticsearchRestClientAutoConfiguration.class,
+            ElasticsearchClientAutoConfiguration.class })
+    @EnableConfigurationProperties(SearchProperties.class)
+    static class App {
+
+        @Bean
+        ElasticsearchStoreSearchEngine engine(ElasticsearchClient client, JsonMapper jsonMapper, SearchProperties properties) {
+            return new ElasticsearchStoreSearchEngine(client, jsonMapper, properties);
+        }
+    }
+
+    @DynamicPropertySource
+    static void infrastructure(DynamicPropertyRegistry registry) {
+        FoodstackContainers.registerElasticsearch(registry);
+    }
+
+    @Autowired
+    ElasticsearchStoreSearchEngine engine;
+
+    @Autowired
+    ElasticsearchClient client;
+
+    @BeforeAll
+    void indexCatalogue() throws Exception {
+        assertThat(this.engine.ensureIndex()).isTrue();
+        assertThat(this.engine.ensureIndex()).isFalse();
+        // Two branches of one brand around the customer, the nearer one 1 km away
+        this.engine.index(store("spice-gulberg", "spice", "Spice Route", "Gulberg", List.of("pakistani", "bbq"),
+                new GeoPoint(31.5250, 74.3430), ring(31.5250, 74.3430, 1), Map.of("en", List.of("Chicken Biryani"),
+                        "ar", List.of("برياني دجاج"), "ur", List.of("چکن بریانی")), false));
+        this.engine.index(store("spice-dha", "spice", "Spice Route", "DHA", List.of("pakistani", "bbq"),
+                new GeoPoint(31.4800, 74.3800), ring(31.4800, 74.3800, 2.5), Map.of("en", List.of("Chicken Biryani")), false));
+        this.engine.index(store("napoli-dha", "napoli", "Napoli Pizza", "DHA", List.of("italian", "pizza"),
+                new GeoPoint(31.5000, 74.3500), ring(31.5000, 74.3500, 1), Map.of("en", List.of("Margherita"),
+                        "ar", List.of("مارغريتا")), true));
+        // Delivers elsewhere only, but offers pickup and is 2 km away
+        this.engine.index(store("far-zone", "far", "Karachi Grill", null, List.of("bbq"), new GeoPoint(31.5340, 74.3430),
+                List.of(List.of(new GeoPoint(24.80, 67.00), new GeoPoint(24.80, 67.10), new GeoPoint(24.90, 67.05))),
+                Map.of("en", List.of("Seekh Kebab")), true));
+        this.engine.delete("never-indexed");
+        this.client.indices().refresh((r) -> r.index(this.engine.alias()));
+    }
+
+    @Test
+    @DisplayName("finds branches whose delivery area contains the customer, nearest branch per brand, nearest first; chips count branches")
+    void deliversHere() {
+        StoreSearchEngine.Result result = this.engine.search(query(null, null, Fulfilment.DELIVERY));
+
+        assertThat(result.hits()).extracting((h) -> h.store().storeId()).containsExactly("spice-gulberg", "napoli-dha");
+        assertThat(result.total()).isEqualTo(2);
+        assertThat(result.hits().getFirst().distanceMeters()).isBetween(950L, 1050L);
+        IndexedStore first = result.hits().getFirst().store();
+        assertThat(first.openingHours()).containsKey("MONDAY");
+        assertThat(first.openingHours().get("MONDAY")).containsExactly(new TimeRange("00:00", "23:59"));
+        assertThat(first.location().lat()).isEqualTo(31.5250);
+        assertThat(first.cuisines()).containsExactly("pakistani", "bbq");
+        assertThat(result.cuisines()).contains(new CuisineCount("pakistani", 2), new CuisineCount("italian", 1));
+    }
+
+    @Test
+    @DisplayName("matches dish names in Arabic and Urdu, and brand names with a typo")
+    void text() {
+        assertThat(this.engine.search(query("برياني", null, Fulfilment.DELIVERY)).hits())
+            .extracting((h) -> h.store().storeId()).containsExactly("spice-gulberg");
+        assertThat(this.engine.search(query("بریانی", null, Fulfilment.DELIVERY)).hits())
+            .extracting((h) -> h.store().storeId()).containsExactly("spice-gulberg");
+        assertThat(this.engine.search(query("napoly", null, Fulfilment.DELIVERY)).hits())
+            .extracting((h) -> h.store().storeId()).containsExactly("napoli-dha");
+        assertThat(this.engine.search(query("piz", null, Fulfilment.DELIVERY)).hits())
+            .extracting((h) -> h.store().storeId()).containsExactly("napoli-dha");
+    }
+
+    @Test
+    @DisplayName("filters by cuisine after counting, so the chips still show every cuisine")
+    void cuisine() {
+        StoreSearchEngine.Result result = this.engine.search(query(null, "italian", Fulfilment.DELIVERY));
+
+        assertThat(result.hits()).extracting((h) -> h.store().storeId()).containsExactly("napoli-dha");
+        assertThat(result.total()).isEqualTo(1);
+        assertThat(result.cuisines()).extracting(CuisineCount::cuisine).contains("pakistani", "italian");
+    }
+
+    @Test
+    @DisplayName("pickup lists nearby branches that offer pickup, wherever they deliver")
+    void pickup() {
+        StoreSearchEngine.Result result = this.engine.search(query(null, null, Fulfilment.PICKUP));
+
+        assertThat(result.hits()).extracting((h) -> h.store().storeId()).containsExactly("napoli-dha", "far-zone");
+    }
+
+    @Test
+    @DisplayName("finds the indexed branches of a brand and of a delivery mode, and removes a branch")
+    void idsAndDelete() throws Exception {
+        assertThat(this.engine.storeIdsOfBrand("spice")).containsExactlyInAnyOrder("spice-gulberg", "spice-dha");
+        assertThat(this.engine.storeIdsWithDeliveryMode("OPERATOR")).containsExactlyInAnyOrder("napoli-dha", "far-zone");
+
+        this.engine.index(store("temp", "temp", "Temp", null, List.of(), new GeoPoint(31.5, 74.3), List.of(), Map.of(), false));
+        this.engine.delete("temp");
+        this.client.indices().refresh((r) -> r.index(this.engine.alias()));
+        assertThat(this.engine.storeIdsOfBrand("temp")).isEmpty();
+    }
+
+    private static StoreSearchQuery query(String text, String cuisine, Fulfilment fulfilment) {
+        return new StoreSearchQuery(LAT, LNG, text, cuisine, fulfilment, 0, 20);
+    }
+
+    /** A ring of scale times 3 km around a point, as geo sends delivery areas (open, without the closing point). */
+    private static List<List<GeoPoint>> ring(double lat, double lng, double scale) {
+        List<GeoPoint> points = new java.util.ArrayList<>();
+        for (int i = 0; i < 24; i++) {
+            double angle = 2 * Math.PI * i / 24;
+            points.add(new GeoPoint(lat + 0.027 * scale * Math.cos(angle), lng + 0.0316 * scale * Math.sin(angle)));
+        }
+        return List.of(points);
+    }
+
+    private static IndexedStore store(String id, String brandId, String brandName, String branchName, List<String> cuisines,
+            GeoPoint location, List<List<GeoPoint>> area, Map<String, List<String>> dishes, boolean operatorDelivery) {
+        Map<String, List<TimeRange>> hours = new java.util.LinkedHashMap<>();
+        for (java.time.DayOfWeek day : java.time.DayOfWeek.values()) {
+            hours.put(day.name(), List.of(new TimeRange("00:00", "23:59")));
+        }
+        return new IndexedStore(id, brandId, brandName, branchName, 2, Map.of("en", brandName + " in Lahore"), cuisines,
+                Map.of("thumb", "https://cdn.example/" + id + ".webp"), Map.of(), location, branchName, "Lahore",
+                operatorDelivery ? "OPERATOR" : "SELF", operatorDelivery, false, 25, "Asia/Karachi", hours, List.of(), dishes,
+                List.of("halal"), area, 3);
+    }
+}
