@@ -81,7 +81,7 @@ services:
     volumes:
       - ./app/web:/app:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/healthz || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -96,7 +96,7 @@ services:
       - ./app/backoffice:/usr/share/nginx/html/admin:ro
       - ./config/backoffice.conf.template:/etc/nginx/templates/default.conf.template:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/admin/config.json || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/admin/config.json || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
