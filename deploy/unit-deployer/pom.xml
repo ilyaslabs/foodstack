@@ -113,6 +113,25 @@
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <executions>
                     <execution>
+                        <id>dist-present</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireFilesExist>
+                                    <files>
+                                        <file>${project.basedir}/src/main/dist/install.sh</file>
+                                        <file>${project.basedir}/src/main/dist/docker-compose.yml</file>
+                                        <file>${project.basedir}/src/main/dist/config/Caddyfile</file>
+                                    </files>
+                                    <message>Unit deployer scripts are missing from src/main/dist (check .gitignore).</message>
+                                </requireFilesExist>
+                            </rules>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>frontend-built</id>
                         <phase>prepare-package</phase>
                         <goals>

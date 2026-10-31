@@ -1,0 +1,57 @@
+# The single-server gateway (TDD 17.2): TLS, routing by path, rate limits and security headers.
+# FOODSTACK_SITES lists the site addresses, for example
+#   "example.com, admin.example.com, api.example.com"   (automatic HTTPS)
+#   "http://localhost"                                   (local trial without TLS)
+{
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+(foodstack) {
+	encode zstd gzip
+	request_body {
+		max_size 25MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	# API, login and OIDC endpoints: the FoodStack server (every module local).
+	@server path /api/* /oauth2/* /login /login/* /logout /.well-known/* /userinfo /connect/* /actuator/health/*
+	handle @server {
+		reverse_proxy server:8080 {
+			health_uri /actuator/health/readiness
+		}
+	}
+
+	# Media buckets: presigned uploads and public images go straight to object storage. The Host
+	# header is passed unchanged, so upload signatures made for this hostname stay valid.
+	@storage path /foodstack-public/* /foodstack-private/*
+	handle @storage {
+		reverse_proxy storage:9000
+	}
+
+	# The back office; on its own hostname the root opens it.
+	handle /admin* {
+		reverse_proxy backoffice:8080
+	}
+	@adminRoot {
+		host {$FOODSTACK_ADMIN_ROOT_HOST}
+		path /
+	}
+	redir @adminRoot /admin/ 302
+
+	# Everything else: the customer app (server-side rendered).
+	handle {
+		reverse_proxy web:4000
+	}
+}
+
+{$FOODSTACK_SITES} {
+	import foodstack
+}
