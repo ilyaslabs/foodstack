@@ -19,7 +19,11 @@ public final class FoodstackContainers {
 
     public static final String REDIS_IMAGE = "redis:8.2-alpine";
 
-    public static final String KAFKA_IMAGE = "apache/kafka-native:4.1.1";
+    /**
+     * The JVM image, as in the unit deployer. The GraalVM native image starts faster but crashed
+     * intermittently on CI runners (segfault before the broker was ready).
+     */
+    public static final String KAFKA_IMAGE = "apache/kafka:4.1.1";
 
     /** S3-compatible object storage (Apache-2.0); the unit deployer runs the same server. */
     public static final String S3_IMAGE = "rustfs/rustfs:1.0.4";
