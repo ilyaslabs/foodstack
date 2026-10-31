@@ -41,7 +41,7 @@
   <mat-sidenav #drawer class="nav" [mode]="compact() ? 'over' : 'side'" [opened]="!compact()">
     <nav aria-label="Main">
       <mat-nav-list>
-        @for (item of nav; track item.path) {
+        @for (item of nav(); track item.path) {
           <a
             mat-list-item
             [routerLink]="item.path"

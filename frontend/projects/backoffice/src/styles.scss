@@ -54,3 +54,11 @@ mat-card[appearance='outlined'] {
   --mat-card-outlined-outline-color: var(--mat-sys-outline-variant);
   --mat-card-outlined-container-shape: 16px;
 }
+
+// Icons inside Material buttons sit on the text's centre line.
+.mat-mdc-button-base > .mdc-button__label > fs-icon,
+.mat-mdc-button-base > fs-icon {
+  --fs-icon-size: 20px;
+  vertical-align: middle;
+  margin-inline-end: 6px;
+}

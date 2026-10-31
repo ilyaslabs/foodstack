@@ -27,3 +27,15 @@ body {
   color: var(--mat-sys-on-surface);
   font-family: var(--fs-font-family);
 }
+
+// Icons inside Material buttons sit on the text's centre line.
+.mat-mdc-button-base > .mdc-button__label > fs-icon,
+.mat-mdc-button-base > fs-icon {
+  --fs-icon-size: 20px;
+  vertical-align: middle;
+  margin-inline-end: 6px;
+}
+
+input[type='search']::-webkit-search-cancel-button {
+  appearance: none;
+}

@@ -1,8 +1,36 @@
 <fs-brand-header>
+  @if (languages().length > 1) {
+    <button
+      mat-button
+      type="button"
+      class="language"
+      [matMenuTriggerFor]="languageMenu"
+      [attr.aria-label]="ui.t('language')"
+    >
+      <fs-icon name="language" />
+      <span class="language-name">{{ locale.languageName(locale.language()) }}</span>
+    </button>
+    <mat-menu #languageMenu="matMenu" xPosition="before">
+      @for (language of languages(); track language) {
+        <button
+          mat-menu-item
+          type="button"
+          [attr.lang]="language"
+          [attr.aria-current]="language === locale.language()"
+          (click)="locale.use(language)"
+        >
+          @if (language === locale.language()) {
+            <fs-icon matMenuItemIcon name="check_circle" />
+          }
+          <span>{{ locale.languageName(language) }}</span>
+        </button>
+      }
+    </mat-menu>
+  }
   @if (auth.signedIn()) {
-    <button mat-button type="button" (click)="signOut()">Sign out</button>
+    <button mat-button type="button" (click)="signOut()">{{ ui.t('signOut') }}</button>
   } @else {
-    <button mat-button type="button" (click)="signIn()">Sign in</button>
+    <button mat-button type="button" (click)="signIn()">{{ ui.t('signIn') }}</button>
   }
 </fs-brand-header>
 <main>

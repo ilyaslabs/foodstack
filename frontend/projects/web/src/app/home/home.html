@@ -1,32 +1,130 @@
 <section class="hero">
   <div class="hero-inner">
-    @if (branding.branding().logo; as logo) {
-      <img
-        class="hero-logo"
-        [src]="logo.urls['card']"
-        alt="{{ branding.branding().name }} logo"
-        width="112"
-        height="112"
-      />
-    }
     <h1>{{ branding.branding().name }}</h1>
-    @if (branding.branding().tagline; as tagline) {
-      <p class="tagline">{{ tagline }}</p>
-    }
-    @if (auth.signedIn()) {
-      <p class="status">You're signed in. Ordering opens soon.</p>
-    } @else {
-      <button mat-flat-button type="button" class="cta" (click)="signIn()">Sign in</button>
+    <p class="tagline">{{ branding.branding().tagline || ui.t('heroTitle') }}</p>
+
+    @if (showPicker()) {
+      <div class="picker">
+        <h2 class="picker-title">{{ ui.t('whereTo') }}</h2>
+        <app-location-picker (picked)="editingLocation.set(false)" />
+      </div>
+    } @else if (locations.location()) {
+      <button type="button" class="location-pill" (click)="editingLocation.set(true)">
+        <fs-icon name="place" />
+        <span class="pill-text">
+          <span class="pill-label">{{
+            fulfilment() === 'PICKUP' ? ui.t('pickupNear') : ui.t('deliveringTo')
+          }}</span>
+          <span class="pill-value">{{ locationLabel() }}</span>
+        </span>
+        <span class="pill-change">{{ ui.t('change') }}</span>
+      </button>
     }
   </div>
 </section>
 
-<section class="soon">
-  <div class="soon-card">
-    <h2>Restaurants are on their way</h2>
-    <p>
-      Browse menus from places near you, order in a few taps and follow your delivery live. We're
-      getting everything ready.
-    </p>
-  </div>
-</section>
+@if (ready() && locations.location()) {
+  <section class="browse">
+    <div class="controls">
+      <div class="search">
+        <fs-icon name="search" />
+        <input
+          #searchBox
+          type="search"
+          [placeholder]="ui.t('searchPlaceholder')"
+          [attr.aria-label]="ui.t('searchPlaceholder')"
+          (input)="onType($event)"
+        />
+        @if (query()) {
+          <button
+            mat-icon-button
+            type="button"
+            [attr.aria-label]="ui.t('clearSearch')"
+            (click)="clearSearch(searchBox)"
+          >
+            <fs-icon name="close" />
+          </button>
+        }
+      </div>
+      <mat-button-toggle-group
+        hideSingleSelectionIndicator
+        [value]="fulfilment()"
+        (change)="fulfilment.set($event.value)"
+        [attr.aria-label]="ui.t('delivery') + ' / ' + ui.t('pickup')"
+      >
+        <mat-button-toggle value="DELIVERY"
+          ><fs-icon name="delivery" /> {{ ui.t('delivery') }}</mat-button-toggle
+        >
+        <mat-button-toggle value="PICKUP"
+          ><fs-icon name="storefront" /> {{ ui.t('pickup') }}</mat-button-toggle
+        >
+      </mat-button-toggle-group>
+    </div>
+
+    @if (cuisines().length > 1 || cuisine()) {
+      <mat-chip-listbox
+        class="cuisines"
+        aria-label="Cuisines"
+        [value]="cuisine()"
+        (change)="pickCuisine($event.value ?? null)"
+      >
+        <mat-chip-option [value]="null" [selected]="!cuisine()">{{ ui.t('all') }}</mat-chip-option>
+        @for (entry of cuisines(); track entry.cuisine) {
+          <mat-chip-option [value]="entry.cuisine"
+            >{{ cuisineLabel(entry.cuisine) }}
+            <span class="count">{{ ui.number(entry.count) }}</span></mat-chip-option
+          >
+        }
+      </mat-chip-listbox>
+    }
+
+    <div class="status-row">
+      @if (!failed() && (stores().length || !loading())) {
+        <h2 class="count-title">{{ countLabel() }}</h2>
+      }
+    </div>
+    @if (loading() && stores().length === 0) {
+      <mat-progress-bar mode="indeterminate" />
+    }
+
+    @if (failed()) {
+      <div class="notice" role="alert">
+        <p>{{ ui.t('searchFailed') }}</p>
+        <button mat-stroked-button type="button" (click)="retry()">{{ ui.t('retry') }}</button>
+      </div>
+    } @else if (!loading() && stores().length === 0) {
+      <div class="notice">
+        <fs-icon name="storefront" class="notice-icon" />
+        <h3>{{ ui.t('noStoresTitle') }}</h3>
+        <p>{{ ui.t('noStoresText') }}</p>
+        @if (query() || cuisine()) {
+          <button mat-stroked-button type="button" (click)="clearSearch(searchBox)">
+            {{ ui.t('clearSearch') }}
+          </button>
+        }
+      </div>
+    }
+
+    <div class="grid">
+      @for (store of stores(); track store.storeId) {
+        <app-store-card [store]="store" />
+      }
+    </div>
+
+    @if (stores().length < total()) {
+      <div class="more">
+        <button mat-stroked-button type="button" (click)="more()" [disabled]="loading()">
+          {{ ui.t('loadMore') }}
+        </button>
+      </div>
+    }
+  </section>
+} @else if (ready()) {
+  <section class="browse">
+    <div class="notice">
+      <fs-icon name="place" class="notice-icon" />
+      <h3>{{ ui.t('pickLocationTitle') }}</h3>
+      <p>{{ ui.t('pickLocationText') }}</p>
+    </div>
+  </section>
+}

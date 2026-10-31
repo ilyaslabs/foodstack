@@ -1,11 +1,11 @@
 import { Component, computed, inject } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 
-import { MeClient } from '@foodstack/api-client';
 import { BrandingStore, Icon } from '@foodstack/ui';
+
+import { Session } from '../shared/session';
 
 /** First page after sign-in: where the platform stands and what to do next. */
 @Component({
@@ -23,40 +23,71 @@ import { BrandingStore, Icon } from '@foodstack/ui';
     <mat-card appearance="outlined" class="setup">
       <mat-card-header>
         <mat-card-title>Get started</mat-card-title>
-        <mat-card-subtitle>Finish these steps before you invite stores.</mat-card-subtitle>
+        <mat-card-subtitle>{{
+          session.operator()
+            ? 'Set up the platform, then bring stores on.'
+            : 'A few steps before customers can order.'
+        }}</mat-card-subtitle>
       </mat-card-header>
       <mat-card-content>
         <ol class="steps">
-          <li [class.done]="brandingDone()">
-            <span class="step-icon">
-              <fs-icon [name]="brandingDone() ? 'check_circle' : 'palette'" />
-            </span>
-            <div class="step-text">
-              <div class="step-title">Set up your brand</div>
-              <div class="step-description">
-                @if (brandingDone()) {
-                  Done. You can change name, colours, font and logo at any time.
-                } @else {
-                  Name, colours, font and logo. Customers see changes right away.
-                }
+          @if (canManageSettings()) {
+            <li [class.done]="brandingDone()">
+              <span class="step-icon">
+                <fs-icon [name]="brandingDone() ? 'check_circle' : 'palette'" />
+              </span>
+              <div class="step-text">
+                <div class="step-title">Set up your brand</div>
+                <div class="step-description">
+                  @if (brandingDone()) {
+                    Done. You can change name, colours, font and logo at any time.
+                  } @else {
+                    Name, colours, font and logo. Customers see changes right away.
+                  }
+                </div>
               </div>
-            </div>
-            @if (canManageSettings()) {
-              @if (brandingDone()) {
-                <a mat-stroked-button routerLink="/settings/branding">Edit</a>
-              } @else {
-                <a mat-flat-button routerLink="/settings/branding">Start</a>
+              @if (canManageSettings()) {
+                @if (brandingDone()) {
+                  <a mat-stroked-button routerLink="/settings/branding">Edit</a>
+                } @else {
+                  <a mat-flat-button routerLink="/settings/branding">Start</a>
+                }
               }
-            }
-          </li>
-          <li class="later">
-            <span class="step-icon"><fs-icon name="storefront" /></span>
-            <div class="step-text">
-              <div class="step-title">Add stores and menus</div>
-              <div class="step-description">Arrives with the next release.</div>
-            </div>
-            <span class="badge">Coming soon</span>
-          </li>
+            </li>
+          }
+          @if (canManageSettings()) {
+            <li>
+              <span class="step-icon"><fs-icon name="language" /></span>
+              <div class="step-text">
+                <div class="step-title">Pick languages and currency</div>
+                <div class="step-description">
+                  Customers switch between your languages. Stores type menus in each one.
+                </div>
+              </div>
+              <a mat-stroked-button routerLink="/settings/locale">Open</a>
+            </li>
+          }
+          @if (session.operator()) {
+            <li>
+              <span class="step-icon"><fs-icon name="storefront" /></span>
+              <div class="step-text">
+                <div class="step-title">Add stores and menus</div>
+                <div class="step-description">
+                  Onboard a store, give its owner a login, and go live when it is ready.
+                </div>
+              </div>
+              <a mat-flat-button routerLink="/stores">Open stores</a>
+            </li>
+          } @else if (session.storePortal()) {
+            <li>
+              <span class="step-icon"><fs-icon name="restaurant" /></span>
+              <div class="step-text">
+                <div class="step-title">Finish your store</div>
+                <div class="step-description">Add your menu, opening hours and delivery area.</div>
+              </div>
+              <a mat-flat-button [routerLink]="storeLink()">Open my store</a>
+            </li>
+          }
         </ol>
       </mat-card-content>
     </mat-card>
@@ -144,7 +175,12 @@ import { BrandingStore, Icon } from '@foodstack/ui';
 export class Dashboard {
   private readonly branding = inject(BrandingStore);
 
-  protected readonly me = toSignal(inject(MeClient).me());
+  protected readonly session = inject(Session);
+  protected readonly me = this.session.me;
+  protected readonly storeLink = computed(() => {
+    const storeIds = this.me()?.storeIds ?? [];
+    return storeIds.length === 1 ? ['/stores', storeIds[0]] : ['/stores'];
+  });
   protected readonly brandingDone = computed(() => this.branding.branding().version > 0);
   protected readonly canManageSettings = computed(
     () => this.me()?.permissions.includes('settings:manage') ?? false,

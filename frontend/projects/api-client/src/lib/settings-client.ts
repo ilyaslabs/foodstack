@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, map } from 'rxjs';
 
-import { Branding, BrandingUpdate, Versioned } from './models';
+import { Branding, BrandingUpdate, LocaleSettings, Versioned } from './models';
 import { RUNTIME_CONFIG } from './runtime-config';
 
 @Injectable({ providedIn: 'root' })
@@ -30,6 +30,34 @@ export class SettingsClient {
       .pipe(
         map((response) => ({
           value: response.body as Branding,
+          etag: response.headers.get('ETag') ?? '',
+        })),
+      );
+  }
+
+  getLocale(): Observable<Versioned<LocaleSettings>> {
+    return this.http
+      .get<LocaleSettings>(`${this.config.apiUrl}/api/v1/settings/locale`, { observe: 'response' })
+      .pipe(
+        map((response) => ({
+          value: response.body as LocaleSettings,
+          etag: response.headers.get('ETag') ?? '',
+        })),
+      );
+  }
+
+  updateLocale(
+    update: Pick<LocaleSettings, 'defaultLanguage' | 'languages' | 'currency' | 'timezone'>,
+    etag: string,
+  ): Observable<Versioned<LocaleSettings>> {
+    return this.http
+      .put<LocaleSettings>(`${this.config.apiUrl}/api/v1/settings/locale`, update, {
+        observe: 'response',
+        headers: { 'If-Match': etag },
+      })
+      .pipe(
+        map((response) => ({
+          value: response.body as LocaleSettings,
           etag: response.headers.get('ETag') ?? '',
         })),
       );

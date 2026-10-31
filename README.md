@@ -31,12 +31,13 @@ mvn test                                  # every test, including both integrati
 mvn -pl app/foodstack-server -am install -DskipTests
 # Run the server with containers: LocalFoodstackApplication (app/foodstack-server/src/test), then
 cd frontend && pnpm install && pnpm start:backoffice   # http://localhost:4300/admin/
+pnpm start:web                                          # http://localhost:4200/ (storefront)
 ```
 
 Sign in locally as `admin@local.foodstack.local` / `foodstack-local`. To try the full stack on one
 machine: `mvn -pl deploy/unit-deployer -am package -DskipTests`, unzip
-`deploy/unit-deployer/target/unit-deployer-*.zip` and run
-`sudo ./install.sh /opt/foodstack --domain localhost --http --http-port 8088`.
+`deploy/unit-deployer/target/unit-deployer-*.zip` and run `./install.sh ~/foodstack --local`
+(no sudo), then open `http://foodstack.localhost:8080/` for the storefront and `/admin/` for the back office.
 
 ## Documents
 

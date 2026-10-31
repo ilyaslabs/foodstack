@@ -29,7 +29,7 @@ export interface LocaleSettings {
   version: number;
 }
 
-export type Role = 'ADMIN' | 'FINANCE' | 'SUPPORT' | 'CUSTOMER';
+export type Role = 'ADMIN' | 'FINANCE' | 'SUPPORT' | 'STORE_OWNER' | 'STORE_STAFF' | 'CUSTOMER';
 
 export interface Me {
   id: string;
@@ -39,6 +39,10 @@ export interface Me {
   permissions: string[];
   status: string;
   createdAt: number;
+  /** Brands the user owns (store owners). */
+  brandIds?: string[];
+  /** Branches the user manages (store owners and staff). */
+  storeIds?: string[];
 }
 
 export type MediaPurpose = 'BRANDING' | 'STORE' | 'MENU_ITEM' | 'RIDER_DOCUMENT';
