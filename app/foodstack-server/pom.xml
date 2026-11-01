@@ -139,11 +139,19 @@
                         <configuration>
                             <!-- The plain jar stays the main artifact so integration-tests can depend on it. -->
                             <classifier>exec</classifier>
+                            <mainClass>io.github.ilyaslabs.foodstack.FoodstackApplication</mainClass>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <!-- Goals typed on the command line: `mvn spring-boot:test-run` starts the local
+                             server with its containers (TDD 15.1), not the production entry point. -->
+                        <id>default-cli</id>
+                        <configuration>
+                            <mainClass>io.github.ilyaslabs.foodstack.LocalFoodstackApplication</mainClass>
                         </configuration>
                     </execution>
                 </executions>
                 <configuration>
-                    <mainClass>io.github.ilyaslabs.foodstack.FoodstackApplication</mainClass>
                     <requiresUnpack>
                         <!-- liquibase-mongodb reads its own manifest through a jar URL, which fails for nested jars. -->
                         <dependency>
