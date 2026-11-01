@@ -20,6 +20,8 @@ export interface ConfirmData {
   /** Shows an optional text box; its text is the result. */
   inputLabel?: string;
   inputHint?: string;
+  /** The confirm button stays disabled until something is typed. */
+  inputRequired?: boolean;
 }
 
 /** A small confirmation dialog, optionally asking for a short note. */
@@ -33,7 +35,13 @@ export interface ConfirmData {
       @if (data.inputLabel) {
         <mat-form-field appearance="outline">
           <mat-label>{{ data.inputLabel }}</mat-label>
-          <input matInput maxlength="200" [(ngModel)]="text" (keyup.enter)="close()" />
+          <input
+            matInput
+            maxlength="200"
+            [required]="!!data.inputRequired"
+            [(ngModel)]="text"
+            (keyup.enter)="close()"
+          />
           @if (data.inputHint) {
             <mat-hint>{{ data.inputHint }}</mat-hint>
           }
@@ -42,7 +50,13 @@ export interface ConfirmData {
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button type="button" [mat-dialog-close]="undefined">Cancel</button>
-      <button mat-flat-button type="button" [class.danger]="data.danger" (click)="close()">
+      <button
+        mat-flat-button
+        type="button"
+        [class.danger]="data.danger"
+        [disabled]="data.inputRequired && !text.trim()"
+        (click)="close()"
+      >
         {{ data.confirm }}
       </button>
     </mat-dialog-actions>
@@ -68,6 +82,9 @@ export class ConfirmDialog {
   protected text = '';
 
   protected close(): void {
+    if (this.data.inputRequired && !this.text.trim()) {
+      return;
+    }
     this.ref.close(this.text.trim());
   }
 }

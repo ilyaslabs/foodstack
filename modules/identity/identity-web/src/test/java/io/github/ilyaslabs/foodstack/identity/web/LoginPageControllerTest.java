@@ -96,6 +96,11 @@ class LoginPageControllerTest {
             .getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
         assertThat(saved.getAuthentication().getName()).isEqualTo("u9");
         assertThat(saved.getAuthentication().isAuthenticated()).isTrue();
+        // The ID token's auth_time comes from the password factor's sign-in time
+        assertThat(saved.getAuthentication().getAuthorities())
+            .filteredOn(org.springframework.security.core.authority.FactorGrantedAuthority.class::isInstance)
+            .singleElement()
+            .satisfies(a -> assertThat(((org.springframework.security.core.authority.FactorGrantedAuthority) a).getIssuedAt()).isNotNull());
     }
 
     @Test

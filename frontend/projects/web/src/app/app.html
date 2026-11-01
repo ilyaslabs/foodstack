@@ -28,9 +28,37 @@
     </mat-menu>
   }
   @if (auth.signedIn()) {
-    <button mat-button type="button" (click)="signOut()">{{ ui.t('signOut') }}</button>
+    <button
+      mat-button
+      type="button"
+      class="account"
+      [matMenuTriggerFor]="accountMenu"
+      [attr.aria-label]="ui.t('accountMenu')"
+    >
+      <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+      @if (me(); as me) {
+        <span class="account-name">{{ me.displayName }}</span>
+      }
+    </button>
+    <mat-menu #accountMenu="matMenu" xPosition="before">
+      @if (me(); as me) {
+        <div class="account-card">
+          <div class="account-card-name">{{ me.displayName }}</div>
+          <div class="account-card-email">{{ me.email }}</div>
+        </div>
+      }
+      <button mat-menu-item type="button" (click)="signOut()">
+        <fs-icon matMenuItemIcon name="logout" />
+        <span>{{ ui.t('signOut') }}</span>
+      </button>
+    </mat-menu>
   } @else {
-    <button mat-button type="button" (click)="signIn()">{{ ui.t('signIn') }}</button>
+    <button mat-button type="button" class="sign-in" (click)="signIn()">
+      {{ ui.t('signIn') }}
+    </button>
+    <button mat-flat-button type="button" class="sign-up" (click)="signUp()">
+      {{ ui.t('createAccount') }}
+    </button>
   }
 </fs-brand-header>
 <main>

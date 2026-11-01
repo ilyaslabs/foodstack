@@ -15,6 +15,8 @@ const CONFLICTS: Record<string, string> = {
   SECTION_NOT_EMPTY: 'Move or delete the items in this section first.',
   OPERATOR_DELIVERY_NOT_ALLOWED: 'The operator has not enabled rider delivery for this branch.',
   STORE_NOT_READY: 'The branch is not ready to go live yet.',
+  CANNOT_BLOCK_SELF: 'You cannot block your own account.',
+  LAST_ADMIN: 'This is the last active admin. Make someone else an admin first.',
 };
 
 /** A sentence for the person from an API error, using field errors when the server sent them. */

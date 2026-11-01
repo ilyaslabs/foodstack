@@ -8,7 +8,69 @@ main {
   margin-inline-end: 6px;
 }
 
+.sign-up {
+  margin-inline-start: 4px;
+  // On the brand-coloured header the filled button uses the on-primary colours
+  --mat-button-filled-container-color: var(--mat-sys-on-primary);
+  --mat-button-filled-label-text-color: var(--mat-sys-primary);
+}
+
+@media (prefers-color-scheme: dark) {
+  // The header is a dark surface there, so the button takes the brand colour
+  .sign-up {
+    --mat-button-filled-container-color: var(--mat-sys-primary);
+    --mat-button-filled-label-text-color: var(--mat-sys-on-primary);
+  }
+  .avatar {
+    background: var(--mat-sys-primary);
+    color: var(--mat-sys-on-primary);
+  }
+}
+
+.account {
+  --mat-button-text-horizontal-padding: 6px;
+}
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 32px;
+  block-size: 32px;
+  border-radius: 50%;
+  background: var(--mat-sys-on-primary);
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-label-large);
+  font-weight: 600;
+}
+
+.account-name {
+  margin-inline-start: 8px;
+  max-inline-size: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-card {
+  padding: 12px 16px 8px;
+  min-inline-size: 200px;
+}
+
+.account-card-name {
+  font: var(--mat-sys-title-small);
+}
+
+.account-card-email {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
 @media (max-width: 599.98px) {
+  // The hosted sign-in page links to "Create account", so phones keep one button
+  .sign-up,
+  .account-name {
+    display: none;
+  }
   .language-name {
     display: none;
   }

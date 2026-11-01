@@ -63,6 +63,8 @@ const EN = {
   closedAllDay: 'Closed',
   today: 'Today',
   opensAt: 'Today {hours}',
+  createAccount: 'Create account',
+  accountMenu: 'Account menu',
 } as const;
 
 export type UiKey = keyof typeof EN;
@@ -124,6 +126,8 @@ const AR: Dictionary = {
   closedAllDay: 'مغلق',
   today: 'اليوم',
   opensAt: 'اليوم {hours}',
+  createAccount: 'إنشاء حساب',
+  accountMenu: 'قائمة الحساب',
 };
 
 const UR: Dictionary = {
@@ -182,6 +186,8 @@ const UR: Dictionary = {
   closedAllDay: 'بند',
   today: 'آج',
   opensAt: 'آج {hours}',
+  createAccount: 'اکاؤنٹ بنائیں',
+  accountMenu: 'اکاؤنٹ مینو',
 };
 
 const DICTIONARIES: Record<string, Dictionary> = { en: EN, ar: AR, ur: UR };

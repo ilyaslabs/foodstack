@@ -30,6 +30,10 @@ export const routes: Routes = [
           import('./delivery/delivery-pricing-page').then((m) => m.DeliveryPricingPage),
       },
       {
+        path: 'users',
+        loadComponent: () => import('./users/users-page').then((m) => m.UsersPage),
+      },
+      {
         path: 'settings/locale',
         loadComponent: () => import('./settings/locale-page').then((m) => m.LocalePage),
       },

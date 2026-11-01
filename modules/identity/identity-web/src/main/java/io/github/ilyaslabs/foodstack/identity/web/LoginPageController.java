@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
@@ -15,6 +18,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.FactorGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -122,7 +127,12 @@ class LoginPageController {
         UserDetails user = this.userDetails.loadUserByUsername(email.trim());
         request.changeSessionId();
         SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(user, null, user.getAuthorities()));
+        // The password factor carries the sign-in time, which the ID token's auth_time needs
+        List<GrantedAuthority> authorities = new ArrayList<>(user.getAuthorities());
+        authorities.add(FactorGrantedAuthority.withAuthority(FactorGrantedAuthority.PASSWORD_AUTHORITY)
+            .issuedAt(Instant.now())
+            .build());
+        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(user, null, authorities));
         SecurityContextHolder.setContext(context);
         this.contextRepository.saveContext(context, request, response);
         return ResponseEntity.status(HttpStatus.SEE_OTHER).header("Location", saved.getRedirectUrl()).build();
