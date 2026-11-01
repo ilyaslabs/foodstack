@@ -64,6 +64,7 @@ MongoDB and Redis have no password. Their ports are picked by Docker (`docker ps
 - [Business Requirements (BRD)](docs/BRD.md)
 - [Product Requirements (PRD)](docs/PRD.md)
 - [Technical Design (TDD)](docs/TDD.md)
+- [Architecture and flows](docs/architecture/README.md): diagrams of how the built system works today
 - [Deployment Guide](docs/deployment-guide.md)
 - [Testing Strategy](docs/testing-strategy.md)
 
