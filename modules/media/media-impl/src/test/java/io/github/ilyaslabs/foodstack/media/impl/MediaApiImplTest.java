@@ -26,6 +26,27 @@ class MediaApiImplTest {
 
     private final MediaApiImpl api = new MediaApiImpl(this.service);
 
+    @org.junit.jupiter.api.BeforeEach
+    void signIn() {
+        callerWith("admin", "settings:manage");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void signOut() {
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+    }
+
+    /** Signs in a caller with these permissions, as the forwarded token would. */
+    private static void callerWith(String subject, String... permissions) {
+        org.springframework.security.oauth2.jwt.Jwt jwt = org.springframework.security.oauth2.jwt.Jwt.withTokenValue("t")
+            .header("alg", "ES256")
+            .subject(subject)
+            .claim("perms", java.util.List.of(permissions))
+            .build();
+        org.springframework.security.core.context.SecurityContextHolder.getContext()
+            .setAuthentication(new io.github.ilyaslabs.foodstack.platform.security.FoodstackJwtAuthenticationConverter().convert(jwt));
+    }
+
     @Test
     @DisplayName("maps a core asset to the API record with epoch-second timestamps")
     void getAsset() {
@@ -64,6 +85,19 @@ class MediaApiImplTest {
         given(this.service.get("m1")).willReturn(details(null, null));
 
         assertThat(this.api.getAsset("m1").owner()).isNull();
+    }
+
+    @Test
+    @DisplayName("customers cannot claim or release images, but anyone may read one (TDD 9.1)")
+    void permissions() {
+        callerWith("customer");
+        assertThatThrownBy(() -> this.api.claim("m1", MediaPurpose.BRANDING, new MediaOwner("settings", "branding")))
+            .isInstanceOf(ModuleException.Forbidden.class);
+        assertThatThrownBy(() -> this.api.release("m1", new MediaOwner("settings", "branding")))
+            .isInstanceOf(ModuleException.Forbidden.class);
+        org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        given(this.service.get("m1")).willReturn(details("settings", "branding"));
+        assertThat(this.api.getAsset("m1").id()).isEqualTo("m1");
     }
 
     private static MediaAssetDetails details(String module, String entity) {

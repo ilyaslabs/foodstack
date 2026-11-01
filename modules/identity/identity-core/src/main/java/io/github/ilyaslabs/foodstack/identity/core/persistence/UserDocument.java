@@ -46,6 +46,13 @@ public class UserDocument {
 
     private String createdBy;
 
+    /** Who blocked the account, when and why (PRD ID-4); cleared when unblocked. */
+    private String blockedBy;
+
+    private Instant blockedAt;
+
+    private String blockedReason;
+
     private Instant createdAt;
 
     private Instant updatedAt;
@@ -163,5 +170,29 @@ public class UserDocument {
 
     public void setStoreIds(Set<String> storeIds) {
         this.storeIds = (storeIds != null) ? storeIds : new java.util.TreeSet<>();
+    }
+
+    public String getBlockedBy() {
+        return this.blockedBy;
+    }
+
+    public void setBlockedBy(String blockedBy) {
+        this.blockedBy = blockedBy;
+    }
+
+    public Instant getBlockedAt() {
+        return this.blockedAt;
+    }
+
+    public void setBlockedAt(Instant blockedAt) {
+        this.blockedAt = blockedAt;
+    }
+
+    public String getBlockedReason() {
+        return this.blockedReason;
+    }
+
+    public void setBlockedReason(String blockedReason) {
+        this.blockedReason = blockedReason;
     }
 }

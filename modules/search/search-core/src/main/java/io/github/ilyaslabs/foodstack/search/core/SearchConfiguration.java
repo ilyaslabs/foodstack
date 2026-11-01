@@ -32,8 +32,9 @@ public class SearchConfiguration {
     }
 
     @Bean
-    StoreIndexer searchStoreIndexer(StoreApi storeApi, GeoApi geoApi, StoreSearchEngine searchStoreEngine) {
-        return new StoreIndexer(storeApi, geoApi, searchStoreEngine);
+    StoreIndexer searchStoreIndexer(StoreApi storeApi, GeoApi geoApi, StoreSearchEngine searchStoreEngine,
+            io.github.ilyaslabs.foodstack.platform.security.ServiceCalls serviceCalls) {
+        return new StoreIndexer(storeApi, geoApi, searchStoreEngine, serviceCalls);
     }
 
     @Bean

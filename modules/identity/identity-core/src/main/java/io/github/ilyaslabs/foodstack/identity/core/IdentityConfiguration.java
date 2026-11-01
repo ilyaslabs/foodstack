@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.identity.core;
 import java.time.Clock;
 
 import io.github.ilyaslabs.foodstack.identity.core.application.BootstrapAdmin;
+import io.github.ilyaslabs.foodstack.identity.core.application.UserDirectory;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.UserRepository;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.LoginKeyRepository;
@@ -83,6 +84,12 @@ public class IdentityConfiguration {
             TokenRevocations tokenRevocations, Clock clock) {
         return new UserService(users, loginKeys, piiCipher, identityPasswordEncoder, identityOutbox,
                 identityMongo.transactionTemplate(), tokenRevocations, clock);
+    }
+
+    @Bean
+    UserDirectory identityUserDirectory(UserService identityUserService, UserRepository users, ModuleMongo identityMongo,
+            Clock clock) {
+        return new UserDirectory(identityUserService, users, identityMongo.template(), clock);
     }
 
     @Bean

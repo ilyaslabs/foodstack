@@ -86,6 +86,8 @@ foodstack:
   security:
     issuer: ${FOODSTACK_PUBLIC_URL:http://localhost:8080}
     pii-key: ${FOODSTACK_PII_KEY:}
+    # Only for deployments that do not run identity themselves (split topologies, TDD 9.1)
+    service-client-secret: ${FOODSTACK_SERVICE_CLIENT_SECRET:}
   identity:
     signing-keys: ${FOODSTACK_SIGNING_KEYS:}
     bootstrap-admin:

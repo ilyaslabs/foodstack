@@ -7,6 +7,8 @@ import java.util.UUID;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
+import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
+import io.github.ilyaslabs.foodstack.platform.security.ServiceTokens;
 import com.nimbusds.jose.proc.SecurityContext;
 import io.github.ilyaslabs.foodstack.identity.core.IdentityProperties;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
@@ -65,12 +67,32 @@ public class IdentitySecurityConfiguration {
     }
 
     @Bean
-    RegisteredClientRepository identityRegisteredClients(IdentityProperties properties) {
-        List<RegisteredClient> clients = properties.getClients().entrySet().stream().map(this::client).toList();
+    RegisteredClientRepository identityRegisteredClients(IdentityProperties properties, FoodstackSecurityProperties security,
+            PasswordEncoder identityPasswordEncoder) {
+        List<RegisteredClient> clients = new java.util.ArrayList<>(
+                properties.getClients().entrySet().stream().map(this::client).toList());
         if (clients.isEmpty()) {
             throw new IllegalStateException("Configure at least one client under foodstack.identity.clients");
         }
+        String serviceSecret = security.getServiceClientSecret();
+        if (serviceSecret != null && !serviceSecret.isBlank()) {
+            // Background work of deployments that do not run identity themselves (TDD 9.1)
+            clients.add(RegisteredClient.withId(UUID.nameUUIDFromBytes(ModuleAccess.SERVICE_CLIENT.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString())
+                .clientId(ModuleAccess.SERVICE_CLIENT)
+                .clientSecret(identityPasswordEncoder.encode(serviceSecret))
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(java.time.Duration.ofMinutes(5)).build())
+                .build());
+        }
         return new InMemoryRegisteredClientRepository(clients);
+    }
+
+    /** Service tokens for this deployment's own background work, minted without a network call. */
+    @Bean
+    ServiceTokens identityServiceTokens(JWKSource<SecurityContext> identityJwkSource, FoodstackSecurityProperties security,
+            org.springframework.beans.factory.ObjectProvider<java.time.Clock> clock) {
+        return new LocalServiceTokens(identityJwkSource, security.getIssuer(), clock.getIfAvailable(java.time.Clock::systemUTC));
     }
 
     private RegisteredClient client(Map.Entry<String, IdentityProperties.Client> entry) {

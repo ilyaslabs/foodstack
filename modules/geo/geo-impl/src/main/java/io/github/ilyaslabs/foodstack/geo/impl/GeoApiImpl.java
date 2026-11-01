@@ -9,7 +9,10 @@ import io.github.ilyaslabs.foodstack.geo.core.application.QuoteService;
 
 import org.springframework.stereotype.Component;
 
-/** {@link GeoApi} for other modules: delegates to the core quote service. */
+/**
+ * {@link GeoApi} for other modules: delegates to the core quote service. Open to every caller,
+ * signed in or not: quotes and delivery areas are what any customer sees (TDD 9.1).
+ */
 @Component
 class GeoApiImpl implements GeoApi {
 

@@ -8,7 +8,7 @@ fetch('/api/v1/settings/branding', { headers: { Accept: 'application/json' } })
     const root = document.documentElement.style;
     root.setProperty('--primary', branding.primaryColor);
     root.setProperty('--font', `${branding.fontFamily}, system-ui, sans-serif`);
-    document.title = `Sign in - ${branding.name}`;
+    document.title = `${document.title.split(' - ')[0]} - ${branding.name}`;
     document.getElementById('brand-name').textContent = branding.name;
     document.getElementById('brand-tagline').textContent = branding.tagline || '';
     const logo = branding.logo && (branding.logo.urls.card || branding.logo.urls.thumb);

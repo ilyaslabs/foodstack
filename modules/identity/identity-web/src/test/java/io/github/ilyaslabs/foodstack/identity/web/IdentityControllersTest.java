@@ -8,6 +8,7 @@ import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
 import io.github.ilyaslabs.foodstack.identity.core.application.NewUser;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserAccount;
+import io.github.ilyaslabs.foodstack.identity.core.application.UserDirectory;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
 import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
@@ -45,6 +46,9 @@ class IdentityControllersTest {
 
     @MockitoBean
     UserService userService;
+
+    @MockitoBean
+    UserDirectory userDirectory;
 
     @MockitoBean
     JwtDecoder jwtDecoder;
@@ -103,7 +107,8 @@ class IdentityControllersTest {
     @Test
     @DisplayName("back-office user management needs identity permissions")
     void users() throws Exception {
-        given(this.userService.listBackOffice(50)).willReturn(List.of(account("u1", Role.ADMIN)));
+        given(this.userDirectory.search(null, null, null, null, 50))
+            .willReturn(new UserDirectory.UserPage(List.of(account("u1", Role.ADMIN)), "u1"));
         given(this.userService.create(new NewUser("s@example.com", "correct horse", "S", Set.of(Role.SUPPORT)), "u1"))
             .willReturn(account("u2", Role.SUPPORT));
         String body = "{\"email\":\"s@example.com\",\"password\":\"correct horse\",\"displayName\":\"S\",\"roles\":[\"SUPPORT\"]}";
@@ -111,13 +116,38 @@ class IdentityControllersTest {
         this.mvc.perform(get("/api/v1/users").with(jwt())).andExpect(status().isForbidden());
         this.mvc.perform(get("/api/v1/users").with(jwt().authorities(List.of(new SimpleGrantedAuthority("identity:users:read")))))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.items[0].id").value("u1"));
+            .andExpect(jsonPath("$.items[0].id").value("u1"))
+            .andExpect(jsonPath("$.nextCursor").value("u1"));
         this.mvc.perform(post("/api/v1/users").with(jwt().jwt((t) -> t.subject("u1"))
             .authorities(List.of(new SimpleGrantedAuthority("identity:users:manage"))))
             .contentType(MediaType.APPLICATION_JSON)
             .content(body))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.roles[0]").value("SUPPORT"));
+    }
+
+    @Test
+    @DisplayName("the Users page searches every account by name, role and status, and blocks with a reason")
+    void directory() throws Exception {
+        given(this.userDirectory.search("ali", Role.CUSTOMER, UserStatus.ACTIVE, "u9", 20))
+            .willReturn(new UserDirectory.UserPage(List.of(account("u3", Role.CUSTOMER)), null));
+        given(this.userDirectory.block("u3", "Fraudulent orders", "admin")).willReturn(account("u3", Role.CUSTOMER));
+        given(this.userDirectory.unblock("u3")).willReturn(account("u3", Role.CUSTOMER));
+        var reader = jwt().authorities(List.of(new SimpleGrantedAuthority("identity:users:read")));
+        var manager = jwt().jwt((t) -> t.subject("admin"))
+            .authorities(List.of(new SimpleGrantedAuthority("identity:users:manage")));
+
+        this.mvc.perform(get("/api/v1/users?q=ali&role=CUSTOMER&status=ACTIVE&after=u9&limit=20").with(reader))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].id").value("u3"));
+        this.mvc.perform(post("/api/v1/users/u3/block").with(reader).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"reason\":\"Fraudulent orders\"}")).andExpect(status().isForbidden());
+        this.mvc.perform(post("/api/v1/users/u3/block").with(manager).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"reason\":\"\"}")).andExpect(status().isBadRequest());
+        this.mvc.perform(post("/api/v1/users/u3/block").with(manager).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"reason\":\"Fraudulent orders\"}")).andExpect(status().isOk());
+        this.mvc.perform(post("/api/v1/users/u3/unblock").with(manager)).andExpect(status().isOk());
+        verify(this.userDirectory).block("u3", "Fraudulent orders", "admin");
     }
 
     private static UserAccount account(String id, Role role) {

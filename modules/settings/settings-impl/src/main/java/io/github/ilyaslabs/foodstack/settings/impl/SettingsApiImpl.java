@@ -10,7 +10,10 @@ import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 
 import org.springframework.stereotype.Component;
 
-/** {@link SettingsApi} for other modules: delegates to the core service and maps the result. */
+/**
+ * {@link SettingsApi} for other modules: delegates to the core service and maps the result. Open to
+ * every caller: branding and languages are public (TDD 9.1).
+ */
 @Component
 class SettingsApiImpl implements SettingsApi {
 

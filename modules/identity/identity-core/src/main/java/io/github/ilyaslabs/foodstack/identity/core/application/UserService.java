@@ -224,7 +224,7 @@ public class UserService {
             .orElseThrow(() -> new ModuleException.NotFound("User " + userId + " not found", "USER_NOT_FOUND"));
     }
 
-    private UserAccount toAccount(UserDocument user) {
+    UserAccount toAccount(UserDocument user) {
         return new UserAccount(user.getId(), this.pii.decrypt(user.getEmailCipher()), user.getDisplayName(),
                 Set.copyOf(user.getRoles()), Permissions.of(user.getRoles()), user.getStatus(), user.getCreatedAt(),
                 Set.copyOf(user.getBrandIds()), Set.copyOf(user.getStoreIds()));
