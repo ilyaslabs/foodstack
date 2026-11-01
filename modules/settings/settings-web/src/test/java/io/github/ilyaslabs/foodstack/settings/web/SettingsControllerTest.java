@@ -8,8 +8,11 @@ import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateBranding;
+import io.github.ilyaslabs.foodstack.settings.core.application.UpdateOrdering;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -50,6 +53,9 @@ class SettingsControllerTest {
 
     @MockitoBean
     SettingsService settingsService;
+
+    @MockitoBean
+    OrderingSettingsService orderingService;
 
     @MockitoBean
     JwtDecoder jwtDecoder;
@@ -140,5 +146,29 @@ class SettingsControllerTest {
     private static BrandingDetails branding(long version) {
         return new BrandingDetails("FoodStack", "Fast", "#C62828", "#2E7D32", "Inter", "logo-1",
                 Map.of("thumb", "https://cdn/logo/thumb.webp"), version, Instant.ofEpochSecond(1_800_000_000L));
+    }
+
+    @Test
+    @DisplayName("GET ordering is public; PUT needs settings:manage and If-Match")
+    void ordering() throws Exception {
+        given(this.orderingService.get()).willReturn(new OrderingDetails(true, false, 0, 0, 0, true, 180, 0, null));
+        given(this.orderingService.update(eq(new UpdateOrdering(true, true, 4900, 250, 1600, false, 300)), eq(0L), eq("admin-1")))
+            .willReturn(new OrderingDetails(true, true, 4900, 250, 1600, false, 300, 1, null));
+        String body = """
+                {"cashEnabled":true,"cardEnabled":true,"serviceFeeMinor":4900,"serviceFeeBasisPoints":250,
+                 "taxBasisPoints":1600,"tipsEnabled":false,"acceptTimeoutSeconds":300}""";
+
+        this.mvc.perform(get("/api/v1/settings/ordering"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("ETag", "\"ordering-0\""))
+            .andExpect(jsonPath("$.acceptTimeoutSeconds").value(180));
+        this.mvc.perform(put("/api/v1/settings/ordering").with(jwt()).header("If-Match", "\"ordering-0\"")
+            .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isForbidden());
+        this.mvc.perform(put("/api/v1/settings/ordering").with(admin()).header("If-Match", "\"ordering-0\"")
+            .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk())
+            .andExpect(header().string("ETag", "\"ordering-1\""))
+            .andExpect(jsonPath("$.serviceFeeBasisPoints").value(250));
     }
 }

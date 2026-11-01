@@ -21,6 +21,11 @@ public final class ModuleRoutes {
         prefixes.put("geo", List.of("/api/v1/geo", "/api/v1/zones"));
         prefixes.put("store", List.of("/api/v1/stores", "/api/v1/brands"));
         prefixes.put("search", List.of("/api/v1/search"));
+        prefixes.put("promotion", List.of("/api/v1/promotions", "/api/v1/coupons"));
+        prefixes.put("cart", List.of("/api/v1/carts"));
+        prefixes.put("payment", List.of("/api/v1/payments", "/api/v1/payment-webhooks"));
+        prefixes.put("order", List.of("/api/v1/orders"));
+        prefixes.put("notification", List.of("/api/v1/notifications", "/api/v1/devices"));
         PREFIXES = Map.copyOf(prefixes);
     }
 

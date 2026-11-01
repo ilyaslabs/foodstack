@@ -25,3 +25,14 @@ databaseChangeLog:
       changes:
         - createCollection:
             collectionName: settings_seed
+  - changeSet:
+      id: settings-3
+      author: foodstack
+      comment: "ordering rules (M2): cash on, card off until a gateway is set up, no fees or tax, tips on, 3-minute accept time"
+      changes:
+        - insertOne:
+            collectionName: settings_settings
+            document: >-
+              { "_id": "ordering", "cashEnabled": true, "cardEnabled": false, "serviceFeeMinor": { "$numberLong": "0" },
+                "serviceFeeBasisPoints": 0, "taxBasisPoints": 0, "tipsEnabled": true, "acceptTimeoutSeconds": 180,
+                "version": { "$numberLong": "0" } }

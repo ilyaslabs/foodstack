@@ -10,13 +10,18 @@ import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.web.ETags;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateBranding;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateLocale;
+import io.github.ilyaslabs.foodstack.settings.core.application.UpdateOrdering;
 import io.github.ilyaslabs.foodstack.settings.web.dto.BrandingRequest;
 import io.github.ilyaslabs.foodstack.settings.web.dto.BrandingResponse;
 import io.github.ilyaslabs.foodstack.settings.web.dto.LocaleRequest;
 import io.github.ilyaslabs.foodstack.settings.web.dto.LocaleResponse;
+import io.github.ilyaslabs.foodstack.settings.web.dto.OrderingRequest;
+import io.github.ilyaslabs.foodstack.settings.web.dto.OrderingResponse;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 import jakarta.validation.Valid;
 
@@ -33,7 +38,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Runtime branding and locale. Reads are public and carry an {@code ETag}; edits need
+ * Runtime branding, locale and ordering rules. Reads are public and carry an {@code ETag}; edits need
  * {@code settings:manage} and the {@code If-Match} of the version the editor saw (TDD 8.1).
  */
 @RestController
@@ -46,8 +51,11 @@ class SettingsController {
 
     private final SettingsService settingsService;
 
-    SettingsController(SettingsService settingsService) {
+    private final OrderingSettingsService orderingService;
+
+    SettingsController(SettingsService settingsService, OrderingSettingsService orderingService) {
         this.settingsService = settingsService;
+        this.orderingService = orderingService;
     }
 
     @GetMapping("/branding")
@@ -90,6 +98,22 @@ class SettingsController {
         return ResponseEntity.ok().eTag(ETags.of("locale", updated.version())).body(toResponse(updated));
     }
 
+    @GetMapping("/ordering")
+    ResponseEntity<OrderingResponse> ordering() {
+        OrderingDetails ordering = this.orderingService.get();
+        return ResponseEntity.ok().eTag(ETags.of("ordering", ordering.version())).body(toResponse(ordering));
+    }
+
+    @PutMapping("/ordering")
+    @PreAuthorize("hasAuthority('settings:manage')")
+    ResponseEntity<OrderingResponse> updateOrdering(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
+            @Valid @RequestBody OrderingRequest request) {
+        OrderingDetails updated = this.orderingService.update(new UpdateOrdering(request.cashEnabled(), request.cardEnabled(),
+                request.serviceFeeMinor(), request.serviceFeeBasisPoints(), request.taxBasisPoints(), request.tipsEnabled(),
+                request.acceptTimeoutSeconds()), requireIfMatch("ordering", ifMatch), CurrentUser.id());
+        return ResponseEntity.ok().eTag(ETags.of("ordering", updated.version())).body(toResponse(updated));
+    }
+
     private static long requireIfMatch(String resource, String ifMatch) {
         Long version = ETags.versionFromIfMatch(resource, ifMatch);
         if (version == null) {
@@ -111,5 +135,10 @@ class SettingsController {
             .filter((tag) -> RTL_LANGUAGES.contains(Locale.forLanguageTag(tag).getLanguage()))
             .toList();
         return new LocaleResponse(l.defaultLanguage(), l.languages(), rtl, l.currency(), l.timezone(), l.version());
+    }
+
+    private static OrderingResponse toResponse(OrderingDetails o) {
+        return new OrderingResponse(o.cashEnabled(), o.cardEnabled(), o.serviceFeeMinor(), o.serviceFeeBasisPoints(),
+                o.taxBasisPoints(), o.tipsEnabled(), o.acceptTimeoutSeconds(), o.version(), EpochSeconds.of(o.updatedAt()));
     }
 }

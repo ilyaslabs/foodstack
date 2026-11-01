@@ -6,8 +6,11 @@ import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
 import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
+import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,7 +23,9 @@ class SettingsApiImplTest {
 
     private final SettingsService service = mock(SettingsService.class);
 
-    private final SettingsApiImpl api = new SettingsApiImpl(this.service);
+    private final OrderingSettingsService ordering = mock(OrderingSettingsService.class);
+
+    private final SettingsApiImpl api = new SettingsApiImpl(this.service, this.ordering);
 
     @Test
     @DisplayName("maps branding to the API record with epoch seconds")
@@ -47,5 +52,13 @@ class SettingsApiImplTest {
         given(this.service.getLocale()).willReturn(new LocaleDetails("en", List.of("en", "ur"), "PKR", "Asia/Karachi", 2, null));
 
         assertThat(this.api.getLocale()).isEqualTo(new LocaleView("en", List.of("en", "ur"), "PKR", "Asia/Karachi", 2));
+    }
+
+    @Test
+    @DisplayName("maps ordering rules to the API record")
+    void ordering() {
+        given(this.ordering.get()).willReturn(new OrderingDetails(true, false, 100, 250, 1600, true, 180, 4, null));
+
+        assertThat(this.api.getOrdering()).isEqualTo(new OrderingView(true, false, 100, 250, 1600, true, 180, 4));
     }
 }

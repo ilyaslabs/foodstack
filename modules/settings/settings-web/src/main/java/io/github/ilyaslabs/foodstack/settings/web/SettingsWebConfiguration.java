@@ -12,6 +12,7 @@ class SettingsWebConfiguration {
 
     @Bean
     PublicEndpoints settingsPublicEndpoints() {
-        return PublicEndpoints.of(HttpMethod.GET, "/api/v1/settings/branding", "/api/v1/settings/locale");
+        return PublicEndpoints.of(HttpMethod.GET, "/api/v1/settings/branding", "/api/v1/settings/locale",
+                "/api/v1/settings/ordering");
     }
 }

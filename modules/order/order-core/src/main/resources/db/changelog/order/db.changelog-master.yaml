@@ -1,0 +1,5 @@
+# Liquibase changelog of the order module (database foodstack_order). Shard keys are applied by
+# OrderConfiguration (TDD 6.3) and listed next to each collection.
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml

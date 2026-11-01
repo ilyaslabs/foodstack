@@ -1,0 +1,16 @@
+# Liquibase changelog of the cart module (database foodstack_cart). Shard keys are applied by
+# CartConfiguration (TDD 6.3) and listed next to each collection.
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: cart-1
+      author: foodstack
+      comment: "cart_carts: one cart per customer, _id = customer id; shard key { _id: hashed }; expires 30 days after the last change"
+      changes:
+        - createCollection:
+            collectionName: cart_carts
+        - createIndex:
+            collectionName: cart_carts
+            keys: '{ "updatedAt": 1 }'
+            options: '{ "name": "expiry", "expireAfterSeconds": 2592000 }'

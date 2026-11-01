@@ -8,4 +8,7 @@ public interface SettingsApi {
 
     /** Languages, currency and timezone of the deployment (one of each per deployment, BRD). */
     LocaleView getLocale();
+
+    /** Payment methods, fees, tax, tips and the store accept time. */
+    OrderingView getOrdering();
 }

@@ -12,10 +12,12 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
+import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsCache;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.persistence.BrandingRepository;
 import io.github.ilyaslabs.foodstack.settings.core.persistence.LocaleRepository;
+import io.github.ilyaslabs.foodstack.settings.core.persistence.OrderingRepository;
 import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -88,5 +90,12 @@ public class SettingsConfiguration {
             Clock clock) {
         return new SettingsService(brandingRepository, localeRepository, mediaApi, settingsOutbox,
                 settingsMongo.transactionTemplate(), settingsCache, clock);
+    }
+
+    @Bean
+    OrderingSettingsService orderingSettingsService(OrderingRepository orderingRepository, OutboxWriter settingsOutbox,
+            ModuleMongo settingsMongo, SettingsCache settingsCache, Clock clock) {
+        return new OrderingSettingsService(orderingRepository, settingsOutbox, settingsMongo.transactionTemplate(),
+                settingsCache, clock);
     }
 }

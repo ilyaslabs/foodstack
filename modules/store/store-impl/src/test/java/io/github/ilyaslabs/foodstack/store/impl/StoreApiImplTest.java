@@ -16,7 +16,10 @@ class StoreApiImplTest {
 
     private final StoreListingService service = mock(StoreListingService.class);
 
-    private final StoreApiImpl api = new StoreApiImpl(this.service);
+    private final io.github.ilyaslabs.foodstack.store.core.application.OrderValidationService validation = mock(
+            io.github.ilyaslabs.foodstack.store.core.application.OrderValidationService.class);
+
+    private final StoreApiImpl api = new StoreApiImpl(this.service, this.validation);
 
     @org.junit.jupiter.api.AfterEach
     void signOut() {
@@ -58,5 +61,18 @@ class StoreApiImplTest {
             .isInstanceOf(io.github.ilyaslabs.moduleswitch.ModuleException.Forbidden.class);
         callerWith("admin", "search:manage");
         this.api.listStoreIds(null, 2);
+    }
+
+    @Test
+    @DisplayName("any signed-in caller may price an order; anonymous calls are refused")
+    void validateOrder() {
+        var request = new io.github.ilyaslabs.foodstack.store.api.OrderValidationRequest("s1", List.of());
+        var view = mock(io.github.ilyaslabs.foodstack.store.api.OrderValidationView.class);
+        given(this.validation.validate(request)).willReturn(view);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> this.api.validateOrder(request))
+            .isInstanceOf(io.github.ilyaslabs.moduleswitch.ModuleException.class);
+        callerWith("customer");
+
+        assertThat(this.api.validateOrder(request)).isSameAs(view);
     }
 }

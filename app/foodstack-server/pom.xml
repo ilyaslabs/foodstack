@@ -105,6 +105,66 @@
 
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-promotion-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-promotion-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-promotion-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-cart-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-cart-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-cart-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-payment-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-payment-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-payment-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-order-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-order-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-order-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-notification-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-notification-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-notification-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
             <artifactId>module-switch-test</artifactId>
             <scope>test</scope>
         </dependency>

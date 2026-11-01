@@ -7,7 +7,7 @@ import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
  * {@code foodstack.settings.SettingsChanged.v1}; consumers re-read the section through
  * {@code SettingsApi} (for example search re-indexes when languages change).
  *
- * @param section {@code branding} or {@code locale}
+ * @param section {@code branding}, {@code locale} or {@code ordering}
  * @param version the section's new version
  * @param changedBy user who made the change
  */
@@ -16,6 +16,8 @@ public record SettingsChanged(String section, long version, String changedBy) im
     public static final String BRANDING = "branding";
 
     public static final String LOCALE = "locale";
+
+    public static final String ORDERING = "ordering";
 
     @Override
     public String subject() {
