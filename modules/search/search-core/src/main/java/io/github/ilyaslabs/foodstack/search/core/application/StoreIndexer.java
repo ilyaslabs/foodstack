@@ -7,6 +7,7 @@ import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaRequest;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaView;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
+import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.search.core.engine.IndexedStore;
 import io.github.ilyaslabs.foodstack.search.core.engine.StoreSearchEngine;
 import io.github.ilyaslabs.foodstack.store.api.StoreApi;
@@ -34,16 +35,24 @@ public class StoreIndexer {
 
     private final StoreSearchEngine engine;
 
+    private final ServiceCalls serviceCalls;
+
     private final AtomicBoolean rebuilding = new AtomicBoolean();
 
-    public StoreIndexer(StoreApi stores, GeoApi geo, StoreSearchEngine engine) {
+    /** @param serviceCalls reads run as the platform: listings include branches that are not live yet (TDD 9.1) */
+    public StoreIndexer(StoreApi stores, GeoApi geo, StoreSearchEngine engine, ServiceCalls serviceCalls) {
         this.stores = stores;
         this.geo = geo;
         this.engine = engine;
+        this.serviceCalls = serviceCalls;
     }
 
     /** Re-reads one branch and indexes it, or removes it when it is not live (or gone). */
     public void refresh(String storeId) {
+        this.serviceCalls.run(() -> refreshAsService(storeId));
+    }
+
+    private void refreshAsService(String storeId) {
         StoreListingView listing;
         try {
             listing = this.stores.getListing(storeId);
@@ -85,6 +94,15 @@ public class StoreIndexer {
             return -1;
         }
         try {
+            return this.serviceCalls.call(this::rebuildAsService);
+        }
+        finally {
+            this.rebuilding.set(false);
+        }
+    }
+
+    private int rebuildAsService() {
+        {
             int count = 0;
             String after = null;
             do {
@@ -103,9 +121,6 @@ public class StoreIndexer {
             while (after != null);
             log.info("Search rebuild read {} branches", count);
             return count;
-        }
-        finally {
-            this.rebuilding.set(false);
         }
     }
 }

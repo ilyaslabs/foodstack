@@ -20,6 +20,16 @@ public class FoodstackSecurityProperties {
     /** Base64 key (32 bytes) for PII field encryption and blind indexes. From a Secret, never in images. */
     private String piiKey;
 
+    /**
+     * Secret of the {@code foodstack-service} client, with which a deployment that does not run
+     * identity itself gets service tokens for background work (TDD 9.1). Not needed where identity is
+     * local, as in the single-server install.
+     */
+    private String serviceClientSecret;
+
+    /** Token endpoint for service tokens; defaults to {@code <issuer>/oauth2/token}. */
+    private String tokenUri;
+
     /** How long a module trusts its in-memory copy of a user's revocation state. */
     private Duration revocationCacheTtl = Duration.ofSeconds(5);
 
@@ -53,6 +63,31 @@ public class FoodstackSecurityProperties {
 
     public void setRevocationCacheTtl(Duration revocationCacheTtl) {
         this.revocationCacheTtl = revocationCacheTtl;
+    }
+
+    public String getServiceClientSecret() {
+        return this.serviceClientSecret;
+    }
+
+    public void setServiceClientSecret(String serviceClientSecret) {
+        this.serviceClientSecret = serviceClientSecret;
+    }
+
+    public String getTokenUri() {
+        return this.tokenUri;
+    }
+
+    public void setTokenUri(String tokenUri) {
+        this.tokenUri = tokenUri;
+    }
+
+    /** Where service tokens come from when identity is not local. */
+    public String effectiveTokenUri() {
+        if (this.tokenUri != null && !this.tokenUri.isBlank()) {
+            return this.tokenUri;
+        }
+        String base = this.issuer.endsWith("/") ? this.issuer.substring(0, this.issuer.length() - 1) : this.issuer;
+        return base + "/oauth2/token";
     }
 
     /** The JWKS location used by modules that verify tokens remotely. */

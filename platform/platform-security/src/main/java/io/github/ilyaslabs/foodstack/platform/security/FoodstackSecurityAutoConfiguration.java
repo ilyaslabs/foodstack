@@ -48,4 +48,27 @@ public final class FoodstackSecurityAutoConfiguration {
         return decoder;
     }
 
+    /** Authenticates module calls that arrive over HTTP with the caller's forwarded token. */
+    @Bean
+    static ModuleCallAuthentication foodstackModuleCallAuthentication(ObjectProvider<JwtDecoder> jwtDecoder) {
+        return new ModuleCallAuthentication(jwtDecoder);
+    }
+
+    /** Service tokens from identity's token endpoint; identity provides its own where it is local. */
+    @Bean
+    @ConditionalOnMissingBean
+    ServiceTokens foodstackServiceTokens(FoodstackSecurityProperties properties,
+            ObjectProvider<org.springframework.web.client.RestClient.Builder> restClient,
+            ObjectProvider<java.time.Clock> clock) {
+        return new ClientCredentialsServiceTokens(restClient.getIfAvailable(org.springframework.web.client.RestClient::builder),
+                properties.effectiveTokenUri(), properties.getServiceClientSecret(),
+                clock.getIfAvailable(java.time.Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    ServiceCalls foodstackServiceCalls(ServiceTokens serviceTokens, JwtDecoder jwtDecoder) {
+        return new ServiceCalls(serviceTokens, jwtDecoder);
+    }
+
 }

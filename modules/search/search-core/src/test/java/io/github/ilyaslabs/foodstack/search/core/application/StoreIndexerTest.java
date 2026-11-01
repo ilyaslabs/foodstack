@@ -38,7 +38,21 @@ class StoreIndexerTest {
 
     private final StoreSearchEngine engine = mock(StoreSearchEngine.class);
 
-    private final StoreIndexer indexer = new StoreIndexer(this.stores, this.geo, this.engine);
+    private final StoreIndexer indexer = new StoreIndexer(this.stores, this.geo, this.engine, passThrough());
+
+    /** Runs the work directly, as the platform would with its service token. */
+    @SuppressWarnings("unchecked")
+    private static io.github.ilyaslabs.foodstack.platform.security.ServiceCalls passThrough() {
+        io.github.ilyaslabs.foodstack.platform.security.ServiceCalls calls = mock(
+                io.github.ilyaslabs.foodstack.platform.security.ServiceCalls.class);
+        org.mockito.Mockito.doAnswer((invocation) -> {
+            ((Runnable) invocation.getArgument(0)).run();
+            return null;
+        }).when(calls).run(org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.when(calls.call(org.mockito.ArgumentMatchers.any()))
+            .thenAnswer((invocation) -> ((java.util.function.Supplier<Object>) invocation.getArgument(0)).get());
+        return calls;
+    }
 
     @Test
     @DisplayName("indexes a live branch with its delivery area from geo")

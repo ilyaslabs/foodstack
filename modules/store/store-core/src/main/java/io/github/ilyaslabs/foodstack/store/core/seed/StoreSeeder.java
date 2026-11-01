@@ -34,6 +34,7 @@ import org.bson.Document;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
+import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
@@ -67,8 +68,11 @@ class StoreSeeder {
 
     private final ModuleMongo mongo;
 
+    private final ServiceCalls serviceCalls;
+
     StoreSeeder(BrandRepository brands, StoreRepository stores, MenuService menus, StoreService storeService,
-            OutboxWriter storeOutbox, ModuleMongo storeMongo) {
+            OutboxWriter storeOutbox, ModuleMongo storeMongo, ServiceCalls serviceCalls) {
+        this.serviceCalls = serviceCalls;
         this.brands = brands;
         this.stores = stores;
         this.menus = menus;
@@ -86,13 +90,16 @@ class StoreSeeder {
         catch (DuplicateKeyException ex) {
             return;
         }
-        spiceRoute();
-        napoli();
-        // Owners go through the identity module like the Owners tab does, so they sign in to the back office.
-        this.storeService.addOwner(DemoStores.SPICE_ROUTE_GULBERG,
-                new NewOwner("spiceroute@demo.foodstack.local", "Spice Route Owner", OWNER_PASSWORD), SEED);
-        this.storeService.addOwner(DemoStores.NAPOLI_DHA,
-                new NewOwner("napoli@demo.foodstack.local", "Napoli Slice Owner", OWNER_PASSWORD), SEED);
+        // Seeding is the platform's own work: calls to identity and media run with a service token
+        this.serviceCalls.run(() -> {
+            spiceRoute();
+            napoli();
+            // Owners go through the identity module like the Owners tab does, so they sign in to the back office.
+            this.storeService.addOwner(DemoStores.SPICE_ROUTE_GULBERG,
+                    new NewOwner("spiceroute@demo.foodstack.local", "Spice Route Owner", OWNER_PASSWORD), SEED);
+            this.storeService.addOwner(DemoStores.NAPOLI_DHA,
+                    new NewOwner("napoli@demo.foodstack.local", "Napoli Slice Owner", OWNER_PASSWORD), SEED);
+        });
         logger.info("Seeded demo restaurants Spice Route (Gulberg) and Napoli Slice (DHA), owners "
                 + "spiceroute@demo.foodstack.local and napoli@demo.foodstack.local (password '" + OWNER_PASSWORD + "')");
     }

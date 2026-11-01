@@ -154,6 +154,8 @@ public final class FoodstackPlatform {
         properties.put("foodstack.kafka.topic-partitions", "3");
         properties.put("foodstack.security.pii-key", PII_KEY);
         properties.put("foodstack.security.revocation-cache-ttl", "1s");
+        // Service tokens for background work where identity is not local (microservices topology)
+        properties.put("foodstack.security.service-client-secret", "integration-service-secret");
         properties.put("foodstack.identity.bootstrap-admin.email", ADMIN_EMAIL);
         properties.put("foodstack.identity.bootstrap-admin.password", ADMIN_PASSWORD);
         properties.put("foodstack.identity.clients." + BACKOFFICE_CLIENT + ".redirect-uris", BACKOFFICE_REDIRECT);

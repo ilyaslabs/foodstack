@@ -7,7 +7,10 @@ import io.github.ilyaslabs.foodstack.search.core.application.StoreSearchService;
 
 import org.springframework.stereotype.Component;
 
-/** {@link SearchApi} for other modules: delegates to the core search service. */
+/**
+ * {@link SearchApi} for other modules: delegates to the core search service. Open to every caller:
+ * store search is public (TDD 9.1).
+ */
 @Component
 class SearchApiImpl implements SearchApi {
 

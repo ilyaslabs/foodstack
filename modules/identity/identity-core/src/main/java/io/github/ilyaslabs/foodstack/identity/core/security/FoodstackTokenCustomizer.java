@@ -31,8 +31,15 @@ public class FoodstackTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodi
     @Override
     public void customize(JwtEncodingContext context) {
         context.getJwsHeader().algorithm(SignatureAlgorithm.ES256);
-        if (!OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())
-                || context.getAuthorizationGrantType().getValue().equals("client_credentials")) {
+        if (!OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
+            return;
+        }
+        if (context.getAuthorizationGrantType().getValue().equals("client_credentials")) {
+            if (io.github.ilyaslabs.foodstack.platform.security.ModuleAccess.SERVICE_CLIENT
+                .equals(context.getRegisteredClient().getClientId())) {
+                context.getClaims()
+                    .claim(TokenClaims.PERMISSIONS, List.of(io.github.ilyaslabs.foodstack.platform.security.ModuleAccess.SERVICE));
+            }
             return;
         }
         UserService.TokenClaims claims;
