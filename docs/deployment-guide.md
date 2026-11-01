@@ -82,7 +82,7 @@ sudo ./install.sh /opt/foodstack \
 7. Optionally installs a systemd unit so FoodStack starts on boot (`--systemd`).
 8. Prints the first administrator's email and generated password once (also kept in `.env` as `FOODSTACK_ADMIN_PASSWORD`). A password-change screen arrives with the notification module.
 
-For a quick trial on your own computer (Linux, or macOS/Windows with Docker Desktop), without DNS, certificates or sudo: `./install.sh ~/foodstack --local`, then open `http://foodstack.localhost:8080/admin/`.
+For a quick trial on your own computer (Linux, or macOS/Windows with Docker Desktop), without DNS, certificates or sudo: `./install.sh ~/foodstack --local`, then open `http://foodstack.localhost:8080/admin/` and sign in as `admin@foodstack.localhost` / `foodstack-local` (fixed for trials; a `--domain` install generates a random password).
 
 `sudo` is only needed to install into a folder your user can't write to (like `/opt`) or with `--systemd`. If an install stops part way (for example a failed image download), fix the cause and run the same command again: it removes the unfinished attempt and starts over. `./uninstall.sh` removes an install and its data volumes, keeping `backups/`.
 

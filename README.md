@@ -29,15 +29,33 @@ Prerequisites: Java 25, Maven, Docker; Node 24 and pnpm for the front-end.
 ```bash
 mvn test                                  # every test, including both integration topologies
 mvn -pl app/foodstack-server -am install -DskipTests
-# Run the server with containers: LocalFoodstackApplication (app/foodstack-server/src/test), then
+# Run the server with containers: LocalFoodstackApplication (app/foodstack-server/src/test) from the IDE,
+# or: mvn -pl app/foodstack-server spring-boot:test-run   (server on http://localhost:8080), then
 cd frontend && pnpm install && pnpm start:backoffice   # http://localhost:4300/admin/
 pnpm start:web                                          # http://localhost:4200/ (storefront)
 ```
 
-Sign in locally as `admin@local.foodstack.local` / `foodstack-local`. To try the full stack on one
-machine: `mvn -pl deploy/unit-deployer -am package -DskipTests`, unzip
+To try the full stack on one machine: `mvn -pl deploy/unit-deployer -am package -DskipTests`, unzip
 `deploy/unit-deployer/target/unit-deployer-*.zip` and run `./install.sh ~/foodstack --local`
 (no sudo), then open `http://foodstack.localhost:8080/` for the storefront and `/admin/` for the back office.
+
+## Test sign-ins
+
+These are fixed so every developer and tester uses the same ones. They exist only in local runs and
+`--local` trial installs; a real install (`--domain`) generates a random administrator password.
+
+| Where | Email | Password | Role |
+|---|---|---|---|
+| `LocalFoodstackApplication` | `admin@demo.foodstack.local` | `foodstack-demo` | Administrator |
+| `LocalFoodstackApplication` | `finance@demo.foodstack.local` | `foodstack-demo` | Finance |
+| `LocalFoodstackApplication` | `support@demo.foodstack.local` | `foodstack-demo` | Support |
+| `LocalFoodstackApplication` | `customer@demo.foodstack.local` | `foodstack-demo` | Customer |
+| `LocalFoodstackApplication` | `admin@local.foodstack.local` | `foodstack-local` | Administrator (first-start account) |
+| `./install.sh <folder> --local` | `admin@foodstack.localhost` | `foodstack-local` | Administrator |
+
+The containers behind `LocalFoodstackApplication` also use fixed credentials: Elasticsearch user
+`elastic` / `foodstack-test`, storage access key `foodstack-test` / secret `foodstack-test-secret`;
+MongoDB and Redis have no password. Their ports are picked by Docker (`docker ps` shows them).
 
 ## Documents
 

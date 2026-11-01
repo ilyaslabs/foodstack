@@ -12,7 +12,7 @@ source "$here/lib/common.sh"
 
 usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
-target=""; domain=""; admin_domain=""; api_domain=""; admin_email=""; scheme=https
+target=""; domain=""; admin_domain=""; api_domain=""; admin_email=""; scheme=https; local_trial=false
 http_port=80; https_port=443; systemd=false
 while (( $# )); do
   case "$1" in
@@ -24,7 +24,7 @@ while (( $# )); do
     --http-port) http_port=$2; shift 2 ;;
     --https-port) https_port=$2; shift 2 ;;
     --systemd) systemd=true; shift ;;
-    --local) domain=${domain:-foodstack.localhost}; scheme=http; http_port=8080; shift ;;
+    --local) domain=${domain:-foodstack.localhost}; scheme=http; http_port=8080; local_trial=true; shift ;;
     -h|--help) usage ;;
     -*) fail "Unknown option $1" ;;
     *) [[ -z "$target" ]] || usage; target=$1; shift ;;
@@ -98,7 +98,12 @@ secret() { openssl rand -hex "${1:-24}"; }
 signing_key=$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 2> /dev/null \
   | openssl pkcs8 -topk8 -nocrypt | grep -v -- '-----' | tr -d '\n')
 pii_key=$(openssl rand -base64 32)
-admin_password=$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)
+# A trial on this computer gets a fixed, documented sign-in (README); real installs get a random one.
+if [[ $local_trial == true ]]; then
+  admin_password=foodstack-local
+else
+  admin_password=$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)
+fi
 kafka_cluster_id=$(openssl rand -base64 16 | tr '+/' '-_' | tr -d '=')
 
 sites=$(printf '%s\n' "$domain" "$admin_domain" "$api_domain" | awk '!seen[$0]++' \
@@ -216,7 +221,7 @@ FoodStack $(cat "$target/VERSION") is running.
   Customer app : $(url "$domain")/
   Back office  : $(url "$admin_domain")/admin/
   Sign in as   : $admin_email
-  Password     : $admin_password   (shown once; also in $target/.env as FOODSTACK_ADMIN_PASSWORD)
+  Password     : $admin_password   ($([[ $local_trial == true ]] && echo "fixed for --local trials" || echo "shown once"); also in $target/.env as FOODSTACK_ADMIN_PASSWORD)
 
 Back up $target/.env now (password manager): it holds the PII key, which cannot be recovered.
 Next: ./status.sh, ./logs.sh, and the first-login checklist in the deployment guide (3.4).
