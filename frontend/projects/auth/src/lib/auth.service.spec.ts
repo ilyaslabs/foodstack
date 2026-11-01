@@ -75,4 +75,70 @@ describe('AuthService', () => {
     ).rejects.toThrow();
     expect(auth.signedIn()).toBe(false);
   });
+
+  async function signedIn(auth: AuthService): Promise<void> {
+    await auth.signIn('/');
+    const state = new URL(assigned.pop()!).searchParams.get('state')!;
+    const done = auth.completeSignIn(new URLSearchParams({ code: 'first', state }));
+    TestBed.inject(HttpTestingController)
+      .expectOne('https://food.example/oauth2/token')
+      .flush({ access_token: 'token-1', id_token: 'id-1', expires_in: 600 });
+    await done;
+  }
+
+  it('renews in the background through the identity session, keeping the page', async () => {
+    // given
+    const auth = TestBed.inject(AuthService);
+    await signedIn(auth);
+    const fetch = vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
+      const state = new URL(String(input)).searchParams.get('state');
+      return { url: `${auth.redirectUri()}?code=again&state=${state}` } as Response;
+    });
+
+    // when
+    const renewal = auth.renew();
+    await new Promise((resolve) => setTimeout(resolve));
+    const request = TestBed.inject(HttpTestingController).expectOne(
+      'https://food.example/oauth2/token',
+    );
+    request.flush({ access_token: 'token-2', expires_in: 600 });
+
+    // then
+    expect(await renewal).toBe(true);
+    expect(request.request.body).toContain('code=again');
+    expect(auth.accessToken()).toBe('token-2');
+    expect(assigned).toEqual([]);
+    fetch.mockRestore();
+  });
+
+  it('reports a failed renewal when the identity session has ended', async () => {
+    // given
+    const auth = TestBed.inject(AuthService);
+    await signedIn(auth);
+    const fetch = vi
+      .spyOn(window, 'fetch')
+      .mockResolvedValue({ url: 'https://food.example/login' } as Response);
+
+    // then
+    expect(await auth.renew()).toBe(false);
+    expect(auth.accessToken()).toBe('token-1');
+    fetch.mockRestore();
+  });
+
+  it('treats a token as expired once its time passes', async () => {
+    // given
+    const auth = TestBed.inject(AuthService);
+    await signedIn(auth);
+    vi.useFakeTimers({ toFake: ['Date'] });
+
+    // when
+    vi.setSystemTime(Date.now() + 601_000);
+
+    // then
+    expect(auth.signedIn()).toBe(false);
+    expect(auth.accessToken()).toBeNull();
+    expect(auth.hasSession()).toBe(true);
+    expect(auth.expiresSoon()).toBe(true);
+    vi.useRealTimers();
+  });
 });
