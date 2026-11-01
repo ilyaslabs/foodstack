@@ -5,6 +5,7 @@
 | Status | Draft v1, agreed in grooming with ilyas (2026-10-27, last updated 2026-10-29) |
 | Owner | ilyas (decisions), Claude (architecture draft) |
 | Related | [BRD](BRD.md), [PRD](PRD.md), [Module-Switch](https://github.com/ilyaslabs/module-switch), [Module-Switch example](https://github.com/ilyaslabs/module-switch-example) |
+| How it works today | [Architecture and flow diagrams](architecture/README.md): what the built code actually does, with sequence diagrams per action and the list of differences from this design |
 
 ## 1. Goals and principles
 
