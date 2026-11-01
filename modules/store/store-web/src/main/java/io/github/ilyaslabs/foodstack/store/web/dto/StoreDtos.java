@@ -108,7 +108,7 @@ public final class StoreDtos {
 
     /** A branch in a back-office list. */
     public record StoreSummaryResponse(String id, String brandId, String brandName, String branchName, String city,
-            String status, boolean temporarilyClosed, String deliveryMode, Long createdAt) {
+            String status, boolean temporarilyClosed, String deliveryMode, Long createdAt, Map<String, String> logoUrls) {
     }
 
     /** Back-office list of branches. */

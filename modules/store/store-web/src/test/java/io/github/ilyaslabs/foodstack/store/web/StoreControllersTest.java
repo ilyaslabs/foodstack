@@ -105,14 +105,15 @@ class StoreControllersTest {
     @DisplayName("a store owner lists only their own branches; operator staff list all")
     void list() throws Exception {
         StoreSummary summary = new StoreSummary("s1", "b1", "Spice Route", "Gulberg", "Lahore", StoreStatus.LIVE, false,
-                DeliveryMode.SELF, Instant.ofEpochSecond(1_800_000_000L));
+                DeliveryMode.SELF, Instant.ofEpochSecond(1_800_000_000L), Map.of("thumb", "https://cdn.example/logo.webp"));
         given(this.storeService.list(Set.of("s1"), null, 50)).willReturn(List.of(summary));
         given(this.storeService.list(null, "spice", 50)).willReturn(List.of(summary));
 
         this.mvc.perform(get("/api/v1/stores").with(owner()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].id").value("s1"))
-            .andExpect(jsonPath("$.items[0].createdAt").value(1_800_000_000L));
+            .andExpect(jsonPath("$.items[0].createdAt").value(1_800_000_000L))
+            .andExpect(jsonPath("$.items[0].logoUrls.thumb").value("https://cdn.example/logo.webp"));
         this.mvc.perform(get("/api/v1/stores").param("q", "spice").with(admin()))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.items[0].brandName").value("Spice Route"));

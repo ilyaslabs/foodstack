@@ -5,6 +5,7 @@ import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -295,8 +296,16 @@ class StoreServiceTest {
     void list() {
         StoreDocument store = store(StoreStatus.LIVE);
         given(this.stores.findByIdInOrderByIdDesc(Set.of("s1"))).willReturn(List.of(store));
+        BrandDocument brand = new BrandDocument();
+        brand.setId(store.getBrandId());
+        brand.setLogoUrls(new LinkedHashMap<>(Map.of("thumb", "https://cdn.example/logo.webp")));
+        given(this.brands.findAllById(any())).willReturn(List.of(brand));
 
-        assertThat(this.service.list(Set.of("s1"), "gulb", 10)).extracting(StoreSummary::id).containsExactly("s1");
+        assertThat(this.service.list(Set.of("s1"), "gulb", 10)).singleElement()
+            .satisfies((summary) -> {
+                assertThat(summary.id()).isEqualTo("s1");
+                assertThat(summary.logoUrls()).containsEntry("thumb", "https://cdn.example/logo.webp");
+            });
         assertThat(this.service.list(Set.of("s1"), "napoli", 10)).isEmpty();
         verify(this.stores, never()).findAllByOrderByIdDesc(any());
     }

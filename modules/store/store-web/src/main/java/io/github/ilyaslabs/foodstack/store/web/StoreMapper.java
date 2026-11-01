@@ -181,7 +181,8 @@ final class StoreMapper {
 
     static StoreDtos.StoreSummaryResponse summary(StoreSummary s) {
         return new StoreDtos.StoreSummaryResponse(s.id(), s.brandId(), s.brandName(), s.branchName(), s.city(),
-                s.status().name(), s.temporarilyClosed(), s.deliveryMode().name(), EpochSeconds.of(s.createdAt()));
+                s.status().name(), s.temporarilyClosed(), s.deliveryMode().name(), EpochSeconds.of(s.createdAt()),
+                s.logoUrls());
     }
 
     static StoreDtos.OwnerResponse owner(OwnerDetails o) {

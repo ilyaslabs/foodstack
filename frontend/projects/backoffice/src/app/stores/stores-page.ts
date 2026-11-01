@@ -82,7 +82,12 @@ import { STATUS_LABELS } from './store-status';
           @for (store of stores(); track store.id) {
             <li>
               <a class="row" [routerLink]="['/stores', store.id]">
-                <span class="avatar" aria-hidden="true">{{ store.brandName.charAt(0) }}</span>
+                @let logo = logoOf(store);
+                @if (logo) {
+                  <img class="avatar" [src]="logo" alt="" loading="lazy" />
+                } @else {
+                  <span class="avatar" aria-hidden="true">{{ store.brandName.charAt(0) }}</span>
+                }
                 <span class="main">
                   <span class="name">
                     {{ store.brandName }}
@@ -166,6 +171,10 @@ import { STATUS_LABELS } from './store-status';
       font: var(--mat-sys-title-medium);
       font-weight: 600;
     }
+    img.avatar {
+      object-fit: cover;
+      background: var(--mat-sys-surface-container-high);
+    }
     .main {
       display: flex;
       flex-direction: column;
@@ -246,6 +255,12 @@ export class StoresPage {
         void this.router.navigate(['/stores', this.stores()![0].id], { replaceUrl: true });
       }
     });
+  }
+
+  /** The brand logo to show, smallest size first; null falls back to the initial. */
+  protected logoOf(store: StoreSummary): string | null {
+    const urls = store.logoUrls ?? {};
+    return urls['thumb'] ?? urls['card'] ?? Object.values(urls)[0] ?? null;
   }
 
   protected statusLabel(store: StoreSummary): string {

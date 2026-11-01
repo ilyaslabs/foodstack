@@ -1,6 +1,7 @@
 package io.github.ilyaslabs.foodstack.store.core.application;
 
 import java.time.Instant;
+import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.store.api.StoreStatus;
@@ -17,7 +18,8 @@ import io.github.ilyaslabs.foodstack.store.api.StoreStatus;
  * @param temporarilyClosed the owner's safety switch
  * @param deliveryMode who delivers
  * @param createdAt onboarding time
+ * @param logoUrls the brand logo's image sizes, empty when the brand has no logo
  */
 public record StoreSummary(String id, String brandId, String brandName, String branchName, String city, StoreStatus status,
-        boolean temporarilyClosed, DeliveryMode deliveryMode, Instant createdAt) {
+        boolean temporarilyClosed, DeliveryMode deliveryMode, Instant createdAt, Map<String, String> logoUrls) {
 }

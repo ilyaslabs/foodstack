@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaRequest;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
@@ -185,12 +187,18 @@ public class StoreService {
         List<StoreDocument> found = (onlyIds != null) ? this.stores.findByIdInOrderByIdDesc(onlyIds)
                 : this.stores.findAllByOrderByIdDesc(Limit.of((query == null || query.isBlank()) ? size : 1000));
         String needle = (query != null) ? query.trim().toLowerCase(Locale.ROOT) : "";
-        return found.stream()
+        List<StoreDocument> page = found.stream()
             .filter((s) -> needle.isEmpty() || contains(s.getBrandName(), needle) || contains(s.getBranchName(), needle))
             .limit(size)
+            .toList();
+        // Logos live on the brand: one read for the whole page.
+        Map<String, Map<String, String>> logos = new HashMap<>();
+        this.brands.findAllById(page.stream().map(StoreDocument::getBrandId).collect(Collectors.toSet()))
+            .forEach((b) -> logos.put(b.getId(), Map.copyOf(b.getLogoUrls())));
+        return page.stream()
             .map((s) -> new StoreSummary(s.getId(), s.getBrandId(), s.getBrandName(), s.getBranchName(),
                     (s.getAddress() != null) ? s.getAddress().city() : null, s.getStatus(), s.isTemporarilyClosed(),
-                    s.getDeliveryMode(), s.getCreatedAt()))
+                    s.getDeliveryMode(), s.getCreatedAt(), logos.getOrDefault(s.getBrandId(), Map.of())))
             .toList();
     }
 

@@ -110,6 +110,8 @@ export interface StoreSummary {
   temporarilyClosed: boolean;
   deliveryMode: DeliveryMode;
   createdAt: number | null;
+  /** The brand's logo by size (thumb, card, full); empty when no logo is uploaded. */
+  logoUrls: Record<string, string>;
 }
 
 export interface Onboarding {
