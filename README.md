@@ -50,6 +50,8 @@ These are fixed so every developer and tester uses the same ones. They exist onl
 | `LocalFoodstackApplication` | `finance@demo.foodstack.local` | `foodstack-demo` | Finance |
 | `LocalFoodstackApplication` | `support@demo.foodstack.local` | `foodstack-demo` | Support |
 | `LocalFoodstackApplication` | `customer@demo.foodstack.local` | `foodstack-demo` | Customer |
+| `LocalFoodstackApplication` | `spiceroute@demo.foodstack.local` | `foodstack-demo` | Store owner of Spice Route (Gulberg) |
+| `LocalFoodstackApplication` | `napoli@demo.foodstack.local` | `foodstack-demo` | Store owner of Napoli Slice (DHA) |
 | `LocalFoodstackApplication` | `admin@local.foodstack.local` | `foodstack-local` | Administrator (first-start account) |
 | `./install.sh <folder> --local` | `admin@foodstack.localhost` | `foodstack-local` | Administrator |
 

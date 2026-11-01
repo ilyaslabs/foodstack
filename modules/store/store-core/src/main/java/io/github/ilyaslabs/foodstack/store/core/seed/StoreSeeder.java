@@ -21,6 +21,8 @@ import io.github.ilyaslabs.foodstack.store.core.application.MenuItemInput;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuService;
 import io.github.ilyaslabs.foodstack.store.core.application.ModifierGroup;
 import io.github.ilyaslabs.foodstack.store.core.application.ModifierOption;
+import io.github.ilyaslabs.foodstack.store.core.application.NewOwner;
+import io.github.ilyaslabs.foodstack.store.core.application.StoreService;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreDocument;
@@ -50,21 +52,27 @@ class StoreSeeder {
 
     private static final String SEED = "seed";
 
+    /** Password of the demo restaurant owners, the same as the identity demo users (README). */
+    static final String OWNER_PASSWORD = "foodstack-demo";
+
     private final BrandRepository brands;
 
     private final StoreRepository stores;
 
     private final MenuService menus;
 
+    private final StoreService storeService;
+
     private final OutboxWriter outbox;
 
     private final ModuleMongo mongo;
 
-    StoreSeeder(BrandRepository brands, StoreRepository stores, MenuService menus, OutboxWriter storeOutbox,
-            ModuleMongo storeMongo) {
+    StoreSeeder(BrandRepository brands, StoreRepository stores, MenuService menus, StoreService storeService,
+            OutboxWriter storeOutbox, ModuleMongo storeMongo) {
         this.brands = brands;
         this.stores = stores;
         this.menus = menus;
+        this.storeService = storeService;
         this.outbox = storeOutbox;
         this.mongo = storeMongo;
     }
@@ -80,7 +88,13 @@ class StoreSeeder {
         }
         spiceRoute();
         napoli();
-        logger.info("Seeded demo restaurants Spice Route (Gulberg) and Napoli Slice (DHA)");
+        // Owners go through the identity module like the Owners tab does, so they sign in to the back office.
+        this.storeService.addOwner(DemoStores.SPICE_ROUTE_GULBERG,
+                new NewOwner("spiceroute@demo.foodstack.local", "Spice Route Owner", OWNER_PASSWORD), SEED);
+        this.storeService.addOwner(DemoStores.NAPOLI_DHA,
+                new NewOwner("napoli@demo.foodstack.local", "Napoli Slice Owner", OWNER_PASSWORD), SEED);
+        logger.info("Seeded demo restaurants Spice Route (Gulberg) and Napoli Slice (DHA), owners "
+                + "spiceroute@demo.foodstack.local and napoli@demo.foodstack.local (password '" + OWNER_PASSWORD + "')");
     }
 
     private void spiceRoute() {
