@@ -63,7 +63,7 @@ class ZoneServiceTest {
 
         // then
         assertThat(saved).extracting(ZoneDetails::name).containsExactly("Up to 3 km", "Canal side");
-        assertThat(saved.getFirst().polygon()).hasSize(48);
+        assertThat(saved.getFirst().polygon()).hasSize(ZoneService.CIRCLE_POINTS);
         assertThat(saved.getFirst().radiusMeters()).isEqualTo(3000);
         assertThat(saved.get(1).polygon()).hasSize(3);
         InOrder order = inOrder(this.repository, this.outbox);
@@ -94,6 +94,22 @@ class ZoneServiceTest {
                 assertThat(ex.code()).isEqualTo("ZONES_INVALID");
                 assertThat(ex.getMessage()).isNotBlank();
             });
+        verifyNoInteractions(this.outbox);
+    }
+
+    @Test
+    @DisplayName("rejects an outline whose edges cross, and accepts a concave one")
+    void crossingOutline() {
+        // A bow tie: the edge (0,0)-(1,1) crosses (1,0)-(0,1).
+        List<GeoPoint> bowTie = List.of(new GeoPoint(0, 0), new GeoPoint(1, 1), new GeoPoint(1, 0), new GeoPoint(0, 1));
+        assertThatThrownBy(() -> this.service.replaceZones("s1",
+                List.of(new ZoneInput("Bow tie", null, null, bowTie, 0, 0, null)), "owner-1"))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("ZONES_INVALID"));
+
+        List<GeoPoint> lShape = List.of(new GeoPoint(0, 0), new GeoPoint(0, 2), new GeoPoint(1, 2), new GeoPoint(1, 1),
+                new GeoPoint(2, 1), new GeoPoint(2, 0));
+        assertThat(ZoneService.selfIntersects(lShape)).isFalse();
+        assertThat(ZoneService.selfIntersects(bowTie)).isTrue();
         verifyNoInteractions(this.outbox);
     }
 }

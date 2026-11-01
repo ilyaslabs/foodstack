@@ -96,6 +96,7 @@ Edit `/opt/foodstack/.env`, then run `./restart.sh server`. The main settings:
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | | Required for login codes and emails |
 | `FCM_CREDENTIALS_FILE` | `/opt/foodstack/config/fcm.json` | Push notifications |
 | `GEOCODING_PROVIDER`, `GEOCODING_URL`, `GEOCODING_COUNTRY_CODES` | `nominatim`, `https://nominatim.openstreetmap.org`, `pk` | Address search for customers and store onboarding. The public Nominatim allows about one request a second; use your own instance or a hosted one for real traffic. `none` turns address search off (customers then use their device location) |
+| `MAP_TILE_URL`, `MAP_TILE_ORIGIN`, `MAP_ATTRIBUTION` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, `https://tile.openstreetmap.org`, `© OpenStreetMap contributors` | Map tiles in the back office, where stores draw their delivery zones. OpenStreetMap's public tiles allow light use only (see their tile usage policy); with many stores, use your own tile server or a hosted provider. `MAP_TILE_ORIGIN` must be the scheme and host of `MAP_TILE_URL`, because the page's security policy only loads tiles from there |
 | `ELASTICSEARCH_URIS`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD` | set by `install.sh` | Point at an external Elasticsearch 9 cluster if you run one; the index is rebuilt from store data on start |
 | `PAYMENTS_CARD_ENABLED` | `false` | Turn on once the gateway is configured |
 | `JAVA_HEAP`, `ES_HEAP` | `4g`, `2g` | Sized by `install.sh` from server memory |

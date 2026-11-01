@@ -29,7 +29,8 @@ public class ZoneService {
 
     public static final int MAX_ZONES = 20;
 
-    static final int CIRCLE_POINTS = 48;
+    /** A ring sent by centre and radius becomes this many corners, few enough to reshape by hand on the map. */
+    static final int CIRCLE_POINTS = 16;
 
     private final ZoneRepository zones;
 
@@ -153,6 +154,9 @@ public class ZoneService {
                 || !zone.polygon().stream().allMatch((point) -> point != null && point.isValid())) {
             errors.put(prefix + "polygon", "needs 3 to 200 valid points, or give a centre and radius");
         }
+        else if (selfIntersects(zone.polygon())) {
+            errors.put(prefix + "polygon", "the outline crosses itself; move the corners so its edges do not cross");
+        }
         if (zone.chargeMinor() < 0) {
             errors.put(prefix + "chargeMinor", "must not be negative");
         }
@@ -162,5 +166,44 @@ public class ZoneService {
         if (zone.freeDeliveryAboveMinor() != null && zone.freeDeliveryAboveMinor() < 0) {
             errors.put(prefix + "freeDeliveryAboveMinor", "must not be negative");
         }
+    }
+
+    /** True when two edges that are not neighbours touch or cross; the quote's point-in-zone test needs a simple outline. */
+    static boolean selfIntersects(List<GeoPoint> polygon) {
+        int n = polygon.size();
+        for (int i = 0; i < n; i++) {
+            GeoPoint a = polygon.get(i);
+            GeoPoint b = polygon.get((i + 1) % n);
+            for (int j = i + 1; j < n; j++) {
+                if (j == i + 1 || (i == 0 && j == n - 1)) {
+                    continue;
+                }
+                if (segmentsTouch(a, b, polygon.get(j), polygon.get((j + 1) % n))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean segmentsTouch(GeoPoint p1, GeoPoint p2, GeoPoint q1, GeoPoint q2) {
+        double d1 = cross(q1, q2, p1);
+        double d2 = cross(q1, q2, p2);
+        double d3 = cross(p1, p2, q1);
+        double d4 = cross(p1, p2, q2);
+        if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+            return true;
+        }
+        return (d1 == 0 && onSegment(q1, q2, p1)) || (d2 == 0 && onSegment(q1, q2, p2))
+                || (d3 == 0 && onSegment(p1, p2, q1)) || (d4 == 0 && onSegment(p1, p2, q2));
+    }
+
+    private static double cross(GeoPoint a, GeoPoint b, GeoPoint c) {
+        return (b.lng() - a.lng()) * (c.lat() - a.lat()) - (b.lat() - a.lat()) * (c.lng() - a.lng());
+    }
+
+    private static boolean onSegment(GeoPoint a, GeoPoint b, GeoPoint c) {
+        return Math.min(a.lng(), b.lng()) <= c.lng() && c.lng() <= Math.max(a.lng(), b.lng())
+                && Math.min(a.lat(), b.lat()) <= c.lat() && c.lat() <= Math.max(a.lat(), b.lat());
     }
 }
