@@ -20,6 +20,30 @@
         </dependency>
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-cart-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-store-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-promotion-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-payment-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-geo-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-settings-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
             <artifactId>foodstack-platform-security</artifactId>
         </dependency>
         <dependency>

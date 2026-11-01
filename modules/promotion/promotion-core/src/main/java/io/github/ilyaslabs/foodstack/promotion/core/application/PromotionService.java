@@ -1,0 +1,221 @@
+package io.github.ilyaslabs.foodstack.promotion.core.application;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.regex.Pattern;
+
+import io.github.ilyaslabs.foodstack.platform.core.Ids;
+import io.github.ilyaslabs.foodstack.promotion.core.domain.CouponRules;
+import io.github.ilyaslabs.foodstack.promotion.core.persistence.PromotionDocument;
+import io.github.ilyaslabs.moduleswitch.ModuleException;
+import org.bson.Document;
+
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/**
+ * Creating and editing promotions (PRD PR-1 to PR-3a). The operator's promotions may target any
+ * branches or cities, payment methods and the operator's merchant account, and say how much the
+ * operator funds; a store owner's promotions apply to their own brand only and are always funded by
+ * the store (TDD 5.5). Edits never touch the use counter, which coupon uses change concurrently;
+ * typed updates bump the version (Spring Data), counter updates do not.
+ */
+public class PromotionService {
+
+    private static final Pattern CODE = Pattern.compile("[A-Z0-9][A-Z0-9-]{2,19}");
+
+    private static final List<String> TYPES = List.of(PromotionDocument.PERCENT, PromotionDocument.FIXED,
+            PromotionDocument.FREE_DELIVERY);
+
+    private final MongoTemplate mongo;
+
+    private final TransactionTemplate transaction;
+
+    private final Clock clock;
+
+    public PromotionService(MongoTemplate mongo, TransactionTemplate transaction, Clock clock) {
+        this.mongo = mongo;
+        this.transaction = transaction;
+        this.clock = clock;
+    }
+
+    /** Creates an operator promotion ({@code brandId == null}) or a store promotion for {@code brandId}. */
+    public PromotionDetails create(String brandId, PromotionInput input, String userId) {
+        boolean operator = brandId == null;
+        String code = validate(input, operator);
+        Instant now = this.clock.instant();
+        PromotionDocument promotion = document(Ids.newId(), brandId, code, input, true, now, userId, now, userId, null);
+        try {
+            PromotionDocument saved = this.transaction.execute((status) -> {
+                this.mongo.insert(new Document("_id", code).append("promotionId", promotion.id()), CouponService.CODES);
+                return this.mongo.insert(promotion);
+            });
+            return details(saved);
+        }
+        catch (DuplicateKeyException ex) {
+            throw codeTaken(code);
+        }
+    }
+
+    public PromotionDetails update(String promotionId, PromotionInput input, long expectedVersion, String userId) {
+        PromotionDocument current = get(promotionId);
+        boolean operator = PromotionDocument.OPERATOR.equals(current.owner());
+        String code = validate(input, operator);
+        Instant now = this.clock.instant();
+        PromotionDocument changed = document(current.id(), current.brandId(), code, input, current.active(), current.createdAt(),
+                current.createdBy(), now, userId, current.version());
+        try {
+            PromotionDocument saved = this.transaction.execute((status) -> {
+                if (!code.equals(current.code())) {
+                    this.mongo.insert(new Document("_id", code).append("promotionId", current.id()), CouponService.CODES);
+                    this.mongo.remove(Query.query(Criteria.where("_id").is(current.code())), CouponService.CODES);
+                }
+                return replaceFields(changed, expectedVersion);
+            });
+            return details(saved);
+        }
+        catch (DuplicateKeyException ex) {
+            throw codeTaken(code);
+        }
+    }
+
+    public PromotionDetails setActive(String promotionId, boolean active, String userId) {
+        PromotionDocument saved = this.mongo.findAndModify(Query.query(Criteria.where("_id").is(promotionId)),
+                new Update().set("active", active).set("updatedAt", this.clock.instant()).set("updatedBy", userId),
+                FindAndModifyOptions.options().returnNew(true), PromotionDocument.class);
+        if (saved == null) {
+            throw notFound(promotionId);
+        }
+        return details(saved);
+    }
+
+    /** Promotions newest first: the operator's and every store's ({@code brandIds == null}), or those of these brands. */
+    public List<PromotionDetails> list(List<String> brandIds, int limit) {
+        Query query = (brandIds == null) ? new Query()
+                : Query.query(Criteria.where("owner").is(PromotionDocument.STORE).and("brandId").in(brandIds));
+        query.with(Sort.by(Sort.Direction.DESC, "_id")).limit(Math.clamp(limit, 1, 500));
+        return this.mongo.find(query, PromotionDocument.class).stream().map(PromotionService::details).toList();
+    }
+
+    public PromotionDetails details(String promotionId) {
+        return details(get(promotionId));
+    }
+
+    PromotionDocument get(String promotionId) {
+        PromotionDocument promotion = this.mongo.findById(promotionId, PromotionDocument.class);
+        if (promotion == null) {
+            throw notFound(promotionId);
+        }
+        return promotion;
+    }
+
+    private PromotionDocument replaceFields(PromotionDocument p, long expectedVersion) {
+        Update update = new Update().set("code", p.code()).set("title", p.title()).set("type", p.type())
+            .set("percentBasisPoints", p.percentBasisPoints()).set("maxDiscountMinor", p.maxDiscountMinor())
+            .set("amountMinor", p.amountMinor()).set("minOrderMinor", p.minOrderMinor()).set("startsAt", p.startsAt())
+            .set("endsAt", p.endsAt()).set("totalLimit", p.totalLimit()).set("perCustomerLimit", p.perCustomerLimit())
+            .set("firstOrderOnly", p.firstOrderOnly()).set("storeIds", p.storeIds()).set("cities", p.cities())
+            .set("paymentMethods", p.paymentMethods()).set("operatorMerchantOnly", p.operatorMerchantOnly())
+            .set("operatorFundingBasisPoints", p.operatorFundingBasisPoints()).set("updatedAt", p.updatedAt())
+            .set("updatedBy", p.updatedBy());
+        PromotionDocument saved = this.mongo.findAndModify(
+                Query.query(Criteria.where("_id").is(p.id()).and("version").is(expectedVersion)), update,
+                FindAndModifyOptions.options().returnNew(true), PromotionDocument.class);
+        if (saved == null) {
+            throw new ModuleException.Conflict("The promotion was changed by someone else; reload and retry",
+                    "PROMOTION_VERSION_CONFLICT");
+        }
+        return saved;
+    }
+
+    private static PromotionDocument document(String id, String brandId, String code, PromotionInput in, boolean active,
+            Instant createdAt, String createdBy, Instant updatedAt, String updatedBy, Long version) {
+        boolean operator = brandId == null;
+        return new PromotionDocument(id, operator ? PromotionDocument.OPERATOR : PromotionDocument.STORE, brandId, code,
+                Map.copyOf(in.title()), in.type(), PromotionDocument.PERCENT.equals(in.type()) ? in.percentBasisPoints() : 0,
+                PromotionDocument.PERCENT.equals(in.type()) ? in.maxDiscountMinor() : null,
+                PromotionDocument.FIXED.equals(in.type()) ? in.amountMinor() : 0, in.minOrderMinor(), in.startsAt(), in.endsAt(),
+                in.totalLimit(), in.perCustomerLimit(), in.firstOrderOnly(), list(in.storeIds()),
+                operator ? list(in.cities()) : List.of(), operator ? List.copyOf(Objects.requireNonNullElse(in.paymentMethods(),
+                        List.of())) : List.of(),
+                operator && in.operatorMerchantOnly(), operator ? in.operatorFundingBasisPoints() : 0, active, 0, createdAt,
+                createdBy, updatedAt, updatedBy, version);
+    }
+
+    private static List<String> list(List<String> values) {
+        return (values == null) ? List.of()
+                : values.stream().filter((v) -> v != null && !v.isBlank()).map(String::strip).distinct().toList();
+    }
+
+    private static String validate(PromotionInput in, boolean operator) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        String code = CouponRules.normalize(in.code());
+        if (!CODE.matcher(code).matches()) {
+            errors.put("code", "must be 3 to 20 letters, digits or hyphens");
+        }
+        if (in.title() == null || in.title().values().stream().allMatch((t) -> t == null || t.isBlank())
+                || in.title().values().stream().anyMatch((t) -> t != null && t.length() > 80)) {
+            errors.put("title", "needs a title of up to 80 characters in at least one language");
+        }
+        if (!TYPES.contains(in.type())) {
+            errors.put("type", "must be PERCENT, FIXED or FREE_DELIVERY");
+        }
+        else if (PromotionDocument.PERCENT.equals(in.type())
+                && (in.percentBasisPoints() < 1 || in.percentBasisPoints() > 10000)) {
+            errors.put("percentBasisPoints", "must be between 0.01% and 100%");
+        }
+        else if (PromotionDocument.FIXED.equals(in.type()) && in.amountMinor() <= 0) {
+            errors.put("amountMinor", "must be more than 0");
+        }
+        if (in.maxDiscountMinor() != null && in.maxDiscountMinor() <= 0) {
+            errors.put("maxDiscountMinor", "must be more than 0");
+        }
+        if (in.minOrderMinor() < 0) {
+            errors.put("minOrderMinor", "must be 0 or more");
+        }
+        if (in.startsAt() == null) {
+            errors.put("startsAt", "is required");
+        }
+        else if (in.endsAt() != null && !in.endsAt().isAfter(in.startsAt())) {
+            errors.put("endsAt", "must be after the start");
+        }
+        if (in.totalLimit() != null && in.totalLimit() < 1) {
+            errors.put("totalLimit", "must be 1 or more");
+        }
+        if (in.perCustomerLimit() != null && in.perCustomerLimit() < 1) {
+            errors.put("perCustomerLimit", "must be 1 or more");
+        }
+        if (operator && (in.operatorFundingBasisPoints() < 0 || in.operatorFundingBasisPoints() > 10000)) {
+            errors.put("operatorFundingBasisPoints", "must be between 0% and 100%");
+        }
+        if (!errors.isEmpty()) {
+            throw new ModuleException.BadRequest("The promotion is invalid", "PROMOTION_INVALID", Map.of("errors", errors));
+        }
+        return code;
+    }
+
+    private static PromotionDetails details(PromotionDocument p) {
+        return new PromotionDetails(p.id(), p.owner(), p.brandId(), p.code(), p.title(), p.type(), p.percentBasisPoints(),
+                p.maxDiscountMinor(), p.amountMinor(), p.minOrderMinor(), p.startsAt(), p.endsAt(), p.totalLimit(),
+                p.perCustomerLimit(), p.firstOrderOnly(), p.storeIds(), p.cities(), p.paymentMethods(), p.operatorMerchantOnly(),
+                p.operatorFundingBasisPoints(), p.active(), p.used(), (p.version() != null) ? p.version() : 0, p.updatedAt());
+    }
+
+    private static ModuleException codeTaken(String code) {
+        return new ModuleException.Conflict("The code " + code + " is already used by another promotion", "COUPON_CODE_TAKEN");
+    }
+
+    private static ModuleException notFound(String promotionId) {
+        return new ModuleException.NotFound("Promotion " + promotionId + " not found", "PROMOTION_NOT_FOUND");
+    }
+}
