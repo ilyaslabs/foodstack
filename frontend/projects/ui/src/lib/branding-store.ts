@@ -39,9 +39,10 @@ export class BrandingStore {
   readonly etag = computed(() => this.state().etag);
   readonly logoUrl = computed(() => this.branding().logo?.urls['thumb'] ?? null);
 
-  async load(): Promise<void> {
+  /** `fresh` bypasses the browser cache; the back office uses it, since it saves with the version. */
+  async load(fresh = false): Promise<void> {
     try {
-      const { value, etag } = await firstValueFrom(this.settings.getBranding());
+      const { value, etag } = await firstValueFrom(this.settings.getBranding(fresh));
       this.set(value, etag);
     } catch {
       this.apply(DEFAULT_BRANDING);

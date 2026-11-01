@@ -42,7 +42,7 @@ import { Session } from '../shared/session';
                   @if (brandingDone()) {
                     Done. You can change name, colours, font and logo at any time.
                   } @else {
-                    Name, colours, font and logo. Customers see changes right away.
+                    Name, colours, font and logo. Customers see changes within a minute.
                   }
                 </div>
               </div>

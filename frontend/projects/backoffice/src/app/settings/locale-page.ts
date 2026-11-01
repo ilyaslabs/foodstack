@@ -187,7 +187,7 @@ export class LocalePage implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const { value, etag } = await firstValueFrom(this.settings.getLocale());
+      const { value, etag } = await firstValueFrom(this.settings.getLocale(true));
       this.etag = etag;
       this.languages = [...value.languages];
       this.defaultLanguage = value.defaultLanguage;
@@ -232,7 +232,7 @@ export class LocalePage implements OnInit {
       );
       this.etag = saved.etag;
       this.locale.set(saved.value);
-      this.snackBar.open('Saved. Customers see the new languages right away.', undefined, {
+      this.snackBar.open('Saved. Customers see the new languages within a minute.', undefined, {
         duration: 4000,
       });
     } catch (error) {

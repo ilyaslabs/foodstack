@@ -48,4 +48,16 @@ describe('SettingsClient', () => {
     expect(request.request.method).toBe('PUT');
     expect(request.request.headers.get('If-Match')).toBe('"branding-4"');
   });
+
+  it('asks for a fresh copy when an editor loads the settings it will save', () => {
+    const client = TestBed.inject(SettingsClient);
+    const http = TestBed.inject(HttpTestingController);
+
+    client.getLocale(true).subscribe();
+    client.getLocale().subscribe();
+    const [fresh, cached] = http.match('https://api.example/api/v1/settings/locale');
+
+    expect(fresh.request.headers.get('Cache-Control')).toBe('no-cache');
+    expect(cached.request.headers.has('Cache-Control')).toBe(false);
+  });
 });

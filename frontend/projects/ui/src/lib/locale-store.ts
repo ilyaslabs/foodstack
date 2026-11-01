@@ -64,11 +64,12 @@ export class LocaleStore {
   /**
    * @param applyToDocument set `lang`/`dir` on the page; the back office keeps its English,
    *     left-to-right frame and only uses the languages for editing content
+   * @param fresh bypass the browser cache, so editors see languages saved a moment ago
    */
-  async load(applyToDocument = true): Promise<void> {
+  async load(applyToDocument = true, fresh = false): Promise<void> {
     this.applyToDocument = applyToDocument;
     try {
-      const { value } = await firstValueFrom(this.settings.getLocale());
+      const { value } = await firstValueFrom(this.settings.getLocale(fresh));
       this.state.set(value);
     } catch {
       this.state.set(DEFAULT_LOCALE);

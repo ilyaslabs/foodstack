@@ -162,7 +162,7 @@ export class BrandingPage {
       );
       this.store.set(saved.value, saved.etag);
       this.form.markAsPristine();
-      this.message.set({ kind: 'ok', text: 'Branding saved. Customers see it right away.' });
+      this.message.set({ kind: 'ok', text: 'Branding saved. Customers see it within a minute.' });
     } catch (error) {
       this.message.set({ kind: 'error', text: describe(error, 'Branding could not be saved.') });
     } finally {
