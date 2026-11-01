@@ -97,9 +97,9 @@ describe('AuthService', () => {
 
     // when
     const renewal = auth.renew();
-    await new Promise((resolve) => setTimeout(resolve));
-    const request = TestBed.inject(HttpTestingController).expectOne(
-      'https://food.example/oauth2/token',
+    // PKCE hashing and the fetch resolve over several turns, so wait for the token request
+    const request = await vi.waitFor(() =>
+      TestBed.inject(HttpTestingController).expectOne('https://food.example/oauth2/token'),
     );
     request.flush({ access_token: 'token-2', expires_in: 600 });
 
