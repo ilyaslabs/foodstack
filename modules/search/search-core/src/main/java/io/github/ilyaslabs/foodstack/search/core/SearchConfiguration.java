@@ -27,8 +27,8 @@ public class SearchConfiguration {
 
     @Bean
     StoreSearchEngine searchStoreEngine(ElasticsearchClient elasticsearchClient, JsonMapper jsonMapper,
-            SearchProperties properties) {
-        return new ElasticsearchStoreSearchEngine(elasticsearchClient, jsonMapper, properties);
+            SearchProperties properties, Clock clock) {
+        return new ElasticsearchStoreSearchEngine(elasticsearchClient, jsonMapper, properties, clock);
     }
 
     @Bean
@@ -49,7 +49,10 @@ public class SearchConfiguration {
 
     @Bean
     @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
-    SearchIndexBootstrap searchIndexBootstrap(StoreSearchEngine searchStoreEngine, StoreIndexer searchStoreIndexer) {
-        return new SearchIndexBootstrap(searchStoreEngine, searchStoreIndexer);
+    SearchIndexBootstrap searchIndexBootstrap(StoreSearchEngine searchStoreEngine, StoreIndexer searchStoreIndexer,
+            SearchProperties properties, org.springframework.data.redis.core.StringRedisTemplate redis,
+            @org.springframework.beans.factory.annotation.Value("${foodstack.namespace:foodstack}") String namespace) {
+        return new SearchIndexBootstrap(searchStoreEngine, searchStoreIndexer, properties.rebuildInterval(),
+                new ScheduledRebuildLock(redis, namespace + ":search:rebuild"));
     }
 }

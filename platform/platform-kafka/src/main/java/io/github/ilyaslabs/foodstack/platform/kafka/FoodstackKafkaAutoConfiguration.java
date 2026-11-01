@@ -14,8 +14,13 @@ import org.springframework.boot.kafka.autoconfigure.KafkaAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.CommonErrorHandler;
+import org.springframework.kafka.listener.DefaultErrorHandler;
 
-/** Provides {@link ModuleEventing}, from which each module builds its outbox, relay and topics. */
+/**
+ * Provides {@link ModuleEventing}, from which each module builds its outbox, relay and topics, and
+ * the listener error handler of {@link DeadLetters}.
+ */
 @AutoConfiguration(after = { KafkaAutoConfiguration.class, DataRedisAutoConfiguration.class })
 @ConditionalOnBean({ KafkaTemplate.class, StringRedisTemplate.class })
 @EnableConfigurationProperties(FoodstackKafkaProperties.class)
@@ -28,5 +33,13 @@ public final class FoodstackKafkaAutoConfiguration {
             FoodstackKafkaProperties properties, org.springframework.beans.factory.ObjectProvider<Clock> clock) {
         return new ModuleEventing(namespace, kafkaTemplate, redis, jsonMapper, properties,
                 clock.getIfAvailable(Clock::systemUTC));
+    }
+
+    /** Picked up by Boot's listener container factory: retries with backoff, then the {@code .dlt} topic. */
+    @Bean
+    @ConditionalOnMissingBean(CommonErrorHandler.class)
+    DefaultErrorHandler foodstackKafkaErrorHandler(KafkaTemplate<String, String> kafkaTemplate,
+            FoodstackKafkaProperties properties) {
+        return DeadLetters.errorHandler(kafkaTemplate, properties.getConsumer());
     }
 }

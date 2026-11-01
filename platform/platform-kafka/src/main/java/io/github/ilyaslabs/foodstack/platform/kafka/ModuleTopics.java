@@ -26,7 +26,7 @@ public final class ModuleTopics {
     }
 
     public static String deadLetter(String namespace, String module) {
-        return events(namespace, module) + ".dlt";
+        return DeadLetters.topicFor(events(namespace, module));
     }
 
     /** The topics a publishing module needs; register the result as a bean. */

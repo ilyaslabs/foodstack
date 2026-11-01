@@ -19,6 +19,8 @@ public class FoodstackKafkaProperties {
 
     private final Relay relay = new Relay();
 
+    private final Consumer consumer = new Consumer();
+
     public int getTopicPartitions() {
         return this.topicPartitions;
     }
@@ -37,6 +39,50 @@ public class FoodstackKafkaProperties {
 
     public Relay getRelay() {
         return this.relay;
+    }
+
+    public Consumer getConsumer() {
+        return this.consumer;
+    }
+
+    /**
+     * How listeners treat a failing event (TDD 7.1): a few attempts with a growing pause, then the
+     * record goes to the dead-letter topic of the module that published it, {@code <topic>.dlt}.
+     */
+    public static class Consumer {
+
+        /** Deliveries of one record, the first included, before it is dead-lettered. */
+        private int attempts = 3;
+
+        /** Pause before the second attempt; doubled for each further one. */
+        private Duration initialBackoff = Duration.ofSeconds(1);
+
+        /** Upper bound of the pause between attempts. */
+        private Duration maxBackoff = Duration.ofSeconds(10);
+
+        public int getAttempts() {
+            return this.attempts;
+        }
+
+        public void setAttempts(int attempts) {
+            this.attempts = attempts;
+        }
+
+        public Duration getInitialBackoff() {
+            return this.initialBackoff;
+        }
+
+        public void setInitialBackoff(Duration initialBackoff) {
+            this.initialBackoff = initialBackoff;
+        }
+
+        public Duration getMaxBackoff() {
+            return this.maxBackoff;
+        }
+
+        public void setMaxBackoff(Duration maxBackoff) {
+            this.maxBackoff = maxBackoff;
+        }
     }
 
     public static class Relay {
