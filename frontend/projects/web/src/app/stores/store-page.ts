@@ -68,7 +68,8 @@ const DIETARY: Record<string, Record<string, string>> = {
   styleUrl: './store-page.scss',
 })
 export class StorePage {
-  readonly id = input.required<string>();
+  /** The branch's web address from the URL (spice-route-gulberg); an id also works. */
+  readonly slug = input.required<string>();
 
   protected readonly ui = inject(Ui);
   protected readonly locale = inject(LocaleStore);
@@ -116,8 +117,8 @@ export class StorePage {
 
   constructor() {
     effect(() => {
-      const id = this.id();
-      untracked(() => void this.load(id));
+      const slug = this.slug();
+      untracked(() => void this.load(slug));
     });
     afterNextRender(() => {
       this.locations.restore();
@@ -138,23 +139,34 @@ export class StorePage {
       const description = this.locale.pick(store.description);
       this.title.setTitle(`${store.displayName} · ${this.branding.branding().name}`);
       if (description) this.meta.updateTag({ name: 'description', content: description });
+      if (store.slug) this.canonical(`/stores/${store.slug}`);
     });
   }
 
-  private async load(id: string): Promise<void> {
+  private async load(slug: string): Promise<void> {
     this.store.set(null);
     this.menu.set(null);
     this.missing.set(false);
     try {
-      const [store, menu] = await Promise.all([
-        firstValueFrom(this.stores.page(id)),
-        firstValueFrom(this.stores.menu(id)),
-      ]);
+      const store = await firstValueFrom(this.stores.page(slug));
+      const menu = await firstValueFrom(this.stores.menu(store.id));
       this.store.set(store);
       this.menu.set(menu);
     } catch {
       this.missing.set(true);
     }
+  }
+
+  /** One canonical address per store page, so search engines index the slug URL. */
+  private canonical(path: string): void {
+    const href = new URL(path, this.document.location?.href ?? 'http://localhost').href;
+    let link = this.document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!link) {
+      link = this.document.createElement('link');
+      link.setAttribute('rel', 'canonical');
+      this.document.head.appendChild(link);
+    }
+    link.setAttribute('href', href);
   }
 
   private async loadQuote(storeId: string, lat: number, lng: number): Promise<void> {

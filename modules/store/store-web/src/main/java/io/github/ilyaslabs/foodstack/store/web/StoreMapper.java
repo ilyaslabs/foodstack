@@ -159,7 +159,7 @@ final class StoreMapper {
     }
 
     static StoreDtos.StoreResponse store(StoreDetails s) {
-        return new StoreDtos.StoreResponse(s.id(), brand(s.brand()), s.branchName(),
+        return new StoreDtos.StoreResponse(s.id(), s.slug(), brand(s.brand()), s.branchName(),
                 displayName(s.brand().name(), s.branchName()), s.legalName(), s.taxId(), s.ownerUserIds(),
                 address(s.address()), latLng(s.location()), hourDtos(s.openingHours()), closureDtos(s.closures()),
                 s.temporarilyClosed(), s.closedReason(), s.prepMinutes(), s.deliveryMode().name(),
@@ -173,7 +173,7 @@ final class StoreMapper {
             .of(s.address().line1(), s.address().area(), s.address().city())
             .filter((part) -> part != null && !part.isBlank())
             .toList()) : null;
-        return new StoreDtos.StorePageResponse(s.id(), b.id(), b.name(), s.branchName(), displayName(b.name(), s.branchName()),
+        return new StoreDtos.StorePageResponse(s.id(), s.slug(), b.id(), b.name(), s.branchName(), displayName(b.name(), s.branchName()),
                 b.description(), b.cuisines(), b.logoUrls(), b.coverUrls(), address, latLng(s.location()), s.openNow(),
                 s.temporarilyClosed(), s.closedReason(), hourDtos(s.openingHours()), s.prepMinutes(), s.deliveryMode().name(),
                 s.pickupEnabled(), s.timezone());

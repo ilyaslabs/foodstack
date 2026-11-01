@@ -81,6 +81,11 @@ export class StoreClient {
     return this.put(`/${storeId}/admin`, update, etag);
   }
 
+  /** Changes the branch's web address (operator only); a taken slug answers 409 SLUG_TAKEN. */
+  updateSlug(storeId: string, slug: string, etag: string): Observable<Versioned<StoreDetails>> {
+    return this.put(`/${storeId}/slug`, { slug }, etag);
+  }
+
   updateHours(
     storeId: string,
     openingHours: Record<Weekday, TimeRange[]>,
@@ -145,8 +150,9 @@ export class StoreClient {
     });
   }
 
-  page(storeId: string): Observable<StorePage> {
-    return this.http.get<StorePage>(this.url(`/${storeId}`));
+  /** A live branch for customers, by its slug (spice-route-gulberg) or id. */
+  page(slugOrId: string): Observable<StorePage> {
+    return this.http.get<StorePage>(this.url(`/${encodeURIComponent(slugOrId)}`));
   }
 
   menu(storeId: string): Observable<Menu> {

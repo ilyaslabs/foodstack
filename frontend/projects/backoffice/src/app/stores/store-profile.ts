@@ -208,6 +208,16 @@ import { StoreContext } from './store-context';
                   <mat-label>Tax number</mat-label>
                   <input matInput formControlName="taxId" maxlength="40" />
                 </mat-form-field>
+                <mat-form-field appearance="outline" class="span-2" subscriptSizing="dynamic">
+                  <mat-label>Web address</mat-label>
+                  <span matTextPrefix>/stores/</span>
+                  <input matInput formControlName="slug" maxlength="60" required />
+                  <mat-hint
+                    >Lower-case letters, digits and hyphens. Old links stop working when this
+                    changes.</mat-hint
+                  >
+                  <mat-error>Use 3 to 60 lower-case letters, digits and single hyphens</mat-error>
+                </mat-form-field>
                 <mat-form-field appearance="outline">
                   <mat-label>Commission</mat-label>
                   <input matInput formControlName="commissionPercent" inputmode="decimal" />
@@ -361,6 +371,15 @@ export class StoreProfile {
   protected readonly adminForm = this.fb.group({
     legalName: ['', Validators.required],
     taxId: [''],
+    slug: [
+      '',
+      [
+        Validators.required,
+        Validators.minLength(3),
+        Validators.maxLength(60),
+        Validators.pattern(/^[a-z0-9]+(-[a-z0-9]+)*$/),
+      ],
+    ],
     commissionPercent: [''],
     commissionFixed: [''],
     operatorDeliveryAllowed: [false],
@@ -424,6 +443,7 @@ export class StoreProfile {
     this.adminForm.patchValue({
       legalName: s.legalName,
       taxId: s.taxId ?? '',
+      slug: s.slug ?? '',
       operatorDeliveryAllowed: s.operatorDeliveryAllowed,
     });
   }
@@ -534,6 +554,11 @@ export class StoreProfile {
     const store = this.context.store()!;
     const v = this.adminForm.getRawValue();
     const percent = Number(v.commissionPercent);
+    if (this.adminForm.controls.slug.invalid) {
+      this.adminForm.controls.slug.markAsTouched();
+      this.snackBar.open('Check the web address.', 'Dismiss', { duration: 6000 });
+      return;
+    }
     if (this.adminForm.invalid || !Number.isFinite(percent) || percent < 0 || percent > 100) {
       this.snackBar.open('Enter a commission from 0 to 100 %.', 'Dismiss', { duration: 6000 });
       return;
@@ -559,6 +584,12 @@ export class StoreProfile {
           ),
         ),
       );
+      const slug = v.slug.trim();
+      if (slug !== store.slug) {
+        this.context.set(
+          await firstValueFrom(this.stores.updateSlug(store.id, slug, this.context.etag())),
+        );
+      }
       await this.loadBrand(store.brand.id);
       this.snackBar.open('Platform settings saved.', undefined, { duration: 3000 });
     } catch (error) {

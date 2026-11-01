@@ -56,3 +56,10 @@ databaseChangeLog:
       changes:
         - createCollection:
             collectionName: store_seed
+  - changeSet:
+      id: store-6
+      author: foodstack
+      comment: "store_slugs: branch web addresses, the slug is the _id so it is unique; shard key { _id: hashed }"
+      changes:
+        - createCollection:
+            collectionName: store_slugs

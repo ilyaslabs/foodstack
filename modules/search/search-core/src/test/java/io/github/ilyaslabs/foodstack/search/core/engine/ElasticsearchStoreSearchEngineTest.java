@@ -191,7 +191,7 @@ class ElasticsearchStoreSearchEngineTest {
         for (java.time.DayOfWeek day : java.time.DayOfWeek.values()) {
             hours.put(day.name(), List.of(new TimeRange("00:00", "23:59")));
         }
-        return new IndexedStore(id, brandId, brandName, branchName, 2, Map.of("en", brandName + " in Lahore"), cuisines,
+        return new IndexedStore(id, id + "-slug", brandId, brandName, branchName, 2, Map.of("en", brandName + " in Lahore"), cuisines,
                 Map.of("thumb", "https://cdn.example/" + id + ".webp"), Map.of(), location, branchName, "Lahore",
                 operatorDelivery ? "OPERATOR" : "SELF", operatorDelivery, false, 25, "Asia/Karachi", hours, List.of(), dishes,
                 List.of("halal"), area, 3);

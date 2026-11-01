@@ -25,6 +25,7 @@ const LOCALE: LocaleSettings = {
 
 const PAGE: Page = {
   id: 's1',
+  slug: 'spice-route-gulberg',
   brandId: 'b1',
   brandName: 'Spice Route',
   branchName: 'Gulberg',
@@ -110,7 +111,7 @@ describe('StorePage', () => {
     });
     await TestBed.inject(LocaleStore).load();
     const fixture = TestBed.createComponent(StorePage);
-    fixture.componentRef.setInput('id', 's1');
+    fixture.componentRef.setInput('slug', 'spice-route-gulberg');
     await fixture.whenStable();
     fixture.detectChanges();
     return { fixture, element: fixture.nativeElement as HTMLElement };
@@ -151,6 +152,22 @@ describe('StorePage', () => {
     expect(element.textContent).toContain('گرِل اور کڑاہی');
     expect(element.textContent).toContain('ختم');
     expect(element.textContent).toContain('حلال');
+  });
+
+  it('reads the store by its slug, the menu by its id, and points search engines at the slug URL', async () => {
+    // given
+    const page = vi.fn(() => of(PAGE));
+    const menu = vi.fn(() => of(MENU));
+
+    // when
+    await render({ page, menu, quote: () => of() as never });
+
+    // then
+    expect(page).toHaveBeenCalledWith('spice-route-gulberg');
+    expect(menu).toHaveBeenCalledWith('s1');
+    expect(document.head.querySelector('link[rel="canonical"]')?.getAttribute('href')).toMatch(
+      /\/stores\/spice-route-gulberg$/,
+    );
   });
 
   it('says the store is not available when it cannot be found', async () => {

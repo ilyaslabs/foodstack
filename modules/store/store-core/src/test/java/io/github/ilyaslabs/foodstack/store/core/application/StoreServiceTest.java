@@ -38,6 +38,8 @@ import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuItemRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreRepository;
+import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugDocument;
+import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugRepository;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -52,6 +54,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -68,6 +71,8 @@ class StoreServiceTest {
 
     private final StoreRepository stores = mock(StoreRepository.class);
 
+    private final StoreSlugRepository slugs = mock(StoreSlugRepository.class);
+
     private final MenuItemRepository items = mock(MenuItemRepository.class);
 
     private final SettingsApi settings = mock(SettingsApi.class);
@@ -82,7 +87,7 @@ class StoreServiceTest {
 
     private final TransactionTemplate transaction = mock(TransactionTemplate.class);
 
-    private final StoreService service = new StoreService(this.brands, this.stores, this.items, this.settings, this.media,
+    private final StoreService service = new StoreService(this.brands, this.stores, this.slugs, this.items, this.settings, this.media,
             this.identity, this.geo, this.outbox, this.transaction, Clock.fixed(NOW, ZoneOffset.UTC));
 
     @BeforeEach
@@ -99,6 +104,63 @@ class StoreServiceTest {
         given(this.brands.save(any(BrandDocument.class))).willAnswer((invocation) -> versioned(invocation.getArgument(0)));
         given(this.stores.insert(any(StoreDocument.class))).willAnswer((invocation) -> versioned(invocation.getArgument(0)));
         given(this.stores.save(any(StoreDocument.class))).willAnswer((invocation) -> versioned(invocation.getArgument(0)));
+    }
+
+    @Test
+    @DisplayName("a second branch with the same names gets a numbered web address")
+    void onboardTakenSlug() {
+        given(this.slugs.existsById("napoli-slice")).willReturn(true);
+
+        StoreDetails store = this.service.onboard(new NewStore("Napoli Slice", null, "Napoli Slice Ltd", null,
+                Map.of("en", "Pizza"), List.of("italian"), new Address("2 Main Road", "DHA", "Lahore", null),
+                new GeoPoint(31.46, 74.40), DeliveryMode.SELF, true, 20, new Commission(1500, 0)), "admin-1");
+
+        assertThat(store.slug()).isEqualTo("napoli-slice-2");
+    }
+
+    @Test
+    @DisplayName("the operator changes a branch's web address; the old one is freed and a taken or malformed one refused")
+    void updateSlug() {
+        StoreDocument store = store(StoreStatus.LIVE);
+        store.setSlug("spice-route-gulberg");
+        given(this.stores.findById("s1")).willReturn(Optional.of(store));
+        given(this.brands.findById("b1")).willReturn(Optional.of(brand()));
+        given(this.slugs.existsById("napoli-slice")).willReturn(true);
+
+        StoreDetails updated = this.service.updateSlug("s1", " Spice-Route ", 3, "admin-1");
+
+        assertThat(updated.slug()).isEqualTo("spice-route");
+        verify(this.slugs).insert(argThat((StoreSlugDocument s) -> s.getSlug().equals("spice-route")));
+        verify(this.slugs).deleteById("spice-route-gulberg");
+        assertThatThrownBy(() -> this.service.updateSlug("s1", "napoli-slice", 4, "admin-1"))
+            .isInstanceOfSatisfying(ModuleException.class, (ex) -> assertThat(ex.code()).isEqualTo("SLUG_TAKEN"));
+        assertThatThrownBy(() -> this.service.updateSlug("s1", "Spice Route!", 4, "admin-1"))
+            .isInstanceOfSatisfying(ModuleException.class, (ex) -> assertThat(ex.code()).isEqualTo("STORE_INVALID"));
+    }
+
+    @Test
+    @DisplayName("links are read by slug or id; an unknown slug is not found")
+    void resolve() {
+        given(this.slugs.findById("spice-route-gulberg"))
+            .willReturn(Optional.of(new StoreSlugDocument("spice-route-gulberg", "s1", NOW)));
+
+        assertThat(this.service.resolve("Spice-Route-Gulberg")).isEqualTo("s1");
+        assertThat(this.service.resolve("0195f0a0-0000-7000-8000-000000000101"))
+            .isEqualTo("0195f0a0-0000-7000-8000-000000000101");
+        assertThatThrownBy(() -> this.service.resolve("nowhere"))
+            .isInstanceOfSatisfying(ModuleException.class, (ex) -> assertThat(ex.code()).isEqualTo("STORE_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("branches without a web address get one at start-up")
+    void assignMissingSlugs() {
+        StoreDocument store = store(StoreStatus.LIVE);
+        given(this.stores.findBySlugIsNull(any())).willReturn(List.of(store), List.of());
+        given(this.brands.findById("b1")).willReturn(Optional.of(brand()));
+
+        assertThat(this.service.assignMissingSlugs("system")).isEqualTo(1);
+        assertThat(store.getSlug()).isEqualTo("spice-route-gulberg");
+        verify(this.slugs).insert(argThat((StoreSlugDocument s) -> s.getStoreId().equals("s1")));
     }
 
     @Test
@@ -127,6 +189,9 @@ class StoreServiceTest {
         assertThat(store.location()).isEqualTo(new GeoPoint(31.52, 74.35));
         assertThat(store.openNow()).isFalse();
         assertThat(store.timezone()).isEqualTo("Asia/Karachi");
+        assertThat(store.slug()).isEqualTo("spice-route-gulberg");
+        verify(this.slugs).insert(argThat((StoreSlugDocument s) -> s.getSlug().equals("spice-route-gulberg")
+                && s.getStoreId().equals(store.id())));
         verify(this.outbox).append(new BrandChanged(brand.get().getId(), 1, "admin-1"));
         verify(this.outbox).append(new StoreChanged(store.id(), brand.get().getId(), 1, "admin-1"));
     }

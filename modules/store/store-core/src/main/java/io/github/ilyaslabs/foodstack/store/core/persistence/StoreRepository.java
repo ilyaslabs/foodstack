@@ -15,4 +15,7 @@ public interface StoreRepository extends MongoRepository<StoreDocument, String> 
     List<StoreDocument> findAllByOrderByIdDesc(Limit limit);
 
     List<StoreDocument> findByIdInOrderByIdDesc(Collection<String> ids);
+
+    /** Branches that have no web address yet (onboarded before slugs, or written by the demo seeder). */
+    List<StoreDocument> findBySlugIsNull(Limit limit);
 }

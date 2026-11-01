@@ -7,6 +7,7 @@ import java.util.Map;
  * A branch in search results.
  *
  * @param storeId branch id
+ * @param slug web address of the branch ({@code /stores/<slug>}), or {@code null}
  * @param brandId brand id
  * @param brandName brand name
  * @param branchName branch name, or {@code null}
@@ -25,7 +26,7 @@ import java.util.Map;
  * @param prepMinutes average preparation time
  * @param dietaryTags dietary tags found on its menu
  */
-public record StoreCard(String storeId, String brandId, String brandName, String branchName, int branchCount,
+public record StoreCard(String storeId, String slug, String brandId, String brandName, String branchName, int branchCount,
         Map<String, String> description, List<String> cuisines, Map<String, String> logoUrls, Map<String, String> coverUrls,
         String area, String city, long distanceMeters, String deliveryMode, boolean pickupEnabled, boolean openNow,
         boolean temporarilyClosed, int prepMinutes, List<String> dietaryTags) {

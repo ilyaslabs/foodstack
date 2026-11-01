@@ -17,6 +17,7 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuCache;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuService;
+import io.github.ilyaslabs.foodstack.store.core.application.SlugBackfill;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreListingService;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreService;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
@@ -24,6 +25,7 @@ import io.github.ilyaslabs.foodstack.store.core.persistence.ItemOverrideReposito
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuItemRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuSectionRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreRepository;
+import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugRepository;
 import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -52,6 +54,7 @@ public class StoreConfiguration {
         return ShardKeys.builder()
             .hashed("store_brands", "_id")
             .hashed("store_stores", "_id")
+            .hashed("store_slugs", "_id")
             .hashed("store_menu_sections", "brandId")
             .hashed("store_menu_items", "brandId")
             .hashed("store_item_overrides", "storeId");
@@ -102,10 +105,16 @@ public class StoreConfiguration {
 
     @Bean
     StoreService storeService(BrandRepository brandRepository, StoreRepository storeRepository,
-            MenuItemRepository menuItemRepository, SettingsApi settingsApi, MediaApi mediaApi, IdentityApi identityApi,
+            StoreSlugRepository storeSlugRepository, MenuItemRepository menuItemRepository, SettingsApi settingsApi, MediaApi mediaApi, IdentityApi identityApi,
             GeoApi geoApi, OutboxWriter storeOutbox, ModuleMongo storeMongo, Clock clock) {
-        return new StoreService(brandRepository, storeRepository, menuItemRepository, settingsApi, mediaApi, identityApi,
+        return new StoreService(brandRepository, storeRepository, storeSlugRepository, menuItemRepository, settingsApi, mediaApi, identityApi,
                 geoApi, storeOutbox, storeMongo.transactionTemplate(), clock);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    SlugBackfill storeSlugBackfill(StoreService storeService) {
+        return new SlugBackfill(storeService);
     }
 
     @Bean

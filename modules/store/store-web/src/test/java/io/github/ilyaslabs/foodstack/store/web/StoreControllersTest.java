@@ -156,10 +156,26 @@ class StoreControllersTest {
     }
 
     @Test
+    @DisplayName("only the operator changes a branch's web address, with If-Match")
+    void slug() throws Exception {
+        given(this.storeService.updateSlug("s1", "spice-route", 1, "admin-1")).willReturn(store(StoreStatus.LIVE));
+
+        this.mvc.perform(put("/api/v1/stores/s1/slug").with(admin()).header("If-Match", "\"store-1\"")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"slug\":\"spice-route\"}")).andExpect(status().isOk()).andExpect(jsonPath("$.slug").exists());
+        this.mvc.perform(put("/api/v1/stores/s1/slug").with(owner()).header("If-Match", "\"store-1\"")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"slug\":\"spice-route\"}")).andExpect(status().isForbidden());
+    }
+
+    @Test
     @DisplayName("customers read a live branch, its menu and a delivery quote without logging in; drafts are hidden")
     void customers() throws Exception {
         given(this.storeService.get("s1")).willReturn(store(StoreStatus.LIVE));
         given(this.storeService.get("s2")).willReturn(store(StoreStatus.DRAFT));
+        given(this.storeService.resolve("spice-route-gulberg")).willReturn("s1");
+        given(this.storeService.resolve("s1")).willReturn("s1");
+        given(this.storeService.resolve("s2")).willReturn("s2");
         given(this.menuService.effectiveMenu("s1")).willReturn(new EffectiveMenu("s1", "b1", "PKR",
                 List.of(new EffectiveMenu.Section("sec1", Map.of("en", "Rice", "ar", "أرز"),
                         List.of(new EffectiveMenu.Item("i1", Map.of("en", "Biryani", "ar", "برياني"), Map.of(), 85_000,
@@ -167,11 +183,12 @@ class StoreControllersTest {
         given(this.storeService.quote("s1", new GeoPoint(31.5, 74.33)))
             .willReturn(new DeliveryQuote(true, null, 10_000, 50_000, null, 2500, 28, "PKR"));
 
-        this.mvc.perform(get("/api/v1/stores/s1"))
+        this.mvc.perform(get("/api/v1/stores/spice-route-gulberg"))
             .andExpect(status().isOk())
+            .andExpect(jsonPath("$.slug").value("spice-route-gulberg"))
             .andExpect(jsonPath("$.address").value("1 Main Boulevard, Gulberg, Lahore"))
             .andExpect(jsonPath("$.legalName").doesNotExist());
-        this.mvc.perform(get("/api/v1/stores/s1/menu"))
+        this.mvc.perform(get("/api/v1/stores/spice-route-gulberg/menu"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.sections[0].items[0].name.ar").value("برياني"));
         this.mvc.perform(get("/api/v1/stores/s1/delivery-quote").param("lat", "31.5").param("lng", "74.33"))
@@ -220,7 +237,7 @@ class StoreControllersTest {
     private static StoreDetails store(StoreStatus status) {
         Map<DayOfWeek, List<TimeRange>> hours = new java.util.EnumMap<>(DayOfWeek.class);
         hours.put(DayOfWeek.MONDAY, List.of(new TimeRange("11:00", "23:00")));
-        return new StoreDetails("s1", new BrandDetails("b1", "Spice Route", Map.of("en", "Biryani"), List.of("pakistani"),
+        return new StoreDetails("s1", "spice-route-gulberg", new BrandDetails("b1", "Spice Route", Map.of("en", "Biryani"), List.of("pakistani"),
                 null, Map.of(), null, Map.of(), new Commission(1500, 0), 1, 1, Instant.ofEpochSecond(1_800_000_000L)),
                 "Gulberg", "Spice Route (Pvt) Ltd", null, Set.of(), new Address("1 Main Boulevard", "Gulberg", "Lahore", null),
                 new GeoPoint(31.52, 74.35), hours, List.of(), false, null, 25, DeliveryMode.SELF, false, true,

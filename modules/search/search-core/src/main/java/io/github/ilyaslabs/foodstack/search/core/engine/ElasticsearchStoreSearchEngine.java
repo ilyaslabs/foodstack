@@ -285,6 +285,7 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
     Map<String, Object> toSource(IndexedStore store) {
         Map<String, Object> source = new LinkedHashMap<>();
         source.put("storeId", store.storeId());
+        source.put("slug", store.slug());
         source.put("brandId", store.brandId());
         source.put("brandName", store.brandName());
         source.put("branchName", store.branchName());
@@ -337,7 +338,7 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
                 : null;
         Map<String, List<TimeRange>> hours = (s.get("openingHours") != null)
                 ? this.jsonMapper.convertValue(s.get("openingHours"), HOURS) : Map.of();
-        return new IndexedStore(id, (String) s.get("brandId"), (String) s.get("brandName"), (String) s.get("branchName"),
+        return new IndexedStore(id, (String) s.get("slug"), (String) s.get("brandId"), (String) s.get("brandName"), (String) s.get("branchName"),
                 number(s.get("branchCount")), map(s.get("description")), list(s.get("cuisines")), map(s.get("logoUrls")),
                 map(s.get("coverUrls")), point, (String) s.get("area"), (String) s.get("city"), (String) s.get("deliveryMode"),
                 Boolean.TRUE.equals(s.get("pickupEnabled")), Boolean.TRUE.equals(s.get("temporarilyClosed")),
@@ -381,7 +382,7 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
             mapping.put("analyzer", "foodstack_text");
         }
         ObjectNode props = mappings.putObject("properties");
-        for (String keyword : List.of("storeId", "brandId", "city", "deliveryMode", "closedDates", "dietaryTags")) {
+        for (String keyword : List.of("storeId", "slug", "brandId", "city", "deliveryMode", "closedDates", "dietaryTags")) {
             props.putObject(keyword).put("type", "keyword");
         }
         text(props, "brandName").putObject("fields").putObject("keyword").put("type", "keyword");

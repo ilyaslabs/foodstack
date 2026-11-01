@@ -57,7 +57,7 @@ class SearchControllerTest {
     @DisplayName("store search is public and passes the customer's point, text, cuisine and fulfilment")
     void search() throws Exception {
         given(this.searchService.search(new StoreSearchQuery(31.5, 74.3, "pizza", "italian", Fulfilment.PICKUP, 1, 10)))
-            .willReturn(new StoreSearchPage(List.of(new StoreCard("s1", "b1", "Napoli Pizza", "DHA", 1, Map.of(),
+            .willReturn(new StoreSearchPage(List.of(new StoreCard("s1", "napoli-pizza-dha", "b1", "Napoli Pizza", "DHA", 1, Map.of(),
                     List.of("italian"), Map.of(), Map.of(), "DHA", "Lahore", 1900, "SELF", true, true, false, 20, List.of())),
                     List.of(new CuisineCount("italian", 1)), 1, 1, 10));
 

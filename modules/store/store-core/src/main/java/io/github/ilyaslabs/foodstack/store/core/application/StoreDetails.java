@@ -15,6 +15,7 @@ import io.github.ilyaslabs.foodstack.store.api.TimeRange;
  * A branch with its brand.
  *
  * @param id branch id
+ * @param slug web address ({@code /stores/<slug>}), or {@code null} until assigned at start-up
  * @param brand its brand
  * @param branchName branch name, or {@code null}
  * @param legalName registered business name
@@ -38,7 +39,7 @@ import io.github.ilyaslabs.foodstack.store.api.TimeRange;
  * @param createdAt onboarding time
  * @param updatedAt last change
  */
-public record StoreDetails(String id, BrandDetails brand, String branchName, String legalName, String taxId,
+public record StoreDetails(String id, String slug, BrandDetails brand, String branchName, String legalName, String taxId,
         Set<String> ownerUserIds, Address address, GeoPoint location, Map<DayOfWeek, List<TimeRange>> openingHours,
         List<Closure> closures, boolean temporarilyClosed, String closedReason, int prepMinutes, DeliveryMode deliveryMode,
         boolean operatorDeliveryAllowed, boolean pickupEnabled, Commission commission, StoreStatus status, String timezone,

@@ -68,7 +68,7 @@ class StoreSearchServiceTest {
 
     private static StoreSearchEngine.Hit hit(String id, String open, String close, boolean switchedOff, long distance) {
         Map<String, List<TimeRange>> hours = Map.of("SATURDAY", List.of(new TimeRange(open, close)));
-        return new StoreSearchEngine.Hit(new IndexedStore(id, id, id, null, 1, Map.of(), List.of("bbq"), Map.of(), Map.of(),
+        return new StoreSearchEngine.Hit(new IndexedStore(id, id, id, id, null, 1, Map.of(), List.of("bbq"), Map.of(), Map.of(),
                 new GeoPoint(31.5, 74.3), null, "Lahore", "SELF", false, switchedOff, 20, "Asia/Karachi", hours, List.of(),
                 Map.of(), List.of(), List.of(), 1), distance);
     }

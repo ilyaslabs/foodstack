@@ -46,8 +46,11 @@ import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuItemRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreRepository;
+import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugDocument;
+import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugRepository;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -69,6 +72,8 @@ public class StoreService {
 
     private final StoreRepository stores;
 
+    private final StoreSlugRepository slugs;
+
     private final MenuItemRepository items;
 
     private final SettingsApi settings;
@@ -85,11 +90,12 @@ public class StoreService {
 
     private final Clock clock;
 
-    public StoreService(BrandRepository brands, StoreRepository stores, MenuItemRepository items, SettingsApi settings,
-            MediaApi media, IdentityApi identity, GeoApi geo, OutboxWriter outbox, TransactionTemplate transaction,
-            Clock clock) {
+    public StoreService(BrandRepository brands, StoreRepository stores, StoreSlugRepository slugs, MenuItemRepository items,
+            SettingsApi settings, MediaApi media, IdentityApi identity, GeoApi geo, OutboxWriter outbox,
+            TransactionTemplate transaction, Clock clock) {
         this.brands = brands;
         this.stores = stores;
+        this.slugs = slugs;
         this.items = items;
         this.settings = settings;
         this.media = media;
@@ -157,15 +163,110 @@ public class StoreService {
         store.setCreatedBy(userId);
         store.setUpdatedAt(now);
         store.setUpdatedBy(userId);
+        store.setSlug(freeSlug(Slugs.of(brand.getName(), store.getBranchName())));
 
-        StoreDocument saved = this.transaction.execute((status) -> {
+        StoreDocument saved = claimingSlug(() -> this.transaction.execute((status) -> {
+            this.slugs.insert(new StoreSlugDocument(store.getSlug(), store.getId(), now));
             BrandDocument savedBrand = this.brands.insert(brand);
             StoreDocument result = this.stores.insert(store);
             this.outbox.append(new BrandChanged(savedBrand.getId(), version(savedBrand.getVersion()), userId));
             this.outbox.append(new StoreChanged(result.getId(), result.getBrandId(), version(result.getVersion()), userId));
             return result;
-        });
+        }));
         return details(saved, brand, locale);
+    }
+
+    // ---- Web addresses ----------------------------------------------------------------------
+
+    /**
+     * The branch a customer link points at: its slug, or its id (the back office and API clients
+     * still use ids). Unknown slugs are not found; a changed slug does not redirect.
+     */
+    public String resolve(String key) {
+        if (Slugs.looksLikeId(key)) {
+            return key;
+        }
+        return this.slugs.findById(key.toLowerCase(Locale.ROOT))
+            .map(StoreSlugDocument::getStoreId)
+            .orElseThrow(() -> new ModuleException.NotFound("Store " + key + " not found", "STORE_NOT_FOUND"));
+    }
+
+    /** Sets the branch's web address (operator only); the old slug is freed. */
+    public StoreDetails updateSlug(String storeId, String slug, long expectedVersion, String userId) {
+        String wanted = (slug != null) ? slug.trim().toLowerCase(Locale.ROOT) : null;
+        if (!Slugs.isValid(wanted)) {
+            failIfAny(Map.of("slug", "use 3 to " + Slugs.MAX_LENGTH + " lower-case letters, digits and single hyphens"),
+                    "STORE_INVALID");
+        }
+        StoreDocument store = findStore(storeId);
+        requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
+        if (wanted.equals(store.getSlug())) {
+            return details(store, findBrand(store.getBrandId()), this.settings.getLocale());
+        }
+        if (this.slugs.existsById(wanted)) {
+            throw slugTaken();
+        }
+        String old = store.getSlug();
+        store.setSlug(wanted);
+        return claimingSlug(() -> saveBranch(store, () -> {
+            this.slugs.insert(new StoreSlugDocument(wanted, storeId, this.clock.instant()));
+            if (old != null) {
+                this.slugs.deleteById(old);
+            }
+        }, userId));
+    }
+
+    /**
+     * Gives a web address to every branch that has none: branches onboarded before slugs existed
+     * and the demo seeder's. Runs at start-up; safe to run on several instances at once.
+     * @return how many branches got one
+     */
+    public int assignMissingSlugs(String userId) {
+        int assigned = 0;
+        for (int attempt = 0; attempt < 1000; attempt++) {
+            List<StoreDocument> batch = this.stores.findBySlugIsNull(Limit.of(100));
+            if (batch.isEmpty()) {
+                break;
+            }
+            for (StoreDocument store : batch) {
+                String slug = freeSlug(Slugs.of(store.getBrandName(), store.getBranchName()));
+                store.setSlug(slug);
+                try {
+                    saveBranch(store, () -> this.slugs.insert(new StoreSlugDocument(slug, store.getId(), this.clock.instant())),
+                            userId);
+                    assigned++;
+                }
+                catch (DuplicateKeyException | org.springframework.dao.OptimisticLockingFailureException ex) {
+                    // another instance took the slug or changed the branch first; the next pass retries it
+                }
+            }
+        }
+        return assigned;
+    }
+
+    /** {@code base}, or {@code base-2}, {@code base-3} and so on when taken. */
+    private String freeSlug(String base) {
+        for (int n = 1; n <= 50; n++) {
+            String candidate = (n == 1) ? base : Slugs.numbered(base, n);
+            if (!this.slugs.existsById(candidate)) {
+                return candidate;
+            }
+        }
+        return Slugs.numbered(base, 1000 + new java.util.Random().nextInt(9000));
+    }
+
+    private static <T> T claimingSlug(java.util.function.Supplier<T> write) {
+        try {
+            return write.get();
+        }
+        catch (DuplicateKeyException ex) {
+            throw slugTaken();
+        }
+    }
+
+    private static ModuleException slugTaken() {
+        return new ModuleException.Conflict("That web address is already used by another restaurant", "SLUG_TAKEN",
+                Map.of("errors", Map.of("slug", "already used by another restaurant")));
     }
 
     public StoreDetails get(String storeId) {
@@ -512,9 +613,16 @@ public class StoreService {
     }
 
     private StoreDetails saveBranch(StoreDocument store, String userId) {
+        return saveBranch(store, () -> {
+        }, userId);
+    }
+
+    /** Saves the branch, with {@code alsoWrite} in the same transaction. */
+    private StoreDetails saveBranch(StoreDocument store, Runnable alsoWrite, String userId) {
         store.setUpdatedAt(this.clock.instant());
         store.setUpdatedBy(userId);
         StoreDocument saved = this.transaction.execute((status) -> {
+            alsoWrite.run();
             StoreDocument result = this.stores.save(store);
             this.outbox.append(new StoreChanged(result.getId(), result.getBrandId(), version(result.getVersion()), userId));
             return result;
@@ -533,7 +641,7 @@ public class StoreService {
         boolean open = store.getStatus() == StoreStatus.LIVE && OpeningHours.isOpen(store.getOpeningHours(),
                 closedDays(store.getClosures()), store.isTemporarilyClosed(), this.clock.instant(), zone);
         Commission commission = (store.getCommissionOverride() != null) ? store.getCommissionOverride() : brand.getCommission();
-        return new StoreDetails(store.getId(), brandDetails(brand), store.getBranchName(), store.getLegalName(),
+        return new StoreDetails(store.getId(), store.getSlug(), brandDetails(brand), store.getBranchName(), store.getLegalName(),
                 store.getTaxId(), Set.copyOf(store.getOwnerUserIds()), store.getAddress(), location(store),
                 Map.copyOf(store.getOpeningHours()), List.copyOf(store.getClosures()), store.isTemporarilyClosed(),
                 store.getClosedReason(), store.getPrepMinutes(), store.getDeliveryMode(), store.isOperatorDeliveryAllowed(),

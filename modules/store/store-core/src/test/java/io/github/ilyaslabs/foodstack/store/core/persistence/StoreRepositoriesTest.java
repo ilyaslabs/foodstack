@@ -22,6 +22,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -34,6 +35,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(classes = StoreRepositoriesTest.App.class, properties = "spring.data.mongodb.repositories.type=none")
 class StoreRepositoriesTest {
@@ -72,6 +74,9 @@ class StoreRepositoriesTest {
 
     @Autowired
     StoreRepository stores;
+
+    @Autowired
+    StoreSlugRepository slugs;
 
     @Autowired
     MenuSectionRepository sections;
@@ -113,6 +118,28 @@ class StoreRepositoriesTest {
         assertThat(loaded.getVersion()).isNotNull();
         assertThat(shardKey("store_brands")).isEqualTo(new Document("_id", "hashed"));
         assertThat(shardKey("store_stores")).isEqualTo(new Document("_id", "hashed"));
+    }
+
+    @Test
+    @DisplayName("keeps one owner per web address and finds branches that have none yet")
+    void slugs() {
+        // given
+        String slug = "spice-route-" + Ids.newId().substring(0, 8);
+        StoreDocument withSlug = store(Ids.newId(), "Gulberg");
+        withSlug.setSlug(slug);
+        StoreDocument withoutSlug = this.stores.insert(store(Ids.newId(), "DHA"));
+        this.stores.insert(withSlug);
+        this.slugs.insert(new StoreSlugDocument(slug, withSlug.getId(), Instant.now()));
+
+        // when
+        List<StoreDocument> missing = this.stores.findBySlugIsNull(Limit.of(500));
+
+        // then
+        assertThat(missing).extracting(StoreDocument::getId).contains(withoutSlug.getId()).doesNotContain(withSlug.getId());
+        assertThat(this.slugs.findById(slug)).get().extracting(StoreSlugDocument::getStoreId).isEqualTo(withSlug.getId());
+        assertThatThrownBy(() -> this.slugs.insert(new StoreSlugDocument(slug, Ids.newId(), Instant.now())))
+            .isInstanceOf(DuplicateKeyException.class);
+        assertThat(shardKey("store_slugs")).isEqualTo(new Document("_id", "hashed"));
     }
 
     @Test

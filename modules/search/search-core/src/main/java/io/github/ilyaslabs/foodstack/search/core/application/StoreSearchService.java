@@ -64,7 +64,7 @@ public class StoreSearchService {
     private static StoreCard card(StoreSearchEngine.Hit hit, Instant now) {
         IndexedStore s = hit.store();
         boolean open = OpenNow.isOpen(s.openingHours(), s.closedDates(), s.temporarilyClosed(), s.timezone(), now);
-        return new StoreCard(s.storeId(), s.brandId(), s.brandName(), s.branchName(), s.branchCount(), s.description(),
+        return new StoreCard(s.storeId(), s.slug(), s.brandId(), s.brandName(), s.branchName(), s.branchCount(), s.description(),
                 s.cuisines(), s.logoUrls(), s.coverUrls(), s.area(), s.city(), hit.distanceMeters(), s.deliveryMode(),
                 s.pickupEnabled(), open, s.temporarilyClosed(), s.prepMinutes(), s.dietaryTags());
     }

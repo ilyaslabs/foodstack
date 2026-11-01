@@ -66,6 +66,10 @@ public final class StoreDtos {
             boolean operatorDeliveryAllowed) {
     }
 
+    /** {@code PUT /api/v1/stores/{id}/slug} with {@code If-Match}: the branch's web address (operator only). */
+    public record SlugRequest(@NotBlank @Size(max = 60) String slug) {
+    }
+
     /** {@code PUT /api/v1/stores/{id}/hours} with {@code If-Match}: ranges keyed MONDAY to SUNDAY. */
     public record HoursRequest(@NotNull Map<String, List<@Valid TimeRangeDto>> openingHours, List<@Valid ClosureDto> closures) {
     }
@@ -98,7 +102,7 @@ public final class StoreDtos {
     }
 
     /** A branch with its brand, for the back office. */
-    public record StoreResponse(String id, BrandResponse brand, String branchName, String displayName, String legalName,
+    public record StoreResponse(String id, String slug, BrandResponse brand, String branchName, String displayName, String legalName,
             String taxId, Set<String> ownerUserIds, AddressDto address, LatLng location,
             Map<String, List<TimeRangeDto>> openingHours, List<ClosureDto> closures, boolean temporarilyClosed,
             String closedReason, int prepMinutes, String deliveryMode, boolean operatorDeliveryAllowed, boolean pickupEnabled,
@@ -120,7 +124,7 @@ public final class StoreDtos {
     }
 
     /** A branch as customers see it. */
-    public record StorePageResponse(String id, String brandId, String brandName, String branchName, String displayName,
+    public record StorePageResponse(String id, String slug, String brandId, String brandName, String branchName, String displayName,
             Map<String, String> description, List<String> cuisines, Map<String, String> logoUrls,
             Map<String, String> coverUrls, String address, LatLng location, boolean openNow, boolean temporarilyClosed,
             String closedReason, Map<String, List<TimeRangeDto>> openingHours, int prepMinutes, String deliveryMode,

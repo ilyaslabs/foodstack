@@ -10,6 +10,7 @@ import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
  * A branch as discovery sees it.
  *
  * @param storeId the branch
+ * @param slug web address of the branch ({@code /stores/<slug>}), or {@code null} until assigned
  * @param brandId its brand
  * @param brandName brand name
  * @param branchName branch name, for example "Gulberg"
@@ -33,7 +34,7 @@ import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
  * @param dietaryTags dietary tags found on the menu
  * @param version the branch's version, to drop out-of-order updates
  */
-public record StoreListingView(String storeId, String brandId, String brandName, String branchName, int branchCount,
+public record StoreListingView(String storeId, String slug, String brandId, String brandName, String branchName, int branchCount,
         Map<String, String> description, List<String> cuisines, Map<String, String> logoUrls, Map<String, String> coverUrls,
         GeoPoint location, String area, String city, DeliveryMode deliveryMode, boolean pickupEnabled, StoreStatus status,
         boolean temporarilyClosed, int prepMinutes, String timezone, Map<String, List<TimeRange>> openingHours,

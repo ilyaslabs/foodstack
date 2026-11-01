@@ -154,3 +154,7 @@ mat-form-field {
     max-width: 480px;
   }
 }
+
+.grid-2 > .span-2 {
+  grid-column: 1 / -1;
+}

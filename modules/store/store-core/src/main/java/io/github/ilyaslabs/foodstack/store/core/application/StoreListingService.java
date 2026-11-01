@@ -54,7 +54,7 @@ public class StoreListingService {
         }
         Map<String, List<TimeRange>> hours = new TreeMap<>();
         store.getOpeningHours().forEach((day, ranges) -> hours.put(day.name(), List.copyOf(ranges)));
-        return new StoreListingView(store.getId(), brand.getId(), brand.getName(), store.getBranchName(), brand.getBranchCount(),
+        return new StoreListingView(store.getId(), store.getSlug(), brand.getId(), brand.getName(), store.getBranchName(), brand.getBranchCount(),
                 Map.copyOf(brand.getDescription()), List.copyOf(brand.getCuisines()), Map.copyOf(brand.getLogoUrls()),
                 Map.copyOf(brand.getCoverUrls()), StoreService.location(store),
                 (store.getAddress() != null) ? store.getAddress().area() : null,

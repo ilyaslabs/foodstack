@@ -111,6 +111,16 @@ class StoresController {
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }
 
+    @PutMapping("/{storeId}/slug")
+    @PreAuthorize("hasAuthority('store:manage')")
+    ResponseEntity<StoreDtos.StoreResponse> updateSlug(@PathVariable String storeId,
+            @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
+            @Valid @RequestBody StoreDtos.SlugRequest request) {
+        StoreDetails updated = this.storeService.updateSlug(storeId, request.slug(),
+                StoreMapper.requireIfMatch("store", ifMatch), CurrentUser.id());
+        return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
+    }
+
     @PutMapping("/{storeId}/hours")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<StoreDtos.StoreResponse> updateHours(@PathVariable String storeId,
@@ -179,19 +189,22 @@ class StoresController {
 
     // ---- Customers ------------------------------------------------------------------------
 
-    @GetMapping("/{storeId}")
-    StoreDtos.StorePageResponse page(@PathVariable String storeId) {
-        return StoreMapper.page(visible(storeId));
+    /** A branch's page by its slug ({@code spice-route-gulberg}) or its id. */
+    @GetMapping("/{key}")
+    StoreDtos.StorePageResponse page(@PathVariable String key) {
+        return StoreMapper.page(visible(this.storeService.resolve(key)));
     }
 
-    @GetMapping("/{storeId}/menu")
-    MenuDtos.MenuResponse menu(@PathVariable String storeId) {
+    @GetMapping("/{key}/menu")
+    MenuDtos.MenuResponse menu(@PathVariable String key) {
+        String storeId = this.storeService.resolve(key);
         visible(storeId);
         return StoreMapper.menu(this.menuService.effectiveMenu(storeId));
     }
 
-    @GetMapping("/{storeId}/delivery-quote")
-    StoreDtos.QuoteResponse quote(@PathVariable String storeId, @RequestParam double lat, @RequestParam double lng) {
+    @GetMapping("/{key}/delivery-quote")
+    StoreDtos.QuoteResponse quote(@PathVariable String key, @RequestParam double lat, @RequestParam double lng) {
+        String storeId = this.storeService.resolve(key);
         visible(storeId);
         GeoPoint destination = new GeoPoint(lat, lng);
         if (!destination.isValid()) {

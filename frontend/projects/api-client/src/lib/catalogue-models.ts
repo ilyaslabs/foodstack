@@ -75,6 +75,8 @@ export interface BrandUpdate {
 
 export interface StoreDetails {
   id: string;
+  /** Web address on the customer site: /stores/{slug}. */
+  slug: string | null;
   brand: Brand;
   branchName: string | null;
   displayName: string;
@@ -226,6 +228,7 @@ export interface Menu {
 
 export interface StorePage {
   id: string;
+  slug: string | null;
   brandId: string;
   brandName: string;
   branchName: string | null;
@@ -287,6 +290,7 @@ export type Fulfilment = 'DELIVERY' | 'PICKUP';
 
 export interface StoreCard {
   storeId: string;
+  slug: string | null;
   brandId: string;
   brandName: string;
   branchName: string | null;

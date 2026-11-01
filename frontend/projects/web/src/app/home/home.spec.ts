@@ -17,6 +17,7 @@ import { Home } from './home';
 
 const CARD: StoreCard = {
   storeId: 's1',
+  slug: 'spice-route-gulberg',
   brandId: 'b1',
   brandName: 'Spice Route',
   branchName: 'Gulberg',
@@ -108,6 +109,9 @@ describe('Home', () => {
     expect(element.querySelectorAll('app-store-card').length).toBe(1);
     expect(element.textContent).toContain('Pakistani · BBQ');
     expect(element.textContent).toContain('1 store');
+    expect(element.querySelector('app-store-card a')?.getAttribute('href')).toBe(
+      '/stores/spice-route-gulberg',
+    );
   });
 
   it('switches to pickup', async () => {

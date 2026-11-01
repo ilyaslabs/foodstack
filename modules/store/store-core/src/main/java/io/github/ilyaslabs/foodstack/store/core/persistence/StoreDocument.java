@@ -38,6 +38,9 @@ public class StoreDocument {
 
     private String branchName;
 
+    /** Web address of the branch ({@code /stores/<slug>}); claimed in {@code store_slugs} so it is unique. */
+    private String slug;
+
     private String legalName;
 
     private String taxId;
@@ -109,6 +112,14 @@ public class StoreDocument {
 
     public void setBrandName(String brandName) {
         this.brandName = brandName;
+    }
+
+    public String getSlug() {
+        return this.slug;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
     }
 
     public String getBranchName() {

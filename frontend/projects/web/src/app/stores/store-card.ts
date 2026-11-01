@@ -13,7 +13,11 @@ import { cuisineLabel } from './cuisine';
   imports: [RouterLink, Icon],
   template: `
     @let card = store();
-    <a class="card" [routerLink]="['/stores', card.storeId]" [class.closed]="!card.openNow">
+    <a
+      class="card"
+      [routerLink]="['/stores', card.slug ?? card.storeId]"
+      [class.closed]="!card.openNow"
+    >
       <div class="cover">
         @if (cover(); as url) {
           <img [src]="url" alt="" loading="lazy" />
