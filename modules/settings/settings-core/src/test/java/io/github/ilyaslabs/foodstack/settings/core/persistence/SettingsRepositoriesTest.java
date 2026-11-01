@@ -1,5 +1,10 @@
 package io.github.ilyaslabs.foodstack.settings.core.persistence;
 
+import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
+import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
+import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
+import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
+import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -10,16 +15,10 @@ import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.data.mongodb.core.MongoTemplate;
-
-import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
-import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
-import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
-import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
-import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
@@ -60,6 +59,27 @@ class SettingsRepositoriesTest {
 
     @Autowired
     LocaleRepository localeRepository;
+
+    @Autowired
+    OrderingRepository orderingRepository;
+
+    @Test
+    @DisplayName("the changelog creates default ordering rules, saved as a versioned record")
+    void ordering() {
+        OrderingDocument ordering = this.orderingRepository.findById(OrderingDocument.ID).orElseThrow();
+        assertThat(ordering.cashEnabled()).isTrue();
+        assertThat(ordering.cardEnabled()).isFalse();
+        assertThat(ordering.acceptTimeoutSeconds()).isEqualTo(180);
+
+        OrderingDocument saved = this.orderingRepository.save(new OrderingDocument(OrderingDocument.ID, true, true, 50, 250,
+                1600, false, 300, null, "u1", ordering.version()));
+        assertThat(saved.version()).isEqualTo(ordering.version() + 1);
+        assertThat(this.orderingRepository.findById(OrderingDocument.ID).orElseThrow().taxBasisPoints()).isEqualTo(1600);
+        assertThatExceptionOfType(OptimisticLockingFailureException.class).isThrownBy(() -> this.orderingRepository
+            .save(new OrderingDocument(OrderingDocument.ID, true, true, 0, 0, 0, true, 180, null, "u2", ordering.version())));
+        this.orderingRepository.save(new OrderingDocument(OrderingDocument.ID, true, false, 0, 0, 0, true, 180, null, null,
+                saved.version()));
+    }
 
     @Test
     @DisplayName("the changelog creates default branding and locale")

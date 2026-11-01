@@ -17,6 +17,7 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuCache;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuService;
+import io.github.ilyaslabs.foodstack.store.core.application.OrderValidationService;
 import io.github.ilyaslabs.foodstack.store.core.application.SlugBackfill;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreListingService;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreService;
@@ -130,5 +131,11 @@ public class StoreConfiguration {
     StoreListingService storeListingService(StoreService storeService, MenuService storeMenuService,
             StoreRepository storeRepository, SettingsApi settingsApi) {
         return new StoreListingService(storeService, storeMenuService, storeRepository, settingsApi);
+    }
+
+    @Bean
+    OrderValidationService storeOrderValidationService(StoreService storeService, MenuService storeMenuService,
+            SettingsApi settingsApi) {
+        return new OrderValidationService(storeService, storeMenuService, settingsApi);
     }
 }

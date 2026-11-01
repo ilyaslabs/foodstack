@@ -1,0 +1,5 @@
+# Liquibase changelog of the promotion module (database foodstack_promotion). Shard keys are applied by
+# PromotionConfiguration (TDD 6.3) and listed next to each collection.
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml

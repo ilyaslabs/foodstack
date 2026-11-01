@@ -16,4 +16,11 @@ public interface StoreApi {
 
     /** Branch ids in id order, for a full search rebuild: pass the last id of a page as {@code afterId}. */
     StoreIdPage listStoreIds(@Param("afterId") String afterId, @Param("limit") int limit);
+
+    /**
+     * Prices cart lines at the branch's current prices and checks them against its menu (PRD CO-6),
+     * with the branch details an order snapshots. Never fails for line problems: they are listed in
+     * the result so the customer can be told what changed. Needs a signed-in caller.
+     */
+    OrderValidationView validateOrder(@Param("request") OrderValidationRequest request);
 }
