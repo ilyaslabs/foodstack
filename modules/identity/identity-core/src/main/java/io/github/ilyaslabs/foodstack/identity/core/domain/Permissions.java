@@ -31,6 +31,15 @@ public final class Permissions {
     /** Rebuild the search index. */
     public static final String SEARCH_MANAGE = "search:manage";
 
+    /** Create and edit operator coupons and see every store's (PRD PR-3). */
+    public static final String PROMOTION_MANAGE = "promotion:manage";
+
+    /** See every order, cancel and refund with a reason (PRD OF-6). */
+    public static final String ORDER_MANAGE = "order:manage";
+
+    /** Switch payment methods and see the card gateway's state. */
+    public static final String PAYMENT_MANAGE = "payment:manage";
+
     /**
      * Work in the store area of the back office. Which brands and branches is decided by the
      * {@code brandIds} and {@code storeIds} claims.
@@ -41,9 +50,9 @@ public final class Permissions {
 
     static {
         BY_ROLE.put(Role.ADMIN, Set.of(SETTINGS_MANAGE, MEDIA_UPLOAD, USERS_READ, USERS_MANAGE, STORE_MANAGE,
-                GEO_MANAGE, SEARCH_MANAGE));
-        BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ));
-        BY_ROLE.put(Role.SUPPORT, Set.of(USERS_READ));
+                GEO_MANAGE, SEARCH_MANAGE, PROMOTION_MANAGE, ORDER_MANAGE, PAYMENT_MANAGE));
+        BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ, PAYMENT_MANAGE));
+        BY_ROLE.put(Role.SUPPORT, Set.of(USERS_READ, ORDER_MANAGE));
         BY_ROLE.put(Role.STORE_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD));
         BY_ROLE.put(Role.STORE_STAFF, Set.of(STORE_PORTAL));
         BY_ROLE.put(Role.CUSTOMER, Set.of());

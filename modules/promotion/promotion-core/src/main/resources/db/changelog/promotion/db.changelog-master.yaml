@@ -3,3 +3,27 @@
 databaseChangeLog:
   - include:
       file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: promotion-1
+      author: foodstack
+      comment: "promotion_promotions (shard key { _id: hashed }) and promotion_codes (the code is the _id, so it is unique; { _id: hashed })"
+      changes:
+        - createCollection:
+            collectionName: promotion_promotions
+        - createIndex:
+            collectionName: promotion_promotions
+            keys: '{ "brandId": 1, "_id": -1 }'
+            options: '{ "name": "brand_newest" }'
+        - createCollection:
+            collectionName: promotion_codes
+  - changeSet:
+      id: promotion-2
+      author: foodstack
+      comment: "coupon uses: promotion_redemptions (_id = order id), promotion_customer_usage (_id = promotionId:customerId), promotion_customers (_id = customer id); all { _id: hashed }"
+      changes:
+        - createCollection:
+            collectionName: promotion_redemptions
+        - createCollection:
+            collectionName: promotion_customer_usage
+        - createCollection:
+            collectionName: promotion_customers

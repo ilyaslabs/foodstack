@@ -20,6 +20,14 @@
         </dependency>
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-identity-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-settings-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
             <artifactId>foodstack-platform-security</artifactId>
         </dependency>
         <dependency>
