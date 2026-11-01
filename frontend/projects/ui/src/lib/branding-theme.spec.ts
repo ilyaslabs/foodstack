@@ -21,6 +21,24 @@ describe('brandColors', () => {
   });
 });
 
+describe('brandColors with a grey brand', () => {
+  it('keeps backgrounds neutral grey instead of tinting them', () => {
+    // when
+    const light = brandColors('#000000', '#EEEEEE', false);
+
+    // then: every channel of the surface is equal, so no pink or other tint
+    for (const role of [
+      '--mat-sys-surface',
+      '--mat-sys-surface-container',
+      '--mat-sys-background',
+    ]) {
+      const hex = light[role];
+      expect(hex.slice(1, 3)).toBe(hex.slice(3, 5));
+      expect(hex.slice(3, 5)).toBe(hex.slice(5, 7));
+    }
+  });
+});
+
 describe('brandStylesheet', () => {
   it('writes light tokens, dark tokens and a sanitised font family', () => {
     // when

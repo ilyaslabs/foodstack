@@ -3,8 +3,10 @@ package io.github.ilyaslabs.foodstack.platform.test;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.kafka.KafkaContainer;
+import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -28,6 +30,11 @@ public final class FoodstackContainers {
     /** S3-compatible object storage (Apache-2.0); the unit deployer runs the same server. */
     public static final String S3_IMAGE = "rustfs/rustfs:1.0.4";
 
+    /** Search engine of the search module; the unit deployer runs the same version. */
+    public static final String ELASTICSEARCH_IMAGE = "elasticsearch:9.4.0";
+
+    public static final String ELASTICSEARCH_PASSWORD = "foodstack-test";
+
     public static final String S3_ACCESS_KEY = "foodstack-test";
 
     public static final String S3_SECRET_KEY = "foodstack-test-secret";
@@ -39,6 +46,8 @@ public final class FoodstackContainers {
     private static KafkaContainer kafka;
 
     private static GenericContainer<?> s3;
+
+    private static ElasticsearchContainer elasticsearch;
 
     private FoodstackContainers() {
     }
@@ -72,11 +81,37 @@ public final class FoodstackContainers {
             s3 = new GenericContainer<>(S3_IMAGE).withExposedPorts(9000)
                 .withEnv("RUSTFS_ACCESS_KEY", S3_ACCESS_KEY)
                 .withEnv("RUSTFS_SECRET_KEY", S3_SECRET_KEY)
+                // The dev servers upload straight to storage from another origin; installs go through the proxy instead.
+                .withEnv("RUSTFS_CORS_ALLOWED_ORIGINS", "http://localhost:4200,http://localhost:4300")
                 .waitingFor(Wait.forHttp("/health").forPort(9000))
                 .withReuse(true);
             s3.start();
         }
         return s3;
+    }
+
+    public static synchronized ElasticsearchContainer elasticsearch() {
+        if (elasticsearch == null) {
+            elasticsearch = new ElasticsearchContainer(DockerImageName.parse(ELASTICSEARCH_IMAGE)
+                .asCompatibleSubstituteFor("docker.elastic.co/elasticsearch/elasticsearch"))
+                .withPassword(ELASTICSEARCH_PASSWORD)
+                .withEnv("xpack.security.http.ssl.enabled", "false")
+                .withEnv("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
+                .withEnv("node.store.allow_mmap", "false")
+                .withReuse(true);
+            elasticsearch.start();
+        }
+        return elasticsearch;
+    }
+
+    /** Elasticsearch with a fresh index prefix. Returns the prefix. */
+    public static String registerElasticsearch(DynamicPropertyRegistry registry) {
+        String prefix = uniqueName() + "_";
+        registry.add("spring.elasticsearch.uris", () -> "http://" + elasticsearch().getHttpHostAddress());
+        registry.add("spring.elasticsearch.username", () -> "elastic");
+        registry.add("spring.elasticsearch.password", () -> ELASTICSEARCH_PASSWORD);
+        registry.add("foodstack.search.index-prefix", () -> prefix);
+        return prefix;
     }
 
     /** Endpoint URL of the S3-compatible container. */

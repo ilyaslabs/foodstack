@@ -1,0 +1,169 @@
+@if (store(); as store) {
+  <section class="banner">
+    <div class="cover">
+      @if (cover(); as url) {
+        <img [src]="url" alt="" />
+      }
+    </div>
+    <div class="banner-inner">
+      <a mat-button routerLink="/" class="back"
+        ><fs-icon name="arrow_back" class="flip" /> {{ ui.t('back') }}</a
+      >
+      <div class="identity">
+        @if (logo(); as url) {
+          <img class="logo" [src]="url" alt="" width="88" height="88" />
+        } @else {
+          <span class="logo logo-fallback" aria-hidden="true">{{ store.brandName.charAt(0) }}</span>
+        }
+        <div class="names">
+          <h1>{{ store.brandName }}</h1>
+          @if (store.branchName) {
+            <p class="branch">{{ store.branchName }}</p>
+          }
+          @if (store.cuisines.length) {
+            <p class="cuisines">
+              @for (c of store.cuisines; track c; let last = $last) {
+                {{ cuisineLabel(c) }}
+                @if (!last) {
+                  <span aria-hidden="true"> · </span>
+                }
+              }
+            </p>
+          }
+        </div>
+      </div>
+      @if (locale.pick(store.description); as description) {
+        <p class="description">{{ description }}</p>
+      }
+
+      <div class="facts">
+        @if (store.openNow) {
+          <span class="fact open"><fs-icon name="check_circle" /> {{ ui.t('openNow') }}</span>
+        } @else {
+          <span class="fact closed">
+            <fs-icon name="schedule" />
+            {{ store.temporarilyClosed ? ui.t('closedForNow') : ui.t('closedNow') }}
+            @if (store.temporarilyClosed && store.closedReason) {
+              <span class="reason">· {{ store.closedReason }}</span>
+            }
+          </span>
+        }
+        <span class="fact"><fs-icon name="schedule" /> {{ ui.minutes(store.prepMinutes) }}</span>
+        @if (store.address) {
+          <span class="fact"><fs-icon name="place" /> {{ store.address }}</span>
+        }
+        @if (browser()) {
+          @if (quote(); as q) {
+            @if (q.deliverable) {
+              <span class="fact accent">
+                <fs-icon name="delivery" />
+                {{
+                  q.chargeMinor === 0
+                    ? ui.t('freeDelivery')
+                    : ui.t('deliveryFee', { fee: money(q.chargeMinor) })
+                }}
+                · {{ ui.minutes(q.etaMinutes) }}
+              </span>
+              @if (q.freeDeliveryAboveMinor !== null && q.chargeMinor > 0) {
+                <span class="fact">{{
+                  ui.t('freeAbove', { amount: money(q.freeDeliveryAboveMinor) })
+                }}</span>
+              }
+              @if (q.minOrderMinor > 0) {
+                <span class="fact">{{ ui.t('minOrder', { amount: money(q.minOrderMinor) }) }}</span>
+              }
+            } @else {
+              <span class="fact warn"><fs-icon name="info" /> {{ ui.t('notDeliverable') }}</span>
+            }
+          } @else if (!locations.location()) {
+            <a class="fact link" routerLink="/"
+              ><fs-icon name="place" /> {{ ui.t('setLocationForFee') }}</a
+            >
+          }
+        }
+      </div>
+    </div>
+  </section>
+
+  <div class="layout">
+    <aside class="side">
+      <details class="hours" open>
+        <summary>{{ ui.t('hours') }}</summary>
+        <dl>
+          @for (row of week(); track row.day; let first = $first) {
+            <div class="hours-row" [class.today]="first">
+              <dt>{{ row.name }}</dt>
+              <dd dir="ltr">{{ row.hours || ui.t('closedAllDay') }}</dd>
+            </div>
+          }
+        </dl>
+      </details>
+      <p class="soon">{{ ui.t('orderingSoon') }}</p>
+    </aside>
+
+    <section class="menu" [attr.aria-label]="ui.t('menu')">
+      @if (sections().length > 1) {
+        <nav class="section-nav" [attr.aria-label]="ui.t('menu')">
+          @for (section of sections(); track section.id) {
+            <button type="button" class="section-link" (click)="jump(section.id)">
+              {{ locale.pick(section.name) }}
+            </button>
+          }
+        </nav>
+      }
+      @for (section of sections(); track section.id) {
+        <section class="menu-section" [id]="'section-' + section.id">
+          <h2>{{ locale.pick(section.name) }}</h2>
+          <div class="items">
+            @for (item of section.items; track item.id) {
+              <article class="item" [class.sold-out]="item.soldOut">
+                <div class="item-text">
+                  <h3>{{ locale.pick(item.name) }}</h3>
+                  @if (locale.pick(item.description); as description) {
+                    <p class="item-description">{{ description }}</p>
+                  }
+                  <div class="item-foot">
+                    <span class="price">
+                      @if (fromPrice(item); as from) {
+                        {{ ui.t('from') }} {{ money(from) }}
+                      } @else {
+                        {{ money(item.priceMinor) }}
+                      }
+                    </span>
+                    @if (item.soldOut) {
+                      <span class="tag sold">{{ ui.t('soldOut') }}</span>
+                    }
+                    @for (tag of item.dietaryTags; track tag) {
+                      <span class="tag">{{ dietary(tag) }}</span>
+                    }
+                  </div>
+                </div>
+                @if (image(item); as url) {
+                  <img
+                    class="item-image"
+                    [src]="url"
+                    alt=""
+                    loading="lazy"
+                    width="112"
+                    height="112"
+                  />
+                }
+              </article>
+            }
+          </div>
+        </section>
+      } @empty {
+        <p class="empty">{{ ui.t('emptyMenu') }}</p>
+      }
+    </section>
+  </div>
+} @else if (missing()) {
+  <section class="missing">
+    <fs-icon name="storefront" class="missing-icon" />
+    <h1>{{ ui.t('storeMissing') }}</h1>
+    <p>{{ ui.t('storeMissingText') }}</p>
+    <a mat-flat-button routerLink="/">{{ ui.t('back') }}</a>
+  </section>
+} @else {
+  <mat-progress-bar mode="indeterminate" />
+}

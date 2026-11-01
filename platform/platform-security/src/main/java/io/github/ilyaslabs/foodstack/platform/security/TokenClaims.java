@@ -12,6 +12,12 @@ public final class TokenClaims {
     /** The user's token version; tokens older than the revoked version are rejected. */
     public static final String TOKEN_VERSION = "tv";
 
+    /** Brands the user owns (brand-level actions such as editing the menu). */
+    public static final String BRAND_IDS = "brandIds";
+
+    /** Branches the user manages or works at. */
+    public static final String STORE_IDS = "storeIds";
+
     private TokenClaims() {
     }
 }

@@ -161,6 +161,90 @@ class UserServiceTest {
     }
 
     @Test
+    @DisplayName("adds the store owner role and brand and branch ids to an existing account")
+    void grantStoreAccessToExistingUser() {
+        // given
+        UserDocument user = user(EnumSet.of(Role.CUSTOMER));
+        given(this.loginKeys.findByLoginKey(this.pii.blindIndex("admin@example.com")))
+            .willReturn(Optional.of(new LoginKeyDocument("k", "x", user.getId())));
+        given(this.users.findById(user.getId())).willReturn(Optional.of(user));
+        given(this.users.save(any(UserDocument.class))).willAnswer((invocation) -> invocation.getArgument(0));
+
+        // when
+        UserAccount account = this.service.grantStoreAccess("admin@example.com", null, null, "brand-1", "store-1", "admin-1");
+
+        // then
+        assertThat(account.roles()).containsExactlyInAnyOrder(Role.CUSTOMER, Role.STORE_OWNER);
+        assertThat(account.brandIds()).containsExactly("brand-1");
+        assertThat(account.storeIds()).containsExactly("store-1");
+        assertThat(account.permissions()).contains("store:portal", "media:upload");
+    }
+
+    @Test
+    @DisplayName("creates a store owner account when nobody has the email yet")
+    void grantStoreAccessCreatesAccount() {
+        // given
+        given(this.loginKeys.findByLoginKey(any())).willReturn(Optional.empty());
+        java.util.concurrent.atomic.AtomicReference<UserDocument> inserted = new java.util.concurrent.atomic.AtomicReference<>();
+        given(this.users.insert(any(UserDocument.class))).willAnswer((invocation) -> {
+            inserted.set(invocation.getArgument(0));
+            return invocation.getArgument(0);
+        });
+        given(this.users.findById(any())).willAnswer((invocation) -> Optional.ofNullable(inserted.get()));
+        given(this.users.save(any(UserDocument.class))).willAnswer((invocation) -> invocation.getArgument(0));
+
+        // when
+        UserAccount account = this.service.grantStoreAccess("owner@example.com", "Owner", "a-long-password", "brand-1",
+                "store-1", "admin-1");
+
+        // then
+        assertThat(account.roles()).containsExactly(Role.STORE_OWNER);
+        assertThat(account.storeIds()).containsExactly("store-1");
+        assertThat(account.email()).isEqualTo("owner@example.com");
+    }
+
+    @Test
+    @DisplayName("refuses a new owner account without a valid password")
+    void grantStoreAccessNeedsPassword() {
+        given(this.loginKeys.findByLoginKey(any())).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> this.service.grantStoreAccess("owner@example.com", "Owner", null, "b", "s", "admin-1"))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("USER_INVALID"));
+    }
+
+    @Test
+    @DisplayName("revoking the last branch drops the owner role and revokes tokens")
+    void revokeStoreAccess() {
+        // given
+        UserDocument user = user(EnumSet.of(Role.STORE_OWNER));
+        user.getBrandIds().add("brand-1");
+        user.getStoreIds().add("store-1");
+        given(this.users.findById(user.getId())).willReturn(Optional.of(user));
+
+        // when
+        this.service.revokeStoreAccess(user.getId(), "brand-1", "store-1");
+
+        // then
+        assertThat(user.getRoles()).containsExactly(Role.CUSTOMER);
+        assertThat(user.getStoreIds()).isEmpty();
+        verify(this.revocations).revokeBefore(user.getId(), 2);
+    }
+
+    @Test
+    @DisplayName("puts brand and branch ids into token claims")
+    void tokenClaimsCarryStoreScopes() {
+        UserDocument owner = user(EnumSet.of(Role.STORE_OWNER));
+        owner.getBrandIds().add("brand-1");
+        owner.getStoreIds().add("store-1");
+        given(this.users.findById(owner.getId())).willReturn(Optional.of(owner));
+
+        UserService.TokenClaims claims = this.service.tokenClaims(owner.getId());
+
+        assertThat(claims.brandIds()).containsExactly("brand-1");
+        assertThat(claims.storeIds()).containsExactly("store-1");
+    }
+
+    @Test
     @DisplayName("answers USER_NOT_FOUND for unknown users")
     void notFound() {
         given(this.users.findById("nobody")).willReturn(Optional.empty());

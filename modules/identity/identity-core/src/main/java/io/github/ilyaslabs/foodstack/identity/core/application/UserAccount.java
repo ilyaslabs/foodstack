@@ -16,7 +16,9 @@ import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
  * @param permissions permissions derived from the roles
  * @param status account state
  * @param createdAt creation time
+ * @param brandIds brands the user owns
+ * @param storeIds branches the user manages
  */
 public record UserAccount(String id, String email, String displayName, Set<Role> roles, Set<String> permissions,
-        UserStatus status, Instant createdAt) {
+        UserStatus status, Instant createdAt, Set<String> brandIds, Set<String> storeIds) {
 }

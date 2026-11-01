@@ -74,7 +74,7 @@ sudo ./install.sh /opt/foodstack \
 `install.sh`:
 
 1. Checks Docker, Compose, CPU, memory, disk and that ports 80 and 443 are free.
-2. When run as root on Linux, sets `vm.max_map_count=262144` (needed by Elasticsearch) and makes it persistent.
+2. Elasticsearch (store search) is part of the stack and runs without memory-mapped files, so no kernel setting is needed. When run as root on Linux, `install.sh` also raises `vm.max_map_count` to 262144, which Elasticsearch prefers for large indices.
 3. Creates `/opt/foodstack/{logs,config,backups}`. Service data lives in named Docker volumes (`foodstack_mongodb`, `foodstack_storage`, …), so no folder ownership setup is needed.
 4. Generates strong passwords, the JWT key pair, the PII key and the internal token into `/opt/foodstack/.env` (permissions 600).
 5. Copies the application, web apps and configuration.
@@ -82,7 +82,7 @@ sudo ./install.sh /opt/foodstack \
 7. Optionally installs a systemd unit so FoodStack starts on boot (`--systemd`).
 8. Prints the first administrator's email and generated password once (also kept in `.env` as `FOODSTACK_ADMIN_PASSWORD`). A password-change screen arrives with the notification module.
 
-For a quick trial on your own computer (Linux, or macOS/Windows with Docker Desktop), without DNS, certificates or sudo: `./install.sh ~/foodstack --local`, then open `http://foodstack.localhost:8080/admin/`.
+For a quick trial on your own computer (Linux, or macOS/Windows with Docker Desktop), without DNS, certificates or sudo: `./install.sh ~/foodstack --local`, then open `http://foodstack.localhost:8080/admin/` and sign in as `admin@foodstack.localhost` / `foodstack-local` (fixed for trials; a `--domain` install generates a random password).
 
 `sudo` is only needed to install into a folder your user can't write to (like `/opt`) or with `--systemd`. If an install stops part way (for example a failed image download), fix the cause and run the same command again: it removes the unfinished attempt and starts over. `./uninstall.sh` removes an install and its data volumes, keeping `backups/`.
 
@@ -95,7 +95,9 @@ Edit `/opt/foodstack/.env`, then run `./restart.sh server`. The main settings:
 | `FOODSTACK_DOMAIN`, `FOODSTACK_ADMIN_DOMAIN`, `FOODSTACK_API_DOMAIN` | `example.com` | Set by `install.sh` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | | Required for login codes and emails |
 | `FCM_CREDENTIALS_FILE` | `/opt/foodstack/config/fcm.json` | Push notifications |
-| `MAPS_PROVIDER` | `osm` or `google` | Plus `NOMINATIM_URL`, `OSRM_URL` or `GOOGLE_MAPS_API_KEY` |
+| `GEOCODING_PROVIDER`, `GEOCODING_URL`, `GEOCODING_COUNTRY_CODES` | `nominatim`, `https://nominatim.openstreetmap.org`, `pk` | Address search for customers and store onboarding. The public Nominatim allows about one request a second; use your own instance or a hosted one for real traffic. `none` turns address search off (customers then use their device location) |
+| `MAP_TILE_URL`, `MAP_TILE_ORIGIN`, `MAP_ATTRIBUTION` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, `https://tile.openstreetmap.org`, `© OpenStreetMap contributors` | Map tiles in the back office, where stores draw their delivery zones. OpenStreetMap's public tiles allow light use only (see their tile usage policy); with many stores, use your own tile server or a hosted provider. `MAP_TILE_ORIGIN` must be the scheme and host of `MAP_TILE_URL`, because the page's security policy only loads tiles from there |
+| `ELASTICSEARCH_URIS`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD` | set by `install.sh` | Point at an external Elasticsearch 9 cluster if you run one; the index is rebuilt from store data on start |
 | `PAYMENTS_CARD_ENABLED` | `false` | Turn on once the gateway is configured |
 | `JAVA_HEAP`, `ES_HEAP` | `4g`, `2g` | Sized by `install.sh` from server memory |
 
@@ -336,6 +338,6 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 | Login emails not arriving | SMTP settings; the notification delivery log in the admin panel shows failures |
 | Orders stuck in `PLACED` | Payment webhooks not reaching `api.<domain>/api/v1/payment-webhooks/…`; check the gateway dashboard and proxy logs |
 | Notifications or ledger lagging | Kafka consumer lag dashboard; outbox lag metric; dead-letter topics in the admin panel |
-| Search results stale or empty | Rebuild search from the admin panel (Settings → Maintenance) |
-| Elasticsearch will not start on a single server | `vm.max_map_count`; rerun `install.sh --check` |
+| Search results stale or empty | Only live branches with a delivery area (or pickup) appear. To rebuild the index, call `POST /api/v1/search/reindex` as an admin (a button arrives with the maintenance screen), or restart the server: it rebuilds on start |
+| Elasticsearch will not start on a single server | `logs elasticsearch`; usually too little memory for `ES_HEAP`; rerun `install.sh --check` |
 | Disk full | `status.sh` shows usage; prune old backups and logs, then extend the disk |

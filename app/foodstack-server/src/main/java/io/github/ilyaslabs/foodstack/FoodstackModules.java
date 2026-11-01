@@ -5,7 +5,7 @@ import java.util.List;
 /** Every module this server can run, in dependency order. */
 final class FoodstackModules {
 
-    static final List<String> ALL = List.of("identity", "settings", "media");
+    static final List<String> ALL = List.of("identity", "settings", "media", "geo", "store", "search");
 
     private FoodstackModules() {
     }

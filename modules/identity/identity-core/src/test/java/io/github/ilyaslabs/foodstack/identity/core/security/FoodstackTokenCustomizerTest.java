@@ -33,7 +33,8 @@ class FoodstackTokenCustomizerTest {
     @DisplayName("signs with ES256 and adds roles, permissions and token version to access tokens")
     void accessToken() {
         given(this.users.tokenClaims("user-1"))
-            .willReturn(new UserService.TokenClaims(Set.of(Role.ADMIN), Set.of("media:upload", "settings:manage"), 3));
+            .willReturn(new UserService.TokenClaims(Set.of(Role.ADMIN), Set.of("media:upload", "settings:manage"), 3,
+                    Set.of(), Set.of()));
         JwsHeader.Builder header = JwsHeader.with(SignatureAlgorithm.RS256);
         JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject("user-1");
 

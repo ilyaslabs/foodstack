@@ -60,8 +60,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
+                  "maximumWarning": "8kB",
+                  "maximumError": "16kB"
                 }
               ],
               "outputHashing": "all"
@@ -116,6 +116,11 @@
               {
                 "glob": "**/*",
                 "input": "projects/backoffice/public"
+              },
+              {
+                "glob": "maplibre-gl-worker.mjs",
+                "input": "node_modules/maplibre-gl/dist",
+                "output": "maplibre"
               }
             ],
             "styles": [
@@ -128,6 +133,7 @@
               "node_modules/@fontsource/poppins/700.css",
               "node_modules/@fontsource/lato/400.css",
               "node_modules/@fontsource/lato/700.css",
+              "node_modules/maplibre-gl/dist/maplibre-gl.css",
               "projects/backoffice/src/styles.scss"
             ]
           },
@@ -141,8 +147,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
+                  "maximumWarning": "8kB",
+                  "maximumError": "16kB"
                 }
               ],
               "outputHashing": "all",

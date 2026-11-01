@@ -10,6 +10,6 @@ final class IdentityWebMapper {
 
     static UserResponse toResponse(UserAccount user) {
         return new UserResponse(user.id(), user.email(), user.displayName(), user.roles(), user.permissions(), user.status(),
-                user.createdAt().getEpochSecond());
+                user.createdAt().getEpochSecond(), user.brandIds(), user.storeIds());
     }
 }

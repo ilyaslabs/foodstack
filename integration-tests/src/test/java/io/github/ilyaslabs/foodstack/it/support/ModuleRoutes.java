@@ -18,6 +18,9 @@ public final class ModuleRoutes {
                 "/logout", "/.well-known", "/userinfo", "/connect"));
         prefixes.put("settings", List.of("/api/v1/settings"));
         prefixes.put("media", List.of("/api/v1/media"));
+        prefixes.put("geo", List.of("/api/v1/geo", "/api/v1/zones"));
+        prefixes.put("store", List.of("/api/v1/stores", "/api/v1/brands"));
+        prefixes.put("search", List.of("/api/v1/search"));
         PREFIXES = Map.copyOf(prefixes);
     }
 

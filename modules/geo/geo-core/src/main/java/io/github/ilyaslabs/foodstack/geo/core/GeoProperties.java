@@ -1,0 +1,104 @@
+package io.github.ilyaslabs.foodstack.geo.core;
+
+import java.time.Duration;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * {@code foodstack.geo.*}: distance estimate and the address search provider (TDD 12).
+ */
+@ConfigurationProperties("foodstack.geo")
+public class GeoProperties {
+
+    /**
+     * Road distance is estimated as the straight-line distance times this factor until a routing
+     * provider is configured.
+     */
+    private double roadFactor = 1.3;
+
+    private final Geocoding geocoding = new Geocoding();
+
+    public double getRoadFactor() {
+        return this.roadFactor;
+    }
+
+    public void setRoadFactor(double roadFactor) {
+        this.roadFactor = roadFactor;
+    }
+
+    public Geocoding getGeocoding() {
+        return this.geocoding;
+    }
+
+    /** Address search and reverse lookup of a map pin (PRD SE-6). */
+    public static class Geocoding {
+
+        /** {@code nominatim} (OpenStreetMap, the default) or {@code none}. */
+        private String provider = "nominatim";
+
+        /**
+         * Nominatim base URL. The public server is for demos only (one request per second); run your
+         * own or use a hosted provider in production (deployment guide).
+         */
+        private String url = "https://nominatim.openstreetmap.org";
+
+        /** Sent as User-Agent, as the Nominatim usage policy requires. */
+        private String userAgent = "FoodStack";
+
+        /** Optional comma-separated ISO 3166-1 codes that limit results, for example {@code pk,ae}. */
+        private String countryCodes = "";
+
+        /** How long answers are cached in Redis. */
+        private Duration cacheTtl = Duration.ofDays(7);
+
+        private Duration timeout = Duration.ofSeconds(5);
+
+        public String getProvider() {
+            return this.provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getUrl() {
+            return this.url;
+        }
+
+        public void setUrl(String url) {
+            this.url = url;
+        }
+
+        public String getUserAgent() {
+            return this.userAgent;
+        }
+
+        public void setUserAgent(String userAgent) {
+            this.userAgent = userAgent;
+        }
+
+        public String getCountryCodes() {
+            return this.countryCodes;
+        }
+
+        public void setCountryCodes(String countryCodes) {
+            this.countryCodes = countryCodes;
+        }
+
+        public Duration getCacheTtl() {
+            return this.cacheTtl;
+        }
+
+        public void setCacheTtl(Duration cacheTtl) {
+            this.cacheTtl = cacheTtl;
+        }
+
+        public Duration getTimeout() {
+            return this.timeout;
+        }
+
+        public void setTimeout(Duration timeout) {
+            this.timeout = timeout;
+        }
+    }
+}

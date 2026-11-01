@@ -9,7 +9,7 @@ import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { provideClientHydration, withEventReplay } from '@angular/platform-browser';
 
 import { authInterceptor } from '@foodstack/auth';
-import { BrandingStore } from '@foodstack/ui';
+import { BrandingStore, LocaleStore } from '@foodstack/ui';
 
 import { routes } from './app.routes';
 
@@ -20,5 +20,7 @@ export const appConfig: ApplicationConfig = {
     provideClientHydration(withEventReplay()),
     provideHttpClient(withFetch(), withInterceptors([authInterceptor])),
     provideAppInitializer(() => inject(BrandingStore).load()),
+    // Sets the page language and direction (right to left for Arabic, Urdu) before the first render.
+    provideAppInitializer(() => inject(LocaleStore).load()),
   ],
 };

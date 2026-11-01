@@ -2,3 +2,17 @@
 main {
   display: block;
 }
+
+.language fs-icon {
+  --fs-icon-size: 20px;
+  margin-inline-end: 6px;
+}
+
+@media (max-width: 599.98px) {
+  .language-name {
+    display: none;
+  }
+  .language fs-icon {
+    margin-inline-end: 0;
+  }
+}

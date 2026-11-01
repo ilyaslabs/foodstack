@@ -8,7 +8,15 @@ server {
     location = /admin/config.json {
         default_type application/json;
         add_header Cache-Control "no-store";
-        return 200 '{"apiUrl":"${FOODSTACK_API_URL}","issuer":"${FOODSTACK_ISSUER}","clientId":"foodstack-backoffice"}';
+        return 200 '{"apiUrl":"${FOODSTACK_API_URL}","issuer":"${FOODSTACK_ISSUER}","clientId":"foodstack-backoffice","mapTiles":"${MAP_TILE_URL}","mapAttribution":"${MAP_ATTRIBUTION}"}';
+    }
+
+    # The map worker has a fixed name, so revalidate it; module workers need a JavaScript type.
+    location ~* ^/admin/.+\.mjs$ {
+        types { }
+        default_type text/javascript;
+        add_header Cache-Control "no-cache";
+        try_files $uri =404;
     }
 
     # Hashed bundles never change; cache them for a year.
@@ -20,7 +28,7 @@ server {
     # Client-side routes fall back to the app shell.
     location /admin/ {
         add_header Cache-Control "no-cache";
-        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'";
+        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: ${MAP_TILE_ORIGIN}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${MAP_TILE_ORIGIN}; worker-src 'self' blob:; frame-ancestors 'none'";
         try_files $uri $uri/ /admin/index.html;
     }
 }

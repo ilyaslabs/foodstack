@@ -122,6 +122,7 @@ class IdentityControllersTest {
 
     private static UserAccount account(String id, Role role) {
         return new UserAccount(id, id + "@example.com", "Name", Set.of(role),
-                (role == Role.ADMIN) ? Set.of("settings:manage") : Set.of(), UserStatus.ACTIVE, Instant.ofEpochSecond(1_800_000_000L));
+                (role == Role.ADMIN) ? Set.of("settings:manage") : Set.of(), UserStatus.ACTIVE, Instant.ofEpochSecond(1_800_000_000L),
+                Set.of(), Set.of());
     }
 }

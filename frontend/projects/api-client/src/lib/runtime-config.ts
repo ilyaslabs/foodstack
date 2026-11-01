@@ -11,12 +11,26 @@ export interface RuntimeConfig {
   issuer: string;
   /** OAuth client id of this app. */
   clientId: string;
+  /** Map tiles as an XYZ URL template, such as `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. */
+  mapTiles?: string;
+  /** Credit shown on the map, as the tile provider requires. */
+  mapAttribution?: string;
 }
+
+/** OpenStreetMap's own tiles: fine for a back office's light use; busy deployments set their own provider. */
+export const DEFAULT_MAP_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+export const DEFAULT_MAP_ATTRIBUTION = '© OpenStreetMap contributors';
 
 export const RUNTIME_CONFIG = new InjectionToken<RuntimeConfig>('RUNTIME_CONFIG');
 
 /** Removes a trailing slash so URLs can be joined with `${base}/path`. */
 export function normalizeConfig(config: RuntimeConfig): RuntimeConfig {
   const trim = (value: string) => (value ?? '').replace(/\/+$/, '');
-  return { apiUrl: trim(config.apiUrl), issuer: trim(config.issuer), clientId: config.clientId };
+  return {
+    apiUrl: trim(config.apiUrl),
+    issuer: trim(config.issuer),
+    clientId: config.clientId,
+    mapTiles: config.mapTiles || DEFAULT_MAP_TILES,
+    mapAttribution: config.mapAttribution || DEFAULT_MAP_ATTRIBUTION,
+  };
 }

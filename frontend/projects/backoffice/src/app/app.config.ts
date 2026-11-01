@@ -8,7 +8,7 @@ import { provideHttpClient, withFetch, withInterceptors } from '@angular/common/
 import { provideRouter, withComponentInputBinding } from '@angular/router';
 
 import { authInterceptor } from '@foodstack/auth';
-import { BrandingStore } from '@foodstack/ui';
+import { BrandingStore, LocaleStore } from '@foodstack/ui';
 
 import { routes } from './app.routes';
 
@@ -17,6 +17,8 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withComponentInputBinding()),
     provideHttpClient(withFetch(), withInterceptors([authInterceptor])),
-    provideAppInitializer(() => inject(BrandingStore).load()),
+    provideAppInitializer(() => inject(BrandingStore).load(true)),
+    // The back office stays English and left to right; the languages are for editing content.
+    provideAppInitializer(() => inject(LocaleStore).load(false, true)),
   ],
 };

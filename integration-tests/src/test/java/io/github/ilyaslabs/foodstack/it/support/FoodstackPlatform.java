@@ -22,7 +22,7 @@ import org.springframework.context.ConfigurableApplicationContext;
  */
 public final class FoodstackPlatform {
 
-    public static final String[] MODULES = { "identity", "settings", "media" };
+    public static final String[] MODULES = { "identity", "settings", "media", "geo", "store", "search" };
 
     public static final String ADMIN_EMAIL = "admin@it.foodstack.local";
 
@@ -114,7 +114,7 @@ public final class FoodstackPlatform {
             }
             String issuer = moduleUrls.get("identity");
             // Start in dependency order so a module's callers find it running.
-            for (String module : List.of("media", "settings", "identity")) {
+            for (String module : List.of("media", "settings", "identity", "geo", "store", "search")) {
                 Map<String, String> properties = new LinkedHashMap<>(shared);
                 properties.put("server.port", String.valueOf(ports.get(module)));
                 properties.put("foodstack.security.issuer", issuer);
@@ -166,6 +166,12 @@ public final class FoodstackPlatform {
         properties.put("foodstack.storage.public-bucket", bucketPrefix + "-public");
         properties.put("foodstack.storage.private-bucket", bucketPrefix + "-private");
         properties.put("foodstack.storage.create-buckets", "true");
+        properties.put("spring.elasticsearch.uris", "http://" + FoodstackContainers.elasticsearch().getHttpHostAddress());
+        properties.put("spring.elasticsearch.username", "elastic");
+        properties.put("spring.elasticsearch.password", FoodstackContainers.ELASTICSEARCH_PASSWORD);
+        properties.put("foodstack.search.index-prefix", namespace + "_");
+        // No calls to a public geocoder from the tests
+        properties.put("foodstack.geo.geocoding.provider", "none");
         return properties;
     }
 

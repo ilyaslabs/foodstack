@@ -31,7 +31,9 @@ public class PiiCipher {
     public PiiCipher(String base64MasterKey) {
         byte[] master = Base64.getDecoder().decode(base64MasterKey);
         if (master.length < 32) {
-            throw new IllegalArgumentException("foodstack.security.pii-key must be at least 32 bytes (base64)");
+            throw new IllegalArgumentException("foodstack.security.pii-key must be at least 32 bytes (base64). "
+                    + "On a developer machine, run LocalFoodstackApplication (app/foodstack-server/src/test) "
+                    + "instead: it starts the containers and sets this key");
         }
         this.encryptionKey = new SecretKeySpec(derive(master, "foodstack-pii-encryption"), "AES");
         this.indexKey = new SecretKeySpec(derive(master, "foodstack-pii-index"), "HmacSHA256");

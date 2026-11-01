@@ -125,7 +125,7 @@ public class UserService {
 
     /** Back-office users, newest first. */
     public List<UserAccount> listBackOffice(int limit) {
-        List<Role> roles = List.of(Role.ADMIN, Role.FINANCE, Role.SUPPORT);
+        List<Role> roles = List.of(Role.ADMIN, Role.FINANCE, Role.SUPPORT, Role.STORE_OWNER, Role.STORE_STAFF);
         return this.users.findByRolesInOrderByIdDesc(roles, Limit.of(Math.min(Math.max(limit, 1), 200)))
             .stream()
             .map(this::toAccount)
@@ -155,7 +155,55 @@ public class UserService {
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new ModuleException.Forbidden("The account is blocked", "USER_BLOCKED");
         }
-        return new TokenClaims(Set.copyOf(user.getRoles()), Permissions.of(user.getRoles()), user.getTokenVersion());
+        return new TokenClaims(Set.copyOf(user.getRoles()), Permissions.of(user.getRoles()), user.getTokenVersion(),
+                Set.copyOf(user.getBrandIds()), Set.copyOf(user.getStoreIds()));
+    }
+
+    /**
+     * Gives owner access to a brand and its branch (PRD 4.2.1). An existing account keeps its other
+     * roles; a missing one is created. New tokens carry the ids; existing tokens are unaffected.
+     */
+    public UserAccount grantStoreAccess(String email, String displayName, String initialPassword, String brandId,
+            String storeId, String grantedBy) {
+        if (brandId == null || brandId.isBlank() || storeId == null || storeId.isBlank()) {
+            throw new ModuleException.BadRequest("Brand and branch are required", "USER_INVALID");
+        }
+        Optional<UserDocument> existing = findByEmail(email);
+        if (existing.isEmpty()) {
+            UserAccount created = create(new NewUser(email, initialPassword, displayName, EnumSet.of(Role.STORE_OWNER)),
+                    grantedBy);
+            UserDocument user = find(created.id());
+            user.getBrandIds().add(brandId);
+            user.getStoreIds().add(storeId);
+            user.setUpdatedAt(this.clock.instant());
+            return toAccount(this.users.save(user));
+        }
+        UserDocument user = existing.get();
+        user.getRoles().add(Role.STORE_OWNER);
+        user.getBrandIds().add(brandId);
+        user.getStoreIds().add(storeId);
+        user.setUpdatedAt(this.clock.instant());
+        return toAccount(this.users.save(user));
+    }
+
+    /** Removes a brand and branch from a user's claims and revokes their tokens so it takes effect now. */
+    public void revokeStoreAccess(String userId, String brandId, String storeId) {
+        Optional<UserDocument> found = this.users.findById(userId);
+        if (found.isEmpty()) {
+            return;
+        }
+        UserDocument user = found.get();
+        user.getBrandIds().remove(brandId);
+        user.getStoreIds().remove(storeId);
+        if (user.getStoreIds().isEmpty() && user.getBrandIds().isEmpty()) {
+            user.getRoles().remove(Role.STORE_OWNER);
+            if (user.getRoles().isEmpty()) {
+                user.getRoles().add(Role.CUSTOMER);
+            }
+        }
+        user.setUpdatedAt(this.clock.instant());
+        this.users.save(user);
+        revokeTokens(userId, "STORE_ACCESS_REVOKED");
     }
 
     /**
@@ -164,8 +212,11 @@ public class UserService {
      * @param roles granted roles
      * @param permissions derived permissions
      * @param tokenVersion current token version
+     * @param brandIds brands the user owns
+     * @param storeIds branches the user manages
      */
-    public record TokenClaims(Set<Role> roles, Set<String> permissions, long tokenVersion) {
+    public record TokenClaims(Set<Role> roles, Set<String> permissions, long tokenVersion, Set<String> brandIds,
+            Set<String> storeIds) {
     }
 
     private UserDocument find(String userId) {
@@ -175,7 +226,8 @@ public class UserService {
 
     private UserAccount toAccount(UserDocument user) {
         return new UserAccount(user.getId(), this.pii.decrypt(user.getEmailCipher()), user.getDisplayName(),
-                Set.copyOf(user.getRoles()), Permissions.of(user.getRoles()), user.getStatus(), user.getCreatedAt());
+                Set.copyOf(user.getRoles()), Permissions.of(user.getRoles()), user.getStatus(), user.getCreatedAt(),
+                Set.copyOf(user.getBrandIds()), Set.copyOf(user.getStoreIds()));
     }
 
     private static void validate(NewUser user) {

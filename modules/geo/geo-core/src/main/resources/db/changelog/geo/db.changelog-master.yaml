@@ -1,0 +1,40 @@
+# Liquibase changelog of the geo module (database foodstack_geo).
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: geo-1
+      author: foodstack
+      comment: "geo_zones: delivery zones of self-delivery branches; unsharded (few, small, rarely written)"
+      changes:
+        - createCollection:
+            collectionName: geo_zones
+        - createIndex:
+            collectionName: geo_zones
+            keys: '{ "storeId": 1, "sortOrder": 1 }'
+            options: '{ "name": "store_order" }'
+        - createIndex:
+            collectionName: geo_zones
+            keys: '{ "area": "2dsphere" }'
+            options: '{ "name": "area_2dsphere" }'
+  - changeSet:
+      id: geo-2
+      author: foodstack
+      comment: "geo_settings: operator delivery pricing; unsharded (one document). Off until the operator sets it up."
+      changes:
+        - createCollection:
+            collectionName: geo_settings
+        - insertMany:
+            collectionName: geo_settings
+            documents: >-
+              [
+                { "_id": "operator-delivery", "enabled": false, "baseChargeMinor": { "$numberLong": "0" },
+                  "perKmMinor": { "$numberLong": "0" }, "maxDistanceMeters": 8000, "version": { "$numberLong": "0" } }
+              ]
+  - changeSet:
+      id: geo-3
+      author: foodstack
+      comment: "geo_seed: marker of the test-seed profile"
+      changes:
+        - createCollection:
+            collectionName: geo_seed

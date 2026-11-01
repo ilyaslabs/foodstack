@@ -22,12 +22,30 @@ public final class Permissions {
 
     public static final String USERS_MANAGE = "identity:users:manage";
 
+    /** Onboard and manage every store and brand (operator staff). */
+    public static final String STORE_MANAGE = "store:manage";
+
+    /** Operator delivery pricing and any store's delivery zones. */
+    public static final String GEO_MANAGE = "geo:manage";
+
+    /** Rebuild the search index. */
+    public static final String SEARCH_MANAGE = "search:manage";
+
+    /**
+     * Work in the store area of the back office. Which brands and branches is decided by the
+     * {@code brandIds} and {@code storeIds} claims.
+     */
+    public static final String STORE_PORTAL = "store:portal";
+
     private static final Map<Role, Set<String>> BY_ROLE = new EnumMap<>(Role.class);
 
     static {
-        BY_ROLE.put(Role.ADMIN, Set.of(SETTINGS_MANAGE, MEDIA_UPLOAD, USERS_READ, USERS_MANAGE));
+        BY_ROLE.put(Role.ADMIN, Set.of(SETTINGS_MANAGE, MEDIA_UPLOAD, USERS_READ, USERS_MANAGE, STORE_MANAGE,
+                GEO_MANAGE, SEARCH_MANAGE));
         BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ));
         BY_ROLE.put(Role.SUPPORT, Set.of(USERS_READ));
+        BY_ROLE.put(Role.STORE_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD));
+        BY_ROLE.put(Role.STORE_STAFF, Set.of(STORE_PORTAL));
         BY_ROLE.put(Role.CUSTOMER, Set.of());
     }
 

@@ -1,0 +1,65 @@
+# Liquibase changelog of the store module (database foodstack_store). Shard keys are applied by
+# StoreConfiguration (TDD 6.3) and listed next to each collection.
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: store-1
+      author: foodstack
+      comment: "store_brands; shard key { _id: hashed } (read by brand id)"
+      changes:
+        - createCollection:
+            collectionName: store_brands
+  - changeSet:
+      id: store-2
+      author: foodstack
+      comment: "store_stores (branches); shard key { _id: hashed } (a branch is read by its id)"
+      changes:
+        - createCollection:
+            collectionName: store_stores
+        - createIndex:
+            collectionName: store_stores
+            keys: '{ "brandId": 1 }'
+            options: '{ "name": "brand" }'
+  - changeSet:
+      id: store-3
+      author: foodstack
+      comment: "store_menu_sections and store_menu_items; shard key { brandId: hashed } (menus are read per brand)"
+      changes:
+        - createCollection:
+            collectionName: store_menu_sections
+        - createIndex:
+            collectionName: store_menu_sections
+            keys: '{ "brandId": 1, "sortOrder": 1 }'
+            options: '{ "name": "brand_order" }'
+        - createCollection:
+            collectionName: store_menu_items
+        - createIndex:
+            collectionName: store_menu_items
+            keys: '{ "brandId": 1, "sortOrder": 1 }'
+            options: '{ "name": "brand_order" }'
+  - changeSet:
+      id: store-4
+      author: foodstack
+      comment: "store_item_overrides; shard key { storeId: hashed } (a branch's overrides are read together)"
+      changes:
+        - createCollection:
+            collectionName: store_item_overrides
+        - createIndex:
+            collectionName: store_item_overrides
+            keys: '{ "storeId": 1 }'
+            options: '{ "name": "store" }'
+  - changeSet:
+      id: store-5
+      author: foodstack
+      comment: "store_seed: marker of the test-seed profile"
+      changes:
+        - createCollection:
+            collectionName: store_seed
+  - changeSet:
+      id: store-6
+      author: foodstack
+      comment: "store_slugs: branch web addresses, the slug is the _id so it is unique; shard key { _id: hashed }"
+      changes:
+        - createCollection:
+            collectionName: store_slugs

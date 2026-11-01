@@ -11,6 +11,9 @@ import java.util.Set;
  * @param roles granted roles
  * @param status account state
  * @param createdAt UTC epoch seconds
+ * @param brandIds brands the user owns
+ * @param storeIds branches the user manages
  */
-public record UserView(String id, String email, String displayName, Set<Role> roles, UserStatus status, long createdAt) {
+public record UserView(String id, String email, String displayName, Set<Role> roles, UserStatus status, long createdAt,
+        Set<String> brandIds, Set<String> storeIds) {
 }

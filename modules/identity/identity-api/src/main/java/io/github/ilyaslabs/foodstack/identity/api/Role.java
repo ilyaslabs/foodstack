@@ -2,7 +2,7 @@ package io.github.ilyaslabs.foodstack.identity.api;
 
 /**
  * Roles carried in the {@code roles} claim. Permissions ({@code perms} claim) are derived from
- * them by the identity module. Store and rider roles arrive with their modules.
+ * them by the identity module. Rider roles arrive with their module.
  */
 public enum Role {
 
@@ -16,5 +16,15 @@ public enum Role {
     SUPPORT,
 
     /** A customer of the marketplace. */
-    CUSTOMER
+    CUSTOMER,
+
+    /**
+     * Owner or manager of one or more branches ({@code storeIds} claim). In M1 every brand has one
+     * branch, so the owner also gets the brand in the {@code brandIds} claim and edits its menu; the
+     * separate {@code BRAND_OWNER} role arrives with multi-branch screens (PRD 4.2.1, M4).
+     */
+    STORE_OWNER,
+
+    /** Staff of a branch: orders and sold-out toggles only ({@code storeIds} claim). */
+    STORE_STAFF
 }
