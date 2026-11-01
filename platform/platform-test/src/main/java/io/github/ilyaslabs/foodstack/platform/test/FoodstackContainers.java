@@ -81,6 +81,8 @@ public final class FoodstackContainers {
             s3 = new GenericContainer<>(S3_IMAGE).withExposedPorts(9000)
                 .withEnv("RUSTFS_ACCESS_KEY", S3_ACCESS_KEY)
                 .withEnv("RUSTFS_SECRET_KEY", S3_SECRET_KEY)
+                // The dev servers upload straight to storage from another origin; installs go through the proxy instead.
+                .withEnv("RUSTFS_CORS_ALLOWED_ORIGINS", "http://localhost:4200,http://localhost:4300")
                 .waitingFor(Wait.forHttp("/health").forPort(9000))
                 .withReuse(true);
             s3.start();
