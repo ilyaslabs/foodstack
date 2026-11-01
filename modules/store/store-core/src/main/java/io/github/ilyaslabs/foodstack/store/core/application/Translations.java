@@ -5,8 +5,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Checks translated text (PRD ST-5): keys are the deployment's languages, the default language is
- * present when the text is required, and every value fits.
+ * Checks translated text (PRD ST-5): the default language is present when the text is required and
+ * every value fits. Text in a language the operator has since turned off is ignored, not refused, so
+ * existing brands and menus stay editable; {@link #clean} drops it on save.
  */
 final class Translations {
 
@@ -33,8 +34,7 @@ final class Translations {
         if (text != null) {
             for (Map.Entry<String, String> entry : text.entrySet()) {
                 if (!languages.contains(entry.getKey())) {
-                    errors.put(field, "has a language that is not enabled: " + entry.getKey());
-                    return;
+                    continue;
                 }
                 if (entry.getValue() != null && entry.getValue().trim().length() > maxLength) {
                     errors.put(field, "must be at most " + maxLength + " characters in every language");

@@ -117,6 +117,8 @@ import { cuisineLabel } from './cuisine';
       padding: 12px 16px 16px;
     }
     .logo {
+      position: relative;
+      z-index: 1;
       inline-size: 48px;
       block-size: 48px;
       border-radius: 14px;

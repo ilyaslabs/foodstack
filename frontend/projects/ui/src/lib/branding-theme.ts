@@ -73,9 +73,17 @@ export function brandColors(
     isDark: dark,
     primaryPalette: TonalPalette.fromInt(primary),
     secondaryPalette: TonalPalette.fromInt(secondary),
-    tertiaryPalette: TonalPalette.fromHueAndChroma((source.hue + 60) % 360, 24),
-    neutralPalette: TonalPalette.fromHueAndChroma(source.hue, 6),
-    neutralVariantPalette: TonalPalette.fromHueAndChroma(source.hue, 8),
+    // A grey or black brand colour has no real hue (HCT reports one anyway), so its tints fade to
+    // pure grey instead of turning every background faintly pink.
+    tertiaryPalette: TonalPalette.fromHueAndChroma(
+      (source.hue + 60) % 360,
+      Math.min(24, source.chroma),
+    ),
+    neutralPalette: TonalPalette.fromHueAndChroma(source.hue, Math.min(6, source.chroma / 8)),
+    neutralVariantPalette: TonalPalette.fromHueAndChroma(
+      source.hue,
+      Math.min(8, source.chroma / 6),
+    ),
   });
   const colors: Record<string, string> = {};
   for (const role of ROLES) {
