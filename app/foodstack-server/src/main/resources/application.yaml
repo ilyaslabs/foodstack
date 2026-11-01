@@ -129,3 +129,11 @@ foodstack:
     public-bucket: ${S3_PUBLIC_BUCKET:foodstack-public}
     private-bucket: ${S3_PRIVATE_BUCKET:foodstack-private}
     create-buckets: ${S3_CREATE_BUCKETS:false}
+  payment:
+    # Card gateway (TDD 5.4): none (cash only), sandbox (development and demos, refused in production) or stripe.
+    gateway: ${PAYMENT_GATEWAY:none}
+    public-url: ${FOODSTACK_PUBLIC_URL:http://localhost:8080}
+    sandbox-secret: ${PAYMENT_SANDBOX_SECRET:}
+    stripe:
+      secret-key: ${STRIPE_SECRET_KEY:}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET:}

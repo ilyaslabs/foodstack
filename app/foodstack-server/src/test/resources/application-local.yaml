@@ -23,3 +23,5 @@ foodstack:
         post-logout-redirect-uris: http://localhost:4300/admin/
   storage:
     create-buckets: true
+  payment:
+    gateway: sandbox
