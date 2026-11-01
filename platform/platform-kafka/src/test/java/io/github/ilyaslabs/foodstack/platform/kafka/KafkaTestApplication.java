@@ -42,4 +42,32 @@ class KafkaTestApplication {
     KafkaAdmin.NewTopics relaytestTopics(ModuleEventing eventing) {
         return eventing.topics("relaytest");
     }
+
+    @Bean
+    KafkaAdmin.NewTopics dltestTopics(ModuleEventing eventing) {
+        return eventing.topics("dltest");
+    }
+
+    @Bean
+    FailingListener failingListener() {
+        return new FailingListener();
+    }
+
+    /** Fails every record whose value is "poison", so it ends in the dead-letter topic. */
+    static class FailingListener {
+
+        final java.util.concurrent.atomic.AtomicInteger poisonAttempts = new java.util.concurrent.atomic.AtomicInteger();
+
+        final java.util.List<String> handled = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        @org.springframework.kafka.annotation.KafkaListener(id = "dltest-listener", groupId = "dltest",
+                topics = "foodstack.dltest.events", properties = "auto.offset.reset=earliest")
+        void onEvent(String value) {
+            if ("poison".equals(value)) {
+                this.poisonAttempts.incrementAndGet();
+                throw new IllegalStateException("cannot handle poison");
+            }
+            this.handled.add(value);
+        }
+    }
 }

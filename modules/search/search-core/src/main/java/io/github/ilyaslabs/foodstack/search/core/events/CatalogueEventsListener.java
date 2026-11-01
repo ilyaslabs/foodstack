@@ -19,8 +19,8 @@ import org.springframework.kafka.annotation.KafkaListener;
 /**
  * Feeds the index from store and geo events (TDD 11.2). The handler only needs the id in the
  * event: {@link StoreIndexer} re-reads the source, so a redelivered or late event is harmless and
- * no inbox is kept. A failing refresh is retried by the container and then skipped; the periodic
- * or manual rebuild repairs anything missed.
+ * no inbox is kept. A failing refresh is retried with backoff and then sent to the dead-letter
+ * topic (platform {@code DeadLetters}); the scheduled or manual rebuild repairs anything missed.
  */
 public class CatalogueEventsListener {
 

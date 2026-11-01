@@ -2,7 +2,6 @@ package io.github.ilyaslabs.foodstack.search.core.application;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -18,8 +17,9 @@ import io.github.ilyaslabs.moduleswitch.ModuleException;
 
 /**
  * Customer store search (PRD SE-1 to SE-4): branches that deliver to the customer's point (or are
- * near and offer pickup), matching free text in any enabled language, with cuisine chips. Open
- * branches come first; within each group the engine's order (relevance, then distance) is kept.
+ * near and offer pickup), matching free text in any enabled language, with cuisine chips. The
+ * engine ranks open branches first across all pages, then by relevance and distance; this service
+ * keeps that order.
  */
 public class StoreSearchService {
 
@@ -56,7 +56,6 @@ public class StoreSearchService {
         List<StoreCard> cards = result.hits()
             .stream()
             .map((hit) -> card(hit, now))
-            .sorted(Comparator.comparing((StoreCard card) -> !card.openNow()))
             .toList();
         return new StoreSearchPage(cards, result.cuisines(), result.total(), page, size);
     }

@@ -37,7 +37,7 @@ class StoreSearchServiceTest {
     private final StoreSearchService service = new StoreSearchService(this.engine, this.clock);
 
     @Test
-    @DisplayName("cleans the query, puts open branches first and keeps engine order within each group")
+    @DisplayName("cleans the query, keeps the engine order (it ranks open branches first) and marks which are open")
     void search() {
         given(this.engine.search(new StoreSearchQuery(31.5, 74.3, "biryani", "bbq", Fulfilment.DELIVERY, 0, 50)))
             .willReturn(new StoreSearchEngine.Result(List.of(hit("closed-near", "18:00", "23:00", false, 500),
@@ -48,9 +48,9 @@ class StoreSearchServiceTest {
         StoreSearchPage page = this.service.search(new StoreSearchQuery(31.5, 74.3, "  biryani ", " BBQ", null, -3, 500));
 
         assertThat(page.stores()).extracting(StoreCard::storeId)
-            .containsExactly("open-far", "open-farther", "closed-near", "switched-off");
-        assertThat(page.stores().getFirst().openNow()).isTrue();
-        assertThat(page.stores().getFirst().distanceMeters()).isEqualTo(3000);
+            .containsExactly("closed-near", "open-far", "switched-off", "open-farther");
+        assertThat(page.stores()).extracting(StoreCard::openNow).containsExactly(false, true, false, true);
+        assertThat(page.stores().get(1).distanceMeters()).isEqualTo(3000);
         assertThat(page.size()).isEqualTo(50);
         assertThat(page.page()).isZero();
         assertThat(page.total()).isEqualTo(4);

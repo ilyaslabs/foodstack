@@ -36,7 +36,21 @@ import tools.jackson.databind.node.ObjectNode;
  */
 public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
 
-    static final int MAPPING_VERSION = 1;
+    /** 2: open windows ({@code openFrom}/{@code openUntil}) for open-now-first ranking across pages. */
+    static final int MAPPING_VERSION = 2;
+
+    /**
+     * Days of opening windows stored per branch. The scheduled rebuild re-reads every branch well
+     * within this period (see {@code foodstack.search.rebuild-interval}).
+     */
+    static final int OPEN_WINDOW_DAYS = 8;
+
+    /** 0 when the branch is open at {@code params.now}, else 1; windows are disjoint and sorted, so the arrays line up. */
+    private static final String OPEN_FIRST_SCRIPT = """
+            def s = doc['openFrom']; def e = doc['openUntil'];
+            if (s.size() != e.size()) { return 1; }
+            for (int i = 0; i < s.size(); i++) { if (s[i] <= params.now && params.now < e[i]) { return 0; } }
+            return 1;""";
 
     private static final Logger log = LoggerFactory.getLogger(ElasticsearchStoreSearchEngine.class);
 
@@ -52,10 +66,18 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
 
     private final SearchProperties properties;
 
+    private final java.time.Clock clock;
+
     public ElasticsearchStoreSearchEngine(ElasticsearchClient client, JsonMapper jsonMapper, SearchProperties properties) {
+        this(client, jsonMapper, properties, java.time.Clock.systemUTC());
+    }
+
+    public ElasticsearchStoreSearchEngine(ElasticsearchClient client, JsonMapper jsonMapper, SearchProperties properties,
+            java.time.Clock clock) {
         this.client = client;
         this.jsonMapper = jsonMapper;
         this.properties = properties;
+        this.clock = clock;
     }
 
     public String alias() {
@@ -90,6 +112,7 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
                 dropStrayIndexNamedLikeAlias();
                 String body = indexDefinition();
                 this.client.indices().create((c) -> c.index(index).withJson(new StringReader(body)));
+                moveAliasToCurrentVersion();
                 log.info("Created search index {} with alias {}", index, alias());
                 this.createdHere = true;
             }
@@ -104,6 +127,32 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         }
         catch (IOException ex) {
             throw unavailable(ex);
+        }
+    }
+
+    /**
+     * Points the alias at the new mapping version only, in one atomic step, and drops the older
+     * versions: the index is a read model, so the rebuild that follows refills it.
+     */
+    private void moveAliasToCurrentVersion() throws IOException {
+        String alias = alias();
+        String index = indexName();
+        List<String> older = new ArrayList<>();
+        for (int version = 1; version < MAPPING_VERSION; version++) {
+            String name = alias + "_v" + version;
+            if (this.client.indices().exists((e) -> e.index(name)).value()) {
+                older.add(name);
+            }
+        }
+        this.client.indices().updateAliases((u) -> {
+            for (String name : older) {
+                u.actions((a) -> a.remove((r) -> r.index(name).alias(alias)));
+            }
+            return u.actions((a) -> a.add((add) -> add.index(index).alias(alias).isWriteIndex(true)));
+        });
+        for (String name : older) {
+            this.client.indices().delete((d) -> d.index(name));
+            log.info("Dropped search index {} of an older mapping", name);
         }
     }
 
@@ -216,6 +265,14 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         }
         body.putObject("collapse").put("field", "brandId");
         ArrayNode sort = body.putArray("sort");
+        // Open branches first across all pages (PRD SE-3), then relevance, then distance
+        ObjectNode openFirst = sort.addObject().putObject("_script");
+        openFirst.put("type", "number");
+        openFirst.put("order", "asc");
+        ObjectNode script = openFirst.putObject("script");
+        script.put("lang", "painless");
+        script.put("source", OPEN_FIRST_SCRIPT);
+        script.putObject("params").put("now", this.clock.instant().getEpochSecond());
         if (hasText) {
             sort.add("_score");
         }
@@ -306,6 +363,10 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         source.put("timezone", store.timezone());
         source.put("openingHours", store.openingHours());
         source.put("closedDates", store.closedDates());
+        List<long[]> windows = io.github.ilyaslabs.foodstack.search.core.domain.OpenWindows.of(store.openingHours(),
+                store.closedDates(), store.temporarilyClosed(), store.timezone(), this.clock.instant(), OPEN_WINDOW_DAYS);
+        source.put("openFrom", windows.stream().map((w) -> w[0]).toList());
+        source.put("openUntil", windows.stream().map((w) -> w[1]).toList());
         source.put("dishes", store.dishNames());
         source.put("dietaryTags", store.dietaryTags());
         List<Map<String, Object>> polygons = new ArrayList<>();
@@ -396,6 +457,8 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         props.putObject("branchCount").put("type", "integer");
         props.putObject("prepMinutes").put("type", "integer");
         props.putObject("version").put("type", "long");
+        props.putObject("openFrom").put("type", "long");
+        props.putObject("openUntil").put("type", "long");
         props.putObject("pickupEnabled").put("type", "boolean");
         props.putObject("temporarilyClosed").put("type", "boolean");
         props.putObject("location").put("type", "geo_point");
@@ -411,7 +474,6 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         // Translated text: one sub-field per language, mapped by the dynamic templates above
         props.putObject("description").put("type", "object").put("dynamic", "true");
         props.putObject("dishes").put("type", "object").put("dynamic", "true");
-        root.putObject("aliases").putObject(alias()).put("is_write_index", true);
         return this.jsonMapper.writeValueAsString(root);
     }
 

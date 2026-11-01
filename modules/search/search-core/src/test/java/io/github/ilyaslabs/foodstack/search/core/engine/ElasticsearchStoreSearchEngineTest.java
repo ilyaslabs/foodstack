@@ -93,7 +93,7 @@ class ElasticsearchStoreSearchEngineTest {
     void earlyWrite() throws Exception {
         // given: an older version let a write auto-create a plain index under the alias name
         ElasticsearchStoreSearchEngine early = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
-                new SearchProperties("early_", 0, 15_000));
+                new SearchProperties("early_", 0, 15_000, null));
         this.client.indices().create((c) -> c.index(early.alias()));
 
         // when: a catalogue event arrives before the bootstrap ran
@@ -107,6 +107,52 @@ class ElasticsearchStoreSearchEngineTest {
             .extracting((h) -> h.store().storeId()).containsExactly("early-1");
         assertThat(early.ensureIndex()).isTrue();
         assertThat(early.ensureIndex()).isFalse();
+    }
+
+    @Test
+    @DisplayName("ranks open branches before closed ones across pages, not just within one page")
+    void openFirstAcrossPages() throws Exception {
+        // given: a closed branch right next to the customer and an open one further away
+        ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
+                new SearchProperties("openfirst_", 0, 15_000, null));
+        assertThat(engine.ensureIndex()).isTrue();
+        IndexedStore open = store("open-far", "open", "Open Kitchen", null, List.of("bbq"), new GeoPoint(LAT + 0.02, LNG),
+                ring(LAT, LNG, 2), Map.of(), false);
+        IndexedStore closed = store("closed-near", "closed", "Closed Kitchen", null, List.of("bbq"), new GeoPoint(LAT, LNG),
+                ring(LAT, LNG, 2), Map.of(), false);
+        engine.index(open);
+        engine.index(new IndexedStore(closed.storeId(), closed.slug(), closed.brandId(), closed.brandName(), closed.branchName(),
+                closed.branchCount(), closed.description(), closed.cuisines(), closed.logoUrls(), closed.coverUrls(),
+                closed.location(), closed.area(), closed.city(), closed.deliveryMode(), closed.pickupEnabled(), true,
+                closed.prepMinutes(), closed.timezone(), closed.openingHours(), closed.closedDates(), closed.dishNames(),
+                closed.dietaryTags(), closed.deliveryArea(), closed.version()));
+        this.client.indices().refresh((r) -> r.index(engine.alias()));
+
+        // when: one result per page
+        StoreSearchEngine.Result first = engine.search(new StoreSearchQuery(LAT, LNG, null, null, Fulfilment.DELIVERY, 0, 1));
+        StoreSearchEngine.Result second = engine.search(new StoreSearchQuery(LAT, LNG, null, null, Fulfilment.DELIVERY, 1, 1));
+
+        // then
+        assertThat(first.hits()).extracting((h) -> h.store().storeId()).containsExactly("open-far");
+        assertThat(first.hits().getFirst().distanceMeters()).isBetween(2000L, 2400L);
+        assertThat(second.hits()).extracting((h) -> h.store().storeId()).containsExactly("closed-near");
+    }
+
+    @Test
+    @DisplayName("a new mapping version takes over the alias and drops the older index")
+    void mappingUpgrade() throws Exception {
+        // given: an index of the previous version holding the alias
+        ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
+                new SearchProperties("upgrade_", 0, 15_000, null));
+        String old = engine.alias() + "_v1";
+        this.client.indices().create((c) -> c.index(old).aliases(engine.alias(), (a) -> a.isWriteIndex(true)));
+
+        // when
+        assertThat(engine.ensureIndex()).isTrue();
+
+        // then
+        assertThat(this.client.indices().exists((e) -> e.index(old)).value()).isFalse();
+        assertThat(this.client.indices().getAlias((g) -> g.name(engine.alias())).aliases()).containsOnlyKeys(engine.indexName());
     }
 
     @Test
