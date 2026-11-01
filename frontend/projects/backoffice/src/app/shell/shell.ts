@@ -72,6 +72,13 @@ export class Shell {
       permission: 'geo:manage',
     },
     {
+      path: '/users',
+      label: 'Users',
+      icon: 'group',
+      exact: false,
+      permission: 'identity:users:read',
+    },
+    {
       path: '/settings/locale',
       label: 'Languages',
       icon: 'language',

@@ -97,11 +97,14 @@ export class AuthService {
     return path + location.search;
   }
 
-  /** Sends the browser to the login page; after sign-in it comes back to {@link redirectUri}. */
-  async signIn(returnTo = '/'): Promise<void> {
+  /**
+   * Sends the browser to the login page; after sign-in it comes back to {@link redirectUri}.
+   * With `signUp` the hosted page opens on "Create account" (customer app only).
+   */
+  async signIn(returnTo = '/', options: { signUp?: boolean } = {}): Promise<void> {
     const flow: PendingFlow = { state: randomUrlSafe(16), verifier: randomUrlSafe(48), returnTo };
     this.storage()?.setItem(FLOW_KEY, JSON.stringify(flow));
-    this.navigation.assign(await this.authorizeUrl(flow));
+    this.navigation.assign(await this.authorizeUrl(flow, options.signUp === true));
   }
 
   /** Finishes sign-in on the callback page; returns where the user was going. */
@@ -139,7 +142,10 @@ export class AuthService {
     return new URL('auth/callback', this.document.baseURI).toString();
   }
 
-  private async authorizeUrl(flow: { state: string; verifier: string }): Promise<string> {
+  private async authorizeUrl(
+    flow: { state: string; verifier: string },
+    signUp = false,
+  ): Promise<string> {
     const params = new HttpParams({
       fromObject: {
         response_type: 'code',
@@ -149,6 +155,7 @@ export class AuthService {
         state: flow.state,
         code_challenge: await s256Challenge(flow.verifier),
         code_challenge_method: 'S256',
+        ...(signUp ? { fs_screen: 'signup' } : {}),
       },
     });
     return `${this.config.issuer}/oauth2/authorize?${params.toString()}`;
