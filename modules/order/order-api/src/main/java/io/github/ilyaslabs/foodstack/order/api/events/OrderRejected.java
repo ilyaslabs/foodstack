@@ -1,6 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.api.events;
 
 import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
+import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
 
 /**
  * The store rejected the order, or did not accept in time ({@code automatic}). Paid orders are refunded.
@@ -11,5 +12,11 @@ import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
  * @param automatic rejected because the accept time ran out
  * @param refundMinor amount to give back to the card, 0 for cash
  */
-public record OrderRejected(OrderSummary order, String actor, String reason, boolean automatic, long refundMinor) implements OrderEvent {
+public record OrderRejected(OrderSummary order, String actor, String reason, boolean automatic, long refundMinor) implements ModuleEvent {
+
+    /** The order id, so all events of an order share a partition. */
+    @Override
+    public String subject() {
+        return this.order.orderId();
+    }
 }

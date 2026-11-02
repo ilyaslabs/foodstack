@@ -103,6 +103,7 @@ public final class FoodstackPlatform {
             Map<String, String> properties = new LinkedHashMap<>(shared);
             properties.put("server.port", String.valueOf(port));
             properties.put("foodstack.security.issuer", url);
+            properties.put("foodstack.payment.public-url", url);
             contexts.add(run("monolith", properties));
         }
         else {
@@ -120,6 +121,7 @@ public final class FoodstackPlatform {
                 Map<String, String> properties = new LinkedHashMap<>(shared);
                 properties.put("server.port", String.valueOf(ports.get(module)));
                 properties.put("foodstack.security.issuer", issuer);
+                properties.put("foodstack.payment.public-url", moduleUrls.get("payment"));
                 if (!module.equals("identity")) {
                     properties.put("foodstack.security.jwk-set-uri", issuer + "/oauth2/jwks");
                 }
@@ -174,6 +176,10 @@ public final class FoodstackPlatform {
         properties.put("spring.elasticsearch.username", "elastic");
         properties.put("spring.elasticsearch.password", FoodstackContainers.ELASTICSEARCH_PASSWORD);
         properties.put("foodstack.search.index-prefix", namespace + "_");
+        // Card payments through the sandbox page; customers come back to the test web app
+        properties.put("foodstack.payment.gateway", "sandbox");
+        properties.put("foodstack.payment.sandbox-secret", "integration-sandbox-secret");
+        properties.put("foodstack.order.web-url", "http://web.it.foodstack.local");
         // No calls to a public geocoder from the tests
         properties.put("foodstack.geo.geocoding.provider", "none");
         return properties;
