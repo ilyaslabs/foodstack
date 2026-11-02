@@ -39,3 +39,9 @@ body {
 input[type='search']::-webkit-search-cancel-button {
   appearance: none;
 }
+
+// The notification list is wider than a plain menu, so titles and "Mark all as read" fit.
+.mat-mdc-menu-panel.fs-notifications {
+  inline-size: min(380px, calc(100vw - 32px));
+  max-inline-size: min(380px, calc(100vw - 32px));
+}

@@ -242,6 +242,11 @@ app-cart-panel {
   margin-block-end: 8px;
   background: var(--mat-sys-surface);
   scrollbar-width: none;
+
+  // the top bar is 56px tall on phones
+  @media (max-width: 599.98px) {
+    inset-block-start: 56px;
+  }
 }
 
 .section-link {
