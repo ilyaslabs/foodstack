@@ -128,6 +128,14 @@ public class OrderService {
 
     /** A store step: accept, reject, preparing, ready, collected, picked up or delivered. */
     public OrderDetails storeAction(String orderId, String action, Integer prepMinutes, String reason) {
+        return storeAction(orderId, action, prepMinutes, reason, null);
+    }
+
+    /**
+     * A store step; when accepting a self-delivery order the store may name one of its own riders,
+     * who then gets the job in the rider app (PRD DR-2).
+     */
+    public OrderDetails storeAction(String orderId, String action, Integer prepMinutes, String reason, String storeRiderId) {
         OrderDocument order = this.lifecycle.require(orderId);
         Actor actor = actor(order);
         if (Actor.CUSTOMER.equals(actor.role())) {
@@ -135,7 +143,7 @@ public class OrderService {
         }
         OrderDocument after = switch (action) {
             case OrderLifecycleService.ACCEPT -> this.lifecycle.accept(orderId, actor,
-                    (prepMinutes != null) ? prepMinutes : order.prepMinutes());
+                    (prepMinutes != null) ? prepMinutes : order.prepMinutes(), storeRiderId);
             case OrderLifecycleService.REJECT -> this.lifecycle.reject(orderId, actor, reason);
             case OrderLifecycleService.PREPARING -> this.lifecycle.preparing(orderId, actor);
             case OrderLifecycleService.READY -> this.lifecycle.ready(orderId, actor);
@@ -266,7 +274,12 @@ public class OrderService {
                 o.refundedMinor(),
                 o.timeline().stream().map((t) -> new OrderDetails.Step(t.status(), t.at().getEpochSecond(), t.actorRole(), t.note()))
                     .toList(),
-                o.closeReason(), o.placedAt().getEpochSecond(), o.revision(), actions(o, viewer));
+                o.closeReason(), o.placedAt().getEpochSecond(), o.revision(), actions(o, viewer),
+                (o.rider() != null) ? new OrderDetails.RiderInfo(o.rider().riderId(), o.rider().name(), o.rider().vehicle(),
+                        o.rider().assignedAt().getEpochSecond()) : null,
+                // only the customer sees the code, they read it out to the rider at the door
+                Actor.CUSTOMER.equals(viewer.role()) ? o.deliveryCode() : null,
+                (o.handedBackAt() != null) ? o.handedBackAt().getEpochSecond() : null);
     }
 
     /** What the viewer may do now, so screens show only working buttons. */

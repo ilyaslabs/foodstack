@@ -125,7 +125,8 @@ public class UserService {
 
     /** Back-office users, newest first. */
     public List<UserAccount> listBackOffice(int limit) {
-        List<Role> roles = List.of(Role.ADMIN, Role.FINANCE, Role.SUPPORT, Role.STORE_OWNER, Role.STORE_STAFF);
+        List<Role> roles = List.of(Role.ADMIN, Role.FINANCE, Role.SUPPORT, Role.STORE_OWNER, Role.STORE_STAFF, Role.RIDER,
+                Role.STORE_RIDER);
         return this.users.findByRolesInOrderByIdDesc(roles, Limit.of(Math.min(Math.max(limit, 1), 200)))
             .stream()
             .map(this::toAccount)
@@ -219,6 +220,41 @@ public class UserService {
         user.getStoreIds().add(storeId);
         user.setUpdatedAt(this.clock.instant());
         return toAccount(this.users.save(user));
+    }
+
+    /**
+     * Gives rider access (PRD DR-1): {@code RIDER} for the operator's fleet, {@code STORE_RIDER} for a
+     * store's own rider. An existing account keeps its other roles; a missing one is created.
+     */
+    public UserAccount grantRiderAccess(String email, String displayName, String initialPassword, boolean storeRider,
+            String grantedBy) {
+        Role role = storeRider ? Role.STORE_RIDER : Role.RIDER;
+        Optional<UserDocument> existing = findByEmail(email);
+        if (existing.isEmpty()) {
+            return create(new NewUser(email, initialPassword, displayName, EnumSet.of(role)), grantedBy);
+        }
+        UserDocument user = existing.get();
+        user.getRoles().add(role);
+        user.getRoles().remove(Role.CUSTOMER);
+        user.setUpdatedAt(this.clock.instant());
+        return toAccount(this.users.save(user));
+    }
+
+    /** Takes both rider roles away and revokes the user's tokens so it takes effect now. */
+    public void revokeRiderAccess(String userId) {
+        Optional<UserDocument> found = this.users.findById(userId);
+        if (found.isEmpty()) {
+            return;
+        }
+        UserDocument user = found.get();
+        user.getRoles().remove(Role.RIDER);
+        user.getRoles().remove(Role.STORE_RIDER);
+        if (user.getRoles().isEmpty()) {
+            user.getRoles().add(Role.CUSTOMER);
+        }
+        user.setUpdatedAt(this.clock.instant());
+        this.users.save(user);
+        revokeTokens(userId, "RIDER_ACCESS_REVOKED");
     }
 
     /** Removes a brand and branch from a user's claims and revokes their tokens so it takes effect now. */

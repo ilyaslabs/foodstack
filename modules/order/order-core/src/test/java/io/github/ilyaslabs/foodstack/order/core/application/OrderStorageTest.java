@@ -35,6 +35,7 @@ import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponEvaluation;
 import io.github.ilyaslabs.foodstack.promotion.api.PromotionApi;
+import io.github.ilyaslabs.foodstack.settings.api.DeliveryView;
 import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.store.api.OrderValidationView;
@@ -150,6 +151,7 @@ class OrderStorageTest {
         };
         this.customer = "c-" + System.nanoTime();
         given(this.settings.getOrdering()).willReturn(new OrderingView(true, true, 0, 0, 0, true, 180, 1));
+        given(this.settings.getDelivery()).willReturn(new DeliveryView(7000, 0, 30, 5000, 10, 300, 100_000L, 30, 0));
         given(this.identity.getUser(anyString())).willReturn(new UserView(this.customer, "sara@example.com", "Sara", Set.of(),
                 null, 0, Set.of(), Set.of()));
         OutboxWriter outbox = new OutboxWriter(this.orderMongo, JsonMapper.builder().build(), clock);
@@ -317,6 +319,66 @@ class OrderStorageTest {
         assertThat(cancelled.refundRequestedMinor()).isEqualTo(170_000);
         assertThat(lastEvent(id).get("data", String.class)).contains("\"refundMinor\":150000");
         assertThat(this.orders.all(null, STORE, null, 5).items()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("a rider delivery: the code only the customer sees, the rider on the order, picked up and delivered by the rider")
+    void riderDelivery() {
+        given(this.carts.checkout(any())).willReturn(checkout(Fulfilment.DELIVERY, PaymentMethod.CARD, null));
+        given(this.payments.startCard(any())).willReturn(new CardSessionView("x", "https://pay/1", 0));
+        String id = this.placement.place(this.customer, "k11", delivery()).orderId();
+        this.lifecycle.paymentSucceeded(id, 170_000);
+        String code = this.lifecycle.require(id).deliveryCode();
+        assertThat(code).matches("[0-9]{4}");
+        assertThat(lastEvent(id).get("data", String.class)).contains("\"deliveryCode\":\"" + code + "\"");
+
+        signIn("owner-1", STORE);
+        assertThatThrownBy(() -> this.orders.storeAction(id, "ACCEPT", 20, null, "store-rider-1"))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class,
+                    (ex) -> assertThat(ex.code()).isEqualTo("STORE_RIDER_NOT_ALLOWED"));
+        OrderDetails accepted = this.orders.storeAction(id, "ACCEPT", 20, null);
+        assertThat(accepted.deliveryCode()).isNull();
+        String data = lastEvent(id).get("data", String.class);
+        assertThat(data).contains("\"mode\":\"OPERATOR\"").contains("\"dropoffAddress\":\"12 Canal Road\"")
+            .contains("\"cashToCollectMinor\":0");
+
+        this.lifecycle.riderAssigned(id, "rider-1", "Ali", "MOTORBIKE", "rider:rider-1");
+        this.lifecycle.riderAssigned(id, "rider-1", "Ali", "MOTORBIKE", "rider:rider-1");
+        signIn(this.customer);
+        OrderDetails mine = this.orders.get(id);
+        assertThat(mine.rider().name()).isEqualTo("Ali");
+        assertThat(mine.deliveryCode()).isEqualTo(code);
+        assertThat(mine.timeline()).filteredOn((step) -> step.note() != null && step.note().startsWith("Rider Ali")).hasSize(1);
+        this.lifecycle.riderUnassigned(id, "someone-else", "Declined", "system");
+        assertThat(this.orders.get(id).rider()).isNotNull();
+
+        this.lifecycle.pickedUp(id, Actor.rider("rider-1"));
+        this.lifecycle.delivered(id, Actor.rider("rider-1"));
+        OrderDetails done = this.orders.get(id);
+        assertThat(done.status()).isEqualTo(OrderStatus.DELIVERED);
+        assertThat(done.timeline()).extracting(OrderDetails.Step::actorRole).contains("RIDER");
+    }
+
+    @Test
+    @DisplayName("support hands an operator delivery back: the store then delivers it itself")
+    void handedBack() {
+        given(this.carts.checkout(any())).willReturn(checkout(Fulfilment.DELIVERY, PaymentMethod.CARD, null));
+        given(this.payments.startCard(any())).willReturn(new CardSessionView("x", "https://pay/1", 0));
+        String id = this.placement.place(this.customer, "k12", delivery()).orderId();
+        this.lifecycle.paymentSucceeded(id, 170_000);
+        signIn("owner-1", STORE);
+        this.orders.storeAction(id, "ACCEPT", 20, null);
+        this.orders.storeAction(id, "READY", null, null);
+        this.lifecycle.riderAssigned(id, "rider-1", "Ali", "CAR", "rider:rider-1");
+
+        this.lifecycle.handedBack(id, "No rider nearby", "support:support-1");
+        OrderDetails back = this.orders.get(id);
+        assertThat(back.deliveryMode()).isEqualTo(DeliveryMode.SELF);
+        assertThat(back.handedBackAt()).isEqualTo(START.getEpochSecond());
+        assertThat(back.rider()).isNull();
+        assertThat(back.actions()).contains("PICKED_UP");
+        this.orders.storeAction(id, "PICKED_UP", null, null);
+        assertThat(this.orders.storeAction(id, "DELIVERED", null, null).status()).isEqualTo(OrderStatus.DELIVERED);
     }
 
     @Test

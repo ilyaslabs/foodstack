@@ -1,11 +1,13 @@
 package io.github.ilyaslabs.foodstack.identity.impl;
 
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
+import io.github.ilyaslabs.foodstack.identity.api.RiderAccessGrant;
 import io.github.ilyaslabs.foodstack.identity.api.StoreAccessGrant;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserAccount;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
 
+import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
 import io.github.ilyaslabs.foodstack.identity.core.domain.Permissions;
 
@@ -36,6 +38,21 @@ class IdentityApiImpl implements IdentityApi {
         ModuleAccess.requireServiceOr(Permissions.STORE_MANAGE);
         return toView(this.userService.grantStoreAccess(access.email(), access.displayName(), access.initialPassword(),
                 access.brandId(), access.storeId(), access.grantedBy()));
+    }
+
+    @Override
+    public UserView grantRiderAccess(RiderAccessGrant access) {
+        // the rider module checks a store's right to its own riders, then calls as the platform
+        ModuleAccess.requireServiceOr(Permissions.RIDER_MANAGE);
+        boolean storeRider = access.storeId() != null && !access.storeId().isBlank();
+        return toView(this.userService.grantRiderAccess(access.email(), access.displayName(), access.initialPassword(),
+                storeRider, access.grantedBy()));
+    }
+
+    @Override
+    public void revokeRiderAccess(String userId) {
+        ModuleAccess.requireServiceOr(Permissions.RIDER_MANAGE);
+        this.userService.revokeRiderAccess(userId);
     }
 
     @Override

@@ -256,6 +256,34 @@ class UserServiceTest {
     }
 
     @Test
+    @DisplayName("makes a customer an operator rider, and a new email a store rider; neither gets store claims")
+    void grantRiderAccess() {
+        UserDocument user = user(EnumSet.of(Role.CUSTOMER));
+        given(this.loginKeys.findByLoginKey(this.pii.blindIndex("admin@example.com")))
+            .willReturn(Optional.of(new LoginKeyDocument("k", "x", user.getId())));
+        given(this.users.findById(user.getId())).willReturn(Optional.of(user));
+        given(this.users.save(any(UserDocument.class))).willAnswer((invocation) -> invocation.getArgument(0));
+
+        UserAccount rider = this.service.grantRiderAccess("admin@example.com", null, null, false, "admin-1");
+
+        assertThat(rider.roles()).containsExactly(Role.RIDER);
+        assertThat(rider.permissions()).containsExactlyInAnyOrder("rider:portal", "media:upload");
+        assertThat(rider.storeIds()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("taking rider access away leaves a customer account and revokes tokens now")
+    void revokeRiderAccess() {
+        UserDocument user = user(EnumSet.of(Role.STORE_RIDER));
+        given(this.users.findById(user.getId())).willReturn(Optional.of(user));
+
+        this.service.revokeRiderAccess(user.getId());
+
+        assertThat(user.getRoles()).containsExactly(Role.CUSTOMER);
+        verify(this.revocations).revokeBefore(user.getId(), 2);
+    }
+
+    @Test
     @DisplayName("puts brand and branch ids into token claims")
     void tokenClaimsCarryStoreScopes() {
         UserDocument owner = user(EnumSet.of(Role.STORE_OWNER));

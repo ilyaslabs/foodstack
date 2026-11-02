@@ -45,7 +45,7 @@ class OrderEventsListenerTest {
     @DisplayName("a confirmed order redeems its coupon and counts as the customer's order, once per event")
     void confirmed() {
         this.listener.onEvent(envelope("e1", "foodstack.order.OrderConfirmed.v1",
-                new OrderConfirmed(summary(OrderStatus.CONFIRMED), "payment")));
+                new OrderConfirmed(summary(OrderStatus.CONFIRMED), "payment", null)));
 
         verify(this.inbox).processOnce(eq("e1"), eq("promotion-orders"), any());
         verify(this.coupons).redeem("o1");

@@ -13,14 +13,17 @@ class PermissionsTest {
     @Test
     @DisplayName("gives administrators every permission, store owners the store area and customers none")
     void byRole() {
-        assertThat(Permissions.of(EnumSet.of(Role.ADMIN))).containsExactly("geo:manage", "identity:users:manage",
-                "identity:users:read", "media:upload", "order:manage", "payment:manage", "promotion:manage", "search:manage",
-                "settings:manage", "store:manage");
+        assertThat(Permissions.of(EnumSet.of(Role.ADMIN))).containsExactly("dispatch:manage", "geo:manage",
+                "identity:users:manage", "identity:users:read", "media:upload", "order:manage", "payment:manage",
+                "promotion:manage", "rider:manage", "search:manage", "settings:manage", "store:manage");
         assertThat(Permissions.of(EnumSet.of(Role.STORE_OWNER))).containsExactly("media:upload", "store:portal");
         assertThat(Permissions.of(EnumSet.of(Role.STORE_STAFF))).containsExactly("store:portal");
         assertThat(Permissions.of(EnumSet.of(Role.CUSTOMER))).isEmpty();
         assertThat(Permissions.of(EnumSet.of(Role.FINANCE))).containsExactly("identity:users:read", "payment:manage");
-        assertThat(Permissions.of(EnumSet.of(Role.SUPPORT))).containsExactly("identity:users:read", "order:manage");
+        assertThat(Permissions.of(EnumSet.of(Role.SUPPORT))).containsExactly("dispatch:manage", "identity:users:read",
+                "order:manage");
+        assertThat(Permissions.of(EnumSet.of(Role.RIDER))).containsExactly("media:upload", "rider:portal");
+        assertThat(Permissions.of(EnumSet.of(Role.STORE_RIDER))).containsExactly("media:upload", "rider:portal");
     }
 
     @Test

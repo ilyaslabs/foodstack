@@ -51,6 +51,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param placedAt placed at
  * @param updatedAt last change
  * @param revision number of changes
+ * @param deliveryCode the 4-digit code the customer gives the rider (PRD DR-6), or {@code null}
+ * @param rider the rider on a delivery order, from dispatch, or {@code null}
+ * @param handedBackAt when support gave an operator delivery back to the store, or {@code null}
  */
 @Document("order_orders")
 public record OrderDocument(@Id String id, String number, String customerId, String customerName, String contactPhone,
@@ -58,7 +61,19 @@ public record OrderDocument(@Id String id, String number, String customerId, Str
         PaymentMethod paymentMethod, String currency, String language, List<Line> lines, Totals totals, Coupon coupon,
         Commission commission, int prepMinutes, int travelMinutes, Instant acceptBy, Instant readyBy, String paymentUrl,
         long paidMinor, long refundRequestedMinor, long refundedMinor, long cartVersion, List<TimelineEntry> timeline,
-        String closeReason, Instant placedAt, Instant updatedAt, long revision) {
+        String closeReason, Instant placedAt, Instant updatedAt, long revision, String deliveryCode, Rider rider,
+        Instant handedBackAt) {
+
+    /**
+     * The rider on the order, as dispatch reported it.
+     *
+     * @param riderId the rider's user id
+     * @param name the rider's name, shown to the customer
+     * @param vehicle how the rider travels
+     * @param assignedAt when the rider took the job
+     */
+    public record Rider(String riderId, String name, String vehicle, Instant assignedAt) {
+    }
 
     /**
      * @param storeId branch id

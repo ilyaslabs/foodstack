@@ -40,12 +40,25 @@ import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
  * @param placedAt placed at
  * @param revision number of changes
  * @param actions what the viewer may do now
+ * @param rider the rider on the way, or {@code null}
+ * @param deliveryCode the code to give the rider at the door; shown to the customer only, else {@code null}
+ * @param handedBackAt when support gave an operator delivery back to the store, or {@code null}
  */
 public record OrderDetails(String id, String number, OrderStatus status, Fulfilment fulfilment, DeliveryMode deliveryMode,
         PaymentMethod paymentMethod, String currency, String customerId, String customerName, String contactPhone,
         StoreInfo store, Destination destination, List<Line> lines, Totals totals, Coupon coupon, int prepMinutes, Long acceptBy,
         Long readyBy, Long estimatedAt, String paymentUrl, long paidMinor, long refundRequestedMinor, long refundedMinor,
-        List<Step> timeline, String closeReason, long placedAt, long revision, Set<String> actions) {
+        List<Step> timeline, String closeReason, long placedAt, long revision, Set<String> actions, RiderInfo rider,
+        String deliveryCode, Long handedBackAt) {
+
+    /**
+     * @param riderId the rider
+     * @param name the rider's first name
+     * @param vehicle bicycle, motorbike, scooter or car
+     * @param assignedAt epoch seconds
+     */
+    public record RiderInfo(String riderId, String name, String vehicle, long assignedAt) {
+    }
 
     /**
      * @param storeId branch id

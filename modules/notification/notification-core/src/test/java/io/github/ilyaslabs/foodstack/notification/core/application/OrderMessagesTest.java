@@ -49,7 +49,7 @@ class OrderMessagesTest {
     @SuppressWarnings("unchecked")
     @DisplayName("a confirmed order tells the customer, and every person of the branch that a new order waits")
     void confirmed() {
-        this.messages.onOrderEvent("e1", new OrderConfirmed(order(Fulfilment.PICKUP, "ar"), "payment"));
+        this.messages.onOrderEvent("e1", new OrderConfirmed(order(Fulfilment.PICKUP, "ar"), "payment", null));
         ArgumentCaptor<Message> sent = ArgumentCaptor.forClass(Message.class);
         verify(this.notifications, times(3)).send(sent.capture());
         assertThat(sent.getAllValues()).extracting(Message::userId).containsExactly("c1", "owner-1", "owner-2");
