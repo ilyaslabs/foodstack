@@ -129,6 +129,11 @@ foodstack:
       url: ${GEOCODING_URL:https://nominatim.openstreetmap.org}
       user-agent: FoodStack (${FOODSTACK_PUBLIC_URL:http://localhost:8080})
       country-codes: ${GEOCODING_COUNTRY_CODES:}
+    # Road distance and driving time for quotes, dispatch and live ETAs: "osrm" with ROUTING_URL, or
+    # "none" for the straight-line estimate (distance x road factor at an urban average speed).
+    routing:
+      provider: ${ROUTING_PROVIDER:none}
+      url: ${ROUTING_URL:}
   search:
     index-prefix: ${SEARCH_INDEX_PREFIX:foodstack_}
     replicas: ${SEARCH_REPLICAS:0}

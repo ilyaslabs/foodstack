@@ -5,6 +5,10 @@ import java.time.Clock;
 import io.github.ilyaslabs.foodstack.geo.core.application.GeocodingService;
 import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricingService;
 import io.github.ilyaslabs.foodstack.geo.core.application.QuoteService;
+import io.github.ilyaslabs.foodstack.geo.core.application.RoutingService;
+import io.github.ilyaslabs.foodstack.geo.core.routing.OsrmRoutingProvider;
+import io.github.ilyaslabs.foodstack.geo.core.routing.RoutingProvider;
+import io.github.ilyaslabs.foodstack.geo.core.routing.StraightLineRoutingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.application.ZoneService;
 import io.github.ilyaslabs.foodstack.geo.core.geocoding.DisabledGeocodingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.geocoding.GeocodingProvider;
@@ -93,9 +97,26 @@ public class GeoConfiguration {
     }
 
     @Bean
+    RoutingService geoRoutingService(GeoProperties properties, StringRedisTemplate redis,
+            @Value("${foodstack.namespace:foodstack}") String namespace) {
+        GeoProperties.Routing routing = properties.getRouting();
+        StraightLineRoutingProvider estimate = new StraightLineRoutingProvider(properties.getRoadFactor(),
+                routing.getEstimateSpeedKmh());
+        RoutingProvider provider = null;
+        if ("osrm".equalsIgnoreCase(routing.getProvider()) && routing.getUrl() != null && !routing.getUrl().isBlank()) {
+            SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+            requestFactory.setConnectTimeout(routing.getTimeout());
+            requestFactory.setReadTimeout(routing.getTimeout());
+            provider = new OsrmRoutingProvider(RestClient.builder().requestFactory(requestFactory), routing.getUrl(),
+                    routing.getProfile());
+        }
+        return new RoutingService(provider, estimate, redis, namespace, routing.getCacheTtl());
+    }
+
+    @Bean
     QuoteService geoQuoteService(ZoneService geoZoneService, OperatorPricingService geoOperatorPricingService,
-            GeoProperties properties) {
-        return new QuoteService(geoZoneService, geoOperatorPricingService, properties.getRoadFactor());
+            GeoProperties properties, RoutingService geoRoutingService) {
+        return new QuoteService(geoZoneService, geoOperatorPricingService, properties.getRoadFactor(), geoRoutingService);
     }
 
     @Bean

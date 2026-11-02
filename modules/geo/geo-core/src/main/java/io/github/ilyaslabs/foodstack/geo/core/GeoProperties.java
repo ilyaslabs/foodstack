@@ -18,6 +18,81 @@ public class GeoProperties {
 
     private final Geocoding geocoding = new Geocoding();
 
+    private final Routing routing = new Routing();
+
+    public Routing getRouting() {
+        return this.routing;
+    }
+
+    /** Road distance and driving time (TDD 14.1): quotes, rider dispatch and live ETAs. */
+    public static class Routing {
+
+        /** {@code osrm}, or {@code none} for the straight-line estimate (the default). */
+        private String provider = "none";
+
+        /** OSRM base URL, for example {@code http://osrm:5000}. */
+        private String url = "";
+
+        /** OSRM profile the server was built with. */
+        private String profile = "driving";
+
+        /** Average urban speed for the straight-line estimate. */
+        private double estimateSpeedKmh = 25;
+
+        /** How long answers are cached in Redis. */
+        private Duration cacheTtl = Duration.ofHours(6);
+
+        private Duration timeout = Duration.ofSeconds(3);
+
+        public String getProvider() {
+            return this.provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getUrl() {
+            return this.url;
+        }
+
+        public void setUrl(String url) {
+            this.url = url;
+        }
+
+        public String getProfile() {
+            return this.profile;
+        }
+
+        public void setProfile(String profile) {
+            this.profile = profile;
+        }
+
+        public double getEstimateSpeedKmh() {
+            return this.estimateSpeedKmh;
+        }
+
+        public void setEstimateSpeedKmh(double estimateSpeedKmh) {
+            this.estimateSpeedKmh = estimateSpeedKmh;
+        }
+
+        public Duration getCacheTtl() {
+            return this.cacheTtl;
+        }
+
+        public void setCacheTtl(Duration cacheTtl) {
+            this.cacheTtl = cacheTtl;
+        }
+
+        public Duration getTimeout() {
+            return this.timeout;
+        }
+
+        public void setTimeout(Duration timeout) {
+            this.timeout = timeout;
+        }
+    }
+
     public double getRoadFactor() {
         return this.roadFactor;
     }

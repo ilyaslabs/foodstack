@@ -19,4 +19,10 @@ public interface GeoApi {
      * a circle of the operator's maximum distance for operator delivery. Empty when it delivers nowhere.
      */
     DeliveryAreaView deliveryArea(@Param("request") DeliveryAreaRequest request);
+
+    /**
+     * Road distance and driving time between two points, from the routing provider (OSRM) or, when
+     * it is off or not answering, estimated from the straight line. Answers are cached briefly.
+     */
+    RouteView route(@Param("request") RouteRequest request);
 }
