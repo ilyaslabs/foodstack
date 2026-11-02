@@ -166,7 +166,7 @@ public class OrderPlacementService {
                 String actor = "customer:" + customerId;
                 this.outbox.append(new OrderPlaced(OrderLifecycleService.summary(placed), actor));
                 if (cash) {
-                    this.outbox.append(new OrderConfirmed(OrderLifecycleService.summary(placed), actor));
+                    this.outbox.append(new OrderConfirmed(OrderLifecycleService.summary(placed), actor, placed.deliveryCode()));
                 }
                 return placed;
             });
@@ -252,7 +252,7 @@ public class OrderPlacementService {
                 order.store(), OrderStatus.CONFIRMED, order.fulfilment(), order.deliveryMode(), order.destination(),
                 order.paymentMethod(), order.currency(), order.language(), order.lines(), order.totals(), order.coupon(),
                 order.commission(), order.prepMinutes(), order.travelMinutes(), this.lifecycle.acceptBy(now), null, null, 0, 0, 0,
-                order.cartVersion(), List.copyOf(timeline), null, order.placedAt(), now, 1);
+                order.cartVersion(), List.copyOf(timeline), null, order.placedAt(), now, 1, order.deliveryCode(), null, null);
     }
 
     private OrderDocument newOrder(String orderId, String customerId, PlaceOrder request, CheckoutView checkout, Instant now) {
@@ -294,7 +294,8 @@ public class OrderPlacementService {
                         : null,
                 destination, request.paymentMethod(), checkout.currency(), language(request.language()), lines, totals, coupon,
                 new OrderDocument.Commission(s.commissionBasisPoints(), s.commissionFixedMinor()), s.prepMinutes(), travel, null,
-                null, null, 0, 0, 0, checkout.cartVersion(), List.copyOf(timeline), null, now, now, 0);
+                null, null, 0, 0, 0, checkout.cartVersion(), List.copyOf(timeline), null, now, now, 0,
+                this.lifecycle.deliveryCodeFor(request.fulfilment(), totals.totalMinor()), null, null);
     }
 
     private String customerName(String customerId) {

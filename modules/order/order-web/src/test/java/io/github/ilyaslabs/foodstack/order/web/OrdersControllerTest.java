@@ -94,15 +94,15 @@ class OrdersControllerTest {
     @Test
     @DisplayName("store steps go to the order service by name; problems come back as problem details")
     void actions() throws Exception {
-        given(this.orders.storeAction("o1", "PICKED_UP", null, null))
+        given(this.orders.storeAction("o1", "PICKED_UP", null, null, null))
             .willThrow(new ModuleException.Forbidden("The operator's rider reports this step", "OPERATOR_DELIVERY"));
         this.mvc.perform(post("/api/v1/orders/o1/actions/picked-up").with(jwt()))
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.code").value("OPERATOR_DELIVERY"));
 
         this.mvc.perform(post("/api/v1/orders/o1/actions/accept").with(jwt()).contentType(MediaType.APPLICATION_JSON)
-            .content("{\"prepMinutes\":25}")).andExpect(status().isOk());
-        verify(this.orders).storeAction("o1", "ACCEPT", 25, null);
+            .content("{\"prepMinutes\":25,\"storeRiderId\":\"r9\"}")).andExpect(status().isOk());
+        verify(this.orders).storeAction("o1", "ACCEPT", 25, null, "r9");
     }
 
     @Test

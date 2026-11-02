@@ -62,7 +62,7 @@ class OrdersController {
     record AddressRequest(Double lat, Double lng, String addressLine, String instructions) {
     }
 
-    record ActionRequest(Integer prepMinutes, String reason) {
+    record ActionRequest(Integer prepMinutes, String reason, String storeRiderId) {
     }
 
     record ReasonRequest(String reason) {
@@ -117,7 +117,8 @@ class OrdersController {
     OrderDetails action(@PathVariable String orderId, @PathVariable String action,
             @RequestBody(required = false) ActionRequest body) {
         return this.orders.storeAction(orderId, action.toUpperCase(Locale.ROOT).replace('-', '_'),
-                (body != null) ? body.prepMinutes() : null, (body != null) ? body.reason() : null);
+                (body != null) ? body.prepMinutes() : null, (body != null) ? body.reason() : null,
+                (body != null) ? body.storeRiderId() : null);
     }
 
     @PostMapping("/api/v1/orders/{orderId}/refund")

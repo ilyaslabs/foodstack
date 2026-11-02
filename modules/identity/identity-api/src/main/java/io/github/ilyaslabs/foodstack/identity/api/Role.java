@@ -2,7 +2,7 @@ package io.github.ilyaslabs.foodstack.identity.api;
 
 /**
  * Roles carried in the {@code roles} claim. Permissions ({@code perms} claim) are derived from
- * them by the identity module. Rider roles arrive with their module.
+ * them by the identity module.
  */
 public enum Role {
 
@@ -26,5 +26,14 @@ public enum Role {
     STORE_OWNER,
 
     /** Staff of a branch: orders and sold-out toggles only ({@code storeIds} claim). */
-    STORE_STAFF
+    STORE_STAFF,
+
+    /** An operator rider (PRD DR-1): receives offers for operator-delivery orders. */
+    RIDER,
+
+    /**
+     * A store's own rider (PRD DR-1): gets jobs of that store only. The store is kept by the rider
+     * module, not in the {@code storeIds} claim, so a rider never gets store-owner access.
+     */
+    STORE_RIDER
 }

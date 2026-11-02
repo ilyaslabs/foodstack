@@ -189,6 +189,46 @@
             </dependency>
             <dependency>
                 <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-rider-api</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-rider-core</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-rider-impl</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-rider-web</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-dispatch-api</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-dispatch-core</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-dispatch-impl</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-dispatch-web</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
                 <artifactId>foodstack-cart-api</artifactId>
                 <version>${revision}</version>
             </dependency>

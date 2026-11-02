@@ -25,6 +25,8 @@
         <module>cart</module>
         <module>payment</module>
         <module>order</module>
+        <module>rider</module>
+        <module>dispatch</module>
         <module>notification</module>
     </modules>
 </project>

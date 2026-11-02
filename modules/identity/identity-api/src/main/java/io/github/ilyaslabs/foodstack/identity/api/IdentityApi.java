@@ -19,6 +19,17 @@ public interface IdentityApi {
      */
     UserView grantStoreAccess(@Param("access") StoreAccessGrant access);
 
+    /**
+     * Gives a person rider access (PRD DR-1): an existing account (found by email) gets the
+     * {@code RIDER} role, or {@code STORE_RIDER} when {@code storeId} is set; otherwise an account is
+     * created with {@code initialPassword}. Operator staff with {@code rider:manage} may give either;
+     * a branch's people may give {@code STORE_RIDER} for their branch. Errors: {@code USER_INVALID} (400).
+     */
+    UserView grantRiderAccess(@Param("access") RiderAccessGrant access);
+
+    /** Takes the rider role away (both kinds) and revokes the user's tokens. Unknown users are ignored. */
+    void revokeRiderAccess(@Param("userId") String userId);
+
     /** Takes a brand and branch out of a user's claims and revokes their tokens. Unknown users are ignored. */
     void revokeStoreAccess(@Param("userId") String userId, @Param("brandId") String brandId,
             @Param("storeId") String storeId);

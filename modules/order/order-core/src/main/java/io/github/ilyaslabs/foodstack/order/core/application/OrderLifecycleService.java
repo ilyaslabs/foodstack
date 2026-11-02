@@ -10,6 +10,8 @@ import java.util.Set;
 import java.util.function.Function;
 
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
+import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
+import io.github.ilyaslabs.foodstack.order.api.OrderDelivery;
 import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
 import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderAccepted;
@@ -104,13 +106,26 @@ public class OrderLifecycleService {
 
     /** The store takes the order with a prep-time estimate (PRD OF-2). */
     public OrderDocument accept(String orderId, Actor actor, int prepMinutes) {
+        return accept(orderId, actor, prepMinutes, null);
+    }
+
+    /**
+     * The store takes the order with a prep-time estimate (PRD OF-2) and, for a self-delivery order,
+     * optionally one of its own riders (PRD OF-8). Dispatch takes it from the event.
+     */
+    public OrderDocument accept(String orderId, Actor actor, int prepMinutes, String storeRiderId) {
         if (prepMinutes < 1 || prepMinutes > 180) {
             throw new ModuleException.BadRequest("Prep time must be 1 to 180 minutes", "PREP_TIME_INVALID");
         }
+        String rider = (storeRiderId == null || storeRiderId.isBlank()) ? null : storeRiderId.strip();
         return step(orderId, EnumSet.of(OrderStatus.CONFIRMED), OrderStatus.ACCEPTED, actor, null, (order, now) -> {
+            if (rider != null && (order.fulfilment() != Fulfilment.DELIVERY || order.deliveryMode() != DeliveryMode.SELF)) {
+                throw new ModuleException.BadRequest("Only self-delivery orders take a store rider", "STORE_RIDER_NOT_ALLOWED");
+            }
             Instant readyBy = now.plus(Duration.ofMinutes(prepMinutes));
             return new Change(new Update().set("prepMinutes", prepMinutes).set("readyBy", readyBy).unset("acceptBy"),
-                    (after) -> new OrderAccepted(summary(after), actor.asEventActor(), prepMinutes, readyBy.getEpochSecond()));
+                    (after) -> new OrderAccepted(summary(after), actor.asEventActor(), prepMinutes, readyBy.getEpochSecond(),
+                            delivery(after, rider)));
         });
     }
 
@@ -142,9 +157,14 @@ public class OrderLifecycleService {
         });
     }
 
-    /** A delivery order left the store (self-delivery stores mark it themselves, PRD OF-4). */
+    /**
+     * A delivery order left the store: self-delivery stores mark it themselves (PRD OF-4), riders
+     * through dispatch. A rider's pickup also counts as ready when the store forgot to say so.
+     */
     public OrderDocument pickedUp(String orderId, Actor actor) {
-        return step(orderId, EnumSet.of(OrderStatus.READY), OrderStatus.PICKED_UP, actor, null, (order, now) -> {
+        Set<OrderStatus> from = Actor.RIDER.equals(actor.role())
+                ? EnumSet.of(OrderStatus.ACCEPTED, OrderStatus.PREPARING, OrderStatus.READY) : EnumSet.of(OrderStatus.READY);
+        return step(orderId, from, OrderStatus.PICKED_UP, actor, null, (order, now) -> {
             requireFulfilment(order, Fulfilment.DELIVERY);
             requireSelfDeliveryOrSupport(order, actor);
             return new Change(new Update(), (after) -> new OrderPickedUp(summary(after), actor.asEventActor()));
@@ -219,7 +239,7 @@ public class OrderLifecycleService {
                 Instant now = this.clock.instant();
                 OrderDocument after = apply(order, OrderStatus.CONFIRMED, Actor.system(), "Paid by card",
                         new Update().set("paidMinor", amountMinor).unset("paymentUrl").set("acceptBy", acceptBy(now)), now,
-                        (changed) -> new OrderConfirmed(summary(changed), "payment"));
+                        (changed) -> new OrderConfirmed(summary(changed), "payment", changed.deliveryCode()));
                 if (after != null) {
                     return after;
                 }
@@ -266,6 +286,71 @@ public class OrderLifecycleService {
         }
         recordNote(order, "Refund of " + amountMinor + " failed: " + reason,
                 new Update().inc("refundRequestedMinor", -amountMinor));
+    }
+
+    // ---- dispatch ------------------------------------------------------------------------------
+
+    /** A rider took the delivery (dispatch {@code RiderAssigned}): shown to the customer and the store. */
+    public void riderAssigned(String orderId, String riderId, String name, String vehicle, String eventActor) {
+        OrderDocument order = find(orderId);
+        if (order == null || order.status().isFinal()
+                || (order.rider() != null && order.rider().riderId().equals(riderId))) {
+            return;
+        }
+        recordNote(order, "Rider " + (name != null ? name : riderId) + " is on the way to the store",
+                new Update().set("rider", new OrderDocument.Rider(riderId, name, vehicle, this.clock.instant())),
+                Actor.fromEvent(eventActor));
+    }
+
+    /** The rider was taken off the delivery before pickup (dispatch {@code RiderUnassigned}). */
+    public void riderUnassigned(String orderId, String riderId, String reason, String eventActor) {
+        OrderDocument order = find(orderId);
+        if (order == null || order.status().isFinal() || order.rider() == null || !order.rider().riderId().equals(riderId)) {
+            return;
+        }
+        recordNote(order, "Rider changed: " + reason, new Update().unset("rider"), Actor.fromEvent(eventActor));
+    }
+
+    /**
+     * Support gave an operator delivery back to the store (PRD OF-8): from now on the store delivers
+     * it and gets the delivery charge, so the order counts as self-delivered.
+     */
+    public void handedBack(String orderId, String reason, String eventActor) {
+        OrderDocument order = find(orderId);
+        if (order == null || order.status().isFinal() || order.handedBackAt() != null) {
+            return;
+        }
+        recordNote(order, "Handed back to the store to deliver: " + reason,
+                new Update().set("deliveryMode", DeliveryMode.SELF).set("handedBackAt", this.clock.instant()).unset("rider"),
+                Actor.fromEvent(eventActor));
+    }
+
+    /** The 4-digit code for a new order (PRD DR-6), when the operator asks for one at this total. */
+    public String deliveryCodeFor(Fulfilment fulfilment, long totalMinor) {
+        if (fulfilment != Fulfilment.DELIVERY) {
+            return null;
+        }
+        Long threshold = this.settings.getDelivery().proofCodeAboveMinor();
+        if (threshold == null || totalMinor < threshold) {
+            return null;
+        }
+        return String.format(java.util.Locale.ROOT, "%04d", CODES.nextInt(10_000));
+    }
+
+    private static final java.security.SecureRandom CODES = new java.security.SecureRandom();
+
+    /** What dispatch needs from an accepted delivery order; {@code null} for pickup. */
+    static OrderDelivery delivery(OrderDocument o, String storeRiderId) {
+        if (o.fulfilment() != Fulfilment.DELIVERY || o.destination() == null) {
+            return null;
+        }
+        OrderDocument.Store s = o.store();
+        long charge = Math.max(0, o.totals().deliveryChargeMinor() - o.totals().deliveryDiscountMinor());
+        long cash = (o.paymentMethod() == PaymentMethod.CASH) ? o.totals().totalMinor() : 0;
+        return new OrderDelivery(o.deliveryMode(), storeRiderId, new GeoPoint(s.lat(), s.lng()), s.addressLine(),
+                new GeoPoint(o.destination().lat(), o.destination().lng()), o.destination().addressLine(),
+                o.destination().instructions(), o.customerName(), o.contactPhone(), charge, o.totals().tipMinor(), cash,
+                o.currency(), o.deliveryCode());
     }
 
     /** Rejects confirmed orders the store did not answer in time (PRD 3); returns how many. */
@@ -403,9 +488,13 @@ public class OrderLifecycleService {
 
     /** A note that sends no event (refund outcomes; payment already sent its own). */
     private void recordNote(OrderDocument order, String note, Update update) {
+        recordNote(order, note, update, Actor.system());
+    }
+
+    private void recordNote(OrderDocument order, String note, Update update, Actor actor) {
         Instant now = this.clock.instant();
         update.set("updatedAt", now).inc("revision", 1)
-            .push("timeline", new TimelineEntry(null, now, Actor.SYSTEM, null, note));
+            .push("timeline", new TimelineEntry(null, now, actor.role(), actor.id(), note));
         OrderDocument after = this.mongo.findAndModify(Query.query(Criteria.where("_id").is(order.id())), update,
                 org.springframework.data.mongodb.core.FindAndModifyOptions.options().returnNew(true), OrderDocument.class);
         if (after != null) {
@@ -428,9 +517,10 @@ public class OrderLifecycleService {
         }
     }
 
-    /** Operator riders report their own steps (M3); until then only support moves those orders. */
+    /** Operator riders report their own steps through dispatch; besides them only support moves those orders. */
     private static void requireSelfDeliveryOrSupport(OrderDocument order, Actor actor) {
-        if (order.deliveryMode() == DeliveryMode.OPERATOR && !Actor.SUPPORT.equals(actor.role())) {
+        if (order.deliveryMode() == DeliveryMode.OPERATOR && !Actor.SUPPORT.equals(actor.role())
+                && !Actor.RIDER.equals(actor.role())) {
             throw new ModuleException.Forbidden("The operator's rider reports this step", "OPERATOR_DELIVERY");
         }
     }

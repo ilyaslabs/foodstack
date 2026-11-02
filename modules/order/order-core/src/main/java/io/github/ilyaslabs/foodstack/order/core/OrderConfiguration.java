@@ -10,6 +10,7 @@ import io.github.ilyaslabs.foodstack.order.core.application.OrderLiveUpdates;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderPlacementService;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderProjections;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderService;
+import io.github.ilyaslabs.foodstack.order.core.events.DispatchEventsListener;
 import io.github.ilyaslabs.foodstack.order.core.events.OrderProjectionListener;
 import io.github.ilyaslabs.foodstack.order.core.events.PaymentEventsListener;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
@@ -148,6 +149,13 @@ public class OrderConfiguration {
     PaymentEventsListener orderPaymentEventsListener(OrderLifecycleService orderLifecycleService,
             OrderPlacementService orderPlacementService, InboxGuard orderInbox, ServiceCalls serviceCalls, JsonMapper jsonMapper) {
         return new PaymentEventsListener(orderLifecycleService, orderPlacementService, orderInbox, serviceCalls, jsonMapper);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    DispatchEventsListener orderDispatchEventsListener(OrderLifecycleService orderLifecycleService, InboxGuard orderInbox,
+            JsonMapper jsonMapper) {
+        return new DispatchEventsListener(orderLifecycleService, orderInbox, jsonMapper);
     }
 
     @Bean
