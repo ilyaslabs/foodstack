@@ -19,8 +19,8 @@ interface NavItem {
   readonly label: string;
   readonly icon: IconName;
   readonly exact: boolean;
-  /** Shown only with this permission; none means everyone. */
-  readonly permission?: string;
+  /** Shown only with this permission (or any of these); none means everyone. */
+  readonly permission?: string | readonly string[];
 }
 
 /** The signed-in frame: brand header, account menu, navigation and the current page. */
@@ -58,6 +58,20 @@ export class Shell {
   private readonly allNav: readonly NavItem[] = [
     { path: '/', label: 'Overview', icon: 'dashboard', exact: true },
     {
+      path: '/orders/board',
+      label: 'Live orders',
+      icon: 'notifications',
+      exact: true,
+      permission: ['store:portal', 'order:manage'],
+    },
+    {
+      path: '/orders',
+      label: 'Orders',
+      icon: 'receipt',
+      exact: true,
+      permission: ['store:portal', 'order:manage'],
+    },
+    {
       path: '/stores',
       label: 'Stores',
       icon: 'storefront',
@@ -70,6 +84,13 @@ export class Shell {
       icon: 'delivery',
       exact: false,
       permission: 'geo:manage',
+    },
+    {
+      path: '/promotions',
+      label: 'Coupons',
+      icon: 'local_offer',
+      exact: false,
+      permission: ['promotion:manage', 'store:portal'],
     },
     {
       path: '/users',
@@ -92,13 +113,31 @@ export class Shell {
       exact: false,
       permission: 'settings:manage',
     },
+    {
+      path: '/settings/ordering',
+      label: 'Ordering',
+      icon: 'shopping_bag',
+      exact: false,
+      permission: 'settings:manage',
+    },
+    {
+      path: '/settings/emails',
+      label: 'Email log',
+      icon: 'mail',
+      exact: false,
+      permission: ['settings:manage', 'order:manage'],
+    },
   ];
 
   /** Operators see everything they may manage; store owners see their own store. */
   protected readonly nav = computed<NavItem[]>(() => {
     const permissions = this.session.permissions();
     const items = this.allNav.filter(
-      (item) => !item.permission || permissions.has(item.permission),
+      (item) =>
+        !item.permission ||
+        (typeof item.permission === 'string' ? [item.permission] : item.permission).some((p) =>
+          permissions.has(p),
+        ),
     );
     if (!permissions.has('store:manage') && permissions.has('store:portal')) {
       const storeIds = this.me()?.storeIds ?? [];

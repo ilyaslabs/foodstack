@@ -1,0 +1,164 @@
+<header class="fs-page-header board-header">
+  <div>
+    <h1>Live orders</h1>
+    <p>
+      New orders ring until someone accepts them.
+      @if (live()) {
+        <span class="live"><span class="dot" aria-hidden="true"></span> Live</span>
+      } @else if (storeId()) {
+        <span class="offline">Connecting…</span>
+      }
+    </p>
+  </div>
+  <div class="tools">
+    @if (storeList().length > 1) {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="store-field">
+        <mat-label>Branch</mat-label>
+        <mat-select [value]="storeId()" (selectionChange)="pickStore($event.value)">
+          @for (store of storeList(); track store.id) {
+            <mat-option [value]="store.id">
+              {{ store.brandName }}{{ store.branchName ? ' · ' + store.branchName : '' }}
+            </mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
+    <button
+      mat-stroked-button
+      type="button"
+      (click)="toggleSound()"
+      [class.sound-off]="!soundOn() || soundBlocked()"
+    >
+      <fs-icon [name]="soundOn() && !soundBlocked() ? 'volume_up' : 'volume_off'" />
+      {{ !soundOn() ? 'Turn on sound' : soundBlocked() ? 'Tap to allow sound' : 'Sound on' }}
+    </button>
+  </div>
+</header>
+
+@if (loading()) {
+  <mat-progress-bar mode="indeterminate" />
+} @else if (!storeId()) {
+  <section class="empty">
+    <fs-icon name="storefront" class="empty-icon" />
+    <h2>No live branch</h2>
+    <p>Orders appear here once a branch is live.</p>
+  </section>
+} @else {
+  @if (fresh().length) {
+    <div class="alert" role="alert">
+      <fs-icon name="notifications" />
+      {{
+        fresh().length === 1 ? '1 new order is waiting' : fresh().length + ' new orders are waiting'
+      }}
+    </div>
+  }
+  <div class="columns">
+    @for (column of columns(); track column.key) {
+      <section class="column" [attr.data-column]="column.key" [attr.aria-label]="column.title">
+        <h2>
+          {{ column.title }} <span class="count">{{ column.orders.length }}</span>
+        </h2>
+        @for (order of column.orders; track order.id) {
+          <article class="ticket" [class.urgent]="order.status === 'CONFIRMED'">
+            <header class="ticket-head">
+              <div>
+                <div class="number">#{{ order.number }}</div>
+                <div class="muted">{{ order.customerName }} · {{ ago(order.placedAt) }}</div>
+              </div>
+              @if (order.status === 'CONFIRMED' && secondsLeft(order) !== null) {
+                <span
+                  class="timer"
+                  [class.late]="(secondsLeft(order) ?? 0) < 60"
+                  matTooltip="Time left to accept"
+                >
+                  <fs-icon name="schedule" /> {{ countdown(order) }}
+                </span>
+              } @else if (
+                order.readyBy && (order.status === 'ACCEPTED' || order.status === 'PREPARING')
+              ) {
+                <span class="timer calm" matTooltip="Promised ready time">
+                  <fs-icon name="schedule" /> {{ clock(order.readyBy) }}
+                </span>
+              }
+            </header>
+            <div class="chips">
+              <span class="chip">{{ order.fulfilment === 'PICKUP' ? 'Pickup' : 'Delivery' }}</span>
+              <span class="chip" [class.cash]="order.paymentMethod === 'CASH'">
+                {{
+                  order.paymentMethod === 'CASH'
+                    ? 'Cash ' + money(order, order.totals.totalMinor)
+                    : 'Paid by card'
+                }}
+              </span>
+              @if (order.status !== 'CONFIRMED') {
+                <span class="chip status">{{ statusLabels[order.status] }}</span>
+              }
+            </div>
+            <ul class="lines">
+              @for (line of order.lines; track $index) {
+                <li>
+                  <span class="qty">{{ line.quantity }}×</span>
+                  <span>
+                    {{ locale.pick(line.name) }}
+                    @for (option of line.options; track $index) {
+                      <span class="option">{{ locale.pick(option.name) }}</span>
+                    }
+                    @if (line.note) {
+                      <span class="note"><fs-icon name="info" /> {{ line.note }}</span>
+                    }
+                  </span>
+                </li>
+              }
+            </ul>
+            @if (order.fulfilment === 'DELIVERY' && order.destination) {
+              <p class="address">
+                <fs-icon name="place" /> {{ order.destination.addressLine }}
+                @if (order.destination.instructions) {
+                  <span class="muted"> · {{ order.destination.instructions }}</span>
+                }
+              </p>
+            }
+            <footer class="ticket-actions">
+              @if (primaryAction(order); as action) {
+                <button
+                  mat-flat-button
+                  type="button"
+                  class="primary"
+                  [disabled]="busy() === order.id"
+                  (click)="act(order, action)"
+                >
+                  {{ actionLabels[action] }}
+                </button>
+              }
+              @for (action of secondary(order); track action) {
+                <button
+                  mat-button
+                  type="button"
+                  [class.danger]="action === 'REJECT' || action === 'CANCEL'"
+                  [disabled]="busy() === order.id"
+                  (click)="act(order, action)"
+                >
+                  {{ actionLabels[action] }}
+                </button>
+              }
+              <button
+                mat-icon-button
+                type="button"
+                class="print"
+                aria-label="Print kitchen ticket"
+                matTooltip="Print kitchen ticket"
+                (click)="print(order)"
+              >
+                <fs-icon name="print" />
+              </button>
+            </footer>
+          </article>
+        } @empty {
+          <p class="column-empty">Nothing here</p>
+        }
+      </section>
+    }
+  </div>
+}
+
+<app-order-ticket [order]="printing()" />
