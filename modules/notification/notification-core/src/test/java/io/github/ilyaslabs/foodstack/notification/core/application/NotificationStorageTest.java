@@ -236,4 +236,28 @@ class NotificationStorageTest {
             .findFirst()
             .orElseThrow();
     }
+
+    @Test
+    @DisplayName("a sign-in code is sent whatever the preferences, never shown in the log, and wiped once sent")
+    void sealedCode() {
+        this.notifications.updatePreferences(this.user, false, false);
+        String eventId = "code-" + System.nanoTime();
+        this.notifications.send(new Message(eventId, this.user, null, "login-code", "en",
+                Map.of("brand", "Lahore Eats", "code", "482913", "minutes", 5), null, false, false, true, true));
+
+        verify(this.mail).send(eq("sara@example.com"), eq("482913 is your Lahore Eats sign-in code"), contains("482913"),
+                contains("482913"));
+        assertThat(this.inbox.list(this.user, null, 10)).isEmpty();
+        assertThat(this.notifications.deliveries(null, null, 50)).filteredOn((d) -> d.id().startsWith(eventId))
+            .singleElement()
+            .satisfies((d) -> {
+                assertThat(d.subject()).isEqualTo("Your sign-in code");
+                assertThat(d.status()).isEqualTo("SENT");
+            });
+        org.bson.Document stored = this.notificationMongo.template()
+            .findById(eventId + ":" + this.user + ":EMAIL", org.bson.Document.class, "notification_deliveries");
+        assertThat(stored).isNotNull();
+        assertThat(stored.toJson()).doesNotContain("482913");
+        assertThat(stored).doesNotContainKeys("html", "text", "sealedSubject");
+    }
 }

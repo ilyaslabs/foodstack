@@ -4,9 +4,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
@@ -17,16 +14,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.FactorGrantedAuthority;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
-import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.savedrequest.SavedRequest;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -58,23 +48,20 @@ class LoginPageController {
 
     private final String script = read("/identity/login.js");
 
-    private final HttpSessionRequestCache requestCache = new HttpSessionRequestCache();
-
-    private final HttpSessionSecurityContextRepository contextRepository = new HttpSessionSecurityContextRepository();
-
     private final UserService users;
 
-    private final UserDetailsService userDetails;
+    private final LoginSessions sessions;
 
     LoginPageController(UserService users, UserDetailsService identityUserDetailsService) {
         this.users = users;
-        this.userDetails = identityUserDetailsService;
+        this.sessions = new LoginSessions(identityUserDetailsService);
     }
 
     @GetMapping(value = "/login", produces = MediaType.TEXT_HTML_VALUE)
     ResponseEntity<String> login(CsrfToken csrf, @RequestParam(required = false) String error,
-            @RequestParam(required = false) String logout, HttpServletRequest request, HttpServletResponse response) {
-        SavedRequest saved = this.requestCache.getRequest(request, response);
+            @RequestParam(required = false) String logout, @RequestParam(required = false) String reset,
+            @RequestParam(required = false) String signedin, HttpServletRequest request, HttpServletResponse response) {
+        SavedRequest saved = this.sessions.savedRequest(request, response);
         boolean customer = fromCustomerApp(saved);
         if (customer && error == null && logout == null && "signup".equals(parameter(saved, SCREEN_PARAMETER))) {
             return ResponseEntity.status(HttpStatus.FOUND).header("Location", "/login/signup").build();
@@ -85,6 +72,12 @@ class LoginPageController {
         }
         else if (logout != null) {
             message = "<p class=\"message\" role=\"status\">You are signed out.</p>";
+        }
+        else if (reset != null) {
+            message = "<p class=\"message\" role=\"status\">Your new password is saved.</p>";
+        }
+        else if (signedin != null) {
+            message = "<p class=\"message\" role=\"status\">You are signed in. Go back to the app to continue.</p>";
         }
         String signup = customer
                 ? "<p class=\"switch\">New here? <a href=\"/login/signup\">Create an account</a></p>" : "";
@@ -97,7 +90,7 @@ class LoginPageController {
 
     @GetMapping(value = "/login/signup", produces = MediaType.TEXT_HTML_VALUE)
     ResponseEntity<String> signupPage(CsrfToken csrf, HttpServletRequest request, HttpServletResponse response) {
-        if (!fromCustomerApp(this.requestCache.getRequest(request, response))) {
+        if (!fromCustomerApp(this.sessions.savedRequest(request, response))) {
             return ResponseEntity.status(HttpStatus.FOUND).header("Location", "/login").build();
         }
         return html(HttpStatus.OK, signupPage(csrf, "", "", "", Map.of()));
@@ -108,7 +101,7 @@ class LoginPageController {
     ResponseEntity<String> signup(CsrfToken csrf, @RequestParam(defaultValue = "") String displayName,
             @RequestParam(defaultValue = "") String email, @RequestParam(defaultValue = "") String password,
             HttpServletRequest request, HttpServletResponse response) {
-        SavedRequest saved = this.requestCache.getRequest(request, response);
+        SavedRequest saved = this.sessions.savedRequest(request, response);
         if (!fromCustomerApp(saved)) {
             return ResponseEntity.status(HttpStatus.FOUND).header("Location", "/login").build();
         }
@@ -123,19 +116,8 @@ class LoginPageController {
         catch (ModuleException.BadRequest ex) {
             return html(HttpStatus.BAD_REQUEST, signupPage(csrf, "", displayName, email, fieldErrors(ex)));
         }
-        // Sign the new customer in, as the login form would, and continue the authorization request
-        UserDetails user = this.userDetails.loadUserByUsername(email.trim());
-        request.changeSessionId();
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        // The password factor carries the sign-in time, which the ID token's auth_time needs
-        List<GrantedAuthority> authorities = new ArrayList<>(user.getAuthorities());
-        authorities.add(FactorGrantedAuthority.withAuthority(FactorGrantedAuthority.PASSWORD_AUTHORITY)
-            .issuedAt(Instant.now())
-            .build());
-        context.setAuthentication(UsernamePasswordAuthenticationToken.authenticated(user, null, authorities));
-        SecurityContextHolder.setContext(context);
-        this.contextRepository.saveContext(context, request, response);
-        return ResponseEntity.status(HttpStatus.SEE_OTHER).header("Location", saved.getRedirectUrl()).build();
+        // Sign the new customer in and continue the authorization request
+        return this.sessions.signInAndContinue(email, FactorGrantedAuthority.PASSWORD_AUTHORITY, "/login", request, response);
     }
 
     @GetMapping(value = "/login/branding.js", produces = "text/javascript")
@@ -176,7 +158,7 @@ class LoginPageController {
         return (values != null && values.length > 0) ? values[0] : null;
     }
 
-    private static ResponseEntity<String> html(HttpStatus status, String page) {
+    static ResponseEntity<String> html(HttpStatus status, String page) {
         return ResponseEntity.status(status)
             .header("Content-Security-Policy", CSP)
             .header("Cache-Control", "no-store")
@@ -184,7 +166,7 @@ class LoginPageController {
             .body(page);
     }
 
-    private static String read(String path) {
+    static String read(String path) {
         try (InputStream in = LoginPageController.class.getResourceAsStream(path)) {
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }

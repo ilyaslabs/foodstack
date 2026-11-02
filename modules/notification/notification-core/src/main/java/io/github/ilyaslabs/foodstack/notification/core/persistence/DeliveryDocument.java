@@ -28,7 +28,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document("notification_deliveries")
 public record DeliveryDocument(@Id String id, String userId, String channel, String template, String recipient, String subject,
         String html, String text, String status, int attempts, String lastError, Instant nextAttemptAt, Instant sentAt,
-        Instant createdAt) {
+        Instant createdAt, String sealedSubject) {
+
+    /** Whether this email carries a secret (a sign-in or reset code), kept encrypted and wiped once done. */
+    public boolean sealed() {
+        return this.sealedSubject != null;
+    }
 
     public static final String QUEUED = "QUEUED";
 

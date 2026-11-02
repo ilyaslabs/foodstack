@@ -100,8 +100,8 @@ public class NotificationConfiguration {
 
     @Bean
     AccountMessages notificationAccountMessages(NotificationService notificationService, SettingsApi settingsApi,
-            IdentityApi identityApi, ServiceCalls serviceCalls) {
-        return new AccountMessages(notificationService, settingsApi, identityApi, serviceCalls);
+            IdentityApi identityApi, ServiceCalls serviceCalls, PiiCipher piiCipher, Clock clock) {
+        return new AccountMessages(notificationService, settingsApi, identityApi, serviceCalls, piiCipher, clock);
     }
 
     @Bean

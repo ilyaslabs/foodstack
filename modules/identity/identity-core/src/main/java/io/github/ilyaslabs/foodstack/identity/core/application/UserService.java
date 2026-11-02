@@ -149,6 +149,41 @@ public class UserService {
         return next;
     }
 
+    /**
+     * Sets a new password after an emailed reset code (TDD 9.1). Every token the user held stops
+     * working, in case someone else had the account.
+     */
+    public void resetPassword(String userId, String newPassword) {
+        UserDocument user = find(userId);
+        requirePassword(newPassword);
+        user.setPasswordHash(this.passwordEncoder.encode(newPassword));
+        user.setUpdatedAt(this.clock.instant());
+        this.users.save(user);
+        revokeTokens(userId, "PASSWORD_RESET");
+    }
+
+    /** A signed-in user changes their password, proving they know the current one. */
+    public void changePassword(String userId, String currentPassword, String newPassword) {
+        UserDocument user = find(userId);
+        if (currentPassword == null || user.getPasswordHash() == null
+                || !this.passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            throw new ModuleException.BadRequest("The current password is not correct", "PASSWORD_WRONG",
+                    Map.of("errors", Map.of("currentPassword", "is not correct")));
+        }
+        requirePassword(newPassword);
+        user.setPasswordHash(this.passwordEncoder.encode(newPassword));
+        user.setUpdatedAt(this.clock.instant());
+        this.users.save(user);
+    }
+
+    /** Throws {@code PASSWORD_INVALID} unless the password has 10 to 128 characters. */
+    public static void requirePassword(String password) {
+        if (password == null || password.length() < MIN_PASSWORD || password.length() > MAX_PASSWORD) {
+            throw new ModuleException.BadRequest("The password is invalid", "PASSWORD_INVALID",
+                    Map.of("errors", Map.of("password", "must be " + MIN_PASSWORD + " to " + MAX_PASSWORD + " characters")));
+        }
+    }
+
     /** Claims for a new access token: roles, permissions and the current token version. */
     public TokenClaims tokenClaims(String userId) {
         UserDocument user = find(userId);

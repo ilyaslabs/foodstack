@@ -128,6 +128,31 @@ class UserServiceTest {
     }
 
     @Test
+    @DisplayName("a reset sets the new password and ends every old token; a change needs the current password")
+    void passwords() {
+        UserDocument user = user(EnumSet.of(Role.CUSTOMER));
+        user.setTokenVersion(2);
+        user.setPasswordHash("{argon2}old");
+        given(this.users.findById(user.getId())).willReturn(Optional.of(user));
+
+        assertThatThrownBy(() -> this.service.resetPassword(user.getId(), "short"))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("PASSWORD_INVALID"));
+        this.service.resetPassword(user.getId(), "a new long password");
+        assertThat(user.getPasswordHash()).isEqualTo("{argon2}hash");
+        assertThat(user.getTokenVersion()).isEqualTo(3);
+        verify(this.revocations).revokeBefore(user.getId(), 3);
+
+        given(this.passwordEncoder.matches("wrong guess", "{argon2}hash")).willReturn(false);
+        assertThatThrownBy(() -> this.service.changePassword(user.getId(), "wrong guess", "another long password"))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("PASSWORD_WRONG"));
+        given(this.passwordEncoder.matches("a new long password", "{argon2}hash")).willReturn(true);
+        given(this.passwordEncoder.encode("another long password")).willReturn("{argon2}newer");
+        this.service.changePassword(user.getId(), "a new long password", "another long password");
+        assertThat(user.getPasswordHash()).isEqualTo("{argon2}newer");
+        assertThat(user.getTokenVersion()).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("revokes every token by raising the token version, in Redis and as an event")
     void revokeTokens() {
         UserDocument user = user(EnumSet.of(Role.CUSTOMER));
