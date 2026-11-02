@@ -66,6 +66,12 @@ mat-card[appearance='outlined'] {
 // Printing a kitchen ticket prints the ticket alone (the board's print button sets this class).
 // The ticket sits directly under body, so everything else is taken out of the layout; hidden
 // content that still takes up space would push the ticket onto a later page.
+// The ticket's own page has no margins: the paper size comes from the printer (an 80 mm roll),
+// and the browser's default margins would eat into the narrow print width.
+@page kitchen-ticket {
+  margin: 0;
+}
+
 @media print {
   body.fs-printing-ticket > :not(app-order-ticket) {
     display: none !important;

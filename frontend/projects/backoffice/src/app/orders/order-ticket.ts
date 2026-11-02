@@ -49,14 +49,18 @@ import { clock } from './order-labels';
     @media print {
       :host-context(body.fs-printing-ticket) {
         display: block;
-        padding: 4mm;
+        page: kitchen-ticket;
       }
       .ticket {
         font-family: 'Roboto Mono', ui-monospace, monospace;
         color: #000;
         background: #fff;
-        max-inline-size: 80mm;
+        /* An 80 mm roll prints about 72 mm wide; a little inner padding keeps text off the edge. */
+        box-sizing: border-box;
+        inline-size: 72mm;
+        padding: 2mm 3mm;
         font-size: 13pt;
+        overflow-wrap: anywhere;
       }
       h1 {
         font-size: 28pt;
