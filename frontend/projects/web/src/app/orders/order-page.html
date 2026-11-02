@@ -1,0 +1,189 @@
+<div class="page">
+  @if (order(); as o) {
+    <a mat-button routerLink="/orders" class="back"
+      ><fs-icon name="arrow_back" class="flip" /> {{ ui.t('orders') }}</a
+    >
+    <header class="head">
+      <div>
+        <h1>{{ ui.t('orderNumber', { number: o.number }) }}</h1>
+        <p class="muted">{{ o.store.name }} · {{ date(o.placedAt) }}</p>
+      </div>
+      @if (live()) {
+        <span class="live"
+          ><span class="dot" aria-hidden="true"></span>{{ ui.t('liveUpdates') }}</span
+        >
+      }
+    </header>
+
+    @if (payment() === 'cancelled' && o.status === 'PAYMENT_PENDING') {
+      <p class="banner warn" role="status">
+        <fs-icon name="info" /> {{ ui.t('paymentCancelled') }}
+      </p>
+    }
+
+    <section class="status card" [attr.data-tone]="tone(o.status)" aria-live="polite">
+      <div class="status-head">
+        <span class="chip">{{ statusLabel(o.status) }}</span>
+        @if (o.estimatedAt && !stopped() && o.status !== 'DELIVERED' && o.status !== 'COLLECTED') {
+          <span class="eta"
+            ><fs-icon name="schedule" />
+            {{ ui.t('expectedBy', { time: time(o.estimatedAt) }) }}</span
+          >
+        }
+      </div>
+      @if (hint(); as key) {
+        <p class="hint">{{ ui.t(key) }}</p>
+      }
+      @if (o.closeReason && stopped()) {
+        <p class="muted">“{{ o.closeReason }}”</p>
+      }
+      @if (!stopped() && o.status !== 'PAYMENT_PENDING') {
+        <ol class="steps">
+          @for (step of steps(); track step.status) {
+            <li [class.done]="step.done" [class.current]="step.current">
+              <span class="mark" aria-hidden="true">
+                @if (step.done && !step.current) {
+                  <fs-icon name="check" />
+                }
+              </span>
+              <span class="step-name">{{ statusLabel(step.status) }}</span>
+              @if (step.at) {
+                <span class="step-time">{{ time(step.at) }}</span>
+              }
+            </li>
+          }
+        </ol>
+      }
+      @if (can('PAY') || can('CANCEL')) {
+        <div class="actions">
+          @if (can('PAY')) {
+            <button mat-flat-button type="button" (click)="pay()">
+              <fs-icon name="credit_card" /> {{ ui.t('payNow') }}
+            </button>
+          }
+          @if (can('CANCEL')) {
+            <button mat-stroked-button type="button" [disabled]="busy()" (click)="cancel()">
+              {{ ui.t('cancelOrder') }}
+            </button>
+          }
+        </div>
+      }
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <h2>{{ ui.t('yourOrder') }}</h2>
+        <ul class="lines">
+          @for (line of o.lines; track $index) {
+            <li>
+              <span class="qty">{{ ui.number(line.quantity) }}×</span>
+              <span class="line-name">
+                {{ locale.pick(line.name) }}
+                @if (options(line); as text) {
+                  <span class="muted small">{{ text }}</span>
+                }
+                @if (line.note) {
+                  <span class="muted small">“{{ line.note }}”</span>
+                }
+              </span>
+              <span>{{ money(line.lineTotalMinor) }}</span>
+            </li>
+          }
+        </ul>
+        <dl class="totals">
+          <div>
+            <dt>{{ ui.t('subtotal') }}</dt>
+            <dd>{{ money(o.totals.subtotalMinor) }}</dd>
+          </div>
+          @if (o.fulfilment === 'DELIVERY') {
+            <div>
+              <dt>{{ ui.t('deliveryCharge') }}</dt>
+              <dd>{{ money(o.totals.deliveryChargeMinor) }}</dd>
+            </div>
+          }
+          @if (o.totals.itemsDiscountMinor + o.totals.deliveryDiscountMinor > 0) {
+            <div class="discount">
+              <dt>
+                {{ ui.t('discount') }}
+                @if (o.coupon) {
+                  ({{ o.coupon.code }})
+                }
+              </dt>
+              <dd>−{{ money(o.totals.itemsDiscountMinor + o.totals.deliveryDiscountMinor) }}</dd>
+            </div>
+          }
+          @if (o.totals.serviceFeeMinor) {
+            <div>
+              <dt>{{ ui.t('serviceFee') }}</dt>
+              <dd>{{ money(o.totals.serviceFeeMinor) }}</dd>
+            </div>
+          }
+          @if (o.totals.taxMinor) {
+            <div>
+              <dt>{{ ui.t('tax') }}</dt>
+              <dd>{{ money(o.totals.taxMinor) }}</dd>
+            </div>
+          }
+          @if (o.totals.tipMinor) {
+            <div>
+              <dt>{{ ui.t('tipLine') }}</dt>
+              <dd>{{ money(o.totals.tipMinor) }}</dd>
+            </div>
+          }
+          <div class="grand">
+            <dt>{{ ui.t('total') }}</dt>
+            <dd>{{ money(o.totals.totalMinor) }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="card facts">
+        <h2>{{ o.fulfilment === 'PICKUP' ? ui.t('pickupFrom') : ui.t('deliverTo') }}</h2>
+        @if (o.fulfilment === 'PICKUP') {
+          <p class="fact">
+            <fs-icon name="storefront" />
+            <span
+              ><strong>{{ o.store.name }}</strong
+              ><br />
+              <span class="muted">{{ o.store.addressLine }}</span></span
+            >
+          </p>
+        } @else if (o.destination) {
+          <p class="fact">
+            <fs-icon name="place" />
+            <span
+              >{{ o.destination.addressLine }}
+              @if (o.destination.instructions) {
+                <br /><span class="muted">{{ o.destination.instructions }}</span>
+              }
+            </span>
+          </p>
+        }
+        <h2>{{ ui.t('payment') }}</h2>
+        <p class="fact">
+          <fs-icon [name]="o.paymentMethod === 'CARD' ? 'credit_card' : 'money'" />
+          <span>
+            @if (o.paymentMethod === 'CARD') {
+              {{ o.paidMinor > 0 ? ui.t('paidByCard') : ui.t('card') }}
+            } @else {
+              {{ ui.t('payByCash') }}
+            }
+            @if (o.refundedMinor > 0) {
+              <br /><span class="muted">{{
+                ui.t('refunded', { amount: money(o.refundedMinor) })
+              }}</span>
+            }
+          </span>
+        </p>
+      </section>
+    </div>
+  } @else if (missing()) {
+    <section class="missing">
+      <fs-icon name="receipt" class="missing-icon" />
+      <h1>{{ ui.t('orderMissing') }}</h1>
+      <a mat-flat-button routerLink="/orders">{{ ui.t('orders') }}</a>
+    </section>
+  } @else {
+    <mat-progress-bar mode="indeterminate" />
+  }
+</div>

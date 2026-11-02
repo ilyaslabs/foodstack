@@ -98,7 +98,7 @@
           }
         </dl>
       </details>
-      <p class="soon">{{ ui.t('orderingSoon') }}</p>
+      <app-cart-panel [storeId]="store.id" />
     </aside>
 
     <section class="menu" [attr.aria-label]="ui.t('menu')">
@@ -117,6 +117,13 @@
           <div class="items">
             @for (item of section.items; track item.id) {
               <article class="item" [class.sold-out]="item.soldOut">
+                <button
+                  type="button"
+                  class="item-open"
+                  [disabled]="item.soldOut"
+                  [attr.aria-label]="locale.pick(item.name) + ', ' + money(item.priceMinor)"
+                  (click)="open(item)"
+                ></button>
                 <div class="item-text">
                   <h3>{{ locale.pick(item.name) }}</h3>
                   @if (locale.pick(item.description); as description) {

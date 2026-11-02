@@ -13,6 +13,7 @@ import { Meta, Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 import {
@@ -24,11 +25,15 @@ import {
   WEEKDAYS,
   Weekday,
 } from '@foodstack/api-client';
+import { AuthService } from '@foodstack/auth';
 import { BrandingStore, Icon, LocaleStore } from '@foodstack/ui';
+
+import { CartPanel } from '../cart/cart-panel';
 
 import { Ui } from '../i18n';
 import { LocationStore } from '../location-store';
 import { cuisineLabel } from './cuisine';
+import { ItemDialog, ItemDialogData } from './item-dialog';
 
 const DIETARY: Record<string, Record<string, string>> = {
   en: {
@@ -63,7 +68,7 @@ const DIETARY: Record<string, Record<string, string>> = {
 /** A store's page: who they are, whether they are open, the delivery fee to you, and the menu. */
 @Component({
   selector: 'app-store-page',
-  imports: [RouterLink, MatButtonModule, MatProgressBarModule, Icon],
+  imports: [RouterLink, MatButtonModule, MatProgressBarModule, Icon, CartPanel],
   templateUrl: './store-page.html',
   styleUrl: './store-page.scss',
 })
@@ -79,6 +84,8 @@ export class StorePage {
   private readonly title = inject(Title);
   private readonly meta = inject(Meta);
   private readonly document = inject(DOCUMENT);
+  private readonly dialog = inject(MatDialog);
+  private readonly auth = inject(AuthService);
 
   protected readonly store = signal<Page | null>(null);
   protected readonly menu = signal<Menu | null>(null);
@@ -204,6 +211,28 @@ export class StorePage {
     )
       ? item.priceMinor + extra
       : null;
+  }
+
+  /** Opens the dish to choose and add it; signing in comes first, and brings the customer back here. */
+  protected open(item: MenuItem): void {
+    const store = this.store();
+    if (!store || item.soldOut) return;
+    if (!this.auth.signedIn() && !this.auth.hasSession()) {
+      void this.auth.signIn(this.auth.currentPath());
+      return;
+    }
+    this.dialog.open<ItemDialog, ItemDialogData, boolean>(ItemDialog, {
+      data: {
+        storeId: store.id,
+        item,
+        currency: this.menu()?.currency ?? '',
+        imageUrl: this.image(item),
+        canOrder: store.openNow,
+      },
+      width: '520px',
+      maxWidth: 'calc(100vw - 32px)',
+      autoFocus: 'first-tabbable',
+    });
   }
 
   protected jump(sectionId: string): void {

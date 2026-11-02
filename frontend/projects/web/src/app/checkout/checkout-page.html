@@ -1,0 +1,282 @@
+<div class="page">
+  <h1>{{ ui.t('checkoutTitle') }}</h1>
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" />
+  } @else if (cart.empty()) {
+    <section class="empty">
+      <fs-icon name="shopping_bag" class="empty-icon" />
+      <h2>{{ ui.t('cartEmpty') }}</h2>
+      <p>{{ ui.t('cartEmptyText') }}</p>
+      <a mat-flat-button routerLink="/">{{ ui.t('findFood') }}</a>
+    </section>
+  } @else if (quote(); as q) {
+    <div class="layout">
+      <div class="steps">
+        <section class="card">
+          <h2>{{ ui.t('howToGet') }}</h2>
+          <mat-button-toggle-group
+            class="toggle"
+            [value]="fulfilment()"
+            (change)="setFulfilment($event.value)"
+            [attr.aria-label]="ui.t('howToGet')"
+          >
+            <mat-button-toggle value="DELIVERY">
+              <fs-icon name="delivery" /> {{ ui.t('delivery') }}
+            </mat-button-toggle>
+            @if (store()?.pickupEnabled) {
+              <mat-button-toggle value="PICKUP">
+                <fs-icon name="storefront" /> {{ ui.t('pickup') }}
+              </mat-button-toggle>
+            }
+          </mat-button-toggle-group>
+
+          @if (fulfilment() === 'DELIVERY') {
+            <h3>{{ ui.t('deliverTo') }}</h3>
+            @if (editingLocation() || !locations.location()) {
+              <app-location-picker (picked)="editingLocation.set(false)" />
+            } @else if (locations.location(); as here) {
+              <div class="where">
+                <fs-icon name="place" />
+                <span class="where-label">{{ here.label || ui.t('currentLocation') }}</span>
+                <button mat-button type="button" (click)="editingLocation.set(true)">
+                  {{ ui.t('change') }}
+                </button>
+              </div>
+            }
+            <mat-form-field appearance="outline" class="wide">
+              <mat-label>{{ ui.t('addressLine') }}</mat-label>
+              <input
+                matInput
+                name="addressLine"
+                autocomplete="street-address"
+                maxlength="200"
+                required
+                [(ngModel)]="addressLine"
+              />
+              @if (addressMissing()) {
+                <mat-error>{{ ui.t('addressRequired') }}</mat-error>
+              }
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="wide">
+              <mat-label>{{ ui.t('instructions') }}</mat-label>
+              <input matInput name="instructions" maxlength="200" [(ngModel)]="instructions" />
+            </mat-form-field>
+          } @else if (store(); as s) {
+            <h3>{{ ui.t('pickupFrom') }}</h3>
+            <div class="where">
+              <fs-icon name="storefront" />
+              <span class="where-label">
+                <strong>{{ s.brandName }}</strong>
+                @if (s.addressLine) {
+                  <span class="muted"> · {{ s.addressLine }}</span>
+                }
+              </span>
+            </div>
+          }
+
+          <mat-form-field appearance="outline" class="wide phone">
+            <mat-label>{{ ui.t('contactPhone') }}</mat-label>
+            <fs-icon matPrefix name="phone" class="prefix" />
+            <input
+              matInput
+              name="phone"
+              type="tel"
+              autocomplete="tel"
+              dir="ltr"
+              maxlength="20"
+              required
+              [(ngModel)]="phone"
+            />
+            @if (submitted() && !phoneValid()) {
+              <mat-error>{{ ui.t('phoneRequired') }}</mat-error>
+            } @else {
+              <mat-hint>{{ ui.t('contactPhoneHint') }}</mat-hint>
+            }
+          </mat-form-field>
+        </section>
+
+        <section class="card">
+          <h2>{{ ui.t('payment') }}</h2>
+          <mat-radio-group
+            class="methods"
+            [value]="paymentMethod()"
+            (change)="paymentMethod.set($event.value)"
+            [attr.aria-label]="ui.t('payment')"
+          >
+            @for (method of q.paymentMethods; track method) {
+              <label class="method" [class.selected]="paymentMethod() === method">
+                <mat-radio-button [value]="method">
+                  <span class="method-text">
+                    <fs-icon [name]="method === 'CARD' ? 'credit_card' : 'money'" />
+                    <span>
+                      <strong>{{ method === 'CARD' ? ui.t('card') : ui.t('cash') }}</strong>
+                      <span class="muted">{{
+                        method === 'CARD' ? ui.t('cardHint') : ui.t('cashHint')
+                      }}</span>
+                    </span>
+                  </span>
+                </mat-radio-button>
+              </label>
+            }
+          </mat-radio-group>
+
+          <h3>{{ ui.t('couponCode') }}</h3>
+          @if (couponCode() && q.coupon?.applies) {
+            <div class="coupon-applied">
+              <fs-icon name="local_offer" />
+              <span class="where-label">
+                {{ ui.t('couponApplied', { code: couponCode() ?? '' }) }}
+                @if (locale.pick(q.coupon?.title); as title) {
+                  <span class="muted"> · {{ title }}</span>
+                }
+              </span>
+              <button mat-button type="button" (click)="removeCoupon()">
+                {{ ui.t('remove') }}
+              </button>
+            </div>
+          } @else {
+            <form class="coupon" (ngSubmit)="applyCoupon()">
+              <mat-form-field appearance="outline" class="coupon-field" subscriptSizing="dynamic">
+                <mat-label>{{ ui.t('couponCode') }}</mat-label>
+                <input
+                  matInput
+                  name="coupon"
+                  autocapitalize="characters"
+                  maxlength="20"
+                  [(ngModel)]="couponInput"
+                />
+              </mat-form-field>
+              <button mat-stroked-button type="submit" [disabled]="!couponInput.trim()">
+                {{ ui.t('apply') }}
+              </button>
+            </form>
+            @if (couponProblem(); as c) {
+              <p class="field-error" role="alert">
+                {{ couponText(c.reason, c.details) }}
+                <button mat-button type="button" (click)="removeCoupon()">
+                  {{ ui.t('removeCoupon') }}
+                </button>
+              </p>
+            }
+          }
+
+          @if (fulfilment() === 'DELIVERY' && q.tipsEnabled) {
+            <h3>{{ ui.t('tip') }}</h3>
+            <div class="tips" role="radiogroup" [attr.aria-label]="ui.t('tip')">
+              @for (percent of tipPercents; track percent) {
+                <button
+                  type="button"
+                  class="tip"
+                  role="radio"
+                  [attr.aria-checked]="tipPercent() === percent"
+                  [class.selected]="tipPercent() === percent"
+                  (click)="tipPercent.set(percent)"
+                >
+                  {{ tipLabel(percent) }}
+                  @if (percent) {
+                    <span class="tip-amount">{{ money(tipFor(percent)) }}</span>
+                  }
+                </button>
+              }
+            </div>
+            <p class="muted small">{{ ui.t('tipNote') }}</p>
+          }
+        </section>
+      </div>
+
+      <aside class="summary card">
+        <h2>{{ ui.t('summary') }}</h2>
+        @if (store(); as s) {
+          <p class="store-name">
+            <fs-icon name="restaurant" /> {{ s.brandName }}
+            @if (s.branchName) {
+              <span class="muted"> · {{ s.branchName }}</span>
+            }
+          </p>
+        }
+        <ul class="lines">
+          @for (line of q.lines; track line.lineId) {
+            <li>
+              <span class="qty">{{ ui.number(line.priced.quantity) }}×</span>
+              <span class="line-name">
+                {{ locale.pick(line.priced.name) }}
+                @if (options(line); as text) {
+                  <span class="muted small">{{ text }}</span>
+                }
+              </span>
+              <span>{{ money(line.priced.lineTotalMinor) }}</span>
+            </li>
+          }
+        </ul>
+        <dl class="totals">
+          <div>
+            <dt>{{ ui.t('subtotal') }}</dt>
+            <dd>{{ money(q.subtotalMinor) }}</dd>
+          </div>
+          @if (fulfilment() === 'DELIVERY') {
+            <div>
+              <dt>{{ ui.t('deliveryCharge') }}</dt>
+              <dd>
+                {{ q.deliveryChargeMinor ? money(q.deliveryChargeMinor) : ui.t('freeDelivery') }}
+              </dd>
+            </div>
+          }
+          @if (q.itemsDiscountMinor + q.deliveryDiscountMinor > 0) {
+            <div class="discount">
+              <dt>{{ ui.t('discount') }}</dt>
+              <dd>−{{ money(q.itemsDiscountMinor + q.deliveryDiscountMinor) }}</dd>
+            </div>
+          }
+          @if (q.serviceFeeMinor) {
+            <div>
+              <dt>{{ ui.t('serviceFee') }}</dt>
+              <dd>{{ money(q.serviceFeeMinor) }}</dd>
+            </div>
+          }
+          @if (q.taxMinor) {
+            <div>
+              <dt>{{ ui.t('tax') }}</dt>
+              <dd>{{ money(q.taxMinor) }}</dd>
+            </div>
+          }
+          @if (q.tipMinor) {
+            <div>
+              <dt>{{ ui.t('tipLine') }}</dt>
+              <dd>{{ money(q.tipMinor) }}</dd>
+            </div>
+          }
+          <div class="grand">
+            <dt>{{ ui.t('total') }}</dt>
+            <dd>{{ money(q.totalMinor) }}</dd>
+          </div>
+        </dl>
+        @if (q.etaMinutes) {
+          <p class="eta">
+            <fs-icon name="schedule" /> {{ ui.t('etaAbout', { n: ui.number(q.etaMinutes) }) }}
+          </p>
+        }
+        @for (problem of blocking(); track problem.code) {
+          <p class="problem" role="alert"><fs-icon name="info" /> {{ problemText(problem) }}</p>
+        }
+        @if (error(); as key) {
+          <p class="problem" role="alert"><fs-icon name="error" /> {{ ui.t(key) }}</p>
+        }
+        <button
+          mat-flat-button
+          type="button"
+          class="place"
+          [disabled]="placing() || blocking().length > 0 || !!couponProblem() || !paymentMethod()"
+          (click)="place()"
+        >
+          @if (placing()) {
+            {{ ui.t('placing') }}
+          } @else if (paymentMethod() === 'CARD') {
+            {{ ui.t('continueToPay', { total: money(q.totalMinor) }) }}
+          } @else {
+            {{ ui.t('placeOrder', { total: money(q.totalMinor) }) }}
+          }
+        </button>
+      </aside>
+    </div>
+  }
+</div>
