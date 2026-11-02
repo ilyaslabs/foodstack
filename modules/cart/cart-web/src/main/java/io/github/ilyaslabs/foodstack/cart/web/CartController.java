@@ -12,8 +12,10 @@ import io.github.ilyaslabs.foodstack.cart.web.dto.CheckoutQuoteRequest;
 import io.github.ilyaslabs.foodstack.cart.web.dto.QuantityRequest;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
+import io.github.ilyaslabs.foodstack.platform.security.RateLimiter;
 import jakarta.validation.Valid;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,13 +35,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/carts/me")
 class CartController {
 
+    static final int COUPON_CHECKS_PER_WINDOW = 30;
+
+    static final java.time.Duration COUPON_WINDOW = java.time.Duration.ofMinutes(10);
+
     private final CartService carts;
 
     private final CheckoutService checkout;
 
-    CartController(CartService carts, CheckoutService checkout) {
+    private final RateLimiter rateLimiter;
+
+    CartController(CartService carts, CheckoutService checkout, ObjectProvider<RateLimiter> rateLimiter) {
         this.carts = carts;
         this.checkout = checkout;
+        this.rateLimiter = rateLimiter.getIfAvailable();
     }
 
     @GetMapping
@@ -73,6 +82,10 @@ class CartController {
     CheckoutView quote(@RequestBody CheckoutQuoteRequest request) {
         GeoPoint destination = (request.lat() != null && request.lng() != null) ? new GeoPoint(request.lat(), request.lng())
                 : null;
+        if (this.rateLimiter != null && request.couponCode() != null && !request.couponCode().isBlank()) {
+            // coupon checks per customer, so codes cannot be guessed by trying many (TDD 8.1)
+            this.rateLimiter.check("cart", "coupon", CurrentUser.id(), COUPON_CHECKS_PER_WINDOW, COUPON_WINDOW);
+        }
         return this.checkout.checkout(new CheckoutRequest(CurrentUser.id(), request.fulfilment(), destination,
                 request.couponCode(), (request.tipMinor() != null) ? request.tipMinor() : 0, request.paymentMethod()));
     }

@@ -3,3 +3,52 @@
 databaseChangeLog:
   - include:
       file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: order-1
+      author: foodstack
+      comment: "order_orders (shard key { _id: hashed }); order_active (unsharded, in-progress orders for the store board and the accept-timeout sweep)"
+      changes:
+        - createCollection:
+            collectionName: order_orders
+        - createCollection:
+            collectionName: order_active
+        - createIndex:
+            collectionName: order_active
+            keys: '{ "storeId": 1, "placedAt": 1 }'
+            options: '{ "name": "store_board" }'
+        - createIndex:
+            collectionName: order_active
+            keys: '{ "status": 1, "acceptBy": 1 }'
+            options: '{ "name": "accept_deadline" }'
+  - changeSet:
+      id: order-2
+      author: foodstack
+      comment: "order lists: order_by_customer (shard key { customerId: hashed }), order_by_store (shard key { storeId: 1, placedAt: 1 })"
+      changes:
+        - createCollection:
+            collectionName: order_by_customer
+        - createIndex:
+            collectionName: order_by_customer
+            keys: '{ "customerId": 1, "placedAt": -1, "_id": -1 }'
+            options: '{ "name": "customer_newest" }'
+        - createCollection:
+            collectionName: order_by_store
+        - createIndex:
+            collectionName: order_by_store
+            keys: '{ "storeId": 1, "placedAt": -1, "_id": -1 }'
+            options: '{ "name": "store_newest" }'
+        - createIndex:
+            collectionName: order_by_store
+            keys: '{ "placedAt": -1, "_id": -1 }'
+            options: '{ "name": "newest" }'
+  - changeSet:
+      id: order-3
+      author: foodstack
+      comment: "order_placement_keys: used Idempotency-Keys (_id = customerId:key, shard key { _id: hashed }), kept one day"
+      changes:
+        - createCollection:
+            collectionName: order_placement_keys
+        - createIndex:
+            collectionName: order_placement_keys
+            keys: '{ "createdAt": 1 }'
+            options: '{ "name": "expiry", "expireAfterSeconds": 86400 }'

@@ -25,3 +25,5 @@ foodstack:
     create-buckets: true
   payment:
     gateway: sandbox
+  order:
+    web-url: http://localhost:4200
