@@ -3,3 +3,34 @@
 databaseChangeLog:
   - include:
       file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: notification-1
+      author: foodstack
+      comment: "notification_inbox (shard key { userId: hashed }, kept 180 days), notification_deliveries (shard key { _id: hashed }, kept 90 days), notification_preferences (_id = user id, { _id: hashed })"
+      changes:
+        - createCollection:
+            collectionName: notification_inbox
+        - createIndex:
+            collectionName: notification_inbox
+            keys: '{ "userId": 1, "createdAt": -1 }'
+            options: '{ "name": "user_newest" }'
+        - createIndex:
+            collectionName: notification_inbox
+            keys: '{ "createdAt": 1 }'
+            options: '{ "name": "expiry", "expireAfterSeconds": 15552000 }'
+        - createCollection:
+            collectionName: notification_deliveries
+        - createIndex:
+            collectionName: notification_deliveries
+            keys: '{ "status": 1, "nextAttemptAt": 1 }'
+            options: '{ "name": "due" }'
+        - createIndex:
+            collectionName: notification_deliveries
+            keys: '{ "createdAt": -1 }'
+            options: '{ "name": "newest" }'
+        - createIndex:
+            collectionName: notification_deliveries
+            keys: '{ "createdAt": 1 }'
+            options: '{ "name": "expiry", "expireAfterSeconds": 7776000 }'
+        - createCollection:
+            collectionName: notification_preferences

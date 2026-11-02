@@ -3,11 +3,11 @@ package io.github.ilyaslabs.foodstack.platform.test;
 import java.util.Locale;
 import java.util.UUID;
 
-import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.elasticsearch.ElasticsearchContainer;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
-import org.testcontainers.containers.wait.strategy.Wait;
 
 import org.springframework.test.context.DynamicPropertyRegistry;
 
@@ -31,6 +31,9 @@ public final class FoodstackContainers {
     public static final String S3_IMAGE = "rustfs/rustfs:1.0.4";
 
     /** Search engine of the search module; the unit deployer runs the same version. */
+    /** SMTP server that keeps every email and shows it in a web page and an API (port 8025). */
+    public static final String MAILPIT_IMAGE = "axllent/mailpit:v1.27";
+
     public static final String ELASTICSEARCH_IMAGE = "elasticsearch:9.4.0";
 
     public static final String ELASTICSEARCH_PASSWORD = "foodstack-test";
@@ -48,6 +51,8 @@ public final class FoodstackContainers {
     private static GenericContainer<?> s3;
 
     private static ElasticsearchContainer elasticsearch;
+
+    private static GenericContainer<?> mailpit;
 
     private FoodstackContainers() {
     }
@@ -102,6 +107,28 @@ public final class FoodstackContainers {
             elasticsearch.start();
         }
         return elasticsearch;
+    }
+
+    public static synchronized GenericContainer<?> mailpit() {
+        if (mailpit == null) {
+            mailpit = new GenericContainer<>(MAILPIT_IMAGE).withExposedPorts(1025, 8025)
+                .waitingFor(Wait.forHttp("/livez").forPort(8025))
+                .withReuse(true);
+            mailpit.start();
+        }
+        return mailpit;
+    }
+
+    /** Mailpit's web page and API, such as {@code http://localhost:32768}. */
+    public static String mailpitUrl() {
+        return "http://" + mailpit().getHost() + ":" + mailpit().getMappedPort(8025);
+    }
+
+    /** SMTP through Mailpit, with a from address. */
+    public static void registerMailpit(DynamicPropertyRegistry registry) {
+        registry.add("spring.mail.host", () -> mailpit().getHost());
+        registry.add("spring.mail.port", () -> mailpit().getMappedPort(1025));
+        registry.add("foodstack.notification.from-address", () -> "no-reply@foodstack.localhost");
     }
 
     /** Elasticsearch with a fresh index prefix. Returns the prefix. */

@@ -1,0 +1,72 @@
+{
+  "order-confirmed": {
+    "en": { "title": "Order {{number}} received", "body": "{{store}} has your order. We will tell you as soon as they accept it.", "subject": "Your order {{number}} from {{store}}" },
+    "ar": { "title": "تم استلام الطلب {{number}}", "body": "وصل طلبك إلى {{store}}. سنخبرك فور قبوله.", "subject": "طلبك {{number}} من {{store}}" },
+    "ur": { "title": "آرڈر {{number}} موصول ہو گیا", "body": "آپ کا آرڈر {{store}} کو مل گیا ہے۔ قبول ہوتے ہی ہم آپ کو بتائیں گے۔", "subject": "{{store}} سے آپ کا آرڈر {{number}}" }
+  },
+  "order-accepted": {
+    "en": { "title": "{{store}} accepted your order", "body": "Order {{number}} is being prepared and should be ready in about {{minutes}} minutes.", "subject": "Order {{number}} accepted" },
+    "ar": { "title": "قبل {{store}} طلبك", "body": "يجري تحضير الطلب {{number}} وسيكون جاهزاً خلال {{minutes}} دقيقة تقريباً.", "subject": "تم قبول الطلب {{number}}" },
+    "ur": { "title": "{{store}} نے آپ کا آرڈر قبول کر لیا", "body": "آرڈر {{number}} تیار ہو رہا ہے اور تقریباً {{minutes}} منٹ میں تیار ہو جائے گا۔", "subject": "آرڈر {{number}} قبول ہو گیا" }
+  },
+  "order-ready-pickup": {
+    "en": { "title": "Order {{number}} is ready to collect", "body": "Your order is waiting for you at {{store}}. Show the number {{number}} at the counter.", "subject": "Order {{number}} is ready to collect" },
+    "ar": { "title": "الطلب {{number}} جاهز للاستلام", "body": "طلبك بانتظارك في {{store}}. أظهر الرقم {{number}} عند الاستلام.", "subject": "الطلب {{number}} جاهز للاستلام" },
+    "ur": { "title": "آرڈر {{number}} وصولی کے لیے تیار ہے", "body": "آپ کا آرڈر {{store}} پر آپ کا منتظر ہے۔ کاؤنٹر پر نمبر {{number}} دکھائیں۔", "subject": "آرڈر {{number}} وصولی کے لیے تیار ہے" }
+  },
+  "order-picked-up": {
+    "en": { "title": "Order {{number}} is on its way", "body": "Your order from {{store}} has left the store.", "subject": "Order {{number}} is on its way" },
+    "ar": { "title": "الطلب {{number}} في الطريق", "body": "غادر طلبك من {{store}} المتجر.", "subject": "الطلب {{number}} في الطريق" },
+    "ur": { "title": "آرڈر {{number}} راستے میں ہے", "body": "{{store}} سے آپ کا آرڈر روانہ ہو چکا ہے۔", "subject": "آرڈر {{number}} راستے میں ہے" }
+  },
+  "order-delivered": {
+    "en": { "title": "Order {{number}} delivered", "body": "Enjoy your meal from {{store}}.", "subject": "Order {{number}} delivered" },
+    "ar": { "title": "تم توصيل الطلب {{number}}", "body": "بالهناء والشفاء من {{store}}.", "subject": "تم توصيل الطلب {{number}}" },
+    "ur": { "title": "آرڈر {{number}} پہنچا دیا گیا", "body": "{{store}} کے کھانے کا لطف اٹھائیں۔", "subject": "آرڈر {{number}} پہنچا دیا گیا" }
+  },
+  "order-rejected": {
+    "en": { "title": "{{store}} could not take order {{number}}", "body": "{{reason}} {{refund}}", "subject": "Order {{number}} was not accepted" },
+    "ar": { "title": "تعذّر على {{store}} قبول الطلب {{number}}", "body": "{{reason}} {{refund}}", "subject": "لم يتم قبول الطلب {{number}}" },
+    "ur": { "title": "{{store}} آرڈر {{number}} قبول نہیں کر سکا", "body": "{{reason}} {{refund}}", "subject": "آرڈر {{number}} قبول نہیں ہوا" }
+  },
+  "order-cancelled": {
+    "en": { "title": "Order {{number}} was cancelled", "body": "{{reason}} {{refund}}", "subject": "Order {{number}} was cancelled" },
+    "ar": { "title": "تم إلغاء الطلب {{number}}", "body": "{{reason}} {{refund}}", "subject": "تم إلغاء الطلب {{number}}" },
+    "ur": { "title": "آرڈر {{number}} منسوخ کر دیا گیا", "body": "{{reason}} {{refund}}", "subject": "آرڈر {{number}} منسوخ کر دیا گیا" }
+  },
+  "order-failed": {
+    "en": { "title": "Payment for order {{number}} did not go through", "body": "Nothing was charged. Your cart is still there, so you can try again or pay cash.", "subject": "Payment for order {{number}} did not go through" },
+    "ar": { "title": "لم يكتمل الدفع للطلب {{number}}", "body": "لم يتم خصم أي مبلغ. سلتك ما زالت محفوظة، يمكنك المحاولة مجدداً أو الدفع نقداً.", "subject": "لم يكتمل الدفع للطلب {{number}}" },
+    "ur": { "title": "آرڈر {{number}} کی ادائیگی مکمل نہیں ہوئی", "body": "کوئی رقم نہیں کاٹی گئی۔ آپ کی ٹوکری محفوظ ہے، دوبارہ کوشش کریں یا نقد ادائیگی کریں۔", "subject": "آرڈر {{number}} کی ادائیگی مکمل نہیں ہوئی" }
+  },
+  "refund-issued": {
+    "en": { "title": "Refund of {{amount}} sent", "body": "We sent {{amount}} back to your card for order {{number}}. Your bank may take a few days to show it.", "subject": "Refund for order {{number}}" },
+    "ar": { "title": "تم إرسال مبلغ مسترد قدره {{amount}}", "body": "أعدنا {{amount}} إلى بطاقتك عن الطلب {{number}}. قد يستغرق ظهوره بضعة أيام لدى البنك.", "subject": "استرداد الطلب {{number}}" },
+    "ur": { "title": "{{amount}} کی واپسی بھیج دی گئی", "body": "آرڈر {{number}} کے {{amount}} آپ کے کارڈ پر واپس بھیج دیے گئے ہیں۔ بینک میں ظاہر ہونے میں چند دن لگ سکتے ہیں۔", "subject": "آرڈر {{number}} کی رقم کی واپسی" }
+  },
+  "store-new-order": {
+    "en": { "title": "New order {{number}}", "body": "{{items}} items, {{total}}, {{fulfilment}}. Accept it within {{minutes}} minutes.", "subject": "New order {{number}} for {{store}}" },
+    "ar": { "title": "طلب جديد {{number}}", "body": "{{items}} أصناف، {{total}}، {{fulfilment}}. اقبله خلال {{minutes}} دقيقة.", "subject": "طلب جديد {{number}} لـ {{store}}" },
+    "ur": { "title": "نیا آرڈر {{number}}", "body": "{{items}} اشیاء، {{total}}، {{fulfilment}}۔ {{minutes}} منٹ کے اندر قبول کریں۔", "subject": "{{store}} کے لیے نیا آرڈر {{number}}" }
+  },
+  "welcome": {
+    "en": { "title": "Welcome to {{brand}}", "body": "Hi {{name}}, your account is ready. Find a restaurant near you and order in a few taps.", "subject": "Welcome to {{brand}}" },
+    "ar": { "title": "مرحباً بك في {{brand}}", "body": "أهلاً {{name}}، حسابك جاهز. ابحث عن مطعم قريب واطلب بخطوات قليلة.", "subject": "مرحباً بك في {{brand}}" },
+    "ur": { "title": "{{brand}} میں خوش آمدید", "body": "السلام علیکم {{name}}، آپ کا اکاؤنٹ تیار ہے۔ قریبی ریستوران تلاش کریں اور چند ٹیپس میں آرڈر کریں۔", "subject": "{{brand}} میں خوش آمدید" }
+  },
+  "login-code": {
+    "en": { "title": "Your sign-in code", "body": "Use {{code}} to sign in to {{brand}}. It expires in {{minutes}} minutes. If you did not ask for it, ignore this email.", "subject": "{{code}} is your {{brand}} sign-in code" },
+    "ar": { "title": "رمز تسجيل الدخول", "body": "استخدم {{code}} لتسجيل الدخول إلى {{brand}}. تنتهي صلاحيته خلال {{minutes}} دقيقة. إن لم تطلبه فتجاهل هذه الرسالة.", "subject": "{{code}} هو رمز الدخول إلى {{brand}}" },
+    "ur": { "title": "آپ کا سائن اِن کوڈ", "body": "{{brand}} میں سائن اِن کے لیے {{code}} استعمال کریں۔ یہ {{minutes}} منٹ میں ختم ہو جائے گا۔ اگر آپ نے یہ نہیں مانگا تو اس ای میل کو نظر انداز کریں۔", "subject": "{{code}} آپ کا {{brand}} سائن اِن کوڈ ہے" }
+  },
+  "password-reset-code": {
+    "en": { "title": "Reset your password", "body": "Use {{code}} to choose a new password for {{brand}}. It expires in {{minutes}} minutes. If you did not ask for it, your password stays as it is.", "subject": "{{code}} is your {{brand}} password reset code" },
+    "ar": { "title": "إعادة تعيين كلمة المرور", "body": "استخدم {{code}} لاختيار كلمة مرور جديدة في {{brand}}. تنتهي صلاحيته خلال {{minutes}} دقيقة. إن لم تطلبه فستبقى كلمة مرورك كما هي.", "subject": "{{code}} هو رمز إعادة تعيين كلمة المرور في {{brand}}" },
+    "ur": { "title": "اپنا پاس ورڈ دوبارہ ترتیب دیں", "body": "{{brand}} کے لیے نیا پاس ورڈ چننے کے لیے {{code}} استعمال کریں۔ یہ {{minutes}} منٹ میں ختم ہو جائے گا۔ اگر آپ نے یہ نہیں مانگا تو آپ کا پاس ورڈ ویسا ہی رہے گا۔", "subject": "{{code}} آپ کا {{brand}} پاس ورڈ ری سیٹ کوڈ ہے" }
+  },
+  "phrases": {
+    "en": { "refund": "{{amount}} will be refunded to your card.", "delivery": "delivery", "pickup": "pickup", "noAnswer": "The restaurant did not answer in time.", "button": "View order" },
+    "ar": { "refund": "سيتم رد {{amount}} إلى بطاقتك.", "delivery": "توصيل", "pickup": "استلام", "noAnswer": "لم يرد المطعم في الوقت المحدد.", "button": "عرض الطلب" },
+    "ur": { "refund": "{{amount}} آپ کے کارڈ پر واپس کر دیے جائیں گے۔", "delivery": "ڈیلیوری", "pickup": "پک اپ", "noAnswer": "ریستوران نے وقت پر جواب نہیں دیا۔", "button": "آرڈر دیکھیں" }
+  }
+}
