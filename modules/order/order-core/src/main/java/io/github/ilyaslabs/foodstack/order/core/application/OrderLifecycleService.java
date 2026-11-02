@@ -17,7 +17,6 @@ import io.github.ilyaslabs.foodstack.order.api.events.OrderCancelled;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCollected;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderConfirmed;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderDelivered;
-import io.github.ilyaslabs.foodstack.order.api.events.OrderEvent;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderFailed;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderPickedUp;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderPreparing;
@@ -28,6 +27,7 @@ import io.github.ilyaslabs.foodstack.order.core.persistence.ActiveOrderDocument;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument.TimelineEntry;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
+import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
@@ -325,7 +325,7 @@ public class OrderLifecycleService {
     // ---- mechanics -----------------------------------------------------------------------------
 
     /** What a step changes besides the status, and the event it sends. */
-    record Change(Update update, Function<OrderDocument, OrderEvent> event) {
+    record Change(Update update, Function<OrderDocument, ModuleEvent> event) {
     }
 
     @FunctionalInterface
@@ -355,7 +355,7 @@ public class OrderLifecycleService {
 
     /** One status change, if the order is still at the revision read; {@code null} when it is not. */
     private OrderDocument apply(OrderDocument order, OrderStatus to, Actor actor, String note, Update update, Instant now,
-            Function<OrderDocument, OrderEvent> event) {
+            Function<OrderDocument, ModuleEvent> event) {
         update.set("status", to)
             .set("updatedAt", now)
             .inc("revision", 1)
@@ -384,7 +384,7 @@ public class OrderLifecycleService {
 
     /** A timeline note without a status change, with its event; {@code null} when the order changed meanwhile. */
     private OrderDocument note(OrderDocument order, Actor actor, String note, Update update,
-            Function<OrderDocument, OrderEvent> event) {
+            Function<OrderDocument, ModuleEvent> event) {
         Instant now = this.clock.instant();
         update.set("updatedAt", now).inc("revision", 1).push("timeline", new TimelineEntry(null, now, actor.role(), actor.id(), note));
         OrderDocument after = this.transaction.execute((status) -> {
