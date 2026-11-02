@@ -10,16 +10,21 @@ import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.web.ETags;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.DeliveryDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.DeliverySettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateBranding;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateLocale;
+import io.github.ilyaslabs.foodstack.settings.core.application.UpdateDelivery;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateOrdering;
 import io.github.ilyaslabs.foodstack.settings.web.dto.BrandingRequest;
 import io.github.ilyaslabs.foodstack.settings.web.dto.BrandingResponse;
 import io.github.ilyaslabs.foodstack.settings.web.dto.LocaleRequest;
 import io.github.ilyaslabs.foodstack.settings.web.dto.LocaleResponse;
+import io.github.ilyaslabs.foodstack.settings.web.dto.DeliveryRequest;
+import io.github.ilyaslabs.foodstack.settings.web.dto.DeliveryResponse;
 import io.github.ilyaslabs.foodstack.settings.web.dto.OrderingRequest;
 import io.github.ilyaslabs.foodstack.settings.web.dto.OrderingResponse;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
@@ -53,7 +58,11 @@ class SettingsController {
 
     private final OrderingSettingsService orderingService;
 
-    SettingsController(SettingsService settingsService, OrderingSettingsService orderingService) {
+    private final DeliverySettingsService deliveryService;
+
+    SettingsController(SettingsService settingsService, OrderingSettingsService orderingService,
+            DeliverySettingsService deliveryService) {
+        this.deliveryService = deliveryService;
         this.settingsService = settingsService;
         this.orderingService = orderingService;
     }
@@ -114,6 +123,25 @@ class SettingsController {
         return ResponseEntity.ok().eTag(ETags.of("ordering", updated.version())).body(toResponse(updated));
     }
 
+    /** Rider pay and dispatch rules are for operator staff only, unlike the other sections. */
+    @GetMapping("/delivery")
+    @PreAuthorize("hasAuthority('settings:manage')")
+    ResponseEntity<DeliveryResponse> delivery() {
+        DeliveryDetails delivery = this.deliveryService.get();
+        return ResponseEntity.ok().eTag(ETags.of("delivery", delivery.version())).body(toResponse(delivery));
+    }
+
+    @PutMapping("/delivery")
+    @PreAuthorize("hasAuthority('settings:manage')")
+    ResponseEntity<DeliveryResponse> updateDelivery(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
+            @RequestBody DeliveryRequest request) {
+        DeliveryDetails updated = this.deliveryService.update(new UpdateDelivery(request.riderPayBasisPoints(),
+                request.riderPayMinMinor(), request.offerTimeoutSeconds(), request.searchRadiusMeters(),
+                request.searchLeadMinutes(), request.noRiderAlertSeconds(), request.proofCodeAboveMinor(),
+                request.locationRetentionDays()), requireIfMatch("delivery", ifMatch), CurrentUser.id());
+        return ResponseEntity.ok().eTag(ETags.of("delivery", updated.version())).body(toResponse(updated));
+    }
+
     private static long requireIfMatch(String resource, String ifMatch) {
         Long version = ETags.versionFromIfMatch(resource, ifMatch);
         if (version == null) {
@@ -140,5 +168,11 @@ class SettingsController {
     private static OrderingResponse toResponse(OrderingDetails o) {
         return new OrderingResponse(o.cashEnabled(), o.cardEnabled(), o.serviceFeeMinor(), o.serviceFeeBasisPoints(),
                 o.taxBasisPoints(), o.tipsEnabled(), o.acceptTimeoutSeconds(), o.version(), EpochSeconds.of(o.updatedAt()));
+    }
+
+    private static DeliveryResponse toResponse(DeliveryDetails d) {
+        return new DeliveryResponse(d.riderPayBasisPoints(), d.riderPayMinMinor(), d.offerTimeoutSeconds(),
+                d.searchRadiusMeters(), d.searchLeadMinutes(), d.noRiderAlertSeconds(), d.proofCodeAboveMinor(),
+                d.locationRetentionDays(), d.version(), EpochSeconds.of(d.updatedAt()));
     }
 }

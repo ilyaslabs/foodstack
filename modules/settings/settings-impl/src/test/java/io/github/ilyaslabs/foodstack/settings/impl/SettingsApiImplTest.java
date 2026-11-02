@@ -10,6 +10,8 @@ import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.DeliveryDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.DeliverySettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 import org.junit.jupiter.api.DisplayName;
@@ -25,7 +27,9 @@ class SettingsApiImplTest {
 
     private final OrderingSettingsService ordering = mock(OrderingSettingsService.class);
 
-    private final SettingsApiImpl api = new SettingsApiImpl(this.service, this.ordering);
+    private final DeliverySettingsService delivery = mock(DeliverySettingsService.class);
+
+    private final SettingsApiImpl api = new SettingsApiImpl(this.service, this.ordering, this.delivery);
 
     @Test
     @DisplayName("maps branding to the API record with epoch seconds")
@@ -60,5 +64,14 @@ class SettingsApiImplTest {
         given(this.ordering.get()).willReturn(new OrderingDetails(true, false, 100, 250, 1600, true, 180, 4, null));
 
         assertThat(this.api.getOrdering()).isEqualTo(new OrderingView(true, false, 100, 250, 1600, true, 180, 4));
+    }
+
+    @Test
+    @DisplayName("maps delivery rules to the API record")
+    void delivery() {
+        given(this.delivery.get()).willReturn(new DeliveryDetails(7000, 0, 30, 5000, 10, 300, 500000L, 30, 2, null));
+
+        assertThat(this.api.getDelivery().proofCodeAboveMinor()).isEqualTo(500000L);
+        assertThat(this.api.getDelivery().version()).isEqualTo(2);
     }
 }

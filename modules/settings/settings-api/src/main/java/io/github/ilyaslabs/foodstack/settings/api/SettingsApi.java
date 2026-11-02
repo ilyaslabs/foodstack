@@ -11,4 +11,7 @@ public interface SettingsApi {
 
     /** Payment methods, fees, tax, tips and the store accept time. */
     OrderingView getOrdering();
+
+    /** Rider pay, dispatch timings and proof of delivery (PRD 4.6). */
+    DeliveryView getDelivery();
 }

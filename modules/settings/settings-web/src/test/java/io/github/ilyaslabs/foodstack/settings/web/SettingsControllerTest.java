@@ -8,10 +8,13 @@ import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.DeliveryDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.DeliverySettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateBranding;
+import io.github.ilyaslabs.foodstack.settings.core.application.UpdateDelivery;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateOrdering;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 import org.junit.jupiter.api.DisplayName;
@@ -56,6 +59,9 @@ class SettingsControllerTest {
 
     @MockitoBean
     OrderingSettingsService orderingService;
+
+    @MockitoBean
+    DeliverySettingsService deliveryService;
 
     @MockitoBean
     JwtDecoder jwtDecoder;
@@ -170,5 +176,29 @@ class SettingsControllerTest {
             .andExpect(status().isOk())
             .andExpect(header().string("ETag", "\"ordering-1\""))
             .andExpect(jsonPath("$.serviceFeeBasisPoints").value(250));
+    }
+
+    @Test
+    @DisplayName("delivery rules are for settings:manage only, and PUT needs If-Match")
+    void delivery() throws Exception {
+        given(this.deliveryService.get()).willReturn(new DeliveryDetails(7000, 0, 30, 5000, 10, 300, null, 30, 0, null));
+        given(this.deliveryService.update(eq(new UpdateDelivery(8000, 15000, 45, 4000, 12, 600, 500000L, 14)), eq(0L),
+                eq("admin-1")))
+            .willReturn(new DeliveryDetails(8000, 15000, 45, 4000, 12, 600, 500000L, 14, 1, null));
+        String body = """
+                {"riderPayBasisPoints":8000,"riderPayMinMinor":15000,"offerTimeoutSeconds":45,"searchRadiusMeters":4000,
+                 "searchLeadMinutes":12,"noRiderAlertSeconds":600,"proofCodeAboveMinor":500000,"locationRetentionDays":14}""";
+
+        this.mvc.perform(get("/api/v1/settings/delivery")).andExpect(status().isUnauthorized());
+        this.mvc.perform(get("/api/v1/settings/delivery").with(admin()))
+            .andExpect(status().isOk())
+            .andExpect(header().string("ETag", "\"delivery-0\""))
+            .andExpect(jsonPath("$.riderPayBasisPoints").value(7000));
+        this.mvc.perform(put("/api/v1/settings/delivery").with(admin()).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isBadRequest());
+        this.mvc.perform(put("/api/v1/settings/delivery").with(admin()).header("If-Match", "\"delivery-0\"")
+            .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.proofCodeAboveMinor").value(500000));
     }
 }
