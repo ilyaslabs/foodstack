@@ -22,8 +22,8 @@ public interface IdentityApi {
     /**
      * Gives a person rider access (PRD DR-1): an existing account (found by email) gets the
      * {@code RIDER} role, or {@code STORE_RIDER} when {@code storeId} is set; otherwise an account is
-     * created with {@code initialPassword}. Operator staff with {@code rider:manage} may give either;
-     * a branch's people may give {@code STORE_RIDER} for their branch. Errors: {@code USER_INVALID} (400).
+     * created with {@code initialPassword}. Platform calls (the rider module, after checking a store's
+     * right to its own riders) and staff with {@code rider:manage} only. Errors: {@code USER_INVALID} (400).
      */
     UserView grantRiderAccess(@Param("access") RiderAccessGrant access);
 

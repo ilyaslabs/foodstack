@@ -28,7 +28,7 @@
         </dependency>
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
-            <artifactId>foodstack-media-api</artifactId>
+            <artifactId>foodstack-geo-api</artifactId>
         </dependency>
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
