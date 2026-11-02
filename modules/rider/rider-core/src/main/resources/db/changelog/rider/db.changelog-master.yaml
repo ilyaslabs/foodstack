@@ -1,0 +1,43 @@
+# Liquibase changelog of the rider module (database foodstack_rider). Shard keys are applied by
+# RiderConfiguration (TDD 6.3) and listed next to each collection.
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: rider-1
+      author: foodstack
+      comment: "rider_riders ({ _id: hashed }) with lists by kind and store, and the stale-presence sweep"
+      changes:
+        - createCollection:
+            collectionName: rider_riders
+        - createIndex:
+            collectionName: rider_riders
+            keys: '{ "kind": 1, "storeId": 1, "name": 1 }'
+            options: '{ "name": "kind_store_name" }'
+        - createIndex:
+            collectionName: rider_riders
+            keys: '{ "online": 1, "lastSeenAt": 1 }'
+            options: '{ "name": "online_last_seen" }'
+  - changeSet:
+      id: rider-2
+      author: foodstack
+      comment: "rider_locations ({ riderId: hashed }, deleted after the retention days), rider_assignments ({ _id: hashed }), rider_earnings ({ riderId: hashed })"
+      changes:
+        - createCollection:
+            collectionName: rider_locations
+        - createIndex:
+            collectionName: rider_locations
+            keys: '{ "riderId": 1, "at": -1 }'
+            options: '{ "name": "rider_newest" }'
+        - createIndex:
+            collectionName: rider_locations
+            keys: '{ "expireAt": 1 }'
+            options: '{ "name": "expire", "expireAfterSeconds": 0 }'
+        - createCollection:
+            collectionName: rider_assignments
+        - createCollection:
+            collectionName: rider_earnings
+        - createIndex:
+            collectionName: rider_earnings
+            keys: '{ "riderId": 1, "at": -1 }'
+            options: '{ "name": "rider_newest" }'
