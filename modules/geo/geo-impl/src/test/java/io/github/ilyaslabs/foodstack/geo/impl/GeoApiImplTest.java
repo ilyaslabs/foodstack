@@ -8,7 +8,9 @@ import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryQuoteView;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.geo.api.QuoteRequest;
+import io.github.ilyaslabs.foodstack.geo.api.RouteRequest;
 import io.github.ilyaslabs.foodstack.geo.core.application.QuoteService;
+import io.github.ilyaslabs.foodstack.geo.core.application.RoutingService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +22,9 @@ class GeoApiImplTest {
 
     private final QuoteService service = mock(QuoteService.class);
 
-    private final GeoApiImpl api = new GeoApiImpl(this.service);
+    private final RoutingService routing = RoutingService.estimating(1.3);
+
+    private final GeoApiImpl api = new GeoApiImpl(this.service, this.routing);
 
     @Test
     @DisplayName("delegates quotes and delivery areas to the core service")
@@ -34,5 +38,6 @@ class GeoApiImplTest {
 
         assertThat(this.api.quote(request)).isEqualTo(quote);
         assertThat(this.api.deliveryArea(areaRequest)).isEqualTo(area);
+        assertThat(this.api.route(new RouteRequest(new GeoPoint(1, 2), new GeoPoint(1.01, 2))).estimated()).isTrue();
     }
 }

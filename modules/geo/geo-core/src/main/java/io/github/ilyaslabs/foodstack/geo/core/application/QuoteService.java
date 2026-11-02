@@ -26,16 +26,23 @@ public class QuoteService {
 
     private final double roadFactor;
 
+    private final RoutingService routing;
+
     public QuoteService(ZoneService zones, OperatorPricingService pricing, double roadFactor) {
+        this(zones, pricing, roadFactor, RoutingService.estimating(roadFactor));
+    }
+
+    public QuoteService(ZoneService zones, OperatorPricingService pricing, double roadFactor, RoutingService routing) {
         this.zones = zones;
         this.pricing = pricing;
         this.roadFactor = roadFactor;
+        this.routing = routing;
     }
 
     public DeliveryQuoteView quote(QuoteRequest request) {
         requireValid(request.storeLocation(), "storeLocation");
         requireValid(request.destination(), "destination");
-        long distance = Math.round(GeoMath.distanceMeters(request.storeLocation(), request.destination()) * this.roadFactor);
+        long distance = this.routing.route(request.storeLocation(), request.destination()).distanceMeters();
         if (request.deliveryMode() == DeliveryMode.OPERATOR) {
             OperatorPricing operator = this.pricing.get();
             if (!operator.enabled()) {
