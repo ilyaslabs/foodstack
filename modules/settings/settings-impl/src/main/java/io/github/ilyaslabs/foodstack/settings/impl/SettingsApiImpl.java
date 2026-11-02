@@ -3,10 +3,13 @@ package io.github.ilyaslabs.foodstack.settings.impl;
 import io.github.ilyaslabs.foodstack.platform.core.EpochSeconds;
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
 import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
+import io.github.ilyaslabs.foodstack.settings.api.DeliveryView;
 import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.DeliveryDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.DeliverySettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
@@ -24,9 +27,13 @@ class SettingsApiImpl implements SettingsApi {
 
     private final OrderingSettingsService orderingService;
 
-    SettingsApiImpl(SettingsService settingsService, OrderingSettingsService orderingService) {
+    private final DeliverySettingsService deliveryService;
+
+    SettingsApiImpl(SettingsService settingsService, OrderingSettingsService orderingService,
+            DeliverySettingsService deliveryService) {
         this.settingsService = settingsService;
         this.orderingService = orderingService;
+        this.deliveryService = deliveryService;
     }
 
     @Override
@@ -47,5 +54,12 @@ class SettingsApiImpl implements SettingsApi {
         OrderingDetails o = this.orderingService.get();
         return new OrderingView(o.cashEnabled(), o.cardEnabled(), o.serviceFeeMinor(), o.serviceFeeBasisPoints(),
                 o.taxBasisPoints(), o.tipsEnabled(), o.acceptTimeoutSeconds(), o.version());
+    }
+
+    @Override
+    public DeliveryView getDelivery() {
+        DeliveryDetails d = this.deliveryService.get();
+        return new DeliveryView(d.riderPayBasisPoints(), d.riderPayMinMinor(), d.offerTimeoutSeconds(), d.searchRadiusMeters(),
+                d.searchLeadMinutes(), d.noRiderAlertSeconds(), d.proofCodeAboveMinor(), d.locationRetentionDays(), d.version());
     }
 }
