@@ -1,7 +1,5 @@
 package io.github.ilyaslabs.foodstack.it.support;
 
-import static io.restassured.RestAssured.given;
-
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -10,12 +8,16 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
+
+import static io.restassured.RestAssured.given;
 
 /**
  * Talks to the platform only through its public HTTP API, like the web apps do. Each request goes
@@ -74,6 +76,57 @@ public final class ApiClient {
      * exchanges for an access token.
      */
     public ApiClient logIn(String email, String password) {
+        return signIn((cookies, csrf) -> browser("/login", cookies).contentType(ContentType.URLENC)
+            .formParam("username", email)
+            .formParam("password", password)
+            .formParam("_csrf", csrf)
+            .post("/login"));
+    }
+
+    /**
+     * Signs in with an emailed one-time code: asks for it on the login page, reads it with
+     * {@code readCode} (from the mailbox) and types it in.
+     */
+    public ApiClient logInWithEmailCode(String email, Supplier<String> readCode) {
+        return signIn((cookies, csrf) -> {
+            Response sent = browser("/login/code", cookies).contentType(ContentType.URLENC)
+                .formParam("email", email)
+                .formParam("_csrf", csrf)
+                .post("/login/code");
+            expectStatus(sent, 200);
+            return browser("/login/code/verify", cookies).contentType(ContentType.URLENC)
+                .formParam("email", email)
+                .formParam("code", readCode.get())
+                .formParam("_csrf", csrf)
+                .post("/login/code/verify");
+        });
+    }
+
+    /**
+     * Forgot password: asks for a reset code on the login page, reads it with {@code readCode},
+     * chooses {@code newPassword} and is signed in with it.
+     */
+    public ApiClient resetPassword(String email, String newPassword, Supplier<String> readCode) {
+        return signIn((cookies, csrf) -> {
+            Response sent = browser("/login/reset", cookies).contentType(ContentType.URLENC)
+                .formParam("email", email)
+                .formParam("_csrf", csrf)
+                .post("/login/reset");
+            expectStatus(sent, 200);
+            return browser("/login/reset/verify", cookies).contentType(ContentType.URLENC)
+                .formParam("email", email)
+                .formParam("code", readCode.get())
+                .formParam("password", newPassword)
+                .formParam("_csrf", csrf)
+                .post("/login/reset/verify");
+        });
+    }
+
+    /**
+     * Runs the authorization code flow; {@code signInStep} posts the login page's forms with the
+     * browser's cookies and CSRF token and returns the answer that resumes the authorization.
+     */
+    private ApiClient signIn(BiFunction<Map<String, String>, String, Response> signInStep) {
         String verifier = randomUrlSafe(48);
         String state = randomUrlSafe(12);
         Map<String, String> query = new HashMap<>();
@@ -96,11 +149,7 @@ public final class ApiClient {
             throw new AssertionError("The login page has no CSRF token");
         }
 
-        Response login = browser("/login", cookies).contentType(ContentType.URLENC)
-            .formParam("username", email)
-            .formParam("password", password)
-            .formParam("_csrf", csrf.group(1))
-            .post("/login");
+        Response login = signInStep.apply(cookies, csrf.group(1));
         cookies.putAll(login.getCookies());
         String savedRequest = expectRedirect(login, "/oauth2/authorize");
 
@@ -162,11 +211,17 @@ public final class ApiClient {
 
     private static String expectRedirect(Response response, String expected) {
         String location = response.header("Location");
-        if (response.statusCode() != 302 || location == null || !location.contains(expected)) {
+        if ((response.statusCode() != 302 && response.statusCode() != 303) || location == null || !location.contains(expected)) {
             throw new AssertionError("Expected a redirect to " + expected + " but got " + response.statusCode()
                     + " Location=" + location);
         }
         return location;
+    }
+
+    private static void expectStatus(Response response, int status) {
+        if (response.statusCode() != status) {
+            throw new AssertionError("Expected " + status + " but got " + response.statusCode() + ": " + response.asString());
+        }
     }
 
     private static String pathAndQuery(String url) {

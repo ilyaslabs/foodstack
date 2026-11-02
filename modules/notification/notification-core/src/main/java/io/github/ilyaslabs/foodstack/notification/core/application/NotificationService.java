@@ -145,9 +145,13 @@ public class NotificationService {
         String id = message.eventId() + ":" + ((message.userId() != null) ? message.userId() : "-") + ":" + EMAIL;
         boolean ready = this.mail != null;
         try {
+            // A code is a secret: the log shows only the title, and the email itself is kept encrypted
+            boolean sealed = message.required();
             this.mongo.insert(new DeliveryDocument(id, message.userId(), EMAIL, message.template(), this.pii.encrypt(address),
-                    rendered.subject(), html, text, ready ? DeliveryDocument.QUEUED : DeliveryDocument.SKIPPED, 0,
-                    ready ? null : "Email is not set up (SMTP_HOST)", now, null, now));
+                    sealed ? rendered.title() : rendered.subject(), sealed ? this.pii.encrypt(html) : html,
+                    sealed ? this.pii.encrypt(text) : text, ready ? DeliveryDocument.QUEUED : DeliveryDocument.SKIPPED, 0,
+                    ready ? null : "Email is not set up (SMTP_HOST)", now, null, now,
+                    sealed ? this.pii.encrypt(rendered.subject()) : null));
         }
         catch (DuplicateKeyException ex) {
             return;
@@ -180,12 +184,14 @@ public class NotificationService {
     public void retry(String deliveryId) {
         DeliveryDocument updated = this.mongo.findAndModify(
                 Query.query(Criteria.where("_id").is(deliveryId)
-                    .and("status").in(DeliveryDocument.FAILED, DeliveryDocument.SKIPPED)),
+                    .and("status").in(DeliveryDocument.FAILED, DeliveryDocument.SKIPPED)
+                    .and("html").exists(true)),
                 new Update().set("status", DeliveryDocument.QUEUED).set("nextAttemptAt", this.clock.instant()).set("attempts", 0)
                     .unset("lastError"),
                 FindAndModifyOptions.options().returnNew(true), DeliveryDocument.class);
         if (updated == null) {
-            throw new ModuleException.Conflict("Only failed emails can be sent again", "DELIVERY_NOT_FAILED");
+            throw new ModuleException.Conflict("Only failed emails can be sent again, and never an expired code",
+                    "DELIVERY_NOT_FAILED");
         }
         if (this.mail != null) {
             sendOne(deliveryId);
@@ -273,9 +279,16 @@ public class NotificationService {
     private boolean deliver(DeliveryDocument delivery) {
         Instant now = this.clock.instant();
         try {
-            this.mail.send(this.pii.decrypt(delivery.recipient()), delivery.subject(), delivery.html(), delivery.text());
+            if (delivery.sealed()) {
+                this.mail.send(this.pii.decrypt(delivery.recipient()), this.pii.decrypt(delivery.sealedSubject()),
+                        this.pii.decrypt(delivery.html()), this.pii.decrypt(delivery.text()));
+            }
+            else {
+                this.mail.send(this.pii.decrypt(delivery.recipient()), delivery.subject(), delivery.html(), delivery.text());
+            }
             this.mongo.updateFirst(Query.query(Criteria.where("_id").is(delivery.id())),
-                    new Update().set("status", DeliveryDocument.SENT).set("sentAt", now).unset("lastError"), DeliveryDocument.class);
+                    wipeIfSealed(delivery, new Update().set("status", DeliveryDocument.SENT).set("sentAt", now).unset("lastError")),
+                    DeliveryDocument.class);
             return true;
         }
         catch (MailFailure ex) {
@@ -283,7 +296,7 @@ public class NotificationService {
             log.warn("Email {} not sent (try {}): {}", delivery.id(), delivery.attempts(), ex.getMessage());
             Update update = new Update().set("lastError", truncate(ex.getMessage()));
             if (last) {
-                update.set("status", DeliveryDocument.FAILED);
+                wipeIfSealed(delivery, update.set("status", DeliveryDocument.FAILED));
             }
             else {
                 update.set("status", DeliveryDocument.QUEUED)
@@ -292,6 +305,11 @@ public class NotificationService {
             this.mongo.updateFirst(Query.query(Criteria.where("_id").is(delivery.id())), update, DeliveryDocument.class);
             return false;
         }
+    }
+
+    /** A code is useless once sent or given up on, so nothing of it is kept. */
+    private static Update wipeIfSealed(DeliveryDocument delivery, Update update) {
+        return delivery.sealed() ? update.unset("html").unset("text").unset("sealedSubject") : update;
     }
 
     private static String truncate(String message) {

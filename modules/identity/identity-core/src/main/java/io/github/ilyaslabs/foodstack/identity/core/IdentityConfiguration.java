@@ -3,10 +3,11 @@ package io.github.ilyaslabs.foodstack.identity.core;
 import java.time.Clock;
 
 import io.github.ilyaslabs.foodstack.identity.core.application.BootstrapAdmin;
+import io.github.ilyaslabs.foodstack.identity.core.application.EmailCodeService;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserDirectory;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
-import io.github.ilyaslabs.foodstack.identity.core.persistence.UserRepository;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.LoginKeyRepository;
+import io.github.ilyaslabs.foodstack.identity.core.persistence.UserRepository;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
@@ -16,8 +17,10 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
+import io.github.ilyaslabs.foodstack.platform.security.RateLimiter;
 import io.github.ilyaslabs.foodstack.platform.security.TokenRevocations;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +28,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaAdmin;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -84,6 +88,14 @@ public class IdentityConfiguration {
             TokenRevocations tokenRevocations, Clock clock) {
         return new UserService(users, loginKeys, piiCipher, identityPasswordEncoder, identityOutbox,
                 identityMongo.transactionTemplate(), tokenRevocations, clock);
+    }
+
+    @Bean
+    EmailCodeService identityEmailCodeService(UserService identityUserService, StringRedisTemplate redis,
+            RateLimiter rateLimiter, PiiCipher piiCipher, OutboxWriter identityOutbox, ModuleMongo identityMongo,
+            @Value("${foodstack.namespace:foodstack}") String namespace, Clock clock) {
+        return new EmailCodeService(identityUserService, redis, rateLimiter, piiCipher, identityOutbox,
+                identityMongo.transactionTemplate(), namespace, clock);
     }
 
     @Bean

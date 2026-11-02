@@ -39,13 +39,15 @@ class LoginPageControllerTest {
     @Test
     @DisplayName("renders the login form with the CSRF token, escaped, and a strict content security policy")
     void rendersForm() {
-        ResponseEntity<String> page = this.controller.login(new DefaultCsrfToken("X-CSRF", "_csrf", "tok\"<en>"), null, null,
+        ResponseEntity<String> page = this.controller.login(new DefaultCsrfToken("X-CSRF", "_csrf", "tok\"<en>"), null, null, null, null,
                 new MockHttpServletRequest(), new MockHttpServletResponse());
 
         assertThat(page.getBody()).contains("name=\"_csrf\" value=\"tok&quot;&lt;en&gt;\"")
             .contains("action=\"/login\"")
             .doesNotContain("{{")
-            .doesNotContain("/login/signup");
+            .doesNotContain("/login/signup")
+            .contains("href=\"/login/code\"")
+            .contains("href=\"/login/reset\"");
         assertThat(page.getHeaders().getFirst("Content-Security-Policy")).contains("script-src 'self'")
             .contains("frame-ancestors 'none'");
         assertThat(page.getHeaders().getCacheControl()).isEqualTo("no-store");
@@ -54,7 +56,7 @@ class LoginPageControllerTest {
     @Test
     @DisplayName("tells the user when the credentials were wrong")
     void error() {
-        ResponseEntity<String> page = this.controller.login(CSRF, "", null, new MockHttpServletRequest(),
+        ResponseEntity<String> page = this.controller.login(CSRF, "", null, null, null, new MockHttpServletRequest(),
                 new MockHttpServletResponse());
 
         assertThat(page.getBody()).contains("role=\"alert\"");
@@ -64,17 +66,17 @@ class LoginPageControllerTest {
     @DisplayName("offers sign-up only to the customer app, and opens it directly when the app asked for it")
     void signupLink() {
         MockHttpServletRequest customer = savedAuthorize(Map.of("client_id", "foodstack-web"));
-        assertThat(this.controller.login(CSRF, null, null, customer, new MockHttpServletResponse()).getBody())
+        assertThat(this.controller.login(CSRF, null, null, null, null, customer, new MockHttpServletResponse()).getBody())
             .contains("href=\"/login/signup\"");
 
         MockHttpServletRequest backOffice = savedAuthorize(Map.of("client_id", "foodstack-backoffice"));
-        assertThat(this.controller.login(CSRF, null, null, backOffice, new MockHttpServletResponse()).getBody())
+        assertThat(this.controller.login(CSRF, null, null, null, null, backOffice, new MockHttpServletResponse()).getBody())
             .doesNotContain("/login/signup");
         assertThat(this.controller.signupPage(CSRF, backOffice, new MockHttpServletResponse()).getHeaders().getLocation())
             .hasToString("/login");
 
         MockHttpServletRequest straightToSignup = savedAuthorize(Map.of("client_id", "foodstack-web", "fs_screen", "signup"));
-        assertThat(this.controller.login(CSRF, null, null, straightToSignup, new MockHttpServletResponse()).getHeaders()
+        assertThat(this.controller.login(CSRF, null, null, null, null, straightToSignup, new MockHttpServletResponse()).getHeaders()
             .getLocation()).hasToString("/login/signup");
     }
 
