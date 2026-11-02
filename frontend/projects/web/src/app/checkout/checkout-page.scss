@@ -346,3 +346,22 @@ h3 {
   --fs-icon-size: 56px;
   color: var(--mat-sys-outline);
 }
+
+.new-address {
+  margin-block: 8px 4px;
+}
+
+.save-address {
+  display: block;
+  margin-block-end: 8px;
+}
+
+.small {
+  font: var(--mat-sys-body-small);
+}
+
+.field-error {
+  margin: 4px 0 0;
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+}

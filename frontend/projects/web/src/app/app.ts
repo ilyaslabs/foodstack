@@ -10,6 +10,7 @@ import { Me, MeClient } from '@foodstack/api-client';
 import { AuthService } from '@foodstack/auth';
 import { BrandingStore, Icon, LocaleStore } from '@foodstack/ui';
 
+import { AddressBook, addressTitle, locationOf } from './addresses/address-book';
 import { CartStore } from './cart/cart-store';
 import { Ui } from './i18n';
 import { LocationDialog } from './location/location-dialog';
@@ -37,10 +38,27 @@ export class App {
   protected readonly branding = inject(BrandingStore);
   protected readonly cart = inject(CartStore);
   protected readonly locations = inject(LocationStore);
+  private readonly addresses = inject(AddressBook);
 
   constructor() {
-    // The header shows the saved address on every page, not only on those that use it.
-    afterNextRender(() => this.locations.restore());
+    // The header shows the saved address on every page, not only on those that use it. A signed-in
+    // customer with no location in this browser starts at their preferred saved address (PRD ID-6).
+    afterNextRender(() => {
+      this.locations.restore();
+      if (!this.locations.has()) {
+        void this.addresses.load().then(() => {
+          const preferred = this.addresses.preferred();
+          if (preferred && !this.locations.has()) {
+            this.locations.set(
+              locationOf(
+                preferred,
+                `${addressTitle(this.ui, preferred)} · ${preferred.addressLine}`,
+              ),
+            );
+          }
+        });
+      }
+    });
   }
   protected readonly year = new Date().getFullYear();
 

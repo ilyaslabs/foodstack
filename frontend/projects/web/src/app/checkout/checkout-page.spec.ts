@@ -10,10 +10,12 @@ import {
   Checkout,
   OrderClient,
   RUNTIME_CONFIG,
+  SavedAddress,
   SettingsClient,
 } from '@foodstack/api-client';
 import { LocaleStore } from '@foodstack/ui';
 
+import { AddressBook } from '../addresses/address-book';
 import { CartStore } from '../cart/cart-store';
 import { LocationStore } from '../location-store';
 import { CheckoutPage, setPaymentRedirect } from './checkout-page';
@@ -83,7 +85,25 @@ function quote(total: number): Checkout {
 }
 
 describe('CheckoutPage', () => {
-  async function render(checkout: () => Checkout, place: ReturnType<typeof vi.fn>) {
+  const work: SavedAddress = {
+    id: 'a2',
+    label: 'WORK',
+    name: null,
+    lat: 31.5,
+    lng: 74.33,
+    addressLine: 'Arfa Tower, floor 9',
+    instructions: 'Ask at reception',
+    preferred: true,
+    updatedAt: 1,
+    version: 0,
+  };
+
+  async function render(
+    checkout: () => Checkout,
+    place: ReturnType<typeof vi.fn>,
+    addresses: SavedAddress[] = [],
+    fulfilment: 'PICKUP' | 'DELIVERY' = 'PICKUP',
+  ) {
     localStorage.clear();
     TestBed.configureTestingModule({
       imports: [CheckoutPage],
@@ -92,6 +112,14 @@ describe('CheckoutPage', () => {
         { provide: RUNTIME_CONFIG, useValue: { apiUrl: '' } },
         { provide: CartClient, useValue: { checkout: vi.fn(() => of(checkout())) } },
         { provide: OrderClient, useValue: { place } },
+        {
+          provide: AddressBook,
+          useValue: {
+            addresses: signal(addresses),
+            load: vi.fn(async () => addresses),
+            save: vi.fn(async () => addresses[0]),
+          },
+        },
         {
           provide: CartStore,
           useValue: {
@@ -128,11 +156,11 @@ describe('CheckoutPage', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     const page = fixture.componentInstance as unknown as {
-      setFulfilment(value: 'PICKUP'): void;
+      setFulfilment(value: 'PICKUP' | 'DELIVERY'): void;
       phone: string;
       place(): Promise<void>;
     };
-    page.setFulfilment('PICKUP');
+    page.setFulfilment(fulfilment);
     page.phone = '0300 1234567';
     await fixture.whenStable();
     fixture.detectChanges();
@@ -205,5 +233,32 @@ describe('CheckoutPage', () => {
     expect(place.mock.calls[2][0]).toEqual(expect.objectContaining({ expectedTotalMinor: 260000 }));
     expect(place.mock.calls[2][1]).not.toBe(place.mock.calls[0][1]);
     expect(navigate).toHaveBeenCalledWith('/orders/o2');
+  });
+
+  it('delivers to the preferred saved address with its pin, address line and notes', async () => {
+    // given
+    const place = vi.fn(() =>
+      of({ orderId: 'o3', number: '0000-0003', status: 'CONFIRMED', paymentUrl: null }),
+    );
+    const { page, element } = await render(() => quote(255000), place, [work], 'DELIVERY');
+    vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+
+    // when
+    await page.place();
+
+    // then
+    expect(element.textContent).toContain('Arfa Tower, floor 9');
+    expect(place).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fulfilment: 'DELIVERY',
+        address: {
+          lat: 31.5,
+          lng: 74.33,
+          addressLine: 'Arfa Tower, floor 9',
+          instructions: 'Ask at reception',
+        },
+      }),
+      expect.any(String),
+    );
   });
 });

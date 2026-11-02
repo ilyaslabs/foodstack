@@ -77,3 +77,34 @@ export interface Versioned<T> {
   value: T;
   etag: string;
 }
+
+/** Label of a saved address (PRD ID-6). */
+export type AddressLabel = 'HOME' | 'WORK' | 'OTHER';
+
+/** A customer's saved address. */
+export interface SavedAddress {
+  id: string;
+  label: AddressLabel;
+  /** The customer's own name for an OTHER address. */
+  name: string | null;
+  lat: number;
+  lng: number;
+  addressLine: string;
+  /** Notes for the rider. */
+  instructions: string | null;
+  /** The address the apps start with. */
+  preferred: boolean;
+  updatedAt: number;
+  version: number;
+}
+
+export interface AddressInput {
+  label: AddressLabel;
+  name?: string | null;
+  lat: number;
+  lng: number;
+  addressLine: string;
+  instructions?: string | null;
+  preferred?: boolean;
+  version?: number;
+}

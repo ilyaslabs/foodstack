@@ -82,6 +82,9 @@ services:
       FOODSTACK_ISSUER: ""
       FOODSTACK_INTERNAL_API_URL: http://server:8080
       FOODSTACK_ALLOWED_HOSTS: ${FOODSTACK_HOSTNAMES}
+      # Map tiles for address pins and live rider tracking.
+      MAP_TILE_URL: ${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
+      MAP_ATTRIBUTION: ${MAP_ATTRIBUTION:-© OpenStreetMap contributors}
     volumes:
       - ./app/web:/app:ro
     healthcheck:
