@@ -72,9 +72,15 @@ export interface AddressEditorData {
           (change)="label.set($event.value)"
           [attr.aria-label]="ui.t('addressLabel')"
         >
-          <mat-button-toggle value="HOME"><fs-icon name="home" /> {{ ui.t('labelHome') }}</mat-button-toggle>
-          <mat-button-toggle value="WORK"><fs-icon name="work" /> {{ ui.t('labelWork') }}</mat-button-toggle>
-          <mat-button-toggle value="OTHER"><fs-icon name="place" /> {{ ui.t('labelOther') }}</mat-button-toggle>
+          <mat-button-toggle value="HOME"
+            ><fs-icon name="home" /> {{ ui.t('labelHome') }}</mat-button-toggle
+          >
+          <mat-button-toggle value="WORK"
+            ><fs-icon name="work" /> {{ ui.t('labelWork') }}</mat-button-toggle
+          >
+          <mat-button-toggle value="OTHER"
+            ><fs-icon name="place" /> {{ ui.t('labelOther') }}</mat-button-toggle
+          >
         </mat-button-toggle-group>
         @if (labelTaken()) {
           <p class="error" role="alert">{{ ui.t('addressLabelTaken') }}</p>
@@ -105,7 +111,9 @@ export interface AddressEditorData {
           <input matInput name="instructions" maxlength="300" [(ngModel)]="instructions" />
         </mat-form-field>
         @if (!data.address?.preferred) {
-          <mat-checkbox name="preferred" [(ngModel)]="preferred">{{ ui.t('preferredAddress') }}</mat-checkbox>
+          <mat-checkbox name="preferred" [(ngModel)]="preferred">{{
+            ui.t('preferredAddress')
+          }}</mat-checkbox>
         }
         @if (error(); as key) {
           <p class="error" role="alert">{{ ui.t(key) }}</p>
@@ -182,7 +190,9 @@ export class AddressEditor {
   protected readonly submitted = signal(false);
   protected readonly error = signal<UiKey | null>(null);
   protected readonly labelTaken = computed(
-    () => this.label() !== 'OTHER' && this.book.taken(this.label() as 'HOME' | 'WORK', this.data.address?.id),
+    () =>
+      this.label() !== 'OTHER' &&
+      this.book.taken(this.label() as 'HOME' | 'WORK', this.data.address?.id),
   );
 
   protected name = '';
