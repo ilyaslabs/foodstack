@@ -8,6 +8,7 @@ import java.util.Map;
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
 import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
+import io.github.ilyaslabs.foodstack.it.support.Mailbox;
 import io.github.ilyaslabs.foodstack.it.support.PlatformEvents;
 import io.github.ilyaslabs.foodstack.it.support.Topology;
 import io.restassured.RestAssured;
@@ -97,6 +98,11 @@ class OrderingScenario {
         assertThat(board.<String>path("[0].customerName")).isEqualTo("Sara Customer");
         assertThat(board.<String>path("[0].lines[0].note")).isEqualTo("Less spicy");
         assertThat(board.<List<String>>path("[0].actions")).containsExactly("ACCEPT", "REJECT");
+        String number = placed.path("number");
+        assertThat(Mailbox.awaitEmail(ownerEmail, "New order " + number)).contains("/orders/board");
+        assertThat(Mailbox.awaitEmail(customerEmail, "Your order " + number)).contains("/orders/" + orderId);
+        await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(300))
+            .untilAsserted(() -> assertThat(owner.get("/api/v1/notifications/unread-count").<Integer>path("unread")).isEqualTo(1));
 
         // and the store accepts, prepares and hands it over
         owner.postJson("/api/v1/orders/" + orderId + "/actions/accept", Map.of("prepMinutes", 15))
@@ -111,6 +117,9 @@ class OrderingScenario {
         assertThat(PlatformEvents.awaitEvent(this.platform, "order", "foodstack.order.OrderCollected.v1", orderId)).isNotBlank();
         assertThat(PlatformEvents.awaitEvent(this.platform, "payment", "foodstack.payment.PaymentSucceeded.v1", orderId))
             .isNotBlank();
+        assertThat(Mailbox.awaitEmail(customerEmail, "Order " + number + " is ready to collect")).contains(number);
+        assertThat(customer.get("/api/v1/notifications").<List<String>>path("template")).contains("order-ready-pickup",
+                "order-accepted", "order-confirmed", "welcome");
         await().atMost(Duration.ofSeconds(30)).pollInterval(Duration.ofMillis(300)).untilAsserted(() -> {
             Response history = customer.get("/api/v1/orders/mine");
             assertThat(history.<List<String>>path("items.id")).containsExactly(orderId);
@@ -184,7 +193,8 @@ class OrderingScenario {
             .put("/api/v1/stores/" + storeId + "/hours").then().log().ifValidationFails().statusCode(200);
         admin.request("/api/v1/stores/" + storeId + "/status").contentType(ContentType.JSON).body(Map.of("status", "LIVE"))
             .put("/api/v1/stores/" + storeId + "/status").then().log().ifValidationFails().statusCode(200);
-        Response menu = admin.get("/api/v1/stores/" + storeId + "/menu");
-        return new Store(storeId, created.path("id"), menu.path("sections[0].items[0].modifierGroups[0].options[1].id"));
+        String fullOptionId = created.path("modifierGroups[0].options[1].id");
+        assertThat(fullOptionId).isNotBlank();
+        return new Store(storeId, created.path("id"), fullOptionId);
     }
 }

@@ -180,6 +180,10 @@ public final class FoodstackPlatform {
         properties.put("foodstack.payment.gateway", "sandbox");
         properties.put("foodstack.payment.sandbox-secret", "integration-sandbox-secret");
         properties.put("foodstack.order.web-url", "http://web.it.foodstack.local");
+        // Emails go to Mailpit
+        properties.put("spring.mail.host", FoodstackContainers.mailpit().getHost());
+        properties.put("spring.mail.port", String.valueOf(FoodstackContainers.mailpit().getMappedPort(1025)));
+        properties.put("foodstack.notification.from-address", "no-reply@it.foodstack.local");
         // No calls to a public geocoder from the tests
         properties.put("foodstack.geo.geocoding.provider", "none");
         return properties;

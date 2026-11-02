@@ -3,6 +3,17 @@
 spring:
   application:
     name: foodstack-server
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${SMTP_AUTH:false}
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:false}
+      mail.smtp.connectiontimeout: 10000
+      mail.smtp.timeout: 20000
+      mail.smtp.writetimeout: 20000
   threads:
     virtual:
       enabled: true
@@ -132,6 +143,11 @@ foodstack:
   order:
     # Where the customer app lives: card payment pages send the customer back to <web-url>/orders/<id>.
     web-url: ${FOODSTACK_WEB_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}
+  notification:
+    # Emails (PRD 4.10): sent only when SMTP_HOST and SMTP_FROM are set; otherwise the log shows them as skipped.
+    from-address: ${SMTP_FROM:}
+    from-name: ${SMTP_FROM_NAME:FoodStack}
+    admin-url: ${FOODSTACK_ADMIN_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/admin
   payment:
     # Card gateway (TDD 5.4): none (cash only), sandbox (development and demos, refused in production) or stripe.
     gateway: ${PAYMENT_GATEWAY:none}

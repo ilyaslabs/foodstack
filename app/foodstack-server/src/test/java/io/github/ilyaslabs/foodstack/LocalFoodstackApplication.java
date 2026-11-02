@@ -25,11 +25,15 @@ public final class LocalFoodstackApplication {
         System.setProperty("foodstack.storage.public-endpoint", FoodstackContainers.s3Endpoint());
         System.setProperty("foodstack.storage.access-key", FoodstackContainers.S3_ACCESS_KEY);
         System.setProperty("foodstack.storage.secret-key", FoodstackContainers.S3_SECRET_KEY);
+        System.setProperty("spring.mail.host", FoodstackContainers.mailpit().getHost());
+        System.setProperty("spring.mail.port", String.valueOf(FoodstackContainers.mailpit().getMappedPort(1025)));
+        System.setProperty("foodstack.notification.from-address", "no-reply@foodstack.localhost");
         System.setProperty("spring.elasticsearch.uris", "http://" + FoodstackContainers.elasticsearch().getHttpHostAddress());
         System.setProperty("spring.elasticsearch.username", "elastic");
         System.setProperty("spring.elasticsearch.password", FoodstackContainers.ELASTICSEARCH_PASSWORD);
         SpringApplication application = new SpringApplication(FoodstackApplication.class);
         application.setAdditionalProfiles("local", "test-seed");
         application.run(args);
+        System.out.println("Emails sent by this run: " + FoodstackContainers.mailpitUrl());
     }
 }
