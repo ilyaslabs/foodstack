@@ -219,7 +219,7 @@ export class OrderingPage implements OnInit {
 }
 
 function percent(basisPoints: number): string {
-  return basisPoints ? String(basisPoints / 100) : '';
+  return String((basisPoints ?? 0) / 100);
 }
 
 function basisPoints(value: string): number | null {

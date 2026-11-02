@@ -68,7 +68,7 @@ const REFRESH_MS = 60_000;
       justify-content: space-between;
       gap: 12px;
       padding: 4px 8px 4px 16px;
-      min-inline-size: 300px;
+      flex-wrap: wrap;
     }
     .title {
       font: var(--mat-sys-title-small);
