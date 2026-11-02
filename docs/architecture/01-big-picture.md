@@ -60,7 +60,7 @@ flowchart TB
     end
     subgraph settings
         SE[settings]
-        SEdb[("foodstack_settings<br/>settings")]
+        SEdb[("foodstack_settings<br/>settings (branding, locale,<br/>ordering)")]
     end
     subgraph media
         ME[media]
@@ -76,7 +76,7 @@ flowchart TB
     end
     subgraph search
         SR[search]
-        ES[("Elasticsearch<br/>foodstack_search_stores<br/>(alias over _v1)")]
+        ES[("Elasticsearch<br/>foodstack_search_stores<br/>(alias over _v2)")]
     end
 
     ID --- IDdb
@@ -98,17 +98,78 @@ flowchart TB
     GE -. "foodstack.geo.events<br/>ZoneChanged, OperatorDeliveryPricingChanged" .-> SR
 ```
 
-Every module also has its own `<module>_outbox`, `<module>_inbox` and Liquibase tracking collections in its database. `search` keeps no MongoDB database at all: its index can always be rebuilt from `store` and `geo`.
+**Ordering modules (M2).** The catalogue modules they call are drawn as plain boxes; their databases are in the diagram above.
+
+```mermaid
+flowchart TB
+    subgraph promotion
+        PR[promotion]
+        PRdb[("foodstack_promotion<br/>promotions, codes, redemptions,<br/>customer_usage, customers")]
+    end
+    subgraph cart
+        CA[cart]
+        CAdb[("foodstack_cart<br/>carts")]
+    end
+    subgraph payment
+        PA[payment]
+        PAdb[("foodstack_payment<br/>intents")]
+    end
+    subgraph order
+        OR[order]
+        ORdb[("foodstack_order<br/>orders, active, by_customer,<br/>by_store, placement_keys")]
+    end
+    subgraph notification
+        NO[notification]
+        NOdb[("foodstack_notification<br/>inbox, deliveries,<br/>preferences")]
+    end
+    ST[store]
+    GE[geo]
+    SE[settings]
+    ID[identity]
+    GW(["Card gateway<br/>Stripe Checkout or sandbox"])
+    SMTP(["SMTP server"])
+
+    PR --- PRdb
+    CA --- CAdb
+    PA --- PAdb
+    OR --- ORdb
+    NO --- NOdb
+
+    OR -->|"CartApi: checkout, clear"| CA
+    OR -->|"PromotionApi: reserve, release"| PR
+    OR -->|"PaymentApi: startCard"| PA
+    OR -->|"IdentityApi, SettingsApi"| ID
+    CA -->|"StoreApi: validateOrder"| ST
+    CA -->|"GeoApi: quote"| GE
+    CA -->|"PromotionApi: evaluate"| PR
+    CA -->|"SettingsApi: ordering"| SE
+    PA -->|"SettingsApi: ordering"| SE
+    PA -->|"hosted page, refunds"| GW
+    GW -->|"webhook"| PA
+    NO -->|"IdentityApi, OrderApi, SettingsApi"| OR
+    NO -->|"emails"| SMTP
+
+    OR -. "foodstack.order.events<br/>OrderConfirmed, OrderCancelled,<br/>OrderRejected, OrderFailed" .-> PR
+    OR -. "OrderCancelled, OrderRejected,<br/>OrderRefunded" .-> PA
+    PA -. "foodstack.payment.events<br/>PaymentSucceeded, PaymentFailed,<br/>RefundSucceeded, RefundFailed" .-> OR
+    OR -. "order steps" .-> NO
+    PA -. "RefundSucceeded" .-> NO
+    ID -. "foodstack.identity.events<br/>UserRegistered, EmailCodeIssued" .-> NO
+```
+
+Every module also has its own `<module>_outbox`, `<module>_inbox` and Liquibase tracking collections in its database, and every collection name starts with the module name (`order_orders`, `cart_carts`). `search` keeps no MongoDB database at all: its index can always be rebuilt from `store` and `geo`. `order` also reads its own events to keep the order lists (`order_by_customer`, `order_by_store`) up to date. `order` calls `SettingsApi` as well as `IdentityApi`, and `notification` calls all three of `IdentityApi`, `OrderApi` and `SettingsApi`; each is drawn as one arrow to keep the diagram readable. The flows of the ordering modules are on [6. Ordering flows](06-ordering-flows.md).
 
 ### Events with no consumer yet
 
-These are published to Kafka today but nothing reads them. They are there for the modules that come in M2 and later (for example `notification`).
+These are published to Kafka today but nothing reads them yet.
 
-| Topic | Events |
-|---|---|
-| `foodstack.identity.events` | `UserRegistered`, `UserTokensRevoked` |
-| `foodstack.settings.events` | `SettingsChanged` |
-| `foodstack.media.events` | `MediaReady` |
+| Topic | Events | Expected reader |
+|---|---|---|
+| `foodstack.identity.events` | `UserTokensRevoked` | Gateway token cache (M5) |
+| `foodstack.settings.events` | `SettingsChanged` | Caches in other replicas |
+| `foodstack.media.events` | `MediaReady` | — |
+| `foodstack.promotion.events` | `CouponRedeemed`, `CouponReleased` | Reports and ledger (M4) |
+| `foodstack.order.events` | `OrderPlaced`, `OrderPreparing`, `OrderCollected` (read only by order's own projections) | Ledger (M4), dispatch (M3) |
 
 ## 1.3 Inside one module
 
@@ -133,5 +194,5 @@ flowchart LR
     CORE --> DB[("foodstack_store")]
 ```
 
-- Permission checks live in `-web` (`@PreAuthorize`, `CurrentUser.requireStoreAccess`). `-impl` runs none; see [Code vs design](05-code-vs-design.md).
+- Permission checks run at both entry points. `-web` uses `@PreAuthorize` and `CurrentUser.requireStoreAccess`. `-impl` uses `ModuleAccess` (`requireAuthenticated`, `requireServiceOr`, `requireServiceSelfOr`), so a module answers another module only what the user behind the call could ask for. Background work (event listeners, sweeps, rebuilds, demo seeding) runs as the platform through `ServiceCalls` with a service token (`module:service`).
 - Where a module is `http` or `off`, its `-core`, `-impl` and `-web` beans are not created; another module that needs it gets a Module-Switch HTTP client for its `-api` instead.

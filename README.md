@@ -55,6 +55,13 @@ These are fixed so every developer and tester uses the same ones. They exist onl
 | `LocalFoodstackApplication` | `admin@local.foodstack.local` | `foodstack-local` | Administrator (first-start account) |
 | `./install.sh <folder> --local` | `admin@foodstack.localhost` | `foodstack-local` | Administrator |
 
+In a local run, emails (order updates, sign-in codes, password resets) go to Mailpit, whose web page
+is printed at start-up ("Emails sent by this run: http://localhost:<port>"); open it to read a sign-in
+code. Card payments use the sandbox page, which charges nothing: switch card on in the back office
+**Ordering** page, then pay or decline on the test page. A `--local` trial install has no email
+server and takes cash only until you fill in `SMTP_*` and `PAYMENT_GATEWAY` in its `.env`
+([deployment guide 3.3](docs/deployment-guide.md#33-configure)).
+
 The containers behind `LocalFoodstackApplication` also use fixed credentials: Elasticsearch user
 `elastic` / `foodstack-test`, storage access key `foodstack-test` / secret `foodstack-test-secret`;
 MongoDB and Redis have no password. Their ports are picked by Docker (`docker ps` shows them).
