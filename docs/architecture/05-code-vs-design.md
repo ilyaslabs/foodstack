@@ -48,6 +48,7 @@ Listed so nobody looks for them in the code. Milestones are from the [PRD releas
 | Store merchant accounts, credit limits, `resolveMerchant` | 5.4 | M4 (M2 collects everything on the operator's account) |
 | Embedded card fields, saved cards | 5.4 | M4 |
 | Email template editor for the operator | 5.2 notification | M4 (M2 templates are in code, in every language) |
+| Per-store kitchen ticket paper width (80 or 58 mm) | 5.3 | M4 store screens (M2 tickets fit 80 mm rolls: no page margins, 72 mm print width) |
 | Ledger, commission postings, payouts | 5.2 ledger | M4 |
 | Social login, TOTP | 9.1 | M5 (email codes are built) |
 | Login session in Redis (needed for more than one identity replica) | 21 | Before running identity with several replicas |
