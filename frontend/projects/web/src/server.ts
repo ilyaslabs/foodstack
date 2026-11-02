@@ -25,6 +25,8 @@ app.get('/config.json', (_req, res) => {
     apiUrl: process.env['FOODSTACK_API_URL'] ?? '',
     issuer: process.env['FOODSTACK_ISSUER'] ?? '',
     clientId: 'foodstack-web',
+    mapTiles: process.env['MAP_TILE_URL'] ?? '',
+    mapAttribution: process.env['MAP_ATTRIBUTION'] ?? '',
   });
 });
 

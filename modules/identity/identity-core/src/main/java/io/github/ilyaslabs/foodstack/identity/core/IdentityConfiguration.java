@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.identity.core;
 
 import java.time.Clock;
 
+import io.github.ilyaslabs.foodstack.identity.core.application.AddressBook;
 import io.github.ilyaslabs.foodstack.identity.core.application.BootstrapAdmin;
 import io.github.ilyaslabs.foodstack.identity.core.application.EmailCodeService;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserDirectory;
@@ -44,6 +45,14 @@ public class IdentityConfiguration {
 
     public static final String MODULE = "identity";
 
+    /** Shard keys of TDD 6.3, applied when sharding is switched on. */
+    public static ShardKeys shardKeys() {
+        return ShardKeys.builder()
+            .hashed("identity_users", "_id")
+            .ranged("identity_login_keys", "loginKey")
+            .hashed("identity_addresses", "userId");
+    }
+
     @Bean
     ModuleMongo identityMongo(ModuleMongoFactory factory) {
         return factory.create(MODULE);
@@ -63,7 +72,7 @@ public class IdentityConfiguration {
     ModuleMigrations identityMigrations(ModuleMongo identityMongo, ModuleMongoFactory factory,
             FoodstackMongoProperties properties) {
         return new ModuleMigrations(identityMongo, factory.connectionString(MODULE),
-                ShardKeys.builder().hashed("identity_users", "_id").ranged("identity_login_keys", "loginKey"), properties);
+                shardKeys(), properties);
     }
 
     @Bean
@@ -102,6 +111,11 @@ public class IdentityConfiguration {
     UserDirectory identityUserDirectory(UserService identityUserService, UserRepository users, ModuleMongo identityMongo,
             Clock clock) {
         return new UserDirectory(identityUserService, users, identityMongo.template(), clock);
+    }
+
+    @Bean
+    AddressBook identityAddressBook(ModuleMongo identityMongo, Clock clock) {
+        return new AddressBook(identityMongo.template(), identityMongo.transactionTemplate(), clock);
     }
 
     @Bean

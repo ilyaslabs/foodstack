@@ -1,4 +1,4 @@
-import { Component, DestroyRef, inject, output, signal } from '@angular/core';
+import { Component, DestroyRef, inject, input, output, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   Subject,
@@ -128,8 +128,10 @@ export class LocationPicker {
   private readonly geo = inject(GeoClient);
   private readonly locations = inject(LocationStore);
 
-  /** Emits after a location is saved. */
+  /** Emits after a location is picked (and saved, unless `remember` is off). */
   readonly picked = output<CustomerLocation>();
+  /** Off when the pick only fills a form (the address editor), not the header's location. */
+  readonly remember = input(true);
 
   protected readonly options = signal<AddressSuggestion[]>([]);
   protected readonly searching = signal(false);
@@ -189,7 +191,7 @@ export class LocationPicker {
   }
 
   private save(location: CustomerLocation): void {
-    this.locations.set(location);
+    if (this.remember()) this.locations.set(location);
     this.picked.emit(location);
   }
 }

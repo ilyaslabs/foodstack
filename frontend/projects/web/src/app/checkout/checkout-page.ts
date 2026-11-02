@@ -13,6 +13,8 @@ import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -27,9 +29,12 @@ import {
   OrderClient,
   PaymentMethod,
   PlaceOrder,
+  SavedAddress,
 } from '@foodstack/api-client';
 import { Icon, LocaleStore } from '@foodstack/ui';
 
+import { AddressBook, addressIcon, addressTitle, locationOf } from '../addresses/address-book';
+import { AddressEditor } from '../addresses/address-editor';
 import { CartStore } from '../cart/cart-store';
 import { Ui, UiKey } from '../i18n';
 import { LocationPicker } from '../location/location-picker';
@@ -51,6 +56,7 @@ const TIP_PERCENTS = [0, 5, 10, 15];
     RouterLink,
     MatButtonModule,
     MatButtonToggleModule,
+    MatCheckboxModule,
     MatFormFieldModule,
     MatInputModule,
     MatProgressBarModule,
@@ -69,6 +75,8 @@ export class CheckoutPage {
   private readonly cartClient = inject(CartClient);
   private readonly orders = inject(OrderClient);
   private readonly router = inject(Router);
+  private readonly dialogs = inject(MatDialog);
+  protected readonly book = inject(AddressBook);
 
   protected readonly fulfilment = signal<Fulfilment>('DELIVERY');
   protected readonly paymentMethod = signal<PaymentMethod | null>(null);
@@ -86,6 +94,10 @@ export class CheckoutPage {
   protected addressLine = '';
   protected instructions = '';
   protected phone = '';
+  /** Save a typed address to the account after the order is placed (PRD ID-6). */
+  protected saveAddress = true;
+
+  protected readonly savedList = computed(() => this.book.addresses() ?? []);
 
   private quoteRun = 0;
   private attempt: { key: string; body: string } | null = null;
@@ -109,6 +121,7 @@ export class CheckoutPage {
         // storage blocked
       }
       void this.cart.load();
+      void this.book.load().then(() => this.pickSaved());
     });
     effect(() => {
       // a fresh quote whenever something that changes the price changes
@@ -153,6 +166,47 @@ export class CheckoutPage {
     } finally {
       if (run === this.quoteRun) this.loading.set(false);
     }
+  }
+
+  /** Starts with the address the header shows, else the preferred one (PRD ID-6). */
+  private pickSaved(): void {
+    const list = this.savedList();
+    if (!list.length) return;
+    const current = this.locations.location();
+    const match = list.find((a) => a.id === current?.addressId);
+    this.useSaved((match ?? list.find((a) => a.preferred) ?? list[0]).id);
+  }
+
+  protected useSaved(id: string): void {
+    const address = this.savedList().find((a) => a.id === id);
+    if (!address) return;
+    this.locations.set(
+      locationOf(address, `${addressTitle(this.ui, address)} · ${address.addressLine}`),
+    );
+    this.addressLine = address.addressLine;
+    this.instructions = address.instructions ?? '';
+  }
+
+  protected newAddress(): void {
+    this.dialogs
+      .open(AddressEditor, {
+        data: { start: null },
+        width: '560px',
+        maxWidth: '96vw',
+        autoFocus: false,
+      })
+      .afterClosed()
+      .subscribe((saved?: SavedAddress) => {
+        if (saved) this.useSaved(saved.id);
+      });
+  }
+
+  protected addressTitle(address: SavedAddress): string {
+    return addressTitle(this.ui, address);
+  }
+
+  protected addressIcon(address: SavedAddress) {
+    return addressIcon(address);
   }
 
   protected applyCoupon(): void {
@@ -243,6 +297,22 @@ export class CheckoutPage {
     return /^[+0-9][0-9 ()-]{6,19}$/.test(this.phone.trim());
   }
 
+  /** Keeps a typed delivery address as the customer's first saved one; best effort. */
+  private async rememberAddress(address: NonNullable<PlaceOrder['address']>): Promise<void> {
+    try {
+      await this.book.save({
+        label: 'HOME',
+        lat: address.lat,
+        lng: address.lng,
+        addressLine: address.addressLine,
+        instructions: address.instructions,
+        preferred: true,
+      });
+    } catch {
+      // the order went through; the address can be saved later from the account page
+    }
+  }
+
   protected async place(): Promise<void> {
     this.submitted.set(true);
     this.error.set(null);
@@ -284,6 +354,9 @@ export class CheckoutPage {
     this.placing.set(true);
     try {
       const placed = await firstValueFrom(this.orders.place(order, this.attempt.key));
+      if (delivery && order.address && !this.savedList().length && this.saveAddress) {
+        await this.rememberAddress(order.address);
+      }
       if (placed.paymentUrl) {
         location_assign(placed.paymentUrl);
         return;

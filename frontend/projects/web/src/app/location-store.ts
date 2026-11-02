@@ -6,6 +6,12 @@ export interface CustomerLocation {
   lng: number;
   /** What the customer picked, such as "Gulberg III, Lahore"; empty for a device location. */
   label: string;
+  /** The saved address this came from (PRD ID-6), if any. */
+  addressId?: string;
+  /** Street and house of a saved address, for checkout. */
+  addressLine?: string;
+  /** Rider notes of a saved address, for checkout. */
+  instructions?: string;
 }
 
 const STORAGE_KEY = 'fs-location';
@@ -31,7 +37,18 @@ export class LocationStore {
       if (!raw) return;
       const saved = JSON.parse(raw) as CustomerLocation;
       if (Number.isFinite(saved.lat) && Number.isFinite(saved.lng)) {
-        this.state.set({ lat: saved.lat, lng: saved.lng, label: String(saved.label ?? '') });
+        this.state.set({
+          lat: saved.lat,
+          lng: saved.lng,
+          label: String(saved.label ?? ''),
+          ...(saved.addressId
+            ? {
+                addressId: String(saved.addressId),
+                addressLine: String(saved.addressLine ?? ''),
+                instructions: String(saved.instructions ?? ''),
+              }
+            : {}),
+        });
       }
     } catch {
       // storage blocked or bad data: ask again
@@ -45,6 +62,11 @@ export class LocationStore {
     } catch {
       // storage blocked: the location lasts for this page only
     }
+  }
+
+  /** Whether a location was restored or picked in this browser. */
+  has(): boolean {
+    return this.state() !== null;
   }
 
   clear(): void {

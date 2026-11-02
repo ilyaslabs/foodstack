@@ -5,7 +5,6 @@ import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
-import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
 
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -33,6 +32,6 @@ public class IdentityPersistenceTestApplication {
     ModuleMigrations identityMigrations(ModuleMongo identityMongo, ModuleMongoFactory factory,
             FoodstackMongoProperties properties) {
         return new ModuleMigrations(identityMongo, factory.connectionString("identity"),
-                ShardKeys.builder().hashed("identity_users", "_id").ranged("identity_login_keys", "loginKey"), properties);
+                IdentityConfiguration.shardKeys(), properties);
     }
 }

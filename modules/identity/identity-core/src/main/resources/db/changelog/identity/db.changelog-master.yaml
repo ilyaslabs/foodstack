@@ -62,3 +62,14 @@ databaseChangeLog:
       changes:
         - createCollection:
             collectionName: identity_seed
+  - changeSet:
+      id: identity-5
+      author: foodstack
+      comment: "identity_addresses: customers' saved addresses (PRD ID-6); shard key { userId: hashed }"
+      changes:
+        - createCollection:
+            collectionName: identity_addresses
+        - createIndex:
+            collectionName: identity_addresses
+            keys: '{ "userId": 1, "createdAt": 1 }'
+            options: '{ "name": "user_created" }'

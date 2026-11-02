@@ -32,35 +32,73 @@
 
           @if (fulfilment() === 'DELIVERY') {
             <h3>{{ ui.t('deliverTo') }}</h3>
-            @if (editingLocation() || !locations.location()) {
-              <app-location-picker (picked)="editingLocation.set(false)" />
-            } @else if (locations.location(); as here) {
-              <div class="where">
-                <fs-icon name="place" />
-                <span class="where-label">{{ here.label || ui.t('currentLocation') }}</span>
-                <button mat-button type="button" (click)="editingLocation.set(true)">
-                  {{ ui.t('change') }}
-                </button>
-              </div>
-            }
-            <mat-form-field appearance="outline" class="wide">
-              <mat-label>{{ ui.t('addressLine') }}</mat-label>
-              <input
-                matInput
-                name="addressLine"
-                autocomplete="street-address"
-                maxlength="200"
-                required
-                [(ngModel)]="addressLine"
-              />
+            @if (savedList().length) {
+              <mat-radio-group
+                class="methods"
+                [value]="locations.location()?.addressId"
+                (change)="useSaved($event.value)"
+                [attr.aria-label]="ui.t('deliverTo')"
+              >
+                @for (address of savedList(); track address.id) {
+                  <label
+                    class="method"
+                    [class.selected]="locations.location()?.addressId === address.id"
+                  >
+                    <mat-radio-button [value]="address.id">
+                      <span class="method-text">
+                        <fs-icon [name]="addressIcon(address)" />
+                        <span>
+                          <strong>{{ addressTitle(address) }}</strong>
+                          <span class="muted">{{ address.addressLine }}</span>
+                          @if (address.instructions) {
+                            <span class="muted small">{{ address.instructions }}</span>
+                          }
+                        </span>
+                      </span>
+                    </mat-radio-button>
+                  </label>
+                }
+              </mat-radio-group>
+              <button mat-button type="button" class="new-address" (click)="newAddress()">
+                <fs-icon name="add" /> {{ ui.t('newAddress') }}
+              </button>
               @if (addressMissing()) {
-                <mat-error>{{ ui.t('addressRequired') }}</mat-error>
+                <p class="field-error" role="alert">{{ ui.t('addressRequired') }}</p>
               }
-            </mat-form-field>
-            <mat-form-field appearance="outline" class="wide">
-              <mat-label>{{ ui.t('instructions') }}</mat-label>
-              <input matInput name="instructions" maxlength="200" [(ngModel)]="instructions" />
-            </mat-form-field>
+            } @else {
+              @if (editingLocation() || !locations.location()) {
+                <app-location-picker (picked)="editingLocation.set(false)" />
+              } @else if (locations.location(); as here) {
+                <div class="where">
+                  <fs-icon name="place" />
+                  <span class="where-label">{{ here.label || ui.t('currentLocation') }}</span>
+                  <button mat-button type="button" (click)="editingLocation.set(true)">
+                    {{ ui.t('change') }}
+                  </button>
+                </div>
+              }
+              <mat-form-field appearance="outline" class="wide">
+                <mat-label>{{ ui.t('addressLine') }}</mat-label>
+                <input
+                  matInput
+                  name="addressLine"
+                  autocomplete="street-address"
+                  maxlength="200"
+                  required
+                  [(ngModel)]="addressLine"
+                />
+                @if (addressMissing()) {
+                  <mat-error>{{ ui.t('addressRequired') }}</mat-error>
+                }
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="wide">
+                <mat-label>{{ ui.t('instructions') }}</mat-label>
+                <input matInput name="instructions" maxlength="200" [(ngModel)]="instructions" />
+              </mat-form-field>
+              <mat-checkbox name="saveAddress" [(ngModel)]="saveAddress" class="save-address">
+                {{ ui.t('saveAddressForLater') }}
+              </mat-checkbox>
+            }
           } @else if (store(); as s) {
             <h3>{{ ui.t('pickupFrom') }}</h3>
             <div class="where">
