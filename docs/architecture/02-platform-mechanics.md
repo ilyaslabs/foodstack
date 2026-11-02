@@ -104,9 +104,9 @@ sequenceDiagram
 
 - **Topics:** one per publishing module, `foodstack.<module>.events`, 24 partitions, 7-day retention, plus `.dlt` (30 days). They are created at start-up by each module's `KafkaAdmin.NewTopics` bean.
 - **Ordering:** the key is the aggregate id, so events of one branch stay in order. If a send fails, only rows before the failure are marked sent; the failed row and the ones after it go again on the next poll.
-- **Delivery guarantee:** at least once. The only consumer today (search) is idempotent by design, so it does not use the inbox collection.
+- **Delivery guarantee:** at least once. Consumers whose handler is naturally idempotent skip the inbox: search re-reads the branch, order projections rebuild a row, notification keys every message by the event id, and payment uses the event id as the refund id. Consumers that change counters or state once per event (promotion's coupon counters, order's payment listener) record the event id in `<module>_inbox` in the same transaction.
 - **Leader lock:** one relay per module across all replicas. A Lua script takes the lock if free or renews it if this replica already holds it.
-- **When a consumer fails:** no error handler is configured, so Spring Kafka's default applies: 10 attempts with no pause, then the record is logged and skipped. Nothing is written to the `.dlt` topic yet; see [Code vs design](05-code-vs-design.md).
+- **When a consumer fails:** `platform-kafka` retries 3 times with a growing pause (`foodstack.kafka.retry.*`), then `DeadLetters` publishes the record to `<topic>.dlt` with the error in its headers, so nothing is lost silently. Replaying from the `.dlt` topics has no screen yet.
 
 ## 2.4 What is in Redis
 
@@ -114,13 +114,17 @@ Every key starts with the namespace `foodstack`. Redis holds caches and coordina
 
 | Key | Written by | Value | Lifetime | Evicted when |
 |---|---|---|---|---|
-| `foodstack:settings:cache:branding`, `…:locale` | `settings` | Branding or locale JSON | 10 min (`foodstack.settings.cache-ttl`) | `settings` saves a change |
-| `foodstack:store:menu:{storeId}` | `store` | The branch's effective menu (brand menu filtered by branch, with sold-out marks) | 10 min (`foodstack.store.menu-cache-ttl`) | A menu edit (all branches of the brand) or a sold-out change (that branch), right after the transaction commits |
+| `foodstack:settings:cache:branding`, `…:locale`, `…:ordering` | `settings` | Branding, locale or ordering JSON | 10 min (`foodstack.settings.cache-ttl`) | `settings` saves a change |
+| `foodstack:store:menu:{storeId}:{generation}` and `foodstack:store:menu:gen:{storeId}` | `store` | The branch's effective menu (brand menu filtered by branch, with sold-out marks), under the branch's current generation number | 10 min (`foodstack.store.menu-cache-ttl`); the generation lives twice as long | A menu edit (all branches of the brand) or a sold-out change (that branch) raises the generation (`INCR`) right after the transaction commits, so a reader that loaded the old menu can never write it back under the new key |
 | `foodstack:geo:cache:geocode:q:{lang}:{text}` and `…:r:{lang}:{lat}:{lng}` | `geo` | Address search or reverse geocode results (point rounded to about 11 m) | 7 days (`foodstack.geo.geocoding.cache-ttl`) | Never; expires |
 | `foodstack:identity:revoked:{userId}` | `identity` | Lowest token version still valid | No expiry | Overwritten on the next revocation |
+| `foodstack:identity:code:{LOGIN or PASSWORD_RESET}:{userId}` | `identity` | Hash of the 6-digit code and the tries left | 5 min | Deleted when used or after 5 wrong tries |
+| `foodstack:{module}:rl:{scope}:{id}:{window}` | `identity` (codes per email), `cart` (coupon checks), `order` (placements) | Count in a fixed window | The window plus 1 s | Expires |
+| `foodstack:order:rt:order:{orderId}`, `…:store:{storeId}` (pub/sub channels, not keys) | `order` | `{orderId, storeId, status, revision}` after each step | Not stored | — |
 | `foodstack:{module}:outbox:leader` | each publishing module | Id of the replica that relays the outbox | 10 s, renewed every poll | Released on shutdown |
+| `foodstack:search:rebuild` | `search` | Marks that one replica took this round of the daily re-read of every branch (`SET NX`) | 90% of the interval (`foodstack.search.rebuild-interval`, 24 h) | Expires, freeing the next round |
 
-Not in Redis yet (designed in TDD 10, not built): idempotency keys, rate limits, login codes, rider locations, dispatch locks, SSE fan-out.
+Not in Redis yet (designed in TDD 10, built later): rider locations and dispatch locks (M3). Idempotency keys for placing an order are kept in MongoDB (`order_placement_keys`, inside the order's transaction) instead of Redis.
 
 ## 2.5 Module to module: monolith vs split
 
@@ -148,5 +152,6 @@ sequenceDiagram
     GI-->>SS: JSON, mapped back to the record<br/>(errors come back as the same ModuleException)
 ```
 
-- `Authorization` and `Accept-Language` are forwarded (`module-switch.propagate-headers`).
+- `Authorization` and `Accept-Language` are forwarded (`module-switch.propagate-headers`), and the called module authenticates the forwarded token, so `ModuleAccess` in its `-impl` sees the same user as the caller.
+- Work with no user (Kafka listeners, the accept-timeout and payment-expiry sweeps, the email sender, the search rebuild) runs inside `ServiceCalls`. Where identity runs in the same process, the service token is minted there. Otherwise it comes from identity by client credentials (client `foodstack-service`, secret `foodstack.security.service-client-secret`).
 - The integration tests run every journey twice: once as a monolith and once with one application context per module talking over HTTP (`integration-tests`, `Topology.MICROSERVICES`).

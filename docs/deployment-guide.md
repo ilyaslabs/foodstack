@@ -93,24 +93,26 @@ Edit `/opt/foodstack/.env`, then run `./restart.sh server`. The main settings:
 | Variable | Example | Notes |
 |---|---|---|
 | `FOODSTACK_DOMAIN`, `FOODSTACK_ADMIN_DOMAIN`, `FOODSTACK_API_DOMAIN` | `example.com` | Set by `install.sh` |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | | Required for login codes and emails |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_AUTH`, `SMTP_STARTTLS`, `SMTP_FROM`, `SMTP_FROM_NAME` | `smtp.example.net`, `587`, …, `true`, `true`, `orders@example.com`, `Your brand` | Order emails, sign-in codes and password reset. While `SMTP_HOST` or `SMTP_FROM` is empty nothing is emailed: customers still see updates in the app and the **Email log** page shows each message as "Not sent" |
+| `PAYMENT_GATEWAY` | `none` or `stripe` | Card payments. `none` means cash only. `sandbox` is a test page that charges nothing, for development; the server refuses it when `FOODSTACK_ENVIRONMENT=production` |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `sk_live_…`, `whsec_…` | With `PAYMENT_GATEWAY=stripe`. In the Stripe dashboard add a webhook endpoint `https://api.example.com/api/v1/payment-webhooks/stripe` for `checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed`, and copy its signing secret |
+| `FOODSTACK_WEB_URL` | `https://example.com` | Set by `install.sh`. Where customers come back to after paying, and the links in emails |
 | `FCM_CREDENTIALS_FILE` | `/opt/foodstack/config/fcm.json` | Push notifications |
 | `GEOCODING_PROVIDER`, `GEOCODING_URL`, `GEOCODING_COUNTRY_CODES` | `nominatim`, `https://nominatim.openstreetmap.org`, `pk` | Address search for customers and store onboarding. The public Nominatim allows about one request a second; use your own instance or a hosted one for real traffic. `none` turns address search off (customers then use their device location) |
 | `MAP_TILE_URL`, `MAP_TILE_ORIGIN`, `MAP_ATTRIBUTION` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, `https://tile.openstreetmap.org`, `© OpenStreetMap contributors` | Map tiles in the back office, where stores draw their delivery zones. OpenStreetMap's public tiles allow light use only (see their tile usage policy); with many stores, use your own tile server or a hosted provider. `MAP_TILE_ORIGIN` must be the scheme and host of `MAP_TILE_URL`, because the page's security policy only loads tiles from there |
 | `ELASTICSEARCH_URIS`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD` | set by `install.sh` | Point at an external Elasticsearch 9 cluster if you run one; the index is rebuilt from store data on start |
-| `PAYMENTS_CARD_ENABLED` | `false` | Turn on once the gateway is configured |
 | `JAVA_HEAP`, `ES_HEAP` | `4g`, `2g` | Sized by `install.sh` from server memory |
 
-Everything else (branding, languages, currency, timezone, fees, commission, feature switches) is set in the admin panel after login.
+Everything else (branding, languages, currency, timezone, fees, commission, feature switches) is set in the admin panel after login. Card payment also has a switch on the back office **Ordering** page: customers see it only when the gateway is set here and the switch is on.
 
 ### 3.4 First login checklist
 
 1. Open `https://admin.example.com`, set the admin password, and enable two-factor login.
 2. **Settings → Branding:** name, logos, colours, font.
 3. **Settings → Locale:** languages, default language, currency, timezone.
-4. **Settings → Business rules:** service fee, cancellation policy, auto-reject timeout, tip options.
+4. **Ordering:** cash and card, service fee, tax, tips and how long stores have to accept an order.
 5. **Settings → Features:** pickup, operator rider service, card payments, saved cards, store direct payment collection.
-6. **Notifications:** send a test email and a test push.
+6. **Email log:** sign in once with "Email me a sign-in code" and check that the email shows as Sent (push notifications arrive with M3).
 7. **Delivery:** if you run your own riders, switch on the operator rider service and set operator delivery pricing and rider pay; otherwise stores deliver themselves.
 8. **Stores:** onboard the first store and choose whether it may use operator delivery; let the owner set delivery mode, hours, zones and menu.
 9. Place a test order end to end, then delete it from the admin panel.
@@ -335,8 +337,9 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 |---|---|
 | Server pod or container keeps restarting | `logs server`: Module-Switch prints every module's mode at startup and fails with a clear message on bad configuration |
 | "Module X is off but Y needs it" at startup | A custom topology does not run a required module anywhere; add it to a Deployment |
-| Login emails not arriving | SMTP settings; the notification delivery log in the admin panel shows failures |
-| Orders stuck in `PLACED` | Payment webhooks not reaching `api.<domain>/api/v1/payment-webhooks/…`; check the gateway dashboard and proxy logs |
+| Login emails not arriving | SMTP settings; the **Email log** page shows each email with its error, and **Send again** retries it |
+| Card orders stuck in "Waiting for payment" | Payment webhooks not reaching `api.<domain>/api/v1/payment-webhooks/stripe`; check the webhook's deliveries in the Stripe dashboard and the proxy logs. Unpaid pages expire after 30 minutes and the order fails |
+| Orders rejected with "did not answer in time" | Nobody accepted within the time set on the **Ordering** page; keep the store's **Live orders** page open with sound on |
 | Notifications or ledger lagging | Kafka consumer lag dashboard; outbox lag metric; dead-letter topics in the admin panel |
 | Search results stale or empty | Only live branches with a delivery area (or pickup) appear. To rebuild the index, call `POST /api/v1/search/reindex` as an admin (a button arrives with the maintenance screen), or restart the server: it rebuilds on start |
 | Elasticsearch will not start on a single server | `logs elasticsearch`; usually too little memory for `ES_HEAP`; rerun `install.sh --check` |

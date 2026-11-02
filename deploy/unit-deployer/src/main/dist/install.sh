@@ -150,6 +150,18 @@ S3_SECRET_KEY=$(secret)
 S3_PUBLIC_BUCKET=foodstack-public
 S3_PRIVATE_BUCKET=foodstack-private
 S3_PUBLIC_ENDPOINT=$(url "$admin_domain")
+# Email: fill these in to send order updates and sign-in codes (see .env.example), then ./restart.sh server
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_AUTH=true
+SMTP_STARTTLS=true
+SMTP_FROM=
+# Card payments: none (cash only) or stripe with STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET (see .env.example)
+PAYMENT_GATEWAY=none
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
 JAVA_HEAP=$java_heap
 KAFKA_HEAP=1g
 ES_HEAP=1g

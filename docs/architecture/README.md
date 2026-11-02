@@ -2,7 +2,7 @@
 
 These pages show what the code on `main` **actually does today**, traced from the source, not what the design intends. Where the code and the [TDD](../TDD.md) differ, the difference is listed in [Code vs design](05-code-vs-design.md).
 
-State described: after M1 (modules `identity`, `settings`, `media`, `geo`, `store`, `search`). Ordering, payment, dispatch and the other modules are not built yet, so they do not appear here.
+State described: after M2 (modules `identity`, `settings`, `media`, `geo`, `store`, `search`, `promotion`, `cart`, `payment`, `order`, `notification`). Rider dispatch, the ledger and the other later modules are not built yet, so they do not appear here.
 
 All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHub.
 
@@ -15,6 +15,7 @@ All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHu
 | [3. Customer flows](03-customer-flows.md) | Nearby store search, address lookup, store page and menu, delivery quote |
 | [4. Back-office flows](04-backoffice-flows.md) | Sign-in and token renewal, onboarding a store, editing the menu, sold-out, drawing zones, going live, image upload, branding, sign-out everywhere, index rebuild |
 | [5. Code vs design](05-code-vs-design.md) | Every place where today's code differs from the TDD, and what is not built yet |
+| [6. Ordering flows](06-ordering-flows.md) | The order's life, cart and checkout, placing a cash order, card payment on the hosted page, the store's live board, no answer, cancel and refunds, coupons, notifications and emails, sign-in by email code and password reset |
 
 ## Quick answer: which store does each action touch?
 
@@ -32,6 +33,14 @@ All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHu
 | Onboard store, edit branch, hours, menu, sold-out, zones, go live | ✅ | ✅ menu cache evicted on menu edits | ✅ later, through the search listener | ✅ | — | — |
 | Image upload | ✅ | — | — | ✅ `MediaReady` | ✅ | — |
 | Branding / locale change | ✅ | ✅ settings cache evicted | — | ✅ `SettingsChanged` | ✅ logo claim | — |
+| Cart: add, change, read (`/api/v1/carts/me`) | ✅ cart, store menu on a cache miss | ✅ menu cache | — | — | — | — |
+| Checkout quote (`POST /api/v1/carts/me/checkout`) | ✅ cart, store, zones or pricing, promotions | ✅ menu and settings caches, coupon-check limit | — | — | — | — |
+| Place an order (`POST /api/v1/orders`) | ✅ order, placement key, coupon counters, cart | ✅ placement limit, live message | — | ✅ `OrderPlaced`, `OrderConfirmed` | — | — |
+| Card payment | ✅ payment | — | — | ✅ `PaymentSucceeded` / `PaymentFailed` | — | Card gateway (page, webhook, refunds) |
+| Store accepts, ready, collected | ✅ order, order_active | ✅ live message | — | ✅ one event per step | — | — |
+| Live order page and board (SSE) | ✅ on each reload | ✅ pub/sub subscription | — | — | — | — |
+| Notification and email | ✅ inbox, deliveries, preferences | — | — | read: order, payment, identity events | — | SMTP server |
+| Sign in with an email code | ✅ users, outbox | ✅ code, rate limit | — | ✅ `EmailCodeIssued` | — | SMTP (through notification) |
 
 **Short answer for search:** the customer search request reads **only Elasticsearch**. It does not touch MongoDB or Redis. MongoDB, Redis and Kafka are used *earlier*, when a store change is written and the search module re-reads the branch to update the index (see [flow 3.1](03-customer-flows.md#31-nearby-store-search) and [2.3](02-platform-mechanics.md#23-events-outbox-relay-kafka-consumer)).
 
