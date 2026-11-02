@@ -63,17 +63,11 @@ mat-card[appearance='outlined'] {
   margin-inline-end: 6px;
 }
 
-// Printing a kitchen ticket shows the ticket alone (the board's print button sets this class).
+// Printing a kitchen ticket prints the ticket alone (the board's print button sets this class).
+// The ticket sits directly under body, so everything else is taken out of the layout; hidden
+// content that still takes up space would push the ticket onto a later page.
 @media print {
-  body.fs-printing-ticket * {
-    visibility: hidden;
-  }
-  body.fs-printing-ticket app-order-ticket,
-  body.fs-printing-ticket app-order-ticket * {
-    visibility: visible;
-  }
-  body.fs-printing-ticket app-order-ticket {
-    position: absolute;
-    inset: 0;
+  body.fs-printing-ticket > :not(app-order-ticket) {
+    display: none !important;
   }
 }
