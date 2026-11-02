@@ -28,6 +28,7 @@
     </mat-menu>
   }
   @if (auth.signedIn()) {
+    <app-notification-bell />
     <button
       mat-button
       type="button"
@@ -47,6 +48,14 @@
           <div class="account-card-email">{{ me.email }}</div>
         </div>
       }
+      <a mat-menu-item routerLink="/orders">
+        <fs-icon matMenuItemIcon name="receipt" />
+        <span>{{ ui.t('orders') }}</span>
+      </a>
+      <a mat-menu-item routerLink="/account">
+        <fs-icon matMenuItemIcon name="settings" />
+        <span>{{ ui.t('account') }}</span>
+      </a>
       <button mat-menu-item type="button" (click)="signOut()">
         <fs-icon matMenuItemIcon name="logout" />
         <span>{{ ui.t('signOut') }}</span>

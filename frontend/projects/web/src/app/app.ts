@@ -1,7 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, of, switchMap } from 'rxjs';
-import { RouterOutlet } from '@angular/router';
+import { RouterLink, RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 
@@ -10,9 +10,18 @@ import { AuthService } from '@foodstack/auth';
 import { BrandHeader, Icon, LocaleStore } from '@foodstack/ui';
 
 import { Ui } from './i18n';
+import { NotificationBell } from './notifications/notification-bell';
 
 @Component({
-  imports: [RouterOutlet, MatButtonModule, MatMenuModule, BrandHeader, Icon],
+  imports: [
+    RouterOutlet,
+    RouterLink,
+    MatButtonModule,
+    MatMenuModule,
+    BrandHeader,
+    Icon,
+    NotificationBell,
+  ],
   selector: 'app-root',
   styleUrl: './app.scss',
   templateUrl: './app.html',

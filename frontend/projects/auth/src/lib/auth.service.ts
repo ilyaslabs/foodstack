@@ -87,6 +87,12 @@ export class AuthService {
     return this.renewing;
   }
 
+  /** A token that is valid now, renewed first when it is about to run out; for streams outside HttpClient. */
+  async freshToken(): Promise<string | null> {
+    if (this.expiresSoon(30_000)) await this.renew();
+    return this.accessToken();
+  }
+
   /** The current page as a router URL, to come back to after signing in. */
   currentPath(): string {
     const location = this.document.location;

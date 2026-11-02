@@ -10,7 +10,10 @@ import {
   StoreClient,
   StorePage as Page,
 } from '@foodstack/api-client';
+import { AuthService } from '@foodstack/auth';
 import { BrandingStore, DEFAULT_BRANDING, LocaleStore } from '@foodstack/ui';
+
+import { CartStore } from '../cart/cart-store';
 
 import { StorePage } from './store-page';
 
@@ -90,6 +93,13 @@ const MENU: Menu = {
 };
 
 describe('StorePage', () => {
+  const auth = {
+    signedIn: () => false,
+    hasSession: () => false,
+    signIn: vi.fn(async () => undefined),
+    currentPath: () => '/stores/spice-route-gulberg',
+  };
+
   async function render(stores: Partial<StoreClient>, language = 'en') {
     localStorage.clear();
     localStorage.setItem('fs-language', language);
@@ -107,6 +117,16 @@ describe('StorePage', () => {
           useValue: { getLocale: () => of({ value: LOCALE, etag: '"locale-1"' }) },
         },
         { provide: StoreClient, useValue: stores },
+        { provide: AuthService, useValue: auth },
+        {
+          provide: CartStore,
+          useValue: {
+            cart: signal(null),
+            empty: signal(true),
+            itemCount: signal(0),
+            busy: signal(false),
+          },
+        },
       ],
     });
     await TestBed.inject(LocaleStore).load();
@@ -179,5 +199,21 @@ describe('StorePage', () => {
 
     // then
     expect(element.textContent).toContain('This store is not available');
+  });
+
+  it('sends a signed-out customer to sign in when they tap a dish, and back here after', async () => {
+    // given
+    const { element } = await render({
+      page: () => of(PAGE),
+      menu: () => of(MENU),
+      quote: () => of() as never,
+    });
+
+    // when
+    (element.querySelector('.item-open') as HTMLButtonElement).click();
+
+    // then
+    expect(auth.signIn).toHaveBeenCalledWith('/stores/spice-route-gulberg');
+    expect(document.querySelector('app-item-dialog')).toBeNull();
   });
 });
