@@ -21,11 +21,70 @@ html {
   );
 }
 
+// The storefront keeps the operator's brand colour for actions and accents, on neutral white and grey
+// surfaces (the tonal palette tints every surface with the brand hue, which reads like a dashboard).
+// Set on body so these win over the branding stylesheet on :root.
 body {
+  --mat-sys-surface: #ffffff;
+  --mat-sys-surface-bright: #ffffff;
+  --mat-sys-surface-dim: #e6e6e6;
+  --mat-sys-surface-container-lowest: #ffffff;
+  --mat-sys-surface-container-low: #f7f7f7;
+  --mat-sys-surface-container: #f2f2f2;
+  --mat-sys-surface-container-high: #ececec;
+  --mat-sys-surface-container-highest: #e6e6e6;
+  --mat-sys-on-surface: #1a1a1a;
+  --mat-sys-on-surface-variant: #5c5c5c;
+  --mat-sys-outline: #8a8a8a;
+  --mat-sys-outline-variant: #e3e3e3;
+  --mat-sys-background: #ffffff;
+  --fs-radius-card: 16px;
+  --fs-shadow-card: 0 1px 2px rgb(0 0 0 / 6%), 0 4px 16px rgb(0 0 0 / 6%);
+  --fs-shadow-raised: 0 2px 4px rgb(0 0 0 / 8%), 0 12px 32px rgb(0 0 0 / 12%);
+  --fs-page-width: 1240px;
+
   margin: 0;
   background: var(--mat-sys-surface);
   color: var(--mat-sys-on-surface);
   font-family: var(--fs-font-family);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    --mat-sys-surface: #121212;
+    --mat-sys-surface-bright: #2a2a2a;
+    --mat-sys-surface-dim: #121212;
+    --mat-sys-surface-container-lowest: #0d0d0d;
+    --mat-sys-surface-container-low: #1a1a1a;
+    --mat-sys-surface-container: #1f1f1f;
+    --mat-sys-surface-container-high: #262626;
+    --mat-sys-surface-container-highest: #303030;
+    --mat-sys-on-surface: #f2f2f2;
+    --mat-sys-on-surface-variant: #b3b3b3;
+    --mat-sys-outline: #7a7a7a;
+    --mat-sys-outline-variant: #333333;
+    --mat-sys-background: #121212;
+    --fs-shadow-card: 0 1px 2px rgb(0 0 0 / 40%);
+    --fs-shadow-raised: 0 8px 28px rgb(0 0 0 / 50%);
+  }
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.01em;
+}
+
+// A page section that lines up with the header.
+.fs-container {
+  max-inline-size: var(--fs-page-width);
+  margin-inline: auto;
+  padding-inline: 24px;
+
+  @media (max-width: 599.98px) {
+    padding-inline: 16px;
+  }
 }
 
 // Icons inside Material buttons sit on the text's centre line.

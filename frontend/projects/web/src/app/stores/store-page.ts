@@ -33,6 +33,7 @@ import { CartPanel } from '../cart/cart-panel';
 import { Ui } from '../i18n';
 import { LocationStore } from '../location-store';
 import { cuisineLabel } from './cuisine';
+import { foodColour } from './food-colour';
 import { ItemDialog, ItemDialogData } from './item-dialog';
 
 const DIETARY: Record<string, Record<string, string>> = {
@@ -93,6 +94,8 @@ export class StorePage {
   protected readonly quote = signal<DeliveryQuote | null>(null);
   protected readonly browser = signal(false);
   protected readonly cuisineLabel = cuisineLabel;
+
+  protected readonly fallbackColour = computed(() => foodColour(this.store()?.brandName ?? ''));
 
   protected readonly cover = computed(() => {
     const urls = this.store()?.coverUrls ?? {};

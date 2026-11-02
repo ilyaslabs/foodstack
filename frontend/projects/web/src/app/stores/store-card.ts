@@ -6,6 +6,7 @@ import { Icon, LocaleStore } from '@foodstack/ui';
 
 import { Ui } from '../i18n';
 import { cuisineLabel } from './cuisine';
+import { foodGradient } from './food-colour';
 
 /** One store in search results: cover, logo, name, cuisines, open state, distance and prep time. */
 @Component({
@@ -22,33 +23,36 @@ import { cuisineLabel } from './cuisine';
         @if (cover(); as url) {
           <img [src]="url" alt="" loading="lazy" />
         } @else {
-          <div class="cover-fallback" aria-hidden="true"><fs-icon name="restaurant" /></div>
+          <div class="cover-fallback" aria-hidden="true" [style.background]="fallback()">
+            <span class="cover-word">{{ card.brandName }}</span>
+          </div>
         }
         @if (!card.openNow) {
-          <span class="state">{{
-            card.temporarilyClosed ? ui.t('closedForNow') : ui.t('closedNow')
-          }}</span>
+          <div class="shade">
+            <span class="state">{{
+              card.temporarilyClosed ? ui.t('closedForNow') : ui.t('closedNow')
+            }}</span>
+          </div>
+        }
+        <span class="time"><fs-icon name="schedule" /> {{ ui.minutes(card.prepMinutes) }}</span>
+        @if (logo(); as url) {
+          <img class="logo" [src]="url" alt="" width="44" height="44" loading="lazy" />
         }
       </div>
-      <div class="body">
-        @if (logo(); as url) {
-          <img class="logo" [src]="url" alt="" width="48" height="48" loading="lazy" />
-        } @else {
-          <span class="logo logo-fallback" aria-hidden="true">{{ card.brandName.charAt(0) }}</span>
-        }
-        <div class="text">
-          <h3>{{ card.brandName }}</h3>
-          <p class="cuisines">{{ cuisines() }}</p>
-          <p class="meta">
-            @if (card.branchName) {
-              <span>{{ card.branchName }}</span>
-              <span aria-hidden="true">·</span>
-            }
-            <span>{{ ui.distance(card.distanceMeters) }}</span>
+      <div class="text">
+        <h3>{{ card.brandName }}</h3>
+        <p class="cuisines">{{ cuisines() }}</p>
+        <p class="meta">
+          <span>{{ ui.distance(card.distanceMeters) }}</span>
+          @if (card.branchName) {
             <span aria-hidden="true">·</span>
-            <span><fs-icon name="schedule" class="tiny" /> {{ ui.minutes(card.prepMinutes) }}</span>
-          </p>
-        </div>
+            <span class="branch">{{ card.branchName }}</span>
+          }
+          @if (card.pickupEnabled) {
+            <span aria-hidden="true">·</span>
+            <span>{{ ui.t('pickup') }}</span>
+          }
+        </p>
       </div>
     </a>
   `,
@@ -59,101 +63,115 @@ import { cuisineLabel } from './cuisine';
     .card {
       display: flex;
       flex-direction: column;
+      gap: 12px;
       block-size: 100%;
-      border-radius: 20px;
-      overflow: hidden;
-      background: var(--mat-sys-surface-container-low);
-      border: 1px solid var(--mat-sys-outline-variant);
       color: inherit;
       text-decoration: none;
-      transition:
-        box-shadow 150ms ease,
-        transform 150ms ease;
-    }
-    .card:hover {
-      box-shadow: var(--mat-sys-level2);
-      transform: translateY(-2px);
+      border-radius: var(--fs-radius-card);
     }
     .card:focus-visible {
       outline: 3px solid var(--mat-sys-primary);
-      outline-offset: 2px;
+      outline-offset: 4px;
     }
     .cover {
       position: relative;
-      aspect-ratio: 16 / 7;
+      aspect-ratio: 16 / 9;
+      border-radius: var(--fs-radius-card);
+      overflow: hidden;
       background: var(--mat-sys-surface-container-high);
     }
-    .cover img,
+    .cover img:first-child,
     .cover-fallback {
       inline-size: 100%;
       block-size: 100%;
       object-fit: cover;
       display: block;
+      transition: transform 250ms ease;
+    }
+    .card:hover .cover img:first-child,
+    .card:hover .cover-fallback {
+      transform: scale(1.04);
     }
     .cover-fallback {
+      display: flex;
+      align-items: flex-end;
+      padding: 16px 18px;
+      box-sizing: border-box;
+    }
+    .cover-word {
+      color: rgb(255 255 255 / 92%);
+      font-size: 30px;
+      line-height: 1.05;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      text-shadow: 0 2px 12px rgb(0 0 0 / 15%);
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .shade {
+      position: absolute;
+      inset: 0;
       display: grid;
       place-items: center;
-      color: var(--mat-sys-on-primary-container);
-      background: linear-gradient(
-        135deg,
-        var(--mat-sys-primary-container),
-        var(--mat-sys-tertiary-container)
-      );
-    }
-    .closed .cover img,
-    .closed .cover-fallback {
-      filter: grayscale(0.7);
-      opacity: 0.75;
+      background: rgb(0 0 0 / 50%);
     }
     .state {
-      position: absolute;
-      inset-block-start: 12px;
-      inset-inline-start: 12px;
-      padding: 4px 12px;
+      padding: 6px 14px;
       border-radius: 999px;
-      font: var(--mat-sys-label-large);
-      background: var(--mat-sys-inverse-surface);
-      color: var(--mat-sys-inverse-on-surface);
+      background: rgb(255 255 255 / 95%);
+      color: #1a1a1a;
+      font-size: 14px;
+      font-weight: 700;
     }
-    .body {
-      display: flex;
-      gap: 12px;
-      padding: 12px 16px 16px;
+    .time {
+      position: absolute;
+      inset-block-end: 10px;
+      inset-inline-end: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--mat-sys-surface);
+      color: var(--mat-sys-on-surface);
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: var(--fs-shadow-card);
+    }
+    .time fs-icon {
+      --fs-icon-size: 15px;
     }
     .logo {
-      position: relative;
-      z-index: 1;
-      inline-size: 48px;
-      block-size: 48px;
-      border-radius: 14px;
+      position: absolute;
+      inset-block-start: 10px;
+      inset-inline-start: 10px;
+      inline-size: 44px;
+      block-size: 44px;
+      border-radius: 12px;
       object-fit: cover;
-      flex: none;
-      margin-block-start: -28px;
-      border: 3px solid var(--mat-sys-surface-container-low);
       background: var(--mat-sys-surface);
-    }
-    .logo-fallback {
-      display: grid;
-      place-items: center;
-      font: var(--mat-sys-title-large);
-      font-weight: 600;
-      background: var(--mat-sys-primary);
-      color: var(--mat-sys-on-primary);
+      box-shadow: var(--fs-shadow-card);
     }
     .text {
       min-width: 0;
+      padding-inline: 2px;
     }
     h3 {
-      font: var(--mat-sys-title-medium);
-      font-weight: 600;
+      font-size: 17px;
+      line-height: 22px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
       margin: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     p {
-      margin: 2px 0 0;
-      font: var(--mat-sys-body-medium);
+      margin: 3px 0 0;
+      font-size: 14px;
+      line-height: 20px;
       color: var(--mat-sys-on-surface-variant);
     }
     .cuisines {
@@ -166,14 +184,6 @@ import { cuisineLabel } from './cuisine';
       flex-wrap: wrap;
       align-items: center;
       gap: 6px;
-    }
-    .meta span {
-      display: inline-flex;
-      align-items: center;
-      gap: 2px;
-    }
-    .tiny {
-      --fs-icon-size: 16px;
     }
   `,
 })
@@ -191,6 +201,7 @@ export class StoreCard {
     const urls = this.store().logoUrls;
     return urls['thumb'] ?? urls['card'] ?? Object.values(urls)[0] ?? null;
   });
+  protected readonly fallback = computed(() => foodGradient(this.store().brandName));
   protected readonly cuisines = computed(() => {
     const description = this.locale.pick(this.store().description);
     const cuisines = this.store().cuisines.map(cuisineLabel).join(' · ');

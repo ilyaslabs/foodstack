@@ -1,81 +1,101 @@
-<section class="hero">
-  <div class="hero-inner">
-    <h1>{{ branding.branding().name }}</h1>
-    <p class="tagline">{{ branding.branding().tagline || ui.t('heroTitle') }}</p>
+<section class="hero" [class.compact]="!showPicker()">
+  <div class="hero-inner fs-container">
+    <div class="hero-text">
+      <h1>{{ branding.branding().tagline || ui.t('heroTitle') }}</h1>
+      @if (showPicker()) {
+        <p class="hero-sub">{{ ui.t('heroSub') }}</p>
+      }
+    </div>
 
     @if (showPicker()) {
       <div class="picker">
         <h2 class="picker-title">{{ ui.t('whereTo') }}</h2>
-        <app-location-picker (picked)="editingLocation.set(false)" />
+        <app-location-picker />
       </div>
-    } @else if (locations.location()) {
-      <button type="button" class="location-pill" (click)="editingLocation.set(true)">
-        <fs-icon name="place" />
-        <span class="pill-text">
-          <span class="pill-label">{{
-            fulfilment() === 'PICKUP' ? ui.t('pickupNear') : ui.t('deliveringTo')
-          }}</span>
-          <span class="pill-value">{{ locationLabel() }}</span>
-        </span>
-        <span class="pill-change">{{ ui.t('change') }}</span>
-      </button>
+    } @else if (ready() && locations.location()) {
+      <div class="controls">
+        <div class="search">
+          <fs-icon name="search" />
+          <input
+            #searchBox
+            type="search"
+            [placeholder]="ui.t('searchPlaceholder')"
+            [attr.aria-label]="ui.t('searchPlaceholder')"
+            (input)="onType($event)"
+          />
+          @if (query()) {
+            <button
+              mat-icon-button
+              type="button"
+              [attr.aria-label]="ui.t('clearSearch')"
+              (click)="clearSearch(searchBox)"
+            >
+              <fs-icon name="close" />
+            </button>
+          }
+        </div>
+        <div
+          class="mode"
+          role="radiogroup"
+          [attr.aria-label]="ui.t('delivery') + ' / ' + ui.t('pickup')"
+        >
+          <button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="fulfilment() === 'DELIVERY'"
+            [class.on]="fulfilment() === 'DELIVERY'"
+            (click)="fulfilment.set('DELIVERY')"
+          >
+            <fs-icon name="delivery" /> {{ ui.t('delivery') }}
+          </button>
+          <button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="fulfilment() === 'PICKUP'"
+            [class.on]="fulfilment() === 'PICKUP'"
+            (click)="fulfilment.set('PICKUP')"
+          >
+            <fs-icon name="storefront" /> {{ ui.t('pickup') }}
+          </button>
+        </div>
+      </div>
     }
   </div>
 </section>
 
 @if (ready() && locations.location()) {
-  <section class="browse">
-    <div class="controls">
-      <div class="search">
-        <fs-icon name="search" />
-        <input
-          #searchBox
-          type="search"
-          [placeholder]="ui.t('searchPlaceholder')"
-          [attr.aria-label]="ui.t('searchPlaceholder')"
-          (input)="onType($event)"
-        />
-        @if (query()) {
+  <section class="browse fs-container">
+    @if (cuisines().length > 1 || cuisine()) {
+      <nav class="cuisines" [attr.aria-label]="ui.t('cuisinesTitle')">
+        <button
+          type="button"
+          class="cuisine"
+          [class.on]="!cuisine()"
+          [attr.aria-pressed]="!cuisine()"
+          (click)="pickCuisine(null)"
+        >
+          <span class="cuisine-mark" aria-hidden="true"><fs-icon name="restaurant" /></span>
+          <span class="cuisine-name">{{ ui.t('all') }}</span>
+        </button>
+        @for (entry of cuisines(); track entry.cuisine) {
           <button
-            mat-icon-button
             type="button"
-            [attr.aria-label]="ui.t('clearSearch')"
-            (click)="clearSearch(searchBox)"
+            class="cuisine"
+            [class.on]="cuisine() === entry.cuisine"
+            [attr.aria-pressed]="cuisine() === entry.cuisine"
+            (click)="pickCuisine(cuisine() === entry.cuisine ? null : entry.cuisine)"
           >
-            <fs-icon name="close" />
+            <span
+              class="cuisine-mark"
+              aria-hidden="true"
+              [style.background]="cuisineColour(entry.cuisine)"
+              >{{ cuisineLabel(entry.cuisine).charAt(0) }}</span
+            >
+            <span class="cuisine-name">{{ cuisineLabel(entry.cuisine) }}</span>
+            <span class="cuisine-count">{{ ui.number(entry.count) }}</span>
           </button>
         }
-      </div>
-      <mat-button-toggle-group
-        hideSingleSelectionIndicator
-        [value]="fulfilment()"
-        (change)="fulfilment.set($event.value)"
-        [attr.aria-label]="ui.t('delivery') + ' / ' + ui.t('pickup')"
-      >
-        <mat-button-toggle value="DELIVERY"
-          ><fs-icon name="delivery" /> {{ ui.t('delivery') }}</mat-button-toggle
-        >
-        <mat-button-toggle value="PICKUP"
-          ><fs-icon name="storefront" /> {{ ui.t('pickup') }}</mat-button-toggle
-        >
-      </mat-button-toggle-group>
-    </div>
-
-    @if (cuisines().length > 1 || cuisine()) {
-      <mat-chip-listbox
-        class="cuisines"
-        aria-label="Cuisines"
-        [value]="cuisine()"
-        (change)="pickCuisine($event.value ?? null)"
-      >
-        <mat-chip-option [value]="null" [selected]="!cuisine()">{{ ui.t('all') }}</mat-chip-option>
-        @for (entry of cuisines(); track entry.cuisine) {
-          <mat-chip-option [value]="entry.cuisine"
-            >{{ cuisineLabel(entry.cuisine) }}
-            <span class="count">{{ ui.number(entry.count) }}</span></mat-chip-option
-          >
-        }
-      </mat-chip-listbox>
+      </nav>
     }
 
     <div class="status-row">
@@ -98,7 +118,7 @@
         <h3>{{ ui.t('noStoresTitle') }}</h3>
         <p>{{ ui.t('noStoresText') }}</p>
         @if (query() || cuisine()) {
-          <button mat-stroked-button type="button" (click)="clearSearch(searchBox)">
+          <button mat-stroked-button type="button" (click)="clearSearch()">
             {{ ui.t('clearSearch') }}
           </button>
         }
@@ -120,11 +140,24 @@
     }
   </section>
 } @else if (ready()) {
-  <section class="browse">
-    <div class="notice">
-      <fs-icon name="place" class="notice-icon" />
-      <h3>{{ ui.t('pickLocationTitle') }}</h3>
-      <p>{{ ui.t('pickLocationText') }}</p>
-    </div>
+  <section class="browse fs-container">
+    <h2 class="count-title">{{ ui.t('howItWorks') }}</h2>
+    <ol class="steps">
+      <li>
+        <span class="step-icon"><fs-icon name="place" /></span>
+        <h3>{{ ui.t('step1Title') }}</h3>
+        <p>{{ ui.t('step1Text') }}</p>
+      </li>
+      <li>
+        <span class="step-icon"><fs-icon name="restaurant" /></span>
+        <h3>{{ ui.t('step2Title') }}</h3>
+        <p>{{ ui.t('step2Text') }}</p>
+      </li>
+      <li>
+        <span class="step-icon"><fs-icon name="delivery" /></span>
+        <h3>{{ ui.t('step3Title') }}</h3>
+        <p>{{ ui.t('step3Text') }}</p>
+      </li>
+    </ol>
   </section>
 }
