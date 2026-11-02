@@ -1,4 +1,4 @@
-import { Component, input } from '@angular/core';
+import { Component, DOCUMENT, ElementRef, OnDestroy, afterNextRender, input } from '@angular/core';
 
 import { Order } from '@foodstack/api-client';
 import { LocaleStore } from '@foodstack/ui';
@@ -47,8 +47,9 @@ import { clock } from './order-labels';
       display: none;
     }
     @media print {
-      :host {
+      :host-context(body.fs-printing-ticket) {
         display: block;
+        padding: 4mm;
       }
       .ticket {
         font-family: 'Roboto Mono', ui-monospace, monospace;
@@ -82,10 +83,21 @@ import { clock } from './order-labels';
     }
   `,
 })
-export class OrderTicket {
+export class OrderTicket implements OnDestroy {
   readonly order = input<Order | null>(null);
   protected readonly locale = inject(LocaleStore);
   protected readonly clock = clock;
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+
+  constructor() {
+    // The ticket lives directly under body, so printing can drop the rest of the page.
+    const document = inject(DOCUMENT);
+    afterNextRender(() => document.body.appendChild(this.host));
+  }
+
+  ngOnDestroy(): void {
+    this.host.remove();
+  }
 
   protected money(minor: number): string {
     return this.locale.money(minor, this.order()?.currency);
