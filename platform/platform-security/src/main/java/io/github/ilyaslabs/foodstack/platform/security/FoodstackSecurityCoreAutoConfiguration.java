@@ -32,6 +32,14 @@ public final class FoodstackSecurityCoreAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean(StringRedisTemplate.class)
+    RateLimiter rateLimiter(StringRedisTemplate redis, @Value("${foodstack.namespace:foodstack}") String namespace,
+            ObjectProvider<Clock> clock) {
+        return new RateLimiter(redis, namespace, clock.getIfAvailable(Clock::systemUTC));
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     @ConditionalOnProperty("foodstack.security.pii-key")
     PiiCipher piiCipher(FoodstackSecurityProperties properties) {
         return new PiiCipher(properties.getPiiKey());

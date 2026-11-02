@@ -45,6 +45,15 @@ public class ProblemDetailsAdvice {
     }
 
     @ExceptionHandler
+    ResponseEntity<ProblemDetail> tooMany(io.github.ilyaslabs.foodstack.platform.core.TooManyRequestsException ex) {
+        ProblemDetail problem = problem(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(),
+                io.github.ilyaslabs.foodstack.platform.core.TooManyRequestsException.CODE);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+            .header("Retry-After", String.valueOf(ex.retryAfterSeconds()))
+            .body(problem);
+    }
+
+    @ExceptionHandler
     ResponseEntity<ProblemDetail> invalid(MethodArgumentNotValidException ex) {
         ProblemDetail problem = problem(HttpStatus.BAD_REQUEST, "The request is invalid.", "VALIDATION_FAILED");
         List<Map<String, String>> errors = ex.getBindingResult()

@@ -129,6 +129,9 @@ foodstack:
     public-bucket: ${S3_PUBLIC_BUCKET:foodstack-public}
     private-bucket: ${S3_PRIVATE_BUCKET:foodstack-private}
     create-buckets: ${S3_CREATE_BUCKETS:false}
+  order:
+    # Where the customer app lives: card payment pages send the customer back to <web-url>/orders/<id>.
+    web-url: ${FOODSTACK_WEB_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}
   payment:
     # Card gateway (TDD 5.4): none (cash only), sandbox (development and demos, refused in production) or stripe.
     gateway: ${PAYMENT_GATEWAY:none}
