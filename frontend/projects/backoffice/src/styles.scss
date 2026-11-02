@@ -62,3 +62,18 @@ mat-card[appearance='outlined'] {
   vertical-align: middle;
   margin-inline-end: 6px;
 }
+
+// Printing a kitchen ticket shows the ticket alone (the board's print button sets this class).
+@media print {
+  body.fs-printing-ticket * {
+    visibility: hidden;
+  }
+  body.fs-printing-ticket app-order-ticket,
+  body.fs-printing-ticket app-order-ticket * {
+    visibility: visible;
+  }
+  body.fs-printing-ticket app-order-ticket {
+    position: absolute;
+    inset: 0;
+  }
+}

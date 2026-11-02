@@ -25,6 +25,26 @@ export const routes: Routes = [
         loadComponent: () => import('./stores/store-page').then((m) => m.StorePage),
       },
       {
+        path: 'orders/board',
+        loadComponent: () => import('./orders/order-board').then((m) => m.OrderBoard),
+      },
+      {
+        path: 'orders',
+        loadComponent: () => import('./orders/orders-page').then((m) => m.OrdersPage),
+      },
+      {
+        path: 'promotions',
+        loadComponent: () => import('./promotions/promotions-page').then((m) => m.PromotionsPage),
+      },
+      {
+        path: 'settings/ordering',
+        loadComponent: () => import('./settings/ordering-page').then((m) => m.OrderingPage),
+      },
+      {
+        path: 'settings/emails',
+        loadComponent: () => import('./settings/emails-page').then((m) => m.EmailsPage),
+      },
+      {
         path: 'delivery-pricing',
         loadComponent: () =>
           import('./delivery/delivery-pricing-page').then((m) => m.DeliveryPricingPage),
