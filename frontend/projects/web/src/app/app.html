@@ -1,75 +1,140 @@
-<fs-brand-header>
-  @if (languages().length > 1) {
-    <button
-      mat-button
-      type="button"
-      class="language"
-      [matMenuTriggerFor]="languageMenu"
-      [attr.aria-label]="ui.t('language')"
-    >
-      <fs-icon name="language" />
-      <span class="language-name">{{ locale.languageName(locale.language()) }}</span>
+<header class="site-header">
+  <div class="bar fs-container">
+    <a class="brand" routerLink="/" [attr.aria-label]="branding.branding().name">
+      @if (branding.logoUrl(); as logo) {
+        <img class="brand-logo" [src]="logo" alt="" width="36" height="36" />
+      } @else {
+        <span class="brand-mark" aria-hidden="true">{{ brandInitial() }}</span>
+      }
+      <span class="brand-name" dir="auto">{{ branding.branding().name }}</span>
+    </a>
+
+    <button type="button" class="where where-wide" (click)="pickLocation()">
+      <fs-icon name="place" />
+      <span class="where-text">
+        <span class="where-label">{{ ui.t('deliveringTo') }}</span>
+        <span class="where-value">{{ locationLabel() }}</span>
+      </span>
+      <fs-icon name="expand_more" class="where-chevron" />
     </button>
-    <mat-menu #languageMenu="matMenu" xPosition="before">
-      @for (language of languages(); track language) {
-        <button
-          mat-menu-item
-          type="button"
-          [attr.lang]="language"
-          [attr.aria-current]="language === locale.language()"
-          (click)="locale.use(language)"
-        >
-          @if (language === locale.language()) {
-            <fs-icon matMenuItemIcon name="check_circle" />
-          }
-          <span>{{ locale.languageName(language) }}</span>
-        </button>
-      }
-    </mat-menu>
-  }
-  @if (auth.signedIn()) {
-    <app-notification-bell />
-    <button
-      mat-button
-      type="button"
-      class="account"
-      [matMenuTriggerFor]="accountMenu"
-      [attr.aria-label]="ui.t('accountMenu')"
-    >
-      <span class="avatar" aria-hidden="true">{{ initials() }}</span>
-      @if (me(); as me) {
-        <span class="account-name">{{ me.displayName }}</span>
-      }
-    </button>
-    <mat-menu #accountMenu="matMenu" xPosition="before">
-      @if (me(); as me) {
-        <div class="account-card">
-          <div class="account-card-name">{{ me.displayName }}</div>
-          <div class="account-card-email">{{ me.email }}</div>
-        </div>
-      }
-      <a mat-menu-item routerLink="/orders">
-        <fs-icon matMenuItemIcon name="receipt" />
-        <span>{{ ui.t('orders') }}</span>
-      </a>
-      <a mat-menu-item routerLink="/account">
-        <fs-icon matMenuItemIcon name="settings" />
-        <span>{{ ui.t('account') }}</span>
-      </a>
-      <button mat-menu-item type="button" (click)="signOut()">
-        <fs-icon matMenuItemIcon name="logout" />
-        <span>{{ ui.t('signOut') }}</span>
+
+    <span class="spacer"></span>
+
+    @if (languages().length > 1) {
+      <button
+        mat-button
+        type="button"
+        class="header-button language"
+        [matMenuTriggerFor]="languageMenu"
+        [attr.aria-label]="ui.t('language')"
+      >
+        <fs-icon name="language" />
+        <span class="language-name">{{ locale.languageName(locale.language()) }}</span>
       </button>
-    </mat-menu>
-  } @else {
-    <button mat-button type="button" class="sign-in" (click)="signIn()">
-      {{ ui.t('signIn') }}
-    </button>
-    <button mat-flat-button type="button" class="sign-up" (click)="signUp()">
-      {{ ui.t('createAccount') }}
-    </button>
-  }
-</fs-brand-header>
+      <mat-menu #languageMenu="matMenu" xPosition="before">
+        @for (language of languages(); track language) {
+          <button
+            mat-menu-item
+            type="button"
+            [attr.lang]="language"
+            [attr.aria-current]="language === locale.language()"
+            (click)="locale.use(language)"
+          >
+            @if (language === locale.language()) {
+              <fs-icon matMenuItemIcon name="check_circle" />
+            }
+            <span>{{ locale.languageName(language) }}</span>
+          </button>
+        }
+      </mat-menu>
+    }
+
+    @if (auth.signedIn()) {
+      <app-notification-bell />
+      @if (cart.itemCount() > 0) {
+        <a
+          class="cart-button"
+          routerLink="/checkout"
+          [attr.aria-label]="ui.t('goToCheckout') + ', ' + ui.number(cart.itemCount())"
+        >
+          <fs-icon name="shopping_bag" />
+          <span class="cart-count">{{ ui.number(cart.itemCount()) }}</span>
+        </a>
+      }
+      <button
+        mat-button
+        type="button"
+        class="header-button account"
+        [matMenuTriggerFor]="accountMenu"
+        [attr.aria-label]="ui.t('accountMenu')"
+      >
+        <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+        @if (me(); as me) {
+          <span class="account-name">{{ firstName() }}</span>
+        }
+        <fs-icon name="expand_more" class="account-chevron" />
+      </button>
+      <mat-menu #accountMenu="matMenu" xPosition="before">
+        @if (me(); as me) {
+          <div class="account-card">
+            <div class="account-card-name">{{ me.displayName }}</div>
+            <div class="account-card-email">{{ me.email }}</div>
+          </div>
+        }
+        <a mat-menu-item routerLink="/orders">
+          <fs-icon matMenuItemIcon name="receipt" />
+          <span>{{ ui.t('orders') }}</span>
+        </a>
+        <a mat-menu-item routerLink="/account">
+          <fs-icon matMenuItemIcon name="settings" />
+          <span>{{ ui.t('account') }}</span>
+        </a>
+        <button mat-menu-item type="button" (click)="signOut()">
+          <fs-icon matMenuItemIcon name="logout" />
+          <span>{{ ui.t('signOut') }}</span>
+        </button>
+      </mat-menu>
+    } @else {
+      <button mat-button type="button" class="header-button sign-in" (click)="signIn()">
+        {{ ui.t('signIn') }}
+      </button>
+      <button mat-flat-button type="button" class="sign-up" (click)="signUp()">
+        {{ ui.t('createAccount') }}
+      </button>
+    }
+  </div>
+
+  <button type="button" class="where where-narrow" (click)="pickLocation()">
+    <fs-icon name="place" />
+    <span class="where-text">
+      <span class="where-label">{{ ui.t('deliveringTo') }}</span>
+      <span class="where-value">{{ locationLabel() }}</span>
+    </span>
+    <fs-icon name="expand_more" class="where-chevron" />
+  </button>
+</header>
+
 <main>
   <router-outlet />
 </main>
+
+<footer class="site-footer">
+  <div class="fs-container footer-inner">
+    <div class="footer-brand">
+      <span class="footer-name">{{ branding.branding().name }}</span>
+      <p class="footer-tagline">{{ branding.branding().tagline || ui.t('heroTitle') }}</p>
+    </div>
+    <nav class="footer-links" [attr.aria-label]="branding.branding().name">
+      <a routerLink="/">{{ ui.t('findFood') }}</a>
+      @if (auth.signedIn()) {
+        <a routerLink="/orders">{{ ui.t('orders') }}</a>
+        <a routerLink="/account">{{ ui.t('account') }}</a>
+      } @else {
+        <button type="button" class="footer-link" (click)="signIn()">{{ ui.t('signIn') }}</button>
+      }
+    </nav>
+  </div>
+  <div class="fs-container footer-legal">
+    <span>© {{ year }} {{ branding.branding().name }}</span>
+  </div>
+</footer>

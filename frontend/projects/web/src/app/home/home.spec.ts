@@ -91,9 +91,9 @@ describe('Home', () => {
     const { element, stores } = await render({ saved: false });
 
     // then
-    expect(element.querySelector('h1')?.textContent).toContain('Spice Route');
+    expect(element.querySelector('h1')?.textContent).toContain('Dinner nearby');
     expect(element.querySelector('app-location-picker')).not.toBeNull();
-    expect(element.textContent).toContain('Pick a location to see stores');
+    expect(element.textContent).toContain('Where should we deliver?');
     expect(stores).not.toHaveBeenCalled();
   });
 
@@ -105,7 +105,6 @@ describe('Home', () => {
     expect(stores).toHaveBeenCalledWith(
       expect.objectContaining({ lat: 31.51, lng: 74.34, fulfilment: 'DELIVERY', page: 0 }),
     );
-    expect(element.textContent).toContain('Gulberg III, Lahore');
     expect(element.querySelectorAll('app-store-card').length).toBe(1);
     expect(element.textContent).toContain('Pakistani · BBQ');
     expect(element.textContent).toContain('1 store');
@@ -119,7 +118,7 @@ describe('Home', () => {
     const { fixture, stores, element } = await render({ saved: true });
 
     // when
-    (element.querySelectorAll('mat-button-toggle button')[1] as HTMLButtonElement).click();
+    (element.querySelectorAll('.mode button')[1] as HTMLButtonElement).click();
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -136,18 +135,5 @@ describe('Home', () => {
 
     // then
     expect(element.textContent).toContain('Search is not available right now');
-  });
-
-  it('lets the customer change the location', async () => {
-    // given
-    const { fixture, element } = await render({ saved: true });
-
-    // when
-    (element.querySelector('.location-pill') as HTMLButtonElement).click();
-    fixture.detectChanges();
-
-    // then
-    expect(element.querySelector('app-location-picker')).not.toBeNull();
-    expect(TestBed.inject(LocationStore).location()?.label).toBe('Gulberg III, Lahore');
   });
 });

@@ -1,14 +1,18 @@
 @if (store(); as store) {
-  <section class="banner">
-    <div class="cover">
+  <section class="banner fs-container">
+    <div
+      class="cover"
+      [class.plain]="!cover()"
+      [style.background-color]="cover() ? null : fallbackColour()"
+    >
       @if (cover(); as url) {
         <img [src]="url" alt="" />
       }
-    </div>
-    <div class="banner-inner">
       <a mat-button routerLink="/" class="back"
         ><fs-icon name="arrow_back" class="flip" /> {{ ui.t('back') }}</a
       >
+    </div>
+    <div class="banner-inner">
       <div class="identity">
         @if (logo(); as url) {
           <img class="logo" [src]="url" alt="" width="88" height="88" />
@@ -85,9 +89,10 @@
     </div>
   </section>
 
-  <div class="layout">
+  <div class="layout fs-container">
     <aside class="side">
-      <details class="hours" open>
+      <app-cart-panel [storeId]="store.id" />
+      <details class="hours">
         <summary>{{ ui.t('hours') }}</summary>
         <dl>
           @for (row of week(); track row.day; let first = $first) {
@@ -98,7 +103,6 @@
           }
         </dl>
       </details>
-      <app-cart-panel [storeId]="store.id" />
     </aside>
 
     <section class="menu" [attr.aria-label]="ui.t('menu')">
@@ -145,16 +149,21 @@
                     }
                   </div>
                 </div>
-                @if (image(item); as url) {
-                  <img
-                    class="item-image"
-                    [src]="url"
-                    alt=""
-                    loading="lazy"
-                    width="112"
-                    height="112"
-                  />
-                }
+                <div class="item-media">
+                  @if (image(item); as url) {
+                    <img
+                      class="item-image"
+                      [src]="url"
+                      alt=""
+                      loading="lazy"
+                      width="120"
+                      height="120"
+                    />
+                  }
+                  @if (!item.soldOut) {
+                    <span class="item-add" aria-hidden="true"><fs-icon name="add" /></span>
+                  }
+                </div>
               </article>
             }
           </div>

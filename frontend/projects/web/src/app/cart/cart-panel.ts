@@ -87,12 +87,16 @@ import { CartStore } from './cart-store';
   styles: `
     .panel {
       padding: 20px;
-      border-radius: 20px;
-      background: var(--mat-sys-surface-container-low);
+      border-radius: var(--fs-radius-card, 16px);
+      background: var(--mat-sys-surface);
       border: 1px solid var(--mat-sys-outline-variant);
+      box-shadow: var(--fs-shadow-card);
     }
     h2 {
-      font: var(--mat-sys-title-large);
+      font-size: 20px;
+      line-height: 28px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
       margin: 0 0 12px;
     }
     .muted {
@@ -181,7 +185,9 @@ import { CartStore } from './cart-store';
     }
     .checkout {
       inline-size: 100%;
-      block-size: 48px;
+      block-size: 52px;
+      font-weight: 700;
+      font-size: 16px;
     }
     .bar {
       display: none;

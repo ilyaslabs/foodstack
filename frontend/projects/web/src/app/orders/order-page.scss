@@ -1,7 +1,7 @@
 .page {
-  max-width: 960px;
+  max-width: 1000px;
   margin-inline: auto;
-  padding: 16px 24px 64px;
+  padding: 24px 24px 64px;
 
   @media (max-width: 599.98px) {
     padding: 12px 16px 48px;
@@ -25,13 +25,22 @@
 }
 
 h1 {
-  font: var(--mat-sys-headline-medium);
-  font-weight: 600;
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   margin: 0;
+
+  @media (max-width: 599.98px) {
+    font-size: 26px;
+    line-height: 32px;
+  }
 }
 
 h2 {
-  font: var(--mat-sys-title-medium);
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 800;
   margin: 0 0 12px;
 }
 
@@ -90,13 +99,13 @@ h2 {
 
 .card {
   padding: 24px;
-  border-radius: 24px;
-  background: var(--mat-sys-surface-container-low);
+  border-radius: var(--fs-radius-card);
+  background: var(--mat-sys-surface);
   border: 1px solid var(--mat-sys-outline-variant);
+  box-shadow: var(--fs-shadow-card);
 
   @media (max-width: 599.98px) {
     padding: 20px 16px;
-    border-radius: 20px;
   }
 }
 
@@ -112,11 +121,12 @@ h2 {
 }
 
 .chip {
-  padding: 6px 14px;
+  padding: 6px 16px;
   border-radius: 999px;
-  font: var(--mat-sys-title-medium);
-  background: var(--mat-sys-primary-container);
-  color: var(--mat-sys-on-primary-container);
+  font-size: 16px;
+  font-weight: 700;
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
 }
 
 [data-tone='waiting'] .chip {

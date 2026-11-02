@@ -186,7 +186,8 @@ export interface ItemDialogData {
     }
     .base-price {
       margin: 0 0 8px;
-      font: var(--mat-sys-title-medium);
+      font-size: 18px;
+      font-weight: 800;
     }
     .group {
       border: 0;

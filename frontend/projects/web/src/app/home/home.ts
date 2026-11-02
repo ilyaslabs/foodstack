@@ -20,6 +20,7 @@ import { Fulfilment, SearchClient, StoreCard as Card } from '@foodstack/api-clie
 import { BrandingStore, Icon } from '@foodstack/ui';
 
 import { Ui } from '../i18n';
+import { foodColour } from '../stores/food-colour';
 import { LocationPicker } from '../location/location-picker';
 import { LocationStore } from '../location-store';
 import { StoreCard } from '../stores/store-card';
@@ -52,7 +53,6 @@ export class Home {
   private readonly search = inject(SearchClient);
 
   protected readonly ready = signal(false);
-  protected readonly editingLocation = signal(false);
   protected readonly query = signal('');
   protected readonly cuisine = signal<string | null>(null);
   protected readonly fulfilment = signal<Fulfilment>('DELIVERY');
@@ -65,13 +65,8 @@ export class Home {
   private page = 0;
   private requestId = 0;
 
-  protected readonly showPicker = computed(
-    () => this.ready() && (!this.locations.location() || this.editingLocation()),
-  );
+  protected readonly showPicker = computed(() => this.ready() && !this.locations.location());
   protected readonly cuisineLabel = cuisineLabel;
-  protected readonly locationLabel = computed(
-    () => this.locations.location()?.label || this.ui.t('currentLocation'),
-  );
   protected readonly countLabel = computed(() =>
     this.total() === 1
       ? this.ui.t('storeFound')
@@ -102,12 +97,22 @@ export class Home {
     });
   }
 
+  /** A steady, food-like colour per cuisine for its round mark. */
+  protected cuisineColour(cuisine: string): string {
+    return foodColour(cuisine);
+  }
+
   protected onType(event: Event): void {
     this.typed.next((event.target as HTMLInputElement).value.trim());
   }
 
-  protected clearSearch(input: HTMLInputElement): void {
-    input.value = '';
+  protected clearSearch(input?: HTMLInputElement): void {
+    const box =
+      input ??
+      (typeof document === 'undefined'
+        ? null
+        : document.querySelector<HTMLInputElement>('.hero .search input'));
+    if (box) box.value = '';
     this.typed.next('');
     this.query.set('');
     this.cuisine.set(null);

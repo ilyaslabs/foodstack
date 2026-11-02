@@ -201,6 +201,16 @@ const EN = {
   saveFailed: 'Could not save. Try again.',
   signOutEverywhere: 'Sign out on all devices',
   security: 'Security',
+  chooseLocation: 'Choose your address',
+  heroSub: 'Restaurants and home kitchens near you, delivered to your door or ready to collect.',
+  cuisinesTitle: 'Cuisines',
+  howItWorks: 'How it works',
+  step1Title: 'Tell us where',
+  step1Text: 'Search your area or use your location to see who delivers to you.',
+  step2Title: 'Pick your food',
+  step2Text: 'Browse menus, choose your dishes and pay with cash or card.',
+  step3Title: 'Follow it live',
+  step3Text: 'See every step, from the kitchen to your door.',
 } as const;
 
 export type UiKey = keyof typeof EN;
@@ -400,6 +410,16 @@ const AR: Dictionary = {
   saveFailed: 'تعذّر الحفظ. حاول مرة أخرى.',
   signOutEverywhere: 'تسجيل الخروج من كل الأجهزة',
   security: 'الأمان',
+  chooseLocation: 'اختر عنوانك',
+  heroSub: 'مطاعم ومطابخ منزلية قريبة منك، توصيل إلى بابك أو جاهزة للاستلام.',
+  cuisinesTitle: 'المطابخ',
+  howItWorks: 'كيف يعمل',
+  step1Title: 'أخبرنا بموقعك',
+  step1Text: 'ابحث عن منطقتك أو استخدم موقعك لترى من يوصل إليك.',
+  step2Title: 'اختر طعامك',
+  step2Text: 'تصفح القوائم واختر أطباقك وادفع نقدًا أو بالبطاقة.',
+  step3Title: 'تابعه مباشرة',
+  step3Text: 'شاهد كل خطوة، من المطبخ إلى بابك.',
 };
 
 const UR: Dictionary = {
@@ -596,6 +616,16 @@ const UR: Dictionary = {
   saveFailed: 'محفوظ نہیں ہو سکا۔ دوبارہ کوشش کریں۔',
   signOutEverywhere: 'تمام ڈیوائسز سے سائن آؤٹ',
   security: 'سیکیورٹی',
+  chooseLocation: 'اپنا پتہ منتخب کریں',
+  heroSub: 'آپ کے قریب ریستوران اور گھریلو کچن، گھر تک ڈیلیوری یا خود لے جائیں۔',
+  cuisinesTitle: 'کھانوں کی اقسام',
+  howItWorks: 'یہ کیسے کام کرتا ہے',
+  step1Title: 'بتائیں کہاں',
+  step1Text: 'اپنا علاقہ تلاش کریں یا اپنی لوکیشن استعمال کریں تاکہ معلوم ہو کون آپ تک پہنچاتا ہے۔',
+  step2Title: 'اپنا کھانا چنیں',
+  step2Text: 'مینو دیکھیں، ڈشز چنیں اور نقد یا کارڈ سے ادائیگی کریں۔',
+  step3Title: 'لائیو دیکھیں',
+  step3Text: 'کچن سے آپ کے دروازے تک ہر قدم دیکھیں۔',
 };
 
 const DICTIONARIES: Record<string, Dictionary> = { en: EN, ar: AR, ur: UR };

@@ -108,19 +108,24 @@ import { Ui, UiKey } from '../i18n';
       }
     }
     h1 {
-      font: var(--mat-sys-headline-medium);
-      font-weight: 600;
+      font-size: 32px;
+      line-height: 40px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
       margin: 0;
     }
     h2 {
-      font: var(--mat-sys-title-large);
+      font-size: 20px;
+      line-height: 28px;
+      font-weight: 800;
       margin: 0 0 16px;
     }
     .card {
       padding: 24px;
-      border-radius: 24px;
-      background: var(--mat-sys-surface-container-low);
+      border-radius: var(--fs-radius-card);
+      background: var(--mat-sys-surface);
       border: 1px solid var(--mat-sys-outline-variant);
+      box-shadow: var(--fs-shadow-card);
     }
     .hint {
       margin: 4px 0 16px;
