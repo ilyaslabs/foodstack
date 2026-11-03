@@ -17,10 +17,11 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 
 import { FINAL_STATUSES, Order, OrderClient, OrderStatus } from '@foodstack/api-client';
 import { AuthService } from '@foodstack/auth';
-import { Icon, LocaleStore } from '@foodstack/ui';
+import { Icon, LocaleStore, PushRegistration } from '@foodstack/ui';
 
 import { Ui } from '../i18n';
 import { CancelOrderDialog } from './cancel-order-dialog';
+import { DeliveryTracking } from './delivery-tracking';
 import { hintKey, statusKey, stepsFor, tone } from './order-status';
 
 /**
@@ -29,7 +30,7 @@ import { hintKey, statusKey, stepsFor, tone } from './order-status';
  */
 @Component({
   selector: 'app-order-page',
-  imports: [RouterLink, MatButtonModule, MatProgressBarModule, Icon],
+  imports: [RouterLink, MatButtonModule, MatProgressBarModule, DeliveryTracking, Icon],
   templateUrl: './order-page.html',
   styleUrl: './order-page.scss',
 })
@@ -43,6 +44,7 @@ export class OrderPage {
   private readonly orders = inject(OrderClient);
   private readonly auth = inject(AuthService);
   private readonly dialog = inject(MatDialog);
+  protected readonly push = inject(PushRegistration);
 
   protected readonly order = signal<Order | null>(null);
   protected readonly missing = signal(false);
@@ -84,6 +86,7 @@ export class OrderPage {
     afterNextRender(() => {
       this.browser = true;
       void this.load(this.id());
+      void this.push.init('web');
     });
     effect(() => {
       const id = this.id();
@@ -191,6 +194,15 @@ export class OrderPage {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** A delivery on its way gets the rider, the map and the delivery code. */
+  protected tracks(order: Order): boolean {
+    return (
+      order.fulfilment === 'DELIVERY' &&
+      order.status !== 'PAYMENT_PENDING' &&
+      !FINAL_STATUSES.includes(order.status)
+    );
   }
 
   protected statusLabel(status: OrderStatus): string {

@@ -42,6 +42,12 @@ app.use(
     maxAge: '1y',
     index: false,
     redirect: false,
+    // The service worker and manifest keep fixed names, so they must be revalidated.
+    setHeaders: (res, path) => {
+      if (/(sw\.js|manifest\.webmanifest|config\.json)$/.test(path)) {
+        res.setHeader('Cache-Control', 'no-cache');
+      }
+    },
   }),
 );
 

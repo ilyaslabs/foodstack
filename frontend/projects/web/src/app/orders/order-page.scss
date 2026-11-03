@@ -95,6 +95,16 @@ h2 {
     background: var(--mat-sys-tertiary-container);
     color: var(--mat-sys-on-tertiary-container);
   }
+
+  &.push {
+    margin-block: -8px 24px;
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+
+    span {
+      flex: 1;
+    }
+  }
 }
 
 .card {

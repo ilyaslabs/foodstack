@@ -355,6 +355,10 @@ public class RiderActivity {
                 (int) e.getValue()[0], e.getValue()[1], e.getValue()[2], e.getValue()[3])).toList();
         List<Earnings.Row> recent = rows.stream().limit(20).map((r) -> new Earnings.Row(r.id(), r.orderNumber(), r.storeName(),
                 r.earningMinor(), r.tipMinor(), r.cashCollectedMinor(), r.distanceMeters(), r.at().getEpochSecond())).toList();
+        if (currency == null) {
+            // nothing earned in the period: show zeros in the operator's currency
+            currency = this.serviceCalls.call(() -> this.settings.getLocale()).currency();
+        }
         return new Earnings(currency, list.get(0), list, recent);
     }
 

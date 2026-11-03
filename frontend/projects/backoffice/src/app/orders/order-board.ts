@@ -19,13 +19,21 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { Order, OrderAction, OrderClient, StoreClient, StoreSummary } from '@foodstack/api-client';
+import {
+  DispatchClient,
+  Order,
+  OrderAction,
+  OrderClient,
+  RiderClient,
+  StoreClient,
+  StoreSummary,
+} from '@foodstack/api-client';
 import { AuthService } from '@foodstack/auth';
 import { Icon, LocaleStore } from '@foodstack/ui';
 
 import { confirmAction } from '../shared/confirm-dialog';
 import { describeError } from '../shared/errors';
-import { AcceptDialog } from './accept-dialog';
+import { AcceptData, AcceptDialog, AcceptResult } from './accept-dialog';
 import { ACTION_LABELS, STATUS_LABELS, clock, primaryAction } from './order-labels';
 import { OrderTicket } from './order-ticket';
 
@@ -64,6 +72,8 @@ interface Column {
 })
 export class OrderBoard implements OnInit {
   private readonly orders = inject(OrderClient);
+  private readonly riders = inject(RiderClient);
+  private readonly dispatch = inject(DispatchClient);
   private readonly stores = inject(StoreClient);
   private readonly auth = inject(AuthService);
   private readonly dialog = inject(MatDialog);
@@ -216,16 +226,47 @@ export class OrderBoard implements OnInit {
     return order.actions.filter((a) => a !== primary && a !== 'REFUND' && a in ACTION_LABELS);
   }
 
+  /** A delivery the branch makes itself, accepted without a rider: pick one now. */
+  protected async assignRider(order: Order): Promise<void> {
+    const riders = await firstValueFrom(this.riders.storeRiders(order.store.storeId)).catch(
+      () => [],
+    );
+    const chosen = await firstValueFrom(
+      this.dialog
+        .open<AcceptDialog, AcceptData, AcceptResult | null>(AcceptDialog, {
+          data: { number: order.number, prepMinutes: order.prepMinutes, riders, riderOnly: true },
+        })
+        .afterClosed(),
+    );
+    if (!chosen?.storeRiderId) return;
+    try {
+      await firstValueFrom(this.dispatch.assignStoreRider(order.id, chosen.storeRiderId));
+      this.snackBar.open('The rider has the delivery.', undefined, { duration: 3000 });
+    } catch (error) {
+      this.snackBar.open(describeError(error, 'The rider was not assigned.'), 'Close', {
+        duration: 6000,
+      });
+    }
+    void this.reload();
+  }
+
   protected async act(order: Order, action: OrderAction): Promise<void> {
-    let body: { prepMinutes?: number | null; reason?: string | null } = {};
+    let body: { prepMinutes?: number | null; reason?: string | null; storeRiderId?: string | null } =
+      {};
     if (action === 'ACCEPT') {
-      const minutes = await firstValueFrom(
+      const selfDelivery = order.fulfilment === 'DELIVERY' && order.deliveryMode === 'SELF';
+      const riders = selfDelivery
+        ? await firstValueFrom(this.riders.storeRiders(order.store.storeId)).catch(() => [])
+        : undefined;
+      const accepted = await firstValueFrom(
         this.dialog
-          .open(AcceptDialog, { data: { number: order.number, prepMinutes: order.prepMinutes } })
+          .open<AcceptDialog, AcceptData, AcceptResult | null>(AcceptDialog, {
+            data: { number: order.number, prepMinutes: order.prepMinutes, riders },
+          })
           .afterClosed(),
       );
-      if (!minutes) return;
-      body = { prepMinutes: minutes };
+      if (!accepted) return;
+      body = { prepMinutes: accepted.minutes, storeRiderId: accepted.storeRiderId };
     } else if (action === 'REJECT' || action === 'CANCEL') {
       const reason = await confirmAction(this.dialog, {
         title:

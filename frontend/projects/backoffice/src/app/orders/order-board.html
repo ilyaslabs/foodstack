@@ -118,6 +118,29 @@
                 }
               </p>
             }
+            @if (order.fulfilment === 'DELIVERY' && order.status !== 'CONFIRMED') {
+              <p class="rider-line">
+                <fs-icon name="rider" />
+                @if (order.rider) {
+                  <span>{{ order.rider.name }}</span>
+                  <span class="muted">
+                    {{ order.deliveryMode === 'OPERATOR' && !order.handedBackAt ? 'operator rider' : 'your rider' }}
+                  </span>
+                } @else if (order.deliveryMode === 'OPERATOR' && !order.handedBackAt) {
+                  <span class="muted">Finding a rider…</span>
+                } @else {
+                  <span class="muted">No rider yet</span>
+                  <button mat-button type="button" class="assign" (click)="assignRider(order)">
+                    Choose rider
+                  </button>
+                }
+              </p>
+              @if (order.handedBackAt) {
+                <p class="handed-back">
+                  <fs-icon name="warning" /> Handed back to you: deliver it with your own rider.
+                </p>
+              }
+            }
             <footer class="ticket-actions">
               @if (primaryAction(order); as action) {
                 <button

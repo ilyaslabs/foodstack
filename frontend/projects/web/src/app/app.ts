@@ -8,7 +8,7 @@ import { MatMenuModule } from '@angular/material/menu';
 
 import { Me, MeClient } from '@foodstack/api-client';
 import { AuthService } from '@foodstack/auth';
-import { BrandingStore, Icon, LocaleStore } from '@foodstack/ui';
+import { BrandingStore, Icon, LocaleStore, PushRegistration } from '@foodstack/ui';
 
 import { AddressBook, addressTitle, locationOf } from './addresses/address-book';
 import { CartStore } from './cart/cart-store';
@@ -33,6 +33,7 @@ import { NotificationBell } from './notifications/notification-bell';
 })
 export class App {
   protected readonly auth = inject(AuthService);
+  private readonly push = inject(PushRegistration);
   protected readonly locale = inject(LocaleStore);
   protected readonly ui = inject(Ui);
   protected readonly branding = inject(BrandingStore);
@@ -123,7 +124,9 @@ export class App {
     return typeof location === 'undefined' ? '/' : location.pathname + location.search;
   }
 
-  protected signOut(): void {
+  protected async signOut(): Promise<void> {
+    // this browser stops getting the person's push messages
+    await this.push.disable();
     this.auth.signOut();
   }
 }

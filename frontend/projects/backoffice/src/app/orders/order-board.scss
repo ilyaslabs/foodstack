@@ -262,6 +262,40 @@
   }
 }
 
+.rider-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  font: var(--mat-sys-body-medium);
+
+  fs-icon {
+    --fs-icon-size: 18px;
+    color: var(--mat-sys-primary);
+  }
+
+  .assign {
+    margin-inline-start: auto;
+  }
+}
+
+.handed-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+  font: var(--mat-sys-label-large);
+
+  fs-icon {
+    --fs-icon-size: 18px;
+  }
+}
+
 .ticket-actions {
   display: flex;
   flex-wrap: wrap;

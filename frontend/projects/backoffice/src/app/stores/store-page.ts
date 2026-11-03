@@ -19,6 +19,7 @@ import { READINESS_LABELS, STATUS_LABELS } from './store-status';
 import { StoreContext } from './store-context';
 import { StoreHours } from './store-hours';
 import { StoreOwners } from './store-owners';
+import { StoreRiders } from './store-riders';
 import { StoreProfile } from './store-profile';
 import { StoreZones } from './store-zones';
 
@@ -38,6 +39,7 @@ import { StoreZones } from './store-zones';
     MenuEditor,
     StoreHours,
     StoreOwners,
+    StoreRiders,
     StoreProfile,
     StoreZones,
   ],
@@ -161,6 +163,9 @@ import { StoreZones } from './store-zones';
         ></mat-tab>
         <mat-tab label="Delivery"
           ><ng-template matTabContent><app-store-zones /></ng-template
+        ></mat-tab>
+        <mat-tab label="Riders"
+          ><ng-template matTabContent><app-store-riders /></ng-template
         ></mat-tab>
         @if (session.operator()) {
           <mat-tab label="Owners"

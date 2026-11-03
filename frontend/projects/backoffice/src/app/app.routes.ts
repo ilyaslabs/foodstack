@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 
 import { AuthCallback, authGuard } from '@foodstack/auth';
 
+import { riderHome } from './rider/rider-home';
 import { Shell } from './shell/shell';
 
 export const routes: Routes = [
@@ -11,7 +12,37 @@ export const routes: Routes = [
     component: Shell,
     canActivate: [authGuard],
     children: [
-      { path: '', loadComponent: () => import('./dashboard/dashboard').then((m) => m.Dashboard) },
+      {
+        path: '',
+        canActivate: [riderHome],
+        loadComponent: () => import('./dashboard/dashboard').then((m) => m.Dashboard),
+      },
+      {
+        path: 'rider',
+        loadComponent: () => import('./rider/rider-page').then((m) => m.RiderPage),
+      },
+      {
+        path: 'rider/earnings',
+        loadComponent: () =>
+          import('./rider/rider-earnings-page').then((m) => m.RiderEarningsPage),
+      },
+      {
+        path: 'riders',
+        loadComponent: () => import('./riders/riders-page').then((m) => m.RidersPage),
+      },
+      {
+        path: 'riders/:id',
+        loadComponent: () => import('./riders/rider-detail-page').then((m) => m.RiderDetailPage),
+      },
+      {
+        path: 'dispatch',
+        loadComponent: () => import('./riders/dispatch-page').then((m) => m.DispatchPage),
+      },
+      {
+        path: 'settings/delivery',
+        loadComponent: () =>
+          import('./settings/delivery-settings-page').then((m) => m.DeliverySettingsPage),
+      },
       {
         path: 'stores',
         loadComponent: () => import('./stores/stores-page').then((m) => m.StoresPage),

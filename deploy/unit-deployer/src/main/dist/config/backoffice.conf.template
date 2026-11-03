@@ -19,6 +19,13 @@ server {
         try_files $uri =404;
     }
 
+    # The service worker (rider app offline shell and push) and the app manifest keep fixed names.
+    location ~ ^/admin/(sw\.js|manifest\.webmanifest)$ {
+        add_header Cache-Control "no-cache";
+        add_header Service-Worker-Allowed "/admin/";
+        try_files $uri =404;
+    }
+
     # Hashed bundles never change; cache them for a year.
     location ~* ^/admin/.+\.(js|css|woff2?|png|svg|ico|webp)$ {
         add_header Cache-Control "public, max-age=31536000, immutable";
@@ -28,7 +35,7 @@ server {
     # Client-side routes fall back to the app shell.
     location /admin/ {
         add_header Cache-Control "no-cache";
-        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: ${MAP_TILE_ORIGIN}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${MAP_TILE_ORIGIN}; worker-src 'self' blob:; frame-ancestors 'none'";
+        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: ${MAP_TILE_ORIGIN}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${MAP_TILE_ORIGIN} https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com; worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'none'";
         try_files $uri $uri/ /admin/index.html;
     }
 }
