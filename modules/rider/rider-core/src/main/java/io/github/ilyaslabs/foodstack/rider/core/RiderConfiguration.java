@@ -5,6 +5,7 @@ import java.time.Duration;
 
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
+import io.github.ilyaslabs.foodstack.media.api.MediaApi;
 import io.github.ilyaslabs.foodstack.platform.core.PeriodicTask;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
@@ -19,6 +20,7 @@ import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.RateLimiter;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.rider.core.application.RiderActivity;
+import io.github.ilyaslabs.foodstack.rider.core.application.RiderOnboarding;
 import io.github.ilyaslabs.foodstack.rider.core.application.RiderPresence;
 import io.github.ilyaslabs.foodstack.rider.core.application.RiderService;
 import io.github.ilyaslabs.foodstack.rider.core.events.DispatchEventsListener;
@@ -52,7 +54,8 @@ public class RiderConfiguration {
             .hashed("rider_riders", "_id")
             .hashed("rider_locations", "riderId")
             .hashed("rider_assignments", "_id")
-            .hashed("rider_earnings", "riderId");
+            .hashed("rider_earnings", "riderId")
+            .hashed("rider_onboarding", "_id");
     }
 
     @Bean
@@ -122,6 +125,12 @@ public class RiderConfiguration {
             ServiceCalls serviceCalls, Clock clock) {
         return new RiderActivity(riderMongo.template(), riderMongo.transactionTemplate(), riderOutbox, riderService,
                 riderPresence, rateLimiter, settingsApi, geoApi, serviceCalls, clock);
+    }
+
+    @Bean
+    RiderOnboarding riderOnboarding(ModuleMongo riderMongo, RiderService riderService, MediaApi mediaApi,
+            ServiceCalls serviceCalls, PiiCipher piiCipher, Clock clock) {
+        return new RiderOnboarding(riderMongo.template(), riderService, mediaApi, serviceCalls, piiCipher, clock);
     }
 
     @Bean

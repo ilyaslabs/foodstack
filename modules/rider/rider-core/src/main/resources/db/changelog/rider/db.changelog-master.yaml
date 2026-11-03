@@ -41,3 +41,10 @@ databaseChangeLog:
             collectionName: rider_earnings
             keys: '{ "riderId": 1, "at": -1 }'
             options: '{ "name": "rider_newest" }'
+  - changeSet:
+      id: rider-3
+      author: foodstack
+      comment: "rider_onboarding ({ _id: hashed }): an operator rider's documents and payout details (PRD DR-1)"
+      changes:
+        - createCollection:
+            collectionName: rider_onboarding
