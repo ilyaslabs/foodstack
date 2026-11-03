@@ -18,6 +18,7 @@ import io.github.ilyaslabs.foodstack.notification.core.NotificationConfiguration
 import io.github.ilyaslabs.foodstack.notification.core.application.NotificationService.Message;
 import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport.MailFailure;
 import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport;
+import io.github.ilyaslabs.foodstack.notification.core.push.PushTransport;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
@@ -166,6 +167,38 @@ class NotificationStorageTest {
                 assertThat(d.status()).isEqualTo("SENT");
                 assertThat(d.recipient()).isEqualTo("s***@example.com");
             });
+    }
+
+    @Test
+    @DisplayName("a push reaches each registered device of the app once, and tokens FCM no longer knows are forgotten")
+    void push() {
+        PushTransport transport = mock(PushTransport.class);
+        given(transport.send(eq("tok-phone"), anyString(), anyString(), any(), any())).willReturn(PushTransport.Result.SENT);
+        given(transport.send(eq("tok-old"), anyString(), anyString(), any(), any())).willReturn(PushTransport.Result.INVALID_TOKEN);
+        PushService push = new PushService(this.notificationMongo.template(), transport, this.pii, Clock.fixed(START, ZoneOffset.UTC));
+        this.notifications.usePush(push);
+        push.register(this.user, "tok-phone", "android", "backoffice");
+        push.register(this.user, "tok-old", "WEB", "backoffice");
+        push.register(this.user, "tok-web", "WEB", "web");
+        assertThatThrownBy(() -> push.register(this.user, " ", "WEB", "web")).isInstanceOf(ModuleException.BadRequest.class);
+        assertThatThrownBy(() -> push.register(this.user, "t", "FAX", "web")).isInstanceOf(ModuleException.BadRequest.class);
+
+        Message message = new Message("e9", this.user, null, "dispatch-alert", "en",
+                Map.of("number", "A-9", "store", "Karahi Corner", "minutes", 4), "/dispatch", true, true, false, false, true);
+        this.notifications.send(message);
+        this.notifications.send(message);
+
+        verify(transport, times(1)).send(eq("tok-phone"), eq("No rider for order A-9"), contains("4 min"),
+                eq("https://eats.example/admin/dispatch"), any());
+        verify(transport, never()).send(eq("tok-web"), anyString(), anyString(), any(), any());
+        assertThat(push.devices(this.user)).extracting((d) -> d.platform() + "/" + d.app())
+            .containsExactlyInAnyOrder("ANDROID/backoffice", "WEB/web");
+
+        // the token moves to whoever signs in on that phone next
+        push.register("someone-else", "tok-phone", "ANDROID", "backoffice");
+        assertThat(push.devices(this.user)).extracting((d) -> d.app()).containsExactly("web");
+        push.unregister(this.user, "tok-web");
+        assertThat(push.devices(this.user)).isEmpty();
     }
 
     @Test

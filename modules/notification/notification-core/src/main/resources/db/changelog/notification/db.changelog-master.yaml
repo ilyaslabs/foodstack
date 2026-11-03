@@ -34,3 +34,14 @@ databaseChangeLog:
             options: '{ "name": "expiry", "expireAfterSeconds": 7776000 }'
         - createCollection:
             collectionName: notification_preferences
+  - changeSet:
+      id: notification-2
+      author: foodstack
+      comment: "notification_devices: push tokens (FCM), _id = SHA-256 of the token, shard key { userId: hashed }"
+      changes:
+        - createCollection:
+            collectionName: notification_devices
+        - createIndex:
+            collectionName: notification_devices
+            keys: '{ "userId": 1 }'
+            options: '{ "name": "user" }'

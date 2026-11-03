@@ -30,6 +30,9 @@ public interface IdentityApi {
     /** Takes the rider role away (both kinds) and revokes the user's tokens. Unknown users are ignored. */
     void revokeRiderAccess(@Param("userId") String userId);
 
+    /** Ids of active users with any of these roles, such as support staff for a dispatch alert. Platform only. */
+    java.util.List<String> userIdsWithRoles(@Param("roles") java.util.Set<Role> roles);
+
     /** Takes a brand and branch out of a user's claims and revokes their tokens. Unknown users are ignored. */
     void revokeStoreAccess(@Param("userId") String userId, @Param("brandId") String brandId,
             @Param("storeId") String storeId);
