@@ -42,7 +42,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * Two live demo restaurants in Lahore with menus in English, Arabic and Urdu, for the
- * {@code test-seed} profile (TDD 16). Writes only the store module's own data, once (marker in
+ * {@code test-seed} profile (TDD 16): Spice Route uses the operator's riders, Napoli Slice
+ * delivers itself. Writes only the store module's own data, once (marker in
  * {@code store_seed}); runs after the settings seeder has enabled the languages.
  */
 @Component
@@ -110,7 +111,7 @@ class StoreSeeder {
                         "مشويات على الفحم وكراهي وخبز نان طازج من قلب لاهور.", "ur",
                         "لاہور کے دل سے کوئلے کے تکے، کڑاہی اور تازہ نان۔"),
                 List.of("pakistani", "bbq", "desi"), new Address("42 Main Boulevard", "Gulberg III", "Lahore", "54660"),
-                31.5120, 74.3440, 25);
+                31.5120, 74.3440, 25, DeliveryMode.OPERATOR);
         String grills = section(DemoStores.SPICE_ROUTE_BRAND, "Grills", "مشويات", "تکے اور کباب");
         String curries = section(DemoStores.SPICE_ROUTE_BRAND, "Karahi and curries", "كراهي وكاري", "کڑاہی اور سالن");
         String breads = section(DemoStores.SPICE_ROUTE_BRAND, "Breads", "خبز", "روٹی اور نان");
@@ -136,7 +137,7 @@ class StoreSeeder {
                         "بيتزا نابولية في فرن الحطب بعجينة مخمرة ٤٨ ساعة.", "ur",
                         "48 گھنٹے خمیر شدہ آٹے کے ساتھ لکڑی کے تندور کا نیپولیٹن پیزا۔"),
                 List.of("pizza", "italian"), new Address("12 Commercial Area, Phase 5", "DHA", "Lahore", "54792"), 31.4630,
-                74.4080, 20);
+                74.4080, 20, DeliveryMode.SELF);
         String pizzas = section(DemoStores.NAPOLI_BRAND, "Pizzas", "بيتزا", "پیزا");
         item(DemoStores.NAPOLI_BRAND, pizzas, "Margherita", "مارغريتا", "مارگریٹا",
                 "Tomato, fior di latte, basil", "طماطم وجبن فيور دي لاتي وريحان", "ٹماٹر، فیور دی لاتے، تلسی", 180_000,
@@ -147,7 +148,8 @@ class StoreSeeder {
     }
 
     private void restaurant(String brandId, String storeId, String brandName, String branchName,
-            Map<String, String> description, List<String> cuisines, Address address, double lat, double lng, int prep) {
+            Map<String, String> description, List<String> cuisines, Address address, double lat, double lng, int prep,
+            DeliveryMode deliveryMode) {
         Instant now = Instant.now();
         BrandDocument brand = new BrandDocument();
         brand.setId(brandId);
@@ -174,7 +176,7 @@ class StoreSeeder {
         }
         store.setOpeningHours(hours);
         store.setPrepMinutes(prep);
-        store.setDeliveryMode(DeliveryMode.SELF);
+        store.setDeliveryMode(deliveryMode);
         store.setPickupEnabled(true);
         store.setStatus(StoreStatus.LIVE);
         store.setCreatedAt(now);

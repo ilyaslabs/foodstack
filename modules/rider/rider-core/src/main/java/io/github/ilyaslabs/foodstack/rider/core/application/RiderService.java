@@ -12,6 +12,7 @@ import io.github.ilyaslabs.foodstack.identity.api.RiderAccessGrant;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
+import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.rider.api.RiderKind;
@@ -158,7 +159,9 @@ public class RiderService {
     }
 
     public RiderDetails addStoreRider(String storeId, RiderInput input) {
-        CurrentUser.requireStoreAccess(storeId, MANAGE);
+        if (!ModuleAccess.isService()) {
+            CurrentUser.requireStoreAccess(storeId, MANAGE);
+        }
         return add(input, RiderKind.STORE, storeId);
     }
 
@@ -272,7 +275,7 @@ public class RiderService {
     }
 
     private static void requireManage() {
-        if (!CurrentUser.hasAuthority(MANAGE)) {
+        if (!CurrentUser.hasAuthority(MANAGE) && !ModuleAccess.isService()) {
             throw new ModuleException.Forbidden("Only operator staff can do this", "RIDER_ACCESS_DENIED");
         }
     }
