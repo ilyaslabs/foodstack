@@ -121,7 +121,11 @@ export class OrderClient {
   act(
     orderId: string,
     action: OrderAction,
-    body: { prepMinutes?: number | null; reason?: string | null; storeRiderId?: string | null } = {},
+    body: {
+      prepMinutes?: number | null;
+      reason?: string | null;
+      storeRiderId?: string | null;
+    } = {},
   ): Observable<Order> {
     const path = action.toLowerCase().replace('_', '-');
     return this.http.post<Order>(this.url(`/${orderId}/actions/${path}`), body);

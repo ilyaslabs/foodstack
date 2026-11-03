@@ -124,7 +124,11 @@
                 @if (order.rider) {
                   <span>{{ order.rider.name }}</span>
                   <span class="muted">
-                    {{ order.deliveryMode === 'OPERATOR' && !order.handedBackAt ? 'operator rider' : 'your rider' }}
+                    {{
+                      order.deliveryMode === 'OPERATOR' && !order.handedBackAt
+                        ? 'operator rider'
+                        : 'your rider'
+                    }}
                   </span>
                 } @else if (order.deliveryMode === 'OPERATOR' && !order.handedBackAt) {
                   <span class="muted">Finding a rider…</span>

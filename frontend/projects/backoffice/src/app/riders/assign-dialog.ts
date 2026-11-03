@@ -24,7 +24,15 @@ export interface AssignResult {
 /** Support gives a delivery to a rider of their choice, nearest first, or sends it back to search. */
 @Component({
   selector: 'app-assign-dialog',
-  imports: [FormsModule, MatButtonModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatRadioModule, Icon],
+  imports: [
+    FormsModule,
+    MatButtonModule,
+    MatDialogModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatRadioModule,
+    Icon,
+  ],
   template: `
     <h2 mat-dialog-title>Assign order {{ data.job.orderNumber }}</h2>
     <mat-dialog-content>
@@ -129,6 +137,7 @@ export function distance(lat1: number, lng1: number, lat2: number, lng2: number)
   const rad = Math.PI / 180;
   const dLat = (lat2 - lat1) * rad;
   const dLng = (lng2 - lng1) * rad;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
+  const a =
+    Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLng / 2) ** 2;
   return 6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }

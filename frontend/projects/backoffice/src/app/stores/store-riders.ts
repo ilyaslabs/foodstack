@@ -36,7 +36,9 @@ import { StoreContext } from './store-context';
               }
             </p>
           </div>
-          <button mat-flat-button type="button" (click)="add()"><fs-icon name="add" /> Add rider</button>
+          <button mat-flat-button type="button" (click)="add()">
+            <fs-icon name="add" /> Add rider
+          </button>
         </div>
         @for (rider of riders(); track rider.id) {
           <div class="rider">
@@ -167,7 +169,9 @@ export class StoreRiders implements OnInit {
       await firstValueFrom(this.client.removeStoreRider(this.context.store()!.id, rider.id));
       await this.load();
     } catch (error) {
-      this.snackBar.open(describeError(error, 'The rider was not removed.'), 'OK', { duration: 6000 });
+      this.snackBar.open(describeError(error, 'The rider was not removed.'), 'OK', {
+        duration: 6000,
+      });
     }
   }
 

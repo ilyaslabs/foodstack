@@ -76,7 +76,9 @@
     @if (push.state() === 'ask' && tracks(o)) {
       <p class="banner push">
         <fs-icon name="notifications" /> <span>{{ ui.t('pushAsk') }}</span>
-        <button mat-button type="button" (click)="push.enable('web')">{{ ui.t('pushTurnOn') }}</button>
+        <button mat-button type="button" (click)="push.enable('web')">
+          {{ ui.t('pushTurnOn') }}
+        </button>
       </p>
     }
 

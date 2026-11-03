@@ -243,7 +243,9 @@ export class RidersPage implements OnInit {
     );
   });
 
-  protected readonly onlineCount = computed(() => (this.list() ?? []).filter((r) => r.online).length);
+  protected readonly onlineCount = computed(
+    () => (this.list() ?? []).filter((r) => r.online).length,
+  );
 
   ngOnInit(): void {
     void this.load();

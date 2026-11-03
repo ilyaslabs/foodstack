@@ -151,7 +151,7 @@ export class Shell {
     },
     {
       path: '/settings/delivery',
-      label: 'Rider pay and dispatch',
+      label: 'Rider pay',
       icon: 'delivery',
       exact: false,
       permission: 'settings:manage',

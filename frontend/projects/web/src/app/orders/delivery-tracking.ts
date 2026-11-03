@@ -1,4 +1,13 @@
-import { Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { Subscription, firstValueFrom } from 'rxjs';
 
 import { Order, RiderClient, Tracking } from '@foodstack/api-client';
@@ -91,7 +100,7 @@ const ETA_EVERY_MS = 45_000;
     .who {
       display: flex;
       flex-direction: column;
-      flex: 1;
+      flex: 1 1 180px;
       min-inline-size: 0;
       font: var(--mat-sys-body-medium);
       color: var(--mat-sys-on-surface-variant);
@@ -177,10 +186,22 @@ export class DeliveryTracking {
     const t = this.tracking();
     if (!t) return [];
     const markers: MapMarker[] = [
-      { id: 'home', lat: t.dropoffLat, lng: t.dropoffLng, kind: 'home', label: this.ui.t('deliveringTo') },
+      {
+        id: 'home',
+        lat: t.dropoffLat,
+        lng: t.dropoffLng,
+        kind: 'home',
+        label: this.ui.t('deliveringTo'),
+      },
     ];
     if (!t.pickedUp) {
-      markers.push({ id: 'store', lat: t.pickupLat, lng: t.pickupLng, kind: 'store', label: this.order().store.name });
+      markers.push({
+        id: 'store',
+        lat: t.pickupLat,
+        lng: t.pickupLng,
+        kind: 'store',
+        label: this.order().store.name,
+      });
     }
     if (t.lat !== null && t.lng !== null) {
       markers.push({ id: 'rider', lat: t.lat, lng: t.lng, kind: 'rider-busy', label: t.riderName });
@@ -203,7 +224,9 @@ export class DeliveryTracking {
     const seconds = this.tracking()?.etaSeconds;
     if (seconds === null || seconds === undefined) return null;
     const minutes = Math.round(seconds / 60);
-    return minutes <= 1 ? this.ui.t('arrivingNow') : this.ui.t('arrivesIn', { n: this.ui.number(minutes) });
+    return minutes <= 1
+      ? this.ui.t('arrivingNow')
+      : this.ui.t('arrivesIn', { n: this.ui.number(minutes) });
   });
 
   protected readonly stage = computed(() => {

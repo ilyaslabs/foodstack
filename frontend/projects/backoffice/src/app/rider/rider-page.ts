@@ -8,13 +8,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { AuthService } from '@foodstack/auth';
-import {
-  DeliveryJob,
-  DispatchClient,
-  Earnings,
-  Rider,
-  RiderClient,
-} from '@foodstack/api-client';
+import { DeliveryJob, DispatchClient, Earnings, Rider, RiderClient } from '@foodstack/api-client';
 import { FsMap, Icon, LocaleStore, MapMarker, PushRegistration, formatMoney } from '@foodstack/ui';
 
 import { confirmAction } from '../shared/confirm-dialog';
@@ -165,7 +159,11 @@ export class RiderPage implements OnInit {
     );
     if (!proof) return;
     await this.run(job, () => this.dispatch.delivered(job.orderId, proof), 'Not delivered yet.');
+    // Earnings are recorded from the delivery event a moment later, so look again shortly.
     void this.loadEarnings();
+    for (const wait of [2500, 7000]) {
+      setTimeout(() => void this.loadEarnings(), wait);
+    }
   }
 
   protected async giveUp(job: DeliveryJob): Promise<void> {
@@ -188,9 +186,13 @@ export class RiderPage implements OnInit {
   protected async enablePush(): Promise<void> {
     const state = await this.push.enable('backoffice');
     if (state === 'denied') {
-      this.snackBar.open('Notifications are blocked for this site in your browser settings.', 'OK', {
-        duration: 6000,
-      });
+      this.snackBar.open(
+        'Notifications are blocked for this site in your browser settings.',
+        'OK',
+        {
+          duration: 6000,
+        },
+      );
     }
   }
 
@@ -259,7 +261,11 @@ export class RiderPage implements OnInit {
     }
   }
 
-  private async run(job: DeliveryJob, call: () => Observable<unknown>, fallback: string): Promise<void> {
+  private async run(
+    job: DeliveryJob,
+    call: () => Observable<unknown>,
+    fallback: string,
+  ): Promise<void> {
     this.busy.set(job.orderId);
     try {
       await firstValueFrom(call(), { defaultValue: null });

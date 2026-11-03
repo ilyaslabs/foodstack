@@ -103,13 +103,26 @@
         </li>
       </ol>
       @if (job.cashToCollectMinor > 0) {
-        <p class="cash"><fs-icon name="payments" /> Collect {{ money(job.cashToCollectMinor, job.currency) }} in cash</p>
+        <p class="cash">
+          <fs-icon name="payments" /> Collect {{ money(job.cashToCollectMinor, job.currency) }} in
+          cash
+        </p>
       }
       <div class="offer-actions">
-        <button mat-stroked-button type="button" [disabled]="busy() === job.orderId" (click)="decline(job)">
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="busy() === job.orderId"
+          (click)="decline(job)"
+        >
           Decline
         </button>
-        <button mat-flat-button type="button" [disabled]="busy() === job.orderId" (click)="accept(job)">
+        <button
+          mat-flat-button
+          type="button"
+          [disabled]="busy() === job.orderId"
+          (click)="accept(job)"
+        >
           Accept
         </button>
       </div>
@@ -137,7 +150,10 @@
       <fs-map
         class="job-map"
         [markers]="markers(job)"
-        [route]="[{ lat: job.pickupLat, lng: job.pickupLng }, { lat: job.dropoffLat, lng: job.dropoffLng }]"
+        [route]="[
+          { lat: job.pickupLat, lng: job.pickupLng },
+          { lat: job.dropoffLat, lng: job.dropoffLng },
+        ]"
         [fit]="true"
         label="Route of this delivery"
       />
@@ -167,32 +183,59 @@
       </ol>
       <div class="facts">
         @if (job.cashToCollectMinor > 0) {
-          <span class="fact warn"><fs-icon name="payments" /> Collect {{ money(job.cashToCollectMinor, job.currency) }}</span>
+          <span class="fact warn"
+            ><fs-icon name="payments" /> Collect
+            {{ money(job.cashToCollectMinor, job.currency) }}</span
+          >
         } @else {
           <span class="fact"><fs-icon name="credit_card" /> Paid online</span>
         }
         @if (job.needsCode) {
           <span class="fact"><fs-icon name="key" /> Code needed</span>
         }
-        <span class="fact"><fs-icon name="money" /> You earn {{ money(job.earningMinor + job.tipMinor, job.currency) }}</span>
+        <span class="fact"
+          ><fs-icon name="money" /> You earn
+          {{ money(job.earningMinor + job.tipMinor, job.currency) }}</span
+        >
       </div>
       <div class="job-actions">
-        <button mat-button type="button" class="give-up" [disabled]="busy() === job.orderId" (click)="giveUp(job)">
+        <button
+          mat-button
+          type="button"
+          class="give-up"
+          [disabled]="busy() === job.orderId"
+          (click)="giveUp(job)"
+        >
           Can't deliver
         </button>
         @switch (job.status) {
           @case ('ASSIGNED') {
-            <button mat-flat-button type="button" [disabled]="busy() === job.orderId" (click)="arrived(job)">
+            <button
+              mat-flat-button
+              type="button"
+              [disabled]="busy() === job.orderId"
+              (click)="arrived(job)"
+            >
               I'm at the store
             </button>
           }
           @case ('AT_STORE') {
-            <button mat-flat-button type="button" [disabled]="busy() === job.orderId" (click)="pickedUp(job)">
+            <button
+              mat-flat-button
+              type="button"
+              [disabled]="busy() === job.orderId"
+              (click)="pickedUp(job)"
+            >
               Picked up
             </button>
           }
           @case ('PICKED_UP') {
-            <button mat-flat-button type="button" [disabled]="busy() === job.orderId" (click)="delivered(job)">
+            <button
+              mat-flat-button
+              type="button"
+              [disabled]="busy() === job.orderId"
+              (click)="delivered(job)"
+            >
               Delivered…
             </button>
           }

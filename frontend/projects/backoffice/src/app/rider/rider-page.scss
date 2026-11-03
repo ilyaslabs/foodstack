@@ -124,9 +124,18 @@ mat-card {
   gap: 12px;
   padding: 16px 16px 12px;
 
+  > div {
+    min-inline-size: 0;
+  }
+
   h2 {
     margin: 2px 0 0;
     font: var(--mat-sys-headline-small);
+  }
+
+  > a {
+    flex: none;
+    white-space: nowrap;
   }
 }
 
