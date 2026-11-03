@@ -25,6 +25,8 @@ public final class ModuleRoutes {
         prefixes.put("cart", List.of("/api/v1/carts"));
         prefixes.put("payment", List.of("/api/v1/payments", "/api/v1/payment-webhooks"));
         prefixes.put("order", List.of("/api/v1/orders"));
+        prefixes.put("rider", List.of("/api/v1/riders", "/api/v1/rider"));
+        prefixes.put("dispatch", List.of("/api/v1/deliveries", "/api/v1/dispatch"));
         prefixes.put("notification", List.of("/api/v1/notifications", "/api/v1/devices"));
         PREFIXES = Map.copyOf(prefixes);
     }
