@@ -159,6 +159,10 @@ sequenceDiagram
     alt deliveryMode = OPERATOR
         Ga->>Mo: geo_settings (operator pricing)
         Ga->>Ga: off → OPERATOR_DELIVERY_OFF<br/>beyond max distance → TOO_FAR<br/>else charge = base + per-km × km
+        opt now is in a peak window (deployment time zone from SettingsApi)
+            Ga->>Ga: charge × peak multiplier
+        end
+        Ga->>Ga: the operator's minimum order and free-delivery threshold
     else deliveryMode = SELF
         Ga->>Mo: geo_zones of the branch, in sort order
         Ga->>Ga: first zone whose polygon contains the point gives<br/>charge, minimum order, free-delivery threshold<br/>none → OUT_OF_AREA
@@ -168,4 +172,4 @@ sequenceDiagram
     Ss-->>Wb: deliverable, reason, charge, min order, free above, distance, minutes, currency
 ```
 
-The point-in-polygon test runs in Java (`GeoMath.contains`), not in MongoDB. Zones and operator pricing are read from MongoDB on every quote; there is no cache for them yet.
+The point-in-polygon test runs in Java (`GeoMath.contains`), not in MongoDB. Zones and operator pricing are read from MongoDB on every quote; there is no cache for them yet. Peak windows are days and times in the deployment's time zone; a window whose end is before its start runs past midnight. Checkout enforces the quote's minimum order and free-delivery threshold for both delivery modes.
