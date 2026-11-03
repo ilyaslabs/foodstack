@@ -150,7 +150,7 @@ public class DispatchService {
                 (operator ? DeliveryStatus.SEARCHING : DeliveryStatus.WAITING).name(), null, null, null, null,
                 delivery.pickup().lat(), delivery.pickup().lng(), delivery.pickupAddress(), delivery.dropoff().lat(),
                 delivery.dropoff().lng(), delivery.dropoffAddress(), delivery.instructions(), delivery.deliveryChargeMinor(),
-                delivery.tipMinor(), delivery.cashToCollectMinor(), delivery.currency(), hash(delivery.deliveryCode()),
+                delivery.tipMinor(), delivery.cashToCollectMinor(), delivery.currency(), hash(decrypt(delivery.deliveryCodeCipher())),
                 order.language(), readyBy, searchFrom, null, rules.searchRadiusMeters(), 0, null, null, List.of(), null, null,
                 null, null, null, null, null, null, 0, 0, distance, now, now, 0);
         try {
@@ -748,6 +748,10 @@ public class DispatchService {
             throw new ModuleException.BadRequest("Give a reason", "REASON_REQUIRED");
         }
         return reason.strip();
+    }
+
+    private String decrypt(String cipher) {
+        return (cipher != null) ? this.pii.decrypt(cipher) : null;
     }
 
     static String hash(String code) {

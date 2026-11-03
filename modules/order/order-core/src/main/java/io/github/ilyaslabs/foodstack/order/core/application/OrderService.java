@@ -278,7 +278,7 @@ public class OrderService {
                 (o.rider() != null) ? new OrderDetails.RiderInfo(o.rider().riderId(), o.rider().name(), o.rider().vehicle(),
                         o.rider().assignedAt().getEpochSecond()) : null,
                 // only the customer sees the code, they read it out to the rider at the door
-                Actor.CUSTOMER.equals(viewer.role()) ? o.deliveryCode() : null,
+                (Actor.CUSTOMER.equals(viewer.role()) && o.deliveryCodeCipher() != null) ? this.pii.decrypt(o.deliveryCodeCipher()) : null,
                 (o.handedBackAt() != null) ? o.handedBackAt().getEpochSecond() : null);
     }
 

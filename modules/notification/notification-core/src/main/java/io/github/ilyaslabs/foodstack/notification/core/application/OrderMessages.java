@@ -15,6 +15,7 @@ import io.github.ilyaslabs.foodstack.order.api.events.OrderReady;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderRejected;
 import io.github.ilyaslabs.foodstack.payment.api.events.RefundSucceeded;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
+import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 
@@ -38,8 +39,11 @@ public class OrderMessages {
 
     private final ServiceCalls serviceCalls;
 
+    private final PiiCipher pii;
+
     public OrderMessages(NotificationService notifications, Templates templates, SettingsApi settings, OrderApi orders,
-            ServiceCalls serviceCalls) {
+            ServiceCalls serviceCalls, PiiCipher pii) {
+        this.pii = pii;
         this.notifications = notifications;
         this.templates = templates;
         this.settings = settings;
@@ -50,7 +54,7 @@ public class OrderMessages {
     public void onOrderEvent(String eventId, Object event) {
         switch (event) {
             case OrderConfirmed e -> {
-                customer(eventId, e.order(), "order-confirmed", Map.of());
+                customer(eventId, e.order(), "order-confirmed", Map.of("codeLine", codeLine(e.order(), e.deliveryCodeCipher())));
                 int minutes = Math.max(1, this.settings.getOrdering().acceptTimeoutSeconds() / 60);
                 String language = this.settings.getLocale().defaultLanguage();
                 OrderSummary o = e.order();
@@ -100,6 +104,12 @@ public class OrderMessages {
         params.putAll(extra);
         this.notifications.send(new Message(eventId, order.customerId(), null, template, language(order), params,
                 "/orders/" + order.orderId(), false, true, true, false, true));
+    }
+
+    /** For a delivery that needs one, the code to give the rider (PRD DR-6); otherwise nothing. */
+    private String codeLine(OrderSummary order, String codeCipher) {
+        return (order.fulfilment() == Fulfilment.DELIVERY && codeCipher != null)
+                ? this.templates.phrase("deliveryCode", language(order), Map.of("code", this.pii.decrypt(codeCipher))) : "";
     }
 
     private String language(OrderSummary order) {

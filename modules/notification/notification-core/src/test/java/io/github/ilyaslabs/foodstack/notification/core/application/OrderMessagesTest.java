@@ -13,6 +13,7 @@ import io.github.ilyaslabs.foodstack.order.api.events.OrderReady;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderRejected;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
+import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
 import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
@@ -32,12 +33,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 class OrderMessagesTest {
 
+    private static final PiiCipher PII = new PiiCipher(java.util.Base64.getEncoder().encodeToString(new byte[32]));
+
     private final NotificationService notifications = mock(NotificationService.class);
 
     private final SettingsApi settings = mock(SettingsApi.class);
 
     private final OrderMessages messages = new OrderMessages(this.notifications, new Templates(JsonMapper.builder().build()),
-            this.settings, mock(OrderApi.class), mock(ServiceCalls.class));
+            this.settings, mock(OrderApi.class), mock(ServiceCalls.class), PII);
 
     @BeforeEach
     void settings() {
@@ -54,6 +57,7 @@ class OrderMessagesTest {
         verify(this.notifications, times(3)).send(sent.capture());
         assertThat(sent.getAllValues()).extracting(Message::userId).containsExactly("c1", "owner-1", "owner-2");
         assertThat(sent.getAllValues().get(0).language()).isEqualTo("ar");
+        assertThat((Map<String, Object>) sent.getAllValues().get(0).params()).containsEntry("codeLine", "");
         Message store = sent.getAllValues().get(1);
         assertThat(store.template()).isEqualTo("store-new-order");
         assertThat(store.backOffice()).isTrue();
@@ -73,10 +77,24 @@ class OrderMessagesTest {
 
         NotificationService quiet = mock(NotificationService.class);
         OrderMessages other = new OrderMessages(quiet, new Templates(JsonMapper.builder().build()), this.settings,
-                mock(OrderApi.class), mock(ServiceCalls.class));
+                mock(OrderApi.class), mock(ServiceCalls.class), PII);
         other.onOrderEvent("e3", new OrderCancelled(order(Fulfilment.PICKUP, "en"), "customer:c1", "Changed my mind", 0));
         other.onOrderEvent("e4", new OrderReady(order(Fulfilment.DELIVERY, "en"), "store:owner-1"));
         verifyNoInteractions(quiet);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    @DisplayName("a delivery that needs a code has it in the confirmation email (PRD DR-6)")
+    void deliveryCode() {
+        this.messages.onOrderEvent("e5", new OrderConfirmed(order(Fulfilment.DELIVERY, "en"), "payment", PII.encrypt("3173")));
+        ArgumentCaptor<Message> sent = ArgumentCaptor.forClass(Message.class);
+        verify(this.notifications, times(3)).send(sent.capture());
+        Message customer = sent.getAllValues().get(0);
+        assertThat(customer.template()).isEqualTo("order-confirmed");
+        assertThat(customer.email()).isTrue();
+        assertThat((Map<String, Object>) customer.params()).containsEntry("codeLine",
+                "Your delivery code is 3173. Give it to the rider when your order arrives.");
     }
 
     private static OrderSummary order(Fulfilment fulfilment, String language) {
