@@ -96,6 +96,31 @@ class GeoRepositoriesTest {
         assertThat(pricing.isEnabled()).isFalse();
         assertThat(pricing.getMaxDistanceMeters()).isEqualTo(8000);
         assertThat(pricing.getVersion()).isZero();
+        assertThat(pricing.getPeakWindows()).isNull();
+    }
+
+    @Test
+    @DisplayName("keeps the minimum order, free threshold and peak hours of operator pricing")
+    void pricingExtras() {
+        // a document of its own, so the seeded one stays as seeded for the other test
+        OperatorPricingDocument pricing = new OperatorPricingDocument();
+        pricing.setId("pricing-extras-test");
+        pricing.setMaxDistanceMeters(8000);
+        pricing.setMinOrderMinor(50_000);
+        pricing.setFreeDeliveryAboveMinor(200_000L);
+        pricing.setPeakMultiplierPercent(150);
+        pricing.setPeakWindows(java.util.List.of(new io.github.ilyaslabs.foodstack.geo.core.application.PeakWindow(
+                java.util.List.of(java.time.DayOfWeek.FRIDAY, java.time.DayOfWeek.SATURDAY), "19:00", "23:30")));
+        this.pricing.save(pricing);
+
+        OperatorPricingDocument read = this.pricing.findById("pricing-extras-test").orElseThrow();
+        assertThat(read.getMinOrderMinor()).isEqualTo(50_000);
+        assertThat(read.getFreeDeliveryAboveMinor()).isEqualTo(200_000);
+        assertThat(read.getPeakMultiplierPercent()).isEqualTo(150);
+        assertThat(read.getPeakWindows()).singleElement().satisfies((w) -> {
+            assertThat(w.days()).containsExactly(java.time.DayOfWeek.FRIDAY, java.time.DayOfWeek.SATURDAY);
+            assertThat(w.end()).isEqualTo("23:30");
+        });
     }
 
     private static ZoneDocument zone(String storeId, int order, double minLng, double minLat, double maxLng, double maxLat) {

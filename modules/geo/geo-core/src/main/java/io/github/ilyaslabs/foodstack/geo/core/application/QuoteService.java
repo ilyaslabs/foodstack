@@ -1,6 +1,12 @@
 package io.github.ilyaslabs.foodstack.geo.core.application;
 
+import java.time.Clock;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.List;
+import java.util.function.Supplier;
 
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaRequest;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaView;
@@ -14,7 +20,8 @@ import io.github.ilyaslabs.moduleswitch.ModuleException;
 /**
  * Delivery quotes and delivery areas (PRD SE-7). Self-delivery: the first of the branch's zones
  * that contains the address. Operator delivery: base charge plus the per-km rate on the estimated
- * road distance, up to the maximum distance.
+ * road distance, up to the maximum distance, times the peak multiplier in peak hours, with the
+ * operator's minimum order and free-delivery threshold (PRD DR-1b).
  */
 public class QuoteService {
 
@@ -28,15 +35,25 @@ public class QuoteService {
 
     private final RoutingService routing;
 
+    private final Clock clock;
+
+    private final Supplier<ZoneId> timeZone;
+
     public QuoteService(ZoneService zones, OperatorPricingService pricing, double roadFactor) {
-        this(zones, pricing, roadFactor, RoutingService.estimating(roadFactor));
+        this(zones, pricing, roadFactor, RoutingService.estimating(roadFactor), Clock.systemUTC(), () -> ZoneOffset.UTC);
     }
 
-    public QuoteService(ZoneService zones, OperatorPricingService pricing, double roadFactor, RoutingService routing) {
+    /**
+     * @param timeZone the deployment's time zone, which peak hours are in
+     */
+    public QuoteService(ZoneService zones, OperatorPricingService pricing, double roadFactor, RoutingService routing,
+            Clock clock, Supplier<ZoneId> timeZone) {
         this.zones = zones;
         this.pricing = pricing;
         this.roadFactor = roadFactor;
         this.routing = routing;
+        this.clock = clock;
+        this.timeZone = timeZone;
     }
 
     public DeliveryQuoteView quote(QuoteRequest request) {
@@ -52,7 +69,11 @@ public class QuoteService {
                 return refusal(DeliveryQuoteView.TOO_FAR, distance, DeliveryMode.OPERATOR);
             }
             long charge = operator.baseChargeMinor() + Math.round(operator.perKmMinor() * distance / 1000.0);
-            return new DeliveryQuoteView(true, null, charge, 0, null, distance, null, DeliveryMode.OPERATOR);
+            if (operator.peakMultiplierPercent() > 100 && isPeak(operator.peakWindows())) {
+                charge = Math.round(charge * operator.peakMultiplierPercent() / 100.0);
+            }
+            return new DeliveryQuoteView(true, null, charge, operator.minOrderMinor(), operator.freeDeliveryAboveMinor(),
+                    distance, null, DeliveryMode.OPERATOR);
         }
         for (ZoneDetails zone : this.zones.getZones(request.storeId())) {
             if (GeoMath.contains(zone.polygon(), request.destination())) {
@@ -75,6 +96,15 @@ public class QuoteService {
         }
         return new DeliveryAreaView(request.storeId(),
                 this.zones.getZones(request.storeId()).stream().map(ZoneDetails::polygon).toList());
+    }
+
+    private boolean isPeak(List<PeakWindow> windows) {
+        if (windows.isEmpty()) {
+            return false;
+        }
+        ZonedDateTime now = this.clock.instant().atZone(this.timeZone.get());
+        LocalTime time = now.toLocalTime();
+        return windows.stream().anyMatch((w) -> w.contains(now.getDayOfWeek(), time));
     }
 
     private static DeliveryQuoteView refusal(String reason, long distance, DeliveryMode mode) {

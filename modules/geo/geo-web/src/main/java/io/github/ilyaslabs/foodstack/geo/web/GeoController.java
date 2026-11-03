@@ -7,10 +7,12 @@ import io.github.ilyaslabs.foodstack.geo.core.application.AddressSuggestion;
 import io.github.ilyaslabs.foodstack.geo.core.application.GeocodingService;
 import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricing;
 import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricingService;
+import io.github.ilyaslabs.foodstack.geo.core.application.PeakWindow;
 import io.github.ilyaslabs.foodstack.geo.core.application.UpdateOperatorPricing;
 import io.github.ilyaslabs.foodstack.geo.web.dto.AddressResponse;
 import io.github.ilyaslabs.foodstack.geo.web.dto.OperatorPricingRequest;
 import io.github.ilyaslabs.foodstack.geo.web.dto.OperatorPricingResponse;
+import io.github.ilyaslabs.foodstack.geo.web.dto.PeakWindowDto;
 import io.github.ilyaslabs.foodstack.platform.core.EpochSeconds;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.web.ETags;
@@ -61,8 +63,13 @@ class GeoController {
             throw new ModuleException.BadRequest("Send If-Match with the ETag you edited, so changes are not lost",
                     "IF_MATCH_REQUIRED");
         }
+        List<PeakWindow> windows = (request.peakWindows() != null)
+                ? request.peakWindows().stream().map((w) -> new PeakWindow(w.days(), w.start(), w.end())).toList() : List.of();
         OperatorPricing updated = this.pricingService.update(new UpdateOperatorPricing(request.enabled(),
-                request.baseChargeMinor(), request.perKmMinor(), request.maxDistanceMeters()), version, CurrentUser.id());
+                request.baseChargeMinor(), request.perKmMinor(), request.maxDistanceMeters(),
+                (request.minOrderMinor() != null) ? request.minOrderMinor() : 0, request.freeDeliveryAboveMinor(),
+                (request.peakMultiplierPercent() != null) ? request.peakMultiplierPercent() : 100, windows), version,
+                CurrentUser.id());
         return ResponseEntity.ok().eTag(ETags.of(PRICING, updated.version())).body(toResponse(updated));
     }
 
@@ -92,6 +99,8 @@ class GeoController {
 
     private static OperatorPricingResponse toResponse(OperatorPricing p) {
         return new OperatorPricingResponse(p.enabled(), p.baseChargeMinor(), p.perKmMinor(), p.maxDistanceMeters(),
-                p.version(), EpochSeconds.of(p.updatedAt()));
+                p.minOrderMinor(), p.freeDeliveryAboveMinor(), p.peakMultiplierPercent(),
+                p.peakWindows().stream().map((w) -> new PeakWindowDto(w.days(), w.start(), w.end())).toList(), p.version(),
+                EpochSeconds.of(p.updatedAt()));
     }
 }
