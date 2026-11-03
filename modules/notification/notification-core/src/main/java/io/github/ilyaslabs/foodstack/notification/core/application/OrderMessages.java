@@ -59,7 +59,7 @@ public class OrderMessages {
                         this.templates.phrase((o.fulfilment() == Fulfilment.PICKUP) ? "pickup" : "delivery", language, Map.of()));
                 for (String owner : o.storeOwnerIds()) {
                     this.notifications.send(new Message(eventId, owner, null, "store-new-order", language, params, BOARD_LINK, true,
-                            true, true, false));
+                            true, true, false, true));
                 }
             }
             case OrderAccepted e -> customer(eventId, e.order(), "order-accepted", Map.of("minutes", e.prepMinutes()));
@@ -99,7 +99,7 @@ public class OrderMessages {
         Map<String, Object> params = Templates.params("number", order.number(), "store", order.storeName());
         params.putAll(extra);
         this.notifications.send(new Message(eventId, order.customerId(), null, template, language(order), params,
-                "/orders/" + order.orderId(), false, true, true, false));
+                "/orders/" + order.orderId(), false, true, true, false, true));
     }
 
     private String language(OrderSummary order) {

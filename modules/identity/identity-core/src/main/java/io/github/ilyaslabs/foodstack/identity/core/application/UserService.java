@@ -133,6 +133,15 @@ public class UserService {
             .toList();
     }
 
+    /** Active users holding any of these roles, for staff alerts (at most 500). */
+    public List<String> activeUserIdsWithRoles(Set<Role> roles) {
+        return this.users.findByRolesInOrderByIdDesc(List.copyOf(roles), Limit.of(500))
+            .stream()
+            .filter((user) -> user.getStatus() == null || user.getStatus() == io.github.ilyaslabs.foodstack.identity.api.UserStatus.ACTIVE)
+            .map(UserDocument::getId)
+            .toList();
+    }
+
     /**
      * Invalidates every token the user holds, in every module, at once (TDD 9.1).
      * @return the new minimum token version

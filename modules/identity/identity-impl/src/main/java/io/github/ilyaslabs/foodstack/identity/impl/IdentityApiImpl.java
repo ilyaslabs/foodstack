@@ -7,7 +7,6 @@ import io.github.ilyaslabs.foodstack.identity.api.UserView;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserAccount;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
 
-import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
 import io.github.ilyaslabs.foodstack.identity.core.domain.Permissions;
 
@@ -47,6 +46,12 @@ class IdentityApiImpl implements IdentityApi {
         boolean storeRider = access.storeId() != null && !access.storeId().isBlank();
         return toView(this.userService.grantRiderAccess(access.email(), access.displayName(), access.initialPassword(),
                 storeRider, access.grantedBy()));
+    }
+
+    @Override
+    public java.util.List<String> userIdsWithRoles(java.util.Set<io.github.ilyaslabs.foodstack.identity.api.Role> roles) {
+        ModuleAccess.requireServiceOr();
+        return this.userService.activeUserIdsWithRoles(roles);
     }
 
     @Override

@@ -97,14 +97,29 @@ public class NotificationService {
      * @param inApp whether to add it to the notification centre
      * @param email whether to email it
      * @param required whether it is sent whatever the preferences (sign-in codes)
+     * @param push whether to push it to the user's phone or browser too
      */
     public record Message(String eventId, String userId, String emailAddress, String template, String language,
-            Map<String, ?> params, String link, boolean backOffice, boolean inApp, boolean email, boolean required) {
+            Map<String, ?> params, String link, boolean backOffice, boolean inApp, boolean email, boolean required,
+            boolean push) {
+
+        public Message(String eventId, String userId, String emailAddress, String template, String language,
+                Map<String, ?> params, String link, boolean backOffice, boolean inApp, boolean email, boolean required) {
+            this(eventId, userId, emailAddress, template, language, params, link, backOffice, inApp, email, required, false);
+        }
+    }
+
+    private PushService push;
+
+    /** Turns on push messages (TDD 8.3); without it, messages go to the notification centre and email only. */
+    public void usePush(PushService push) {
+        this.push = push;
     }
 
     public void send(Message message) {
         Instant now = this.clock.instant();
         Templates.Rendered rendered = this.templates.render(message.template(), message.language(), message.params());
+        boolean fresh = true;
         if (message.inApp() && message.userId() != null) {
             try {
                 this.mongo.insert(new InboxDocument(message.eventId() + ":" + message.userId(), message.userId(),
@@ -112,6 +127,17 @@ public class NotificationService {
             }
             catch (DuplicateKeyException ex) {
                 // this event was already turned into a message
+                fresh = false;
+            }
+        }
+        if (message.push() && fresh && message.userId() != null && this.push != null && this.push.enabled()) {
+            String url = (message.link() != null) ? (message.backOffice() ? this.adminUrl : this.webUrl) + message.link() : null;
+            try {
+                this.push.send(message.userId(), message.backOffice() ? "backoffice" : "web", rendered.title(), rendered.body(),
+                        url, Map.of("type", message.template(), "link", (message.link() != null) ? message.link() : ""));
+            }
+            catch (RuntimeException ex) {
+                log.warn("Push for {} not sent: {}", message.template(), ex.getMessage());
             }
         }
         if (!message.email()) {

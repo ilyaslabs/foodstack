@@ -64,6 +64,26 @@
     "ar": { "title": "إعادة تعيين كلمة المرور", "body": "استخدم {{code}} لاختيار كلمة مرور جديدة في {{brand}}. تنتهي صلاحيته خلال {{minutes}} دقيقة. إن لم تطلبه فستبقى كلمة مرورك كما هي.", "subject": "{{code}} هو رمز إعادة تعيين كلمة المرور في {{brand}}" },
     "ur": { "title": "اپنا پاس ورڈ دوبارہ ترتیب دیں", "body": "{{brand}} کے لیے نیا پاس ورڈ چننے کے لیے {{code}} استعمال کریں۔ یہ {{minutes}} منٹ میں ختم ہو جائے گا۔ اگر آپ نے یہ نہیں مانگا تو آپ کا پاس ورڈ ویسا ہی رہے گا۔", "subject": "{{code}} آپ کا {{brand}} پاس ورڈ ری سیٹ کوڈ ہے" }
   },
+  "rider-offer": {
+    "en": { "title": "New delivery: earn {{earning}}", "body": "Order {{number}} from {{store}}. Open the app to accept before the offer moves on.", "subject": "New delivery offer {{number}}" },
+    "ar": { "title": "توصيل جديد: اربح {{earning}}", "body": "الطلب {{number}} من {{store}}. افتح التطبيق واقبله قبل انتقال العرض.", "subject": "عرض توصيل جديد {{number}}" },
+    "ur": { "title": "نئی ڈیلیوری: {{earning}} کمائیں", "body": "{{store}} سے آرڈر {{number}}۔ پیشکش آگے جانے سے پہلے ایپ کھول کر قبول کریں۔", "subject": "نئی ڈیلیوری کی پیشکش {{number}}" }
+  },
+  "rider-assigned": {
+    "en": { "title": "{{rider}} is bringing order {{number}}", "body": "Follow your rider on the map from your order page.", "subject": "Your rider for order {{number}}" },
+    "ar": { "title": "{{rider}} يوصل الطلب {{number}}", "body": "تابع المندوب على الخريطة من صفحة طلبك.", "subject": "مندوب طلبك {{number}}" },
+    "ur": { "title": "{{rider}} آرڈر {{number}} لا رہے ہیں", "body": "اپنے آرڈر کے صفحے سے نقشے پر رائیڈر کو دیکھیں۔", "subject": "آرڈر {{number}} کا رائیڈر" }
+  },
+  "rider-job-assigned": {
+    "en": { "title": "You have a delivery: order {{number}}", "body": "Pick it up at {{store}}. The steps are in the app.", "subject": "Delivery {{number}} assigned to you" },
+    "ar": { "title": "لديك توصيل: الطلب {{number}}", "body": "استلمه من {{store}}. الخطوات في التطبيق.", "subject": "تم إسناد التوصيل {{number}} إليك" },
+    "ur": { "title": "آپ کی ڈیلیوری: آرڈر {{number}}", "body": "{{store}} سے وصول کریں۔ مراحل ایپ میں ہیں۔", "subject": "ڈیلیوری {{number}} آپ کو دی گئی" }
+  },
+  "dispatch-alert": {
+    "en": { "title": "No rider for order {{number}}", "body": "{{store}} has been waiting {{minutes}} min. Assign a rider or hand the delivery back to the store.", "subject": "No rider for order {{number}}" },
+    "ar": { "title": "لا يوجد مندوب للطلب {{number}}", "body": "ينتظر {{store}} منذ {{minutes}} دقيقة. أسند مندوبًا أو أعد التوصيل إلى المتجر.", "subject": "لا يوجد مندوب للطلب {{number}}" },
+    "ur": { "title": "آرڈر {{number}} کے لیے کوئی رائیڈر نہیں", "body": "{{store}} {{minutes}} منٹ سے انتظار میں ہے۔ رائیڈر دیں یا ڈیلیوری اسٹور کو واپس کریں۔", "subject": "آرڈر {{number}} کے لیے کوئی رائیڈر نہیں" }
+  },
   "phrases": {
     "en": { "refund": "{{amount}} will be refunded to your card.", "delivery": "delivery", "pickup": "pickup", "noAnswer": "The restaurant did not answer in time.", "button": "View order" },
     "ar": { "refund": "سيتم رد {{amount}} إلى بطاقتك.", "delivery": "توصيل", "pickup": "استلام", "noAnswer": "لم يرد المطعم في الوقت المحدد.", "button": "عرض الطلب" },
