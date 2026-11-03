@@ -103,7 +103,7 @@ class DeliveryScenario {
             .body(order).post("/api/v1/orders");
         placed.then().log().ifValidationFails().statusCode(201);
         String orderId = placed.path("orderId");
-        int total = placed.path("totalMinor");
+        int total = quote.path("totalMinor");
 
         // when: the store accepts, the rider is offered the job and takes it
         owner.postJson("/api/v1/orders/" + orderId + "/actions/accept", Map.of("prepMinutes", 10))
@@ -134,7 +134,7 @@ class DeliveryScenario {
                 "accuracyMeters", 8.0, "at", System.currentTimeMillis())))).then().log().ifValidationFails().statusCode(204);
         await().atMost(Duration.ofSeconds(20)).pollInterval(Duration.ofMillis(500)).untilAsserted(() -> {
             Response tracking = customer.get("/api/v1/riders/tracking/" + orderId);
-            tracking.then().statusCode(200);
+            tracking.then().log().ifValidationFails().statusCode(200);
             assertThat(tracking.<String>path("riderName")).isEqualTo("Bilal Rider");
             assertThat(tracking.<Float>path("lat")).isEqualTo(31.5140f);
             assertThat(tracking.<Boolean>path("pickedUp")).isFalse();

@@ -156,6 +156,8 @@ public final class FoodstackPlatform {
         properties.put("spring.kafka.bootstrap-servers", FoodstackContainers.kafka().getBootstrapServers());
         properties.put("foodstack.namespace", namespace);
         properties.put("foodstack.kafka.topic-partitions", "3");
+        // services start one by one, so a consumer often subscribes before the publisher creates its topic
+        properties.put("spring.kafka.consumer.properties.metadata.max.age.ms", "3000");
         properties.put("foodstack.security.pii-key", PII_KEY);
         properties.put("foodstack.security.revocation-cache-ttl", "1s");
         // Service tokens for background work where identity is not local (microservices topology)

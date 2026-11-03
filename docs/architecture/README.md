@@ -2,7 +2,7 @@
 
 These pages show what the code on `main` **actually does today**, traced from the source, not what the design intends. Where the code and the [TDD](../TDD.md) differ, the difference is listed in [Code vs design](05-code-vs-design.md).
 
-State described: after M2 (modules `identity`, `settings`, `media`, `geo`, `store`, `search`, `promotion`, `cart`, `payment`, `order`, `notification`). Rider dispatch, the ledger and the other later modules are not built yet, so they do not appear here.
+State described: after M3 (modules `identity`, `settings`, `media`, `geo`, `store`, `search`, `promotion`, `cart`, `payment`, `order`, `notification`, `rider`, `dispatch`). The ledger and the other later modules are not built yet, so they do not appear here.
 
 All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHub.
 
@@ -16,6 +16,7 @@ All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHu
 | [4. Back-office flows](04-backoffice-flows.md) | Sign-in and token renewal, onboarding a store, editing the menu, sold-out, drawing zones, going live, image upload, branding, sign-out everywhere, index rebuild |
 | [5. Code vs design](05-code-vs-design.md) | Every place where today's code differs from the TDD, and what is not built yet |
 | [6. Ordering flows](06-ordering-flows.md) | The order's life, cart and checkout, placing a cash order, card payment on the hosted page, the store's live board, no answer, cancel and refunds, coupons, notifications and emails, sign-in by email code and password reset |
+| [7. Delivery flows](07-delivery-flows.md) | The delivery job's life, how dispatch finds and offers a rider, the rider accepting, live position and tracking, pickup and handover with the code, support reassigning or handing back, stores that deliver themselves, push devices, saved addresses |
 
 ## Quick answer: which store does each action touch?
 
@@ -39,6 +40,12 @@ All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHu
 | Card payment | ✅ payment | — | — | ✅ `PaymentSucceeded` / `PaymentFailed` | — | Card gateway (page, webhook, refunds) |
 | Store accepts, ready, collected | ✅ order, order_active | ✅ live message | — | ✅ one event per step | — | — |
 | Live order page and board (SSE) | ✅ on each reload | ✅ pub/sub subscription | — | — | — | — |
+| Saved addresses (`/api/v1/me/addresses`) | ✅ identity_addresses | — | — | — | — | — |
+| Dispatch matcher (every 2 s, one replica) | ✅ dispatch_active, dispatch_jobs | ✅ leader lock, offer lock, rider GEO set and positions, live message | — | ✅ `RiderOffered`, `DispatchAlert` | — | Routing (OSRM) when set |
+| Rider accepts, arrives, picks up, delivers | ✅ dispatch_jobs, dispatch_active | ✅ offer lock released, code tries limit, live message | — | ✅ `RiderAssigned`, `DeliveryPickedUp`, `DeliveryCompleted` | ✅ proof photo (through media) | — |
+| Rider position (`POST /api/v1/rider/me/locations`) | ✅ sampled: rider_riders, rider_locations | ✅ position, GEO set, rate limit, live message | — | — | — | — |
+| Customer tracking (`/api/v1/riders/tracking/{orderId}`) | ✅ rider_assignments | ✅ position, pub/sub for the stream | — | — | — | Routing (OSRM) when set |
+| Push to a device | ✅ notification_devices | — | — | read: dispatch, order events | — | FCM |
 | Notification and email | ✅ inbox, deliveries, preferences | — | — | read: order, payment, identity events | — | SMTP server |
 | Sign in with an email code | ✅ users, outbox | ✅ code, rate limit | — | ✅ `EmailCodeIssued` | — | SMTP (through notification) |
 

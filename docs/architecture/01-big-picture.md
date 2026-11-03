@@ -159,6 +159,47 @@ flowchart TB
 
 Every module also has its own `<module>_outbox`, `<module>_inbox` and Liquibase tracking collections in its database, and every collection name starts with the module name (`order_orders`, `cart_carts`). `search` keeps no MongoDB database at all: its index can always be rebuilt from `store` and `geo`. `order` also reads its own events to keep the order lists (`order_by_customer`, `order_by_store`) up to date. `order` calls `SettingsApi` as well as `IdentityApi`, and `notification` calls all three of `IdentityApi`, `OrderApi` and `SettingsApi`; each is drawn as one arrow to keep the diagram readable. The flows of the ordering modules are on [6. Ordering flows](06-ordering-flows.md).
 
+**Delivery modules (M3).** `rider` keeps rider accounts, where riders are and what they earned; `dispatch` keeps one job per delivery order and finds riders. The flows are on [7. Delivery flows](07-delivery-flows.md).
+
+```mermaid
+flowchart TB
+    subgraph rider
+        RI[rider]
+        RIdb[("foodstack_rider<br/>riders, assignments,<br/>locations, earnings")]
+    end
+    subgraph dispatch
+        DI[dispatch]
+        DIdb[("foodstack_dispatch<br/>jobs, active")]
+    end
+    RD[("Redis<br/>rider GEO set and positions,<br/>offer locks, live channels")]
+    OR[order]
+    NO[notification]
+    GE[geo]
+    SE[settings]
+    ID[identity]
+    FCM(["FCM push"])
+    OSRM(["OSRM (optional)"])
+
+    RI --- RIdb
+    DI --- DIdb
+    RI --- RD
+    DI --- RD
+
+    DI -->|"RiderApi: findAvailable, getRider"| RI
+    DI -->|"GeoApi: route, SettingsApi: delivery"| GE
+    RI -->|"GeoApi: route, SettingsApi: delivery, locale"| SE
+    RI -->|"IdentityApi: grant or revoke rider access"| ID
+    GE -->|"routes when set"| OSRM
+    NO -->|"push"| FCM
+
+    OR -. "foodstack.order.events<br/>OrderAccepted, OrderReady, OrderPickedUp,<br/>OrderDelivered, OrderCancelled, OrderRejected, OrderFailed" .-> DI
+    DI -. "foodstack.dispatch.events<br/>RiderAssigned, RiderUnassigned, DeliveryPickedUp,<br/>DeliveryCompleted, DeliveryHandedBack" .-> OR
+    DI -. "RiderOffered, RiderAssigned, RiderUnassigned,<br/>DeliveryPickedUp, DeliveryCompleted,<br/>DeliveryCancelled, DeliveryHandedBack" .-> RI
+    DI -. "RiderOffered, RiderAssigned, DispatchAlert" .-> NO
+```
+
+`dispatch` calls `GeoApi` and `SettingsApi`, and `rider` calls both too; each pair is drawn as one arrow. `rider` publishes `RiderStatusChanged` on `foodstack.rider.events`, which nothing reads yet.
+
 ### Events with no consumer yet
 
 These are published to Kafka today but nothing reads them yet.
@@ -169,7 +210,8 @@ These are published to Kafka today but nothing reads them yet.
 | `foodstack.settings.events` | `SettingsChanged` | Caches in other replicas |
 | `foodstack.media.events` | `MediaReady` | — |
 | `foodstack.promotion.events` | `CouponRedeemed`, `CouponReleased` | Reports and ledger (M4) |
-| `foodstack.order.events` | `OrderPlaced`, `OrderPreparing`, `OrderCollected` (read only by order's own projections) | Ledger (M4), dispatch (M3) |
+| `foodstack.order.events` | `OrderPlaced`, `OrderPreparing`, `OrderCollected` (read only by order's own projections) | Ledger (M4) |
+| `foodstack.rider.events` | `RiderStatusChanged` | Reports (M4) |
 
 ## 1.3 Inside one module
 

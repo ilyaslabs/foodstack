@@ -380,7 +380,7 @@ public class RiderActivity {
     public AssignmentDocument requireFollow(String orderId) {
         AssignmentDocument assignment = this.mongo.findById(orderId, AssignmentDocument.class);
         String me = CurrentUser.id();
-        if (assignment != null && (me != null && (me.equals(assignment.customerId()) || me.equals(assignment.riderId()))
+        if (assignment != null && ((me != null && (me.equals(assignment.customerId()) || me.equals(assignment.riderId())))
                 || CurrentUser.storeIds().contains(assignment.storeId()) || CurrentUser.hasAuthority(RiderService.DISPATCH)
                 || CurrentUser.hasAuthority(RiderService.MANAGE))) {
             return assignment;
