@@ -42,7 +42,7 @@ Events on `foodstack.dispatch.events`: `RiderOffered`, `RiderAssigned`, `RiderUn
 
 ## 7.2 Store accepts, dispatch finds a rider
 
-The delivery code is made when the order is placed (4 digits, only when the total is at least the operator's **Ask for the code above** amount). `OrderAccepted` carries what dispatch needs (`OrderDelivery`: pickup, drop-off, customer, cash to collect, the code); dispatch keeps only a hash of the code.
+The delivery code is made when the order is placed (4 digits, only when the total is at least the operator's **Ask for the code above** amount). The order keeps the code encrypted with the PII key (`deliveryCodeCipher`). `OrderAccepted` carries what dispatch needs (`OrderDelivery`: pickup, drop-off, customer, cash to collect, the encrypted code); dispatch decrypts it once and keeps only a hash. See 7.10 for the code in the confirmation email.
 
 ```mermaid
 sequenceDiagram
@@ -248,3 +248,57 @@ Push is on only when `FCM_SERVICE_ACCOUNT` is set; the apps hide the "Turn on no
 ## 7.9 Saved addresses
 
 Customers keep up to 20 addresses (`identity_addresses`, one `HOME`, one `WORK`, any number of named `OTHER`), each with a map pin and notes for the rider, through `GET`, `POST`, `PUT` and `DELETE` on `/api/v1/me/addresses`. The web app starts with the preferred one, checkout picks one, and a typed address is saved after the first order. The address on an order is a copy, so editing or deleting a saved address never changes past orders.
+
+## 7.10 The delivery code in the confirmation email
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Oc as order
+    participant K as Kafka
+    participant Nc as notification
+    participant Em as Email
+
+    Oc->>Oc: place order, make the code if the total needs one
+    Oc->>Oc: encrypt the code with the PII key (deliveryCodeCipher)
+    Oc-->>K: OrderConfirmed with the encrypted code
+    K-->>Nc: OrderMessages.onOrderEvent
+    alt delivery order with a code
+        Nc->>Nc: decrypt, fill codeLine in the customer's language
+    else pickup or no code
+        Nc->>Nc: codeLine is empty
+    end
+    Nc->>Em: order-confirmed email with codeLine
+```
+
+The code is in clear only in memory while the email is written; the email itself is the customer's copy (PRD DR-6).
+
+## 7.11 Rider papers
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Bo as Back office (rider page)
+    participant Me as media
+    participant Rw as RiderPapersController
+    participant Ro as RiderOnboarding (rider-core)
+    participant Mo as MongoDB rider_onboarding
+
+    Bo->>Me: upload front and back photos (purpose RIDER_DOCUMENT, private)
+    Me-->>Bo: media ids
+    Bo->>Rw: POST /api/v1/riders/{id}/papers/documents (type, number, photos, expiry)
+    Rw->>Ro: addDocument (needs rider:manage, operator riders only)
+    Ro->>Me: claim each photo for rider doc-(document id), with a service token
+    Ro->>Mo: save, number encrypted, last 4 kept for display
+    Ro-->>Bo: papers with short-lived photo links
+    Bo->>Rw: POST .../documents/{docId}/verify
+    Rw->>Ro: verifyDocument (who and when)
+    Bo->>Rw: PUT /api/v1/riders/{id}/papers/payout (method, provider, holder, account)
+    Rw->>Ro: setPayout, account encrypted
+    Ro-->>Bo: complete when a checked, unexpired ID card or passport and payout are set
+    Bo->>Rw: DELETE .../documents/{docId}
+    Ro->>Me: release the photos
+```
+
+The riders list asks `GET /api/v1/riders/papers/complete` and marks other operator riders **Papers missing**. A save that raced another edit answers 409 `RIDER_PAPERS_CHANGED`.
+
