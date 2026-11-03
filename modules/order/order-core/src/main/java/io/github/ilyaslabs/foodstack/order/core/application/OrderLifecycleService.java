@@ -239,7 +239,7 @@ public class OrderLifecycleService {
                 Instant now = this.clock.instant();
                 OrderDocument after = apply(order, OrderStatus.CONFIRMED, Actor.system(), "Paid by card",
                         new Update().set("paidMinor", amountMinor).unset("paymentUrl").set("acceptBy", acceptBy(now)), now,
-                        (changed) -> new OrderConfirmed(summary(changed), "payment", changed.deliveryCode()));
+                        (changed) -> new OrderConfirmed(summary(changed), "payment", changed.deliveryCodeCipher()));
                 if (after != null) {
                     return after;
                 }
@@ -350,7 +350,7 @@ public class OrderLifecycleService {
         return new OrderDelivery(o.deliveryMode(), storeRiderId, new GeoPoint(s.lat(), s.lng()), s.addressLine(),
                 new GeoPoint(o.destination().lat(), o.destination().lng()), o.destination().addressLine(),
                 o.destination().instructions(), o.customerName(), o.contactPhone(), charge, o.totals().tipMinor(), cash,
-                o.currency(), o.deliveryCode());
+                o.currency(), o.deliveryCodeCipher());
     }
 
     /** Rejects confirmed orders the store did not answer in time (PRD 3); returns how many. */

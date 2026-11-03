@@ -1,8 +1,8 @@
 {
   "order-confirmed": {
-    "en": { "title": "Order {{number}} received", "body": "{{store}} has your order. We will tell you as soon as they accept it.", "subject": "Your order {{number}} from {{store}}" },
-    "ar": { "title": "تم استلام الطلب {{number}}", "body": "وصل طلبك إلى {{store}}. سنخبرك فور قبوله.", "subject": "طلبك {{number}} من {{store}}" },
-    "ur": { "title": "آرڈر {{number}} موصول ہو گیا", "body": "آپ کا آرڈر {{store}} کو مل گیا ہے۔ قبول ہوتے ہی ہم آپ کو بتائیں گے۔", "subject": "{{store}} سے آپ کا آرڈر {{number}}" }
+    "en": { "title": "Order {{number}} received", "body": "{{store}} has your order. We will tell you as soon as they accept it. {{codeLine}}", "subject": "Your order {{number}} from {{store}}" },
+    "ar": { "title": "تم استلام الطلب {{number}}", "body": "وصل طلبك إلى {{store}}. سنخبرك فور قبوله. {{codeLine}}", "subject": "طلبك {{number}} من {{store}}" },
+    "ur": { "title": "آرڈر {{number}} موصول ہو گیا", "body": "آپ کا آرڈر {{store}} کو مل گیا ہے۔ قبول ہوتے ہی ہم آپ کو بتائیں گے۔ {{codeLine}}", "subject": "{{store}} سے آپ کا آرڈر {{number}}" }
   },
   "order-accepted": {
     "en": { "title": "{{store}} accepted your order", "body": "Order {{number}} is being prepared and should be ready in about {{minutes}} minutes.", "subject": "Order {{number}} accepted" },
@@ -85,8 +85,8 @@
     "ur": { "title": "آرڈر {{number}} کے لیے کوئی رائیڈر نہیں", "body": "{{store}} {{minutes}} منٹ سے انتظار میں ہے۔ رائیڈر دیں یا ڈیلیوری اسٹور کو واپس کریں۔", "subject": "آرڈر {{number}} کے لیے کوئی رائیڈر نہیں" }
   },
   "phrases": {
-    "en": { "refund": "{{amount}} will be refunded to your card.", "delivery": "delivery", "pickup": "pickup", "noAnswer": "The restaurant did not answer in time.", "button": "View order" },
-    "ar": { "refund": "سيتم رد {{amount}} إلى بطاقتك.", "delivery": "توصيل", "pickup": "استلام", "noAnswer": "لم يرد المطعم في الوقت المحدد.", "button": "عرض الطلب" },
-    "ur": { "refund": "{{amount}} آپ کے کارڈ پر واپس کر دیے جائیں گے۔", "delivery": "ڈیلیوری", "pickup": "پک اپ", "noAnswer": "ریستوران نے وقت پر جواب نہیں دیا۔", "button": "آرڈر دیکھیں" }
+    "en": { "refund": "{{amount}} will be refunded to your card.", "delivery": "delivery", "pickup": "pickup", "noAnswer": "The restaurant did not answer in time.", "button": "View order", "deliveryCode": "Your delivery code is {{code}}. Give it to the rider when your order arrives." },
+    "ar": { "refund": "سيتم رد {{amount}} إلى بطاقتك.", "delivery": "توصيل", "pickup": "استلام", "noAnswer": "لم يرد المطعم في الوقت المحدد.", "button": "عرض الطلب", "deliveryCode": "رمز التسليم الخاص بك هو {{code}}. أعطه للمندوب عند وصول طلبك." },
+    "ur": { "refund": "{{amount}} آپ کے کارڈ پر واپس کر دیے جائیں گے۔", "delivery": "ڈیلیوری", "pickup": "پک اپ", "noAnswer": "ریستوران نے وقت پر جواب نہیں دیا۔", "button": "آرڈر دیکھیں", "deliveryCode": "آپ کا ڈیلیوری کوڈ {{code}} ہے۔ آرڈر پہنچنے پر یہ رائیڈر کو دیں۔" }
   }
 }

@@ -51,7 +51,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param placedAt placed at
  * @param updatedAt last change
  * @param revision number of changes
- * @param deliveryCode the 4-digit code the customer gives the rider (PRD DR-6), or {@code null}
+ * @param deliveryCodeCipher the 4-digit code the customer gives the rider (PRD DR-6), encrypted with the PII key, or {@code null}
  * @param rider the rider on a delivery order, from dispatch, or {@code null}
  * @param handedBackAt when support gave an operator delivery back to the store, or {@code null}
  */
@@ -61,7 +61,7 @@ public record OrderDocument(@Id String id, String number, String customerId, Str
         PaymentMethod paymentMethod, String currency, String language, List<Line> lines, Totals totals, Coupon coupon,
         Commission commission, int prepMinutes, int travelMinutes, Instant acceptBy, Instant readyBy, String paymentUrl,
         long paidMinor, long refundRequestedMinor, long refundedMinor, long cartVersion, List<TimelineEntry> timeline,
-        String closeReason, Instant placedAt, Instant updatedAt, long revision, String deliveryCode, Rider rider,
+        String closeReason, Instant placedAt, Instant updatedAt, long revision, String deliveryCodeCipher, Rider rider,
         Instant handedBackAt) {
 
     /**
