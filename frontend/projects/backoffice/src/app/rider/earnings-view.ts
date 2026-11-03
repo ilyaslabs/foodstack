@@ -28,7 +28,11 @@ import { LocaleStore, formatMoney } from '@foodstack/ui';
         <dd>{{ money(total().cashCollectedMinor) }}</dd>
       </div>
     </dl>
-    <div class="bars" role="img" [attr.aria-label]="'Earnings per day, last ' + e.days.length + ' days'">
+    <div
+      class="bars"
+      role="img"
+      [attr.aria-label]="'Earnings per day, last ' + e.days.length + ' days'"
+    >
       @for (day of e.days; track day.date) {
         <div class="bar">
           <span class="amount">{{ short(day.earningMinor + day.tipMinor) }}</span>
@@ -49,8 +53,10 @@ import { LocaleStore, formatMoney } from '@foodstack/ui';
           <li>
             <div>
               <strong>{{ row.storeName }}</strong>
-              <span>Order {{ row.orderNumber }} · {{ row.at * 1000 | date: 'EEE d MMM, HH:mm' }} ·
-                {{ (row.distanceMeters / 1000).toFixed(1) }} km</span>
+              <span
+                >Order {{ row.orderNumber }} · {{ row.at * 1000 | date: 'EEE d MMM, HH:mm' }} ·
+                {{ (row.distanceMeters / 1000).toFixed(1) }} km</span
+              >
             </div>
             <div class="money">
               <strong>{{ money(row.earningMinor + row.tipMinor) }}</strong>

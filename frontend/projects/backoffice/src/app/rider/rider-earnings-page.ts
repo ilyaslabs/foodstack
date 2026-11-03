@@ -15,7 +15,10 @@ import { EarningsView } from './earnings-view';
   template: `
     <header class="fs-page-header">
       <h1>Earnings</h1>
-      <p>What you earned per delivery. Tips are all yours; cash you collected is handed in to the operator.</p>
+      <p>
+        What you earned per delivery. Tips are all yours; cash you collected is handed in to the
+        operator.
+      </p>
     </header>
     <mat-button-toggle-group
       class="range"

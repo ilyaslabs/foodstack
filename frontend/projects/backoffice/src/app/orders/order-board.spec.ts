@@ -2,7 +2,14 @@ import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
 import { Subject, of } from 'rxjs';
 
-import { Order, OrderChange, OrderClient, StoreClient } from '@foodstack/api-client';
+import {
+  DispatchClient,
+  Order,
+  OrderChange,
+  OrderClient,
+  RiderClient,
+  StoreClient,
+} from '@foodstack/api-client';
 import { AuthService } from '@foodstack/auth';
 import { LocaleStore } from '@foodstack/ui';
 
@@ -32,6 +39,9 @@ function order(overrides: Partial<Order>): Order {
       logoUrls: {},
     },
     destination: null,
+    rider: null,
+    deliveryCode: null,
+    handedBackAt: null,
     lines: [
       {
         itemId: 'i1',
@@ -72,7 +82,14 @@ function order(overrides: Partial<Order>): Order {
 }
 
 describe('OrderBoard', () => {
-  async function render(board: () => Order[], act = vi.fn()) {
+  async function render(
+    board: () => Order[],
+    act = vi.fn(),
+    accepted: { minutes: number; storeRiderId: string | null } = {
+      minutes: 30,
+      storeRiderId: null,
+    },
+  ) {
     localStorage.clear();
     const changes = new Subject<OrderChange>();
     const boardCall = vi.fn(() => of(board()));
@@ -108,6 +125,14 @@ describe('OrderBoard', () => {
               ]),
           },
         },
+        {
+          provide: RiderClient,
+          useValue: {
+            storeRiders: () =>
+              of([{ id: 'r1', name: 'Usman', vehicle: 'MOTORBIKE', online: true }]),
+          },
+        },
+        { provide: DispatchClient, useValue: { assignStoreRider: vi.fn() } },
         { provide: AuthService, useValue: { freshToken: async () => 'token' } },
         {
           provide: LocaleStore,
@@ -120,7 +145,7 @@ describe('OrderBoard', () => {
     });
     // the component imports MatDialogModule, so its own MatDialog provider must be replaced
     TestBed.overrideProvider(MatDialog, {
-      useValue: { open: () => ({ afterClosed: () => of(30) }) },
+      useValue: { open: () => ({ afterClosed: () => of(accepted) }) },
     });
     const fixture = TestBed.createComponent(OrderBoard);
     fixture.detectChanges();
@@ -166,9 +191,29 @@ describe('OrderBoard', () => {
     fixture.detectChanges();
 
     // then
-    expect(act).toHaveBeenCalledWith('o1', 'ACCEPT', { prepMinutes: 30 });
+    expect(act).toHaveBeenCalledWith('o1', 'ACCEPT', { prepMinutes: 30, storeRiderId: null });
     expect(element.querySelector('[data-column="new"]')?.textContent).toContain('Nothing here');
     expect(element.querySelector('[data-column="kitchen"]')?.textContent).toContain('#7F3A-91C2');
+  });
+
+  it('sends the store rider chosen when accepting a delivery the branch makes itself', async () => {
+    // given
+    const act = vi.fn(() => of(order({ status: 'ACCEPTED', actions: ['PREPARING', 'READY'] })));
+    const delivery = order({ fulfilment: 'DELIVERY', deliveryMode: 'SELF' });
+    const { fixture, element } = await render(() => [delivery], act, {
+      minutes: 20,
+      storeRiderId: 'r1',
+    });
+    vi.spyOn(window, 'print').mockImplementation(() => undefined);
+
+    // when
+    Array.from(element.querySelectorAll('button'))
+      .find((b) => b.textContent?.trim() === 'Accept')!
+      .click();
+    await fixture.whenStable();
+
+    // then
+    expect(act).toHaveBeenCalledWith('o1', 'ACCEPT', { prepMinutes: 20, storeRiderId: 'r1' });
   });
 
   it('reloads the board when the live stream says something changed', async () => {

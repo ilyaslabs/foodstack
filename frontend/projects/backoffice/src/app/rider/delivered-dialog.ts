@@ -33,7 +33,7 @@ import { toMajor, toMinor } from '../shared/money';
     <mat-dialog-content>
       <form id="delivered" class="fields" (ngSubmit)="confirm()">
         @if (job.needsCode) {
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Delivery code</mat-label>
             <input
               matInput
@@ -49,7 +49,7 @@ import { toMajor, toMinor } from '../shared/money';
           </mat-form-field>
         }
         @if (job.cashToCollectMinor > 0) {
-          <mat-form-field appearance="outline">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
             <mat-label>Cash collected ({{ job.currency }})</mat-label>
             <input matInput name="cash" inputmode="decimal" required [(ngModel)]="cash" />
             <mat-hint>The order total is {{ due }}</mat-hint>
@@ -97,6 +97,7 @@ import { toMajor, toMinor } from '../shared/money';
     }
     mat-form-field {
       width: 100%;
+      margin-block-end: 12px;
     }
     .photo {
       display: flex;

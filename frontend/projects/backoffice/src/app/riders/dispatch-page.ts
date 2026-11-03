@@ -124,9 +124,13 @@ type Filter = 'all' | 'attention' | 'moving';
               <button type="button" class="job-main" (click)="select(job.orderId)">
                 <span class="job-top">
                   <strong>#{{ job.orderNumber }}</strong>
-                  <span class="status" [attr.data-status]="job.status">{{ labels[job.status] }}</span>
+                  <span class="status" [attr.data-status]="job.status">{{
+                    labels[job.status]
+                  }}</span>
                 </span>
-                <span class="line">{{ job.storeName }} → {{ job.dropoffAddress || 'customer' }}</span>
+                <span class="line"
+                  >{{ job.storeName }} → {{ job.dropoffAddress || 'customer' }}</span
+                >
                 <span class="line muted">
                   @if (job.riderName) {
                     <fs-icon name="rider" /> {{ job.riderName }} ·
@@ -380,7 +384,9 @@ export class DispatchPage implements OnInit {
     const jobs = this.jobs();
     if (filter === 'attention') return jobs.filter((j) => this.needsAttention(j));
     if (filter === 'moving') return jobs.filter((j) => !!j.riderId);
-    return [...jobs].sort((a, b) => Number(this.needsAttention(b)) - Number(this.needsAttention(a)));
+    return [...jobs].sort(
+      (a, b) => Number(this.needsAttention(b)) - Number(this.needsAttention(a)),
+    );
   });
 
   protected readonly center = computed<LatLng | null>(() => {
@@ -434,7 +440,8 @@ export class DispatchPage implements OnInit {
       points.push({ lat: rider.lat, lng: rider.lng });
     }
     if (job.status !== 'PICKED_UP') points.push({ lat: job.pickupLat, lng: job.pickupLng });
-    else if (rider?.lat != null && rider.lng != null) points.push({ lat: rider.lat, lng: rider.lng });
+    else if (rider?.lat != null && rider.lng != null)
+      points.push({ lat: rider.lat, lng: rider.lng });
     points.push({ lat: job.dropoffLat, lng: job.dropoffLng });
     return points;
   });

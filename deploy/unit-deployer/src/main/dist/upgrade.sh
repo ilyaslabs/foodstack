@@ -33,6 +33,7 @@ rm -rf "${FOODSTACK_HOME:?}/app"
 cp -a "$release/app" "$release/docker-compose.yml" "$release/VERSION" "$release/lib" "$FOODSTACK_HOME/"
 cp -a "$release"/*.sh "$FOODSTACK_HOME/"
 cp -a "$release/config/Caddyfile" "$release/config/backoffice.conf.template" "$FOODSTACK_HOME/config/"
+mkdir -p "$FOODSTACK_HOME/config/push"
 
 info "Running migrations"
 compose stop proxy web backoffice server

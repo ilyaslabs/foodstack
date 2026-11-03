@@ -88,7 +88,7 @@ fi
 
 # --- 2. Directories --------------------------------------------------------------------------
 info "Creating $target"
-mkdir -p "$target"/{app,config,backups,lib} "$target"/logs/server 2> /dev/null \
+mkdir -p "$target"/{app,config/push,backups,lib} "$target"/logs/server 2> /dev/null \
   || fail "Cannot create $target. Choose a folder you own (like ~/foodstack) or run with sudo."
 target="$(cd "$target" && pwd)"
 
@@ -158,6 +158,13 @@ SMTP_PASSWORD=
 SMTP_AUTH=true
 SMTP_STARTTLS=true
 SMTP_FROM=
+# Push to riders and customers: see .env.example for the Firebase settings, then ./restart.sh server
+FCM_SERVICE_ACCOUNT=
+FCM_WEB_CONFIG=
+FCM_VAPID_KEY=
+# Road distances: none (straight-line estimate) or osrm with ROUTING_URL
+ROUTING_PROVIDER=none
+ROUTING_URL=
 # Card payments: none (cash only) or stripe with STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET (see .env.example)
 PAYMENT_GATEWAY=none
 STRIPE_SECRET_KEY=

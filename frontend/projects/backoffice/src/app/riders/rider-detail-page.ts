@@ -37,8 +37,8 @@ import { RiderFormDialog, RiderFormData, VEHICLE_LABELS } from './rider-form-dia
         <div>
           <h1>{{ r.name }}</h1>
           <p>
-            {{ r.kind === 'STORE' ? 'Store rider' : 'Operator rider' }} ·
-            {{ vehicles[r.vehicle] }}{{ r.plate ? ' · ' + r.plate : '' }}
+            {{ r.kind === 'STORE' ? 'Store rider' : 'Operator rider' }} · {{ vehicles[r.vehicle]
+            }}{{ r.plate ? ' · ' + r.plate : '' }}
           </p>
         </div>
         <div class="head-actions">
@@ -107,7 +107,12 @@ import { RiderFormDialog, RiderFormData, VEHICLE_LABELS } from './rider-form-dia
         </mat-card>
         <mat-card appearance="outlined" class="where">
           @if (marker().length > 0) {
-            <fs-map [center]="{ lat: r.lat!, lng: r.lng! }" [zoom]="14" [markers]="marker()" label="Last known position" />
+            <fs-map
+              [center]="{ lat: r.lat!, lng: r.lng! }"
+              [zoom]="14"
+              [markers]="marker()"
+              label="Last known position"
+            />
           } @else {
             <div class="empty">
               <span class="empty-icon"><fs-icon name="place" /></span>
@@ -272,7 +277,9 @@ export class RiderDetailPage implements OnInit {
     try {
       this.rider.set(await firstValueFrom(this.riders.setStatus(rider.id, status)));
     } catch (error) {
-      this.snackBar.open(describeError(error, 'The change was not saved.'), 'OK', { duration: 6000 });
+      this.snackBar.open(describeError(error, 'The change was not saved.'), 'OK', {
+        duration: 6000,
+      });
     }
   }
 }

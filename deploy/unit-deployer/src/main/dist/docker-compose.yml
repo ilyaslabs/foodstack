@@ -50,6 +50,8 @@ services:
       LOGGING_FILE_NAME: /logs/server.log
     volumes:
       - ./app/foodstack-server.jar:/app/foodstack-server.jar:ro
+      # The Firebase service account key for push (FCM_SERVICE_ACCOUNT=/config/push/fcm.json).
+      - ./config/push:/config/push:ro
       - ./logs/server:/logs
     healthcheck:
       # The JRE image has no curl: ask over bash's /dev/tcp.

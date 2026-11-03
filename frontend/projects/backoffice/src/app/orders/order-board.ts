@@ -251,8 +251,11 @@ export class OrderBoard implements OnInit {
   }
 
   protected async act(order: Order, action: OrderAction): Promise<void> {
-    let body: { prepMinutes?: number | null; reason?: string | null; storeRiderId?: string | null } =
-      {};
+    let body: {
+      prepMinutes?: number | null;
+      reason?: string | null;
+      storeRiderId?: string | null;
+    } = {};
     if (action === 'ACCEPT') {
       const selfDelivery = order.fulfilment === 'DELIVERY' && order.deliveryMode === 'SELF';
       const riders = selfDelivery

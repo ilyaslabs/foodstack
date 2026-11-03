@@ -157,9 +157,10 @@ foodstack:
     from-address: ${SMTP_FROM:}
     from-name: ${SMTP_FROM_NAME:FoodStack}
     admin-url: ${FOODSTACK_ADMIN_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/admin
-    # Push (TDD 8.3): on when a Firebase service account JSON is set; web push also needs the web app config and VAPID key.
+    # Push (TDD 8.3): on when a Firebase service account is set (the key file's path, or its JSON);
+    # web push also needs the web app config (one-line JSON) and the VAPID key.
     push:
-      fcm-service-account: ${FCM_SERVICE_ACCOUNT_JSON:}
+      fcm-service-account: ${FCM_SERVICE_ACCOUNT:}
       web-config: ${FCM_WEB_CONFIG:}
       vapid-key: ${FCM_VAPID_KEY:}
   payment:

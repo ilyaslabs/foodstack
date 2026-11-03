@@ -23,8 +23,7 @@ export const routes: Routes = [
       },
       {
         path: 'rider/earnings',
-        loadComponent: () =>
-          import('./rider/rider-earnings-page').then((m) => m.RiderEarningsPage),
+        loadComponent: () => import('./rider/rider-earnings-page').then((m) => m.RiderEarningsPage),
       },
       {
         path: 'riders',

@@ -69,7 +69,14 @@ type CodeRule = 'never' | 'always' | 'above';
             <div class="grid-3">
               <mat-form-field appearance="outline">
                 <mat-label>Time to accept an offer (seconds)</mat-label>
-                <input matInput name="offer" type="number" min="10" max="300" [(ngModel)]="offerSeconds" />
+                <input
+                  matInput
+                  name="offer"
+                  type="number"
+                  min="10"
+                  max="300"
+                  [(ngModel)]="offerSeconds"
+                />
                 <mat-hint>Then the next rider is asked</mat-hint>
               </mat-form-field>
               <mat-form-field appearance="outline">
@@ -79,12 +86,26 @@ type CodeRule = 'never' | 'always' | 'above';
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Start searching before ready (min)</mat-label>
-                <input matInput name="lead" type="number" min="0" max="60" [(ngModel)]="leadMinutes" />
+                <input
+                  matInput
+                  name="lead"
+                  type="number"
+                  min="0"
+                  max="60"
+                  [(ngModel)]="leadMinutes"
+                />
                 <mat-hint>So the rider arrives as the food is ready</mat-hint>
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Alert support after (minutes)</mat-label>
-                <input matInput name="alert" type="number" min="1" max="60" [(ngModel)]="alertMinutes" />
+                <input
+                  matInput
+                  name="alert"
+                  type="number"
+                  min="1"
+                  max="60"
+                  [(ngModel)]="alertMinutes"
+                />
                 <mat-hint>When no rider has taken it</mat-hint>
               </mat-form-field>
             </div>
@@ -119,7 +140,14 @@ type CodeRule = 'never' | 'always' | 'above';
             <div class="grid-3">
               <mat-form-field appearance="outline">
                 <mat-label>Keep rider routes (days)</mat-label>
-                <input matInput name="retention" type="number" min="1" max="365" [(ngModel)]="retentionDays" />
+                <input
+                  matInput
+                  name="retention"
+                  type="number"
+                  min="1"
+                  max="365"
+                  [(ngModel)]="retentionDays"
+                />
                 <mat-hint>Older positions are deleted</mat-hint>
               </mat-form-field>
             </div>
@@ -187,8 +215,14 @@ export class DeliverySettingsPage implements OnInit {
       this.leadMinutes = value.searchLeadMinutes;
       this.alertMinutes = Math.max(1, Math.round(value.noRiderAlertSeconds / 60));
       this.codeRule =
-        value.proofCodeAboveMinor === null ? 'never' : value.proofCodeAboveMinor === 0 ? 'always' : 'above';
-      this.codeAbove = value.proofCodeAboveMinor ? toMajor(value.proofCodeAboveMinor, this.currency()) : '';
+        value.proofCodeAboveMinor === null
+          ? 'never'
+          : value.proofCodeAboveMinor === 0
+            ? 'always'
+            : 'above';
+      this.codeAbove = value.proofCodeAboveMinor
+        ? toMajor(value.proofCodeAboveMinor, this.currency())
+        : '';
       this.retentionDays = value.locationRetentionDays;
       this.loaded.set(true);
     } catch {
@@ -236,7 +270,8 @@ export class DeliverySettingsPage implements OnInit {
             searchRadiusMeters: Math.round(radius * 1000),
             searchLeadMinutes: Math.round(this.leadMinutes),
             noRiderAlertSeconds: Math.round(this.alertMinutes) * 60,
-            proofCodeAboveMinor: this.codeRule === 'never' ? null : this.codeRule === 'always' ? 0 : codeAbove,
+            proofCodeAboveMinor:
+              this.codeRule === 'never' ? null : this.codeRule === 'always' ? 0 : codeAbove,
             locationRetentionDays: Math.round(this.retentionDays),
           },
           this.etag,

@@ -42,7 +42,7 @@ import org.springframework.web.client.RestClient;
 
 /**
  * Wiring of the notification module (TDD 5.2): its database, the message texts, email over SMTP
- * (when {@code SMTP_HOST} is set), push over FCM (when {@code FCM_SERVICE_ACCOUNT_JSON} is set), the
+ * (when {@code SMTP_HOST} is set), push over FCM (when {@code FCM_SERVICE_ACCOUNT} is set), the
  * event listeners and the email retry worker. It publishes no
  * events of its own.
  */
@@ -107,10 +107,23 @@ public class NotificationConfiguration {
             SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
             requestFactory.setConnectTimeout(Duration.ofSeconds(5));
             requestFactory.setReadTimeout(Duration.ofSeconds(5));
-            transport = new FcmPushTransport(RestClient.builder().requestFactory(requestFactory), jsonMapper, serviceAccount,
-                    fcmUrl, clock);
+            transport = new FcmPushTransport(RestClient.builder().requestFactory(requestFactory), jsonMapper,
+                    serviceAccountJson(serviceAccount), fcmUrl, clock);
         }
         return new PushService(notificationMongo.template(), transport, piiCipher, clock);
+    }
+
+    /** The setting holds the key file's JSON itself, or the path of the key file (the usual case on a server). */
+    static String serviceAccountJson(String setting) {
+        String value = setting.strip();
+        if (value.startsWith("{")) {
+            return value;
+        }
+        try {
+            return java.nio.file.Files.readString(java.nio.file.Path.of(value));
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Cannot read the FCM service account file " + value, e);
+        }
     }
 
     @Bean
