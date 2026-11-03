@@ -1,6 +1,8 @@
 package io.github.ilyaslabs.foodstack.geo.core.application;
 
 import java.time.Clock;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -17,6 +19,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * so the operator never runs short on rider pay.
  */
 public class OperatorPricingService {
+
+    static final int MAX_PEAK_WINDOWS = 10;
 
     private final OperatorPricingRepository repository;
 
@@ -50,6 +54,10 @@ public class OperatorPricingService {
         pricing.setBaseChargeMinor(update.baseChargeMinor());
         pricing.setPerKmMinor(update.perKmMinor());
         pricing.setMaxDistanceMeters(update.maxDistanceMeters());
+        pricing.setMinOrderMinor(update.minOrderMinor());
+        pricing.setFreeDeliveryAboveMinor(update.freeDeliveryAboveMinor());
+        pricing.setPeakMultiplierPercent(update.peakMultiplierPercent());
+        pricing.setPeakWindows(update.peakWindows());
         pricing.setUpdatedAt(this.clock.instant());
         pricing.setUpdatedBy(userId);
         OperatorPricingDocument saved = this.transaction.execute((status) -> {
@@ -60,6 +68,18 @@ public class OperatorPricingService {
         return toDetails(saved);
     }
 
+    private static LocalTime time(String value) {
+        if (value == null || !value.matches("\\d{2}:\\d{2}")) {
+            return null;
+        }
+        try {
+            return LocalTime.parse(value);
+        }
+        catch (DateTimeParseException ex) {
+            return null;
+        }
+    }
+
     private OperatorPricingDocument load() {
         return this.repository.findById(OperatorPricingDocument.ID)
             .orElseThrow(() -> new ModuleException.Internal("Operator delivery pricing is missing; run the migrations",
@@ -67,8 +87,10 @@ public class OperatorPricingService {
     }
 
     private static OperatorPricing toDetails(OperatorPricingDocument document) {
+        int peak = (document.getPeakMultiplierPercent() > 0) ? document.getPeakMultiplierPercent() : 100;
         return new OperatorPricing(document.isEnabled(), document.getBaseChargeMinor(), document.getPerKmMinor(),
-                document.getMaxDistanceMeters(), (document.getVersion() != null) ? document.getVersion() : 0,
+                document.getMaxDistanceMeters(), document.getMinOrderMinor(), document.getFreeDeliveryAboveMinor(), peak,
+                document.getPeakWindows(), (document.getVersion() != null) ? document.getVersion() : 0,
                 document.getUpdatedAt());
     }
 
@@ -82,6 +104,26 @@ public class OperatorPricingService {
         }
         if (update.maxDistanceMeters() < 1000 || update.maxDistanceMeters() > 50_000) {
             errors.put("maxDistanceMeters", "must be 1 to 50 km");
+        }
+        if (update.minOrderMinor() < 0) {
+            errors.put("minOrderMinor", "must not be negative");
+        }
+        if (update.freeDeliveryAboveMinor() != null && update.freeDeliveryAboveMinor() <= 0) {
+            errors.put("freeDeliveryAboveMinor", "must be more than 0, or empty for never free");
+        }
+        if (update.peakMultiplierPercent() < 100 || update.peakMultiplierPercent() > 300) {
+            errors.put("peakMultiplierPercent", "must be 100 to 300 (x1 to x3)");
+        }
+        if (update.peakWindows().size() > MAX_PEAK_WINDOWS) {
+            errors.put("peakWindows", "at most " + MAX_PEAK_WINDOWS + " windows");
+        }
+        for (int i = 0; i < update.peakWindows().size(); i++) {
+            PeakWindow window = update.peakWindows().get(i);
+            LocalTime start = time(window.start());
+            LocalTime end = time(window.end());
+            if (start == null || end == null || start.equals(end)) {
+                errors.put("peakWindows[" + i + "]", "needs a start and a different end like 19:00 and 22:00");
+            }
         }
         if (!errors.isEmpty()) {
             throw new ModuleException.BadRequest("The delivery pricing is invalid", "PRICING_INVALID",

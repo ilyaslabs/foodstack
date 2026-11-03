@@ -271,11 +271,28 @@ export interface Zone {
   freeDeliveryAboveMinor: number | null;
 }
 
+/** Hours when operator delivery costs more, in the deployment's time zone. */
+export interface PeakWindow {
+  /** Empty for every day. */
+  days: Weekday[];
+  /** HH:mm. */
+  start: string;
+  /** HH:mm; before the start for a window past midnight. */
+  end: string;
+}
+
 export interface OperatorPricing {
   enabled: boolean;
   baseChargeMinor: number;
   perKmMinor: number;
   maxDistanceMeters: number;
+  /** Smallest basket subtotal, 0 for none. */
+  minOrderMinor: number;
+  /** Subtotal from which delivery is free, or null. */
+  freeDeliveryAboveMinor: number | null;
+  /** Peak charge as a percentage of the normal one, 100 to 300. */
+  peakMultiplierPercent: number;
+  peakWindows: PeakWindow[];
   version: number;
   updatedAt: number | null;
 }

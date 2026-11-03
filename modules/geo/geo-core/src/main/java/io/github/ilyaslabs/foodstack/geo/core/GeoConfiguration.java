@@ -1,6 +1,7 @@
 package io.github.ilyaslabs.foodstack.geo.core;
 
 import java.time.Clock;
+import java.time.ZoneId;
 
 import io.github.ilyaslabs.foodstack.geo.core.application.GeocodingService;
 import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricingService;
@@ -23,6 +24,7 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
+import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -115,8 +117,9 @@ public class GeoConfiguration {
 
     @Bean
     QuoteService geoQuoteService(ZoneService geoZoneService, OperatorPricingService geoOperatorPricingService,
-            GeoProperties properties, RoutingService geoRoutingService) {
-        return new QuoteService(geoZoneService, geoOperatorPricingService, properties.getRoadFactor(), geoRoutingService);
+            GeoProperties properties, RoutingService geoRoutingService, SettingsApi settingsApi, Clock clock) {
+        return new QuoteService(geoZoneService, geoOperatorPricingService, properties.getRoadFactor(), geoRoutingService, clock,
+                () -> ZoneId.of(settingsApi.getLocale().timezone()));
     }
 
     @Bean

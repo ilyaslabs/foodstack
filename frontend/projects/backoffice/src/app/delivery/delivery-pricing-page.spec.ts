@@ -12,6 +12,10 @@ const PRICING: OperatorPricing = {
   baseChargeMinor: 10000,
   perKmMinor: 2500,
   maxDistanceMeters: 8000,
+  minOrderMinor: 0,
+  freeDeliveryAboveMinor: null,
+  peakMultiplierPercent: 150,
+  peakWindows: [{ days: ['FRIDAY'], start: '23:00', end: '02:00' }],
   version: 2,
   updatedAt: null,
 };
@@ -33,7 +37,11 @@ describe('DeliveryPricingPage', () => {
         },
         {
           provide: LocaleStore,
-          useValue: { currency: signal('PKR'), money: (minor: number) => `Rs ${minor / 100}` },
+          useValue: {
+            currency: signal('PKR'),
+            locale: signal({ timezone: 'Asia/Karachi' }),
+            money: (minor: number) => `Rs ${minor / 100}`,
+          },
         },
       ],
     });
@@ -71,7 +79,47 @@ describe('DeliveryPricingPage', () => {
 
     // then
     expect(updateOperatorPricing).toHaveBeenCalledWith(
-      { enabled: true, baseChargeMinor: 12000, perKmMinor: 2500, maxDistanceMeters: 8000 },
+      {
+        enabled: true,
+        baseChargeMinor: 12000,
+        perKmMinor: 2500,
+        maxDistanceMeters: 8000,
+        minOrderMinor: 0,
+        freeDeliveryAboveMinor: null,
+        peakMultiplierPercent: 150,
+        peakWindows: [{ days: ['FRIDAY'], start: '23:00', end: '02:00' }],
+      },
+      '"pricing-2"',
+    );
+  });
+
+  it('shows peak hours in words and saves the minimum order and free threshold', async () => {
+    // given
+    const { fixture, element, updateOperatorPricing } = await render();
+    expect(element.querySelector('.window-note')?.textContent).toContain(
+      'Fri, 23:00 to 02:00, running past midnight',
+    );
+    expect(element.textContent).toContain('Asia/Karachi');
+    const minOrder = element.querySelector('input[name=minOrder]') as HTMLInputElement;
+    const freeAbove = element.querySelector('input[name=freeAbove]') as HTMLInputElement;
+    minOrder.value = '500';
+    minOrder.dispatchEvent(new Event('input'));
+    freeAbove.value = '2000';
+    freeAbove.dispatchEvent(new Event('input'));
+    (element.querySelector('button[aria-label^="Remove peak"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    // when
+    (element.querySelector('button[type=submit]') as HTMLButtonElement).click();
+    await fixture.whenStable();
+
+    // then
+    expect(updateOperatorPricing).toHaveBeenCalledWith(
+      expect.objectContaining({
+        minOrderMinor: 50000,
+        freeDeliveryAboveMinor: 200000,
+        peakWindows: [],
+      }),
       '"pricing-2"',
     );
   });
