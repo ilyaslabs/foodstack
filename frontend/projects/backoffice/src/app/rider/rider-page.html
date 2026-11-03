@@ -1,0 +1,219 @@
+@if (me(); as me) {
+  <section class="status" [class.online]="me.online" aria-live="polite">
+    <div class="status-main">
+      <div class="who">
+        <span class="avatar" aria-hidden="true"><fs-icon name="rider" /></span>
+        <div>
+          <h1>{{ me.name }}</h1>
+          <p class="sub">
+            {{ vehicles[me.vehicle] }}{{ me.plate ? ' · ' + me.plate : '' }}
+            @if (me.kind === 'STORE') {
+              · Store rider
+            }
+          </p>
+        </div>
+      </div>
+      <mat-slide-toggle
+        class="online-toggle"
+        [checked]="me.online"
+        [disabled]="switching() || me.status === 'SUSPENDED'"
+        (change)="toggleOnline($event.checked)"
+        aria-label="Online"
+        >{{ me.online ? 'Online' : 'Offline' }}</mat-slide-toggle
+      >
+    </div>
+    @if (switching()) {
+      <mat-progress-bar mode="indeterminate" />
+    }
+    <div class="status-line">
+      @if (me.status === 'SUSPENDED') {
+        <fs-icon name="block" /> Your account is paused. Contact support.
+      } @else if (!me.online) {
+        <fs-icon name="power" /> Go online to receive deliveries.
+      } @else if (location.problem() === 'denied') {
+        <fs-icon name="warning" /> Location is blocked. Allow it for this site so the store and
+        customer can follow you.
+      } @else if (location.pending() > 0) {
+        <fs-icon name="wifi_off" /> No signal. {{ location.pending() }} positions will be sent when
+        you are back online.
+      } @else if (location.position(); as here) {
+        <fs-icon name="my_location" /> Sharing your location
+        @if (here.accuracyMeters) {
+          (±{{ here.accuracyMeters }} m)
+        }
+      } @else {
+        <fs-icon name="my_location" /> Finding your location…
+      }
+    </div>
+    @if (earnings(); as e) {
+      <dl class="today">
+        <div>
+          <dt>Deliveries</dt>
+          <dd>{{ e.today.deliveries }}</dd>
+        </div>
+        <div>
+          <dt>Earned today</dt>
+          <dd>{{ money(e.today.earningMinor + e.today.tipMinor, e.currency) }}</dd>
+        </div>
+        <div>
+          <dt>Accepted</dt>
+          <dd>{{ me.acceptancePercent }}%</dd>
+        </div>
+      </dl>
+    }
+  </section>
+
+  @if (push.state() === 'ask') {
+    <div class="push-banner">
+      <fs-icon name="notifications" />
+      <span>Get a sound and a message when a delivery is offered, even with the app closed.</span>
+      <button mat-button type="button" (click)="enablePush()">Turn on</button>
+    </div>
+  }
+
+  @for (job of offers(); track job.orderId) {
+    <mat-card class="offer" appearance="outlined">
+      <div class="offer-head">
+        <div>
+          <span class="eyebrow">New delivery</span>
+          <h2>{{ money(job.earningMinor, job.currency) }}</h2>
+          @if (job.tipMinor > 0) {
+            <span class="tip">+ {{ money(job.tipMinor, job.currency) }} tip</span>
+          }
+        </div>
+        <div class="countdown" [attr.aria-label]="secondsLeft(job) + ' seconds left'">
+          <fs-icon name="timer" /> {{ secondsLeft(job) }} s
+        </div>
+      </div>
+      <mat-progress-bar mode="determinate" [value]="offerProgress(job)" />
+      <ol class="route">
+        <li>
+          <fs-icon name="storefront" />
+          <div>
+            <strong>{{ job.storeName }}</strong>
+            <span>{{ job.pickupAddress }}</span>
+          </div>
+        </li>
+        <li>
+          <fs-icon name="home" />
+          <div>
+            <strong>{{ job.dropoffAddress || 'Customer' }}</strong>
+            <span>{{ km(job.distanceMeters) }} km from the store</span>
+          </div>
+        </li>
+      </ol>
+      @if (job.cashToCollectMinor > 0) {
+        <p class="cash"><fs-icon name="payments" /> Collect {{ money(job.cashToCollectMinor, job.currency) }} in cash</p>
+      }
+      <div class="offer-actions">
+        <button mat-stroked-button type="button" [disabled]="busy() === job.orderId" (click)="decline(job)">
+          Decline
+        </button>
+        <button mat-flat-button type="button" [disabled]="busy() === job.orderId" (click)="accept(job)">
+          Accept
+        </button>
+      </div>
+    </mat-card>
+  }
+
+  @for (job of active(); track job.orderId) {
+    <mat-card class="job" appearance="outlined">
+      <div class="job-head">
+        <div>
+          <span class="eyebrow">Order {{ job.orderNumber }}</span>
+          <h2>{{ steps[step(job)]?.label ?? job.status }}</h2>
+        </div>
+        <a mat-stroked-button [href]="directions(job)" target="_blank" rel="noopener">
+          <fs-icon name="directions" /> Directions
+        </a>
+      </div>
+      <ol class="stepper" aria-label="Progress">
+        @for (s of steps; track s.status; let i = $index) {
+          <li [class.done]="i < step(job)" [class.current]="i === step(job)">
+            <span class="dot" aria-hidden="true"></span>{{ s.label }}
+          </li>
+        }
+      </ol>
+      <fs-map
+        class="job-map"
+        [markers]="markers(job)"
+        [route]="[{ lat: job.pickupLat, lng: job.pickupLng }, { lat: job.dropoffLat, lng: job.dropoffLng }]"
+        [fit]="true"
+        label="Route of this delivery"
+      />
+      <ol class="route">
+        <li [class.muted]="job.status === 'PICKED_UP'">
+          <fs-icon name="storefront" />
+          <div>
+            <strong>{{ job.storeName }}</strong>
+            <span>{{ job.pickupAddress }}</span>
+          </div>
+        </li>
+        <li>
+          <fs-icon name="home" />
+          <div>
+            <strong>{{ job.customerName || 'Customer' }}</strong>
+            <span>{{ job.dropoffAddress }}</span>
+            @if (job.instructions) {
+              <span class="note">“{{ job.instructions }}”</span>
+            }
+          </div>
+          @if (job.customerPhone) {
+            <a mat-icon-button [href]="'tel:' + job.customerPhone" aria-label="Call the customer">
+              <fs-icon name="phone" />
+            </a>
+          }
+        </li>
+      </ol>
+      <div class="facts">
+        @if (job.cashToCollectMinor > 0) {
+          <span class="fact warn"><fs-icon name="payments" /> Collect {{ money(job.cashToCollectMinor, job.currency) }}</span>
+        } @else {
+          <span class="fact"><fs-icon name="credit_card" /> Paid online</span>
+        }
+        @if (job.needsCode) {
+          <span class="fact"><fs-icon name="key" /> Code needed</span>
+        }
+        <span class="fact"><fs-icon name="money" /> You earn {{ money(job.earningMinor + job.tipMinor, job.currency) }}</span>
+      </div>
+      <div class="job-actions">
+        <button mat-button type="button" class="give-up" [disabled]="busy() === job.orderId" (click)="giveUp(job)">
+          Can't deliver
+        </button>
+        @switch (job.status) {
+          @case ('ASSIGNED') {
+            <button mat-flat-button type="button" [disabled]="busy() === job.orderId" (click)="arrived(job)">
+              I'm at the store
+            </button>
+          }
+          @case ('AT_STORE') {
+            <button mat-flat-button type="button" [disabled]="busy() === job.orderId" (click)="pickedUp(job)">
+              Picked up
+            </button>
+          }
+          @case ('PICKED_UP') {
+            <button mat-flat-button type="button" [disabled]="busy() === job.orderId" (click)="delivered(job)">
+              Delivered…
+            </button>
+          }
+        }
+      </div>
+    </mat-card>
+  } @empty {
+    @if (me.online && offers().length === 0) {
+      <div class="empty">
+        <fs-icon name="rider" />
+        <h2>Waiting for a delivery</h2>
+        <p>Stay online. Offers show here and your phone rings when one comes in.</p>
+      </div>
+    }
+  }
+} @else if (loadError()) {
+  <div class="empty">
+    <fs-icon name="error" />
+    <h2>This screen could not load</h2>
+    <p>Check your connection and reload the page.</p>
+  </div>
+} @else {
+  <mat-progress-bar mode="indeterminate" />
+}

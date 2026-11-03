@@ -240,6 +240,19 @@ export interface Order {
   placedAt: number;
   revision: number;
   actions: OrderAction[];
+  /** The rider bringing a delivery, once one has the job. */
+  rider: OrderRider | null;
+  /** Read out to the rider at the door; shown only to the customer, and only when required. */
+  deliveryCode: string | null;
+  /** Epoch seconds: support handed the delivery back to the store to deliver itself. */
+  handedBackAt: number | null;
+}
+
+export interface OrderRider {
+  riderId: string;
+  name: string;
+  vehicle: string;
+  assignedAt: number;
 }
 
 export interface OrderRow {

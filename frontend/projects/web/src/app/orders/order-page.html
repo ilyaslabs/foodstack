@@ -70,6 +70,16 @@
       }
     </section>
 
+    @if (tracks(o)) {
+      <app-delivery-tracking [order]="o" />
+    }
+    @if (push.state() === 'ask' && tracks(o)) {
+      <p class="banner push">
+        <fs-icon name="notifications" /> <span>{{ ui.t('pushAsk') }}</span>
+        <button mat-button type="button" (click)="push.enable('web')">{{ ui.t('pushTurnOn') }}</button>
+      </p>
+    }
+
     <div class="grid">
       <section class="card">
         <h2>{{ ui.t('yourOrder') }}</h2>

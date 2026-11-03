@@ -10,7 +10,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSidenavModule } from '@angular/material/sidenav';
 
 import { AuthService } from '@foodstack/auth';
-import { BrandHeader, Icon, IconName } from '@foodstack/ui';
+import { BrandHeader, Icon, IconName, PushRegistration } from '@foodstack/ui';
 
 import { Session } from '../shared/session';
 
@@ -43,6 +43,7 @@ interface NavItem {
 })
 export class Shell {
   private readonly auth = inject(AuthService);
+  private readonly push = inject(PushRegistration);
 
   private readonly session = inject(Session);
   protected readonly me = this.session.me;
@@ -70,6 +71,34 @@ export class Shell {
       icon: 'receipt',
       exact: true,
       permission: ['store:portal', 'order:manage'],
+    },
+    {
+      path: '/rider',
+      label: 'Deliveries',
+      icon: 'rider',
+      exact: true,
+      permission: 'rider:portal',
+    },
+    {
+      path: '/rider/earnings',
+      label: 'Earnings',
+      icon: 'payments',
+      exact: true,
+      permission: 'rider:portal',
+    },
+    {
+      path: '/dispatch',
+      label: 'Dispatch',
+      icon: 'map',
+      exact: true,
+      permission: 'dispatch:manage',
+    },
+    {
+      path: '/riders',
+      label: 'Riders',
+      icon: 'person',
+      exact: false,
+      permission: 'rider:manage',
     },
     {
       path: '/stores',
@@ -121,6 +150,13 @@ export class Shell {
       permission: 'settings:manage',
     },
     {
+      path: '/settings/delivery',
+      label: 'Rider pay and dispatch',
+      icon: 'delivery',
+      exact: false,
+      permission: 'settings:manage',
+    },
+    {
       path: '/settings/emails',
       label: 'Email log',
       icon: 'mail',
@@ -168,7 +204,9 @@ export class Shell {
       .join(', '),
   );
 
-  protected signOut(): void {
+  protected async signOut(): Promise<void> {
+    // this browser stops getting the person's push messages
+    await this.push.disable();
     this.auth.signOut();
   }
 }
