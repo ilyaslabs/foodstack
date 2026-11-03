@@ -190,3 +190,58 @@ export interface PushConfig {
   firebase: Record<string, string> | null;
   vapidKey: string | null;
 }
+
+export type RiderDocumentType =
+  'NATIONAL_ID' | 'PASSPORT' | 'DRIVING_LICENCE' | 'VEHICLE_REGISTRATION' | 'OTHER';
+export type PayoutMethod = 'BANK' | 'MOBILE_WALLET';
+
+/** An ID or vehicle document; the number shows only by its last 4 characters. */
+export interface RiderPaperDocument {
+  id: string;
+  type: RiderDocumentType;
+  numberLast4: string;
+  /** Short-lived links to the private photos. */
+  frontUrl: string | null;
+  backUrl: string | null;
+  /** ISO date, or null when it does not expire. */
+  expiresOn: string | null;
+  expired: boolean;
+  addedAt: number;
+  verified: boolean;
+  verifiedAt: number | null;
+}
+
+export interface RiderPayout {
+  method: PayoutMethod;
+  accountName: string;
+  provider: string;
+  accountLast4: string;
+  updatedAt: number;
+}
+
+/** An operator rider's papers (PRD DR-1). */
+export interface RiderPapers {
+  riderId: string;
+  documents: RiderPaperDocument[];
+  payout: RiderPayout | null;
+  identityVerified: boolean;
+  payoutSet: boolean;
+  complete: boolean;
+  version: number;
+}
+
+export interface RiderDocumentInput {
+  type: RiderDocumentType;
+  number: string;
+  frontMediaId: string;
+  backMediaId: string | null;
+  expiresOn: string | null;
+}
+
+export interface RiderPayoutInput {
+  method: PayoutMethod;
+  accountName: string;
+  provider: string;
+  /** The whole account number or IBAN, entered again on every change. */
+  account: string;
+}

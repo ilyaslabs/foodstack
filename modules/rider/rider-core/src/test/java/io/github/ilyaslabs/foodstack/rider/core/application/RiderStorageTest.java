@@ -16,6 +16,12 @@ import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
+import io.github.ilyaslabs.foodstack.media.api.MediaApi;
+import io.github.ilyaslabs.foodstack.media.api.MediaAssetView;
+import io.github.ilyaslabs.foodstack.media.api.MediaOwner;
+import io.github.ilyaslabs.foodstack.media.api.MediaPurpose;
+import io.github.ilyaslabs.foodstack.media.api.MediaStatus;
+import io.github.ilyaslabs.foodstack.media.api.MediaVariantView;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
@@ -125,7 +131,11 @@ class RiderStorageTest {
 
     private final PiiCipher pii = new PiiCipher(Base64.getEncoder().encodeToString(new byte[32]));
 
+    private final MediaApi media = mock(MediaApi.class);
+
     private RiderService riders;
+
+    private RiderOnboarding onboarding;
 
     private RiderActivity activity;
 
@@ -165,6 +175,8 @@ class RiderStorageTest {
                 this.serviceCalls, presence, this.pii, clock);
         this.activity = new RiderActivity(this.riderMongo.template(), this.riderMongo.transactionTemplate(), outbox, this.riders,
                 presence, new RateLimiter(this.redis, this.namespace, clock), this.settings, this.geo, this.serviceCalls, clock);
+        this.onboarding = new RiderOnboarding(this.riderMongo.template(), this.riders, this.media, this.serviceCalls, this.pii,
+                clock);
     }
 
     @AfterEach
@@ -257,6 +269,76 @@ class RiderStorageTest {
         signIn(rider.id(), null, "rider:portal");
         assertThatThrownBy(() -> this.activity.setOnline(true, null))
             .isInstanceOfSatisfying(ModuleException.Forbidden.class, (ex) -> assertThat(ex.code()).isEqualTo("RIDER_SUSPENDED"));
+    }
+
+    @Test
+    @DisplayName("an operator rider's papers keep numbers encrypted, claim the photos and are complete once ID and payout are in (DR-1)")
+    void papers() {
+        signIn("admin", null, "rider:manage");
+        RiderDetails rider = this.riders.addOperatorRider(input("Usman", Vehicle.MOTORBIKE));
+        given(this.media.getAsset(any())).willAnswer((invocation) -> new MediaAssetView(invocation.getArgument(0),
+                MediaPurpose.RIDER_DOCUMENT, MediaStatus.READY, java.util.Map.of("thumb",
+                        new MediaVariantView("https://media/thumb", 160, 100, 10), "detail",
+                        new MediaVariantView("https://media/detail", 1080, 680, 100)),
+                null, 0));
+
+        RiderOnboarding.Papers empty = this.onboarding.get(rider.id());
+        assertThat(empty.documents()).isEmpty();
+        assertThat(empty.complete()).isFalse();
+        assertThatThrownBy(() -> this.onboarding.addDocument(rider.id(),
+                new RiderOnboarding.DocumentInput("TAX_CARD", "1", null, null, "soon")))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> {
+                assertThat(ex.code()).isEqualTo("RIDER_DOCUMENT_INVALID");
+                assertThat(ex.details()).containsKeys("type", "number", "frontMediaId", "expiresOn");
+            });
+
+        RiderOnboarding.Papers added = this.onboarding.addDocument(rider.id(),
+                new RiderOnboarding.DocumentInput("national_id", "35202-1234567-1", "m-front", "m-back", "2030-01-31"));
+        RiderOnboarding.DocumentView doc = added.documents().get(0);
+        assertThat(doc.type()).isEqualTo("NATIONAL_ID");
+        assertThat(doc.numberLast4()).isEqualTo("5671");
+        assertThat(doc.frontUrl()).isEqualTo("https://media/detail");
+        assertThat(doc.verified()).isFalse();
+        assertThat(added.identityVerified()).isFalse();
+        MediaOwner owner = new MediaOwner("rider", "doc-" + doc.id());
+        verify(this.media).claim("m-front", MediaPurpose.RIDER_DOCUMENT, owner);
+        verify(this.media).claim("m-back", MediaPurpose.RIDER_DOCUMENT, owner);
+        org.bson.Document stored = this.riderMongo.template().findById(rider.id(), org.bson.Document.class, "rider_onboarding");
+        assertThat(stored.toJson()).doesNotContain("35202");
+
+        RiderOnboarding.Papers verified = this.onboarding.verifyDocument(rider.id(), doc.id());
+        assertThat(verified.identityVerified()).isTrue();
+        assertThat(verified.complete()).isFalse();
+        assertThatThrownBy(() -> this.onboarding.setPayout(rider.id(), new RiderOnboarding.PayoutInput("CHEQUE", "", "", "1")))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class,
+                    (ex) -> assertThat(ex.details()).containsKeys("method", "accountName", "provider", "account"));
+        RiderOnboarding.Papers paid = this.onboarding.setPayout(rider.id(),
+                new RiderOnboarding.PayoutInput("BANK", "Usman Ali", "Meezan Bank", "PK36 SCBL 0000 0011 2345 6702"));
+        assertThat(paid.payout().accountLast4()).isEqualTo("6702");
+        assertThat(paid.complete()).isTrue();
+        assertThat(this.onboarding.completeRiders()).contains(rider.id());
+        assertThat(this.riderMongo.template().findById(rider.id(), org.bson.Document.class, "rider_onboarding").toJson())
+            .doesNotContain("SCBL");
+
+        // an expired ID no longer counts; removing a document releases its photos
+        this.now.set(Instant.parse("2030-02-01T00:00:00Z"));
+        assertThat(this.onboarding.get(rider.id()).documents().get(0).expired()).isTrue();
+        assertThat(this.onboarding.get(rider.id()).complete()).isFalse();
+        assertThat(this.onboarding.removeDocument(rider.id(), doc.id()).documents()).isEmpty();
+        verify(this.media).release("m-front", owner);
+        verify(this.media).release("m-back", owner);
+        assertThatThrownBy(() -> this.onboarding.verifyDocument(rider.id(), doc.id()))
+            .isInstanceOfSatisfying(ModuleException.NotFound.class,
+                    (ex) -> assertThat(ex.code()).isEqualTo("RIDER_DOCUMENT_NOT_FOUND"));
+
+        // store riders keep no papers here, and other staff cannot see them
+        String store = "store-" + System.nanoTime();
+        signIn("owner-1", store);
+        RiderDetails own = this.riders.addStoreRider(store, input("Hamza", Vehicle.MOTORBIKE));
+        assertThatThrownBy(() -> this.onboarding.get(rider.id())).isInstanceOf(ModuleException.Forbidden.class);
+        signIn("admin", null, "rider:manage");
+        assertThatThrownBy(() -> this.onboarding.get(own.id())).isInstanceOfSatisfying(ModuleException.BadRequest.class,
+                (ex) -> assertThat(ex.code()).isEqualTo("RIDER_NOT_OPERATOR"));
     }
 
     @Test

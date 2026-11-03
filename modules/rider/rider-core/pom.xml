@@ -32,6 +32,10 @@
         </dependency>
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-media-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
             <artifactId>foodstack-settings-api</artifactId>
         </dependency>
         <dependency>
