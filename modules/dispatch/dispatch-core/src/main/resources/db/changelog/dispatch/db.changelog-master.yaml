@@ -1,0 +1,30 @@
+# Liquibase changelog of the dispatch module (database foodstack_dispatch). Shard keys are applied by
+# DispatchConfiguration (TDD 6.3) and listed next to each collection.
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: dispatch-1
+      author: foodstack
+      comment: "dispatch_jobs ({ _id: hashed }) and the open-job projection dispatch_active ({ _id: hashed }) with its sweep and rider indexes"
+      changes:
+        - createCollection:
+            collectionName: dispatch_jobs
+        - createCollection:
+            collectionName: dispatch_active
+        - createIndex:
+            collectionName: dispatch_active
+            keys: '{ "status": 1, "searchFrom": 1 }'
+            options: '{ "name": "status_search_from" }'
+        - createIndex:
+            collectionName: dispatch_active
+            keys: '{ "riderId": 1 }'
+            options: '{ "name": "rider", "sparse": true }'
+        - createIndex:
+            collectionName: dispatch_active
+            keys: '{ "offerRiderId": 1 }'
+            options: '{ "name": "offer_rider", "sparse": true }'
+        - createIndex:
+            collectionName: dispatch_active
+            keys: '{ "storeId": 1 }'
+            options: '{ "name": "store" }'

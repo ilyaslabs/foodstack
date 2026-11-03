@@ -92,6 +92,10 @@ module-switch:
       mode: local
     order:
       mode: local
+    rider:
+      mode: local
+    dispatch:
+      mode: local
     notification:
       mode: local
   propagate-headers: [Authorization, Accept-Language]
