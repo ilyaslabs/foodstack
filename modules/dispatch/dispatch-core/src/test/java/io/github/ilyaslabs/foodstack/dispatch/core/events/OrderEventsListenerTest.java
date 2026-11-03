@@ -55,7 +55,7 @@ class OrderEventsListenerTest {
     @DisplayName("accepted delivery orders become jobs; pickup orders do not; ready, cancel and reject reach the job")
     void orders() {
         OrderDelivery delivery = new OrderDelivery(DeliveryMode.OPERATOR, null, new GeoPoint(1, 2), "a", new GeoPoint(1.01, 2), "b",
-                null, "Sara", null, 15_000, 0, 1_000, "PKR", null);
+                null, "Sara", null, 15_000, 0, 1_000, "PKR", null, 15_000);
         this.listener.onEvent(envelope("e1", "OrderAccepted", new OrderAccepted(ORDER, "store:u1", 20, 1_800_001_200L, delivery)));
         verify(this.dispatch).orderAccepted(ORDER, delivery, 1_800_001_200L, "store:u1");
         verify(this.inbox).processOnce(eq("e1"), eq("dispatch-orders"), any());
