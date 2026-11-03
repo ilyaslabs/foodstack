@@ -2,7 +2,7 @@
 
 [Back to index](README.md)
 
-Found while tracing the flows on these pages against the [TDD](../TDD.md), first after M1 and again after M2. Choices already recorded in TDD sections 21, 22 and 23 are not repeated here unless the code still differs from what those sections say.
+Found while tracing the flows on these pages against the [TDD](../TDD.md), first after M1, again after M2 and after M3. Choices already recorded in TDD sections 21 to 24 are not repeated here unless the code still differs from what those sections say.
 
 ## 5.1 Differences that change behaviour or reliability
 
@@ -17,6 +17,9 @@ Found while tracing the flows on these pages against the [TDD](../TDD.md), first
 | G7 | Event tracing | 7.1: envelope carries `traceparent`; decision 12: OpenTelemetry | No tracing library, and the outbox stores no `traceparent` | A flow across Kafka is followed by order id in the logs, not by a trace | `OutboxWriter`, server dependencies | Open, M5 (observability) |
 | G8 | Accept-timeout and payment-expiry sweeps | Not specified | Run on every replica every 15 s and every minute; each change is a conditional update, so two replicas never reject or expire the same order twice | Extra reads of `order_active` and `payment_intents` with many replicas; no wrong results | `OrderConfiguration`, `PaymentConfiguration` (`PeriodicTask`) | By design; add a leader lock if the reads ever matter |
 | G9 | Live updates after a reconnect | 8.3: clients reconnect with `Last-Event-ID` | No event ids; a reconnecting client reloads the order or the board once, then follows new messages | Same result: the screen is never stale. Simpler, because a message carries no data to replay | `OrderStreamsController`, `live-stream.ts` | By design |
+| G10 | Dispatch score | 5.6: weights in settings | Fixed weights in `DispatchService.score` | Operators cannot tune ranking yet | `DispatchService` | By design for v1 (TDD 24) |
+| G11 | Delivery code in `OrderAccepted` | 9: PII encrypted in events | The 4-digit code travels in clear inside `OrderDelivery` (dispatch stores only its hash) | Anyone reading the internal Kafka topic could read open codes | `OrderLifecycleService.delivery` | Open: encrypt with the PII key |
+| G12 | Push delivery log | 5.2 notification: delivery log | Emails are logged with retries; push is sent once with no log entry | A lost push is not visible to support; the in-app message is always there | `PushService` | Open, if support needs it |
 
 ## 5.2 Places where the TDD text is out of date (code is fine)
 
@@ -43,16 +46,15 @@ Listed so nobody looks for them in the code. Milestones are from the [PRD releas
 |---|---|---|
 | Kubernetes Helm chart, Gateway API routes, edge JWT check, Istio mTLS, `AuthorizationPolicy` | 9.1, 18 | M5 |
 | Edge rate limiting (per IP, per client) | 8.1, 10 | M5 (per-user limits are built) |
-| Rider GEO, dispatch locks, dispatch live stream | 8.3, 10 | M3 |
-| Push notifications (FCM), live rider ETA on the order page | 8.3, 14 | M3 |
 | Store merchant accounts, credit limits, `resolveMerchant` | 5.4 | M4 (M2 collects everything on the operator's account) |
 | Embedded card fields, saved cards | 5.4 | M4 |
 | Email template editor for the operator | 5.2 notification | M4 (M2 templates are in code, in every language) |
 | Per-store kitchen ticket paper width (80 or 58 mm) | 5.3 | M4 store screens (M2 tickets fit 80 mm rolls: no page margins, 72 mm print width) |
 | Ledger, commission postings, payouts | 5.2 ledger | M4 |
+| Cities (dispatch by city, per-city pricing and fees) | 5.6, PRD DR-1b | M4 if ilyas agrees (TDD 24) |
+| Batching two orders to one rider | PRD DR-9 | Later ("Could") |
 | Social login, TOTP | 9.1 | M5 (email codes are built) |
 | Login session in Redis (needed for more than one identity replica) | 21 | Before running identity with several replicas |
 | Generated OpenAPI and Angular client | 8.1 | Recorded in TDD 21 |
 | OpenTelemetry, observability chart | 18.5 | M5 (see G7) |
 | Dead-letter screen and replay | 7.1 | M5 (see G1) |
-| `RoutingProvider` (OSRM) instead of straight line × 1.3 | 12 | M3 (TDD 22) |

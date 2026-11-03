@@ -121,6 +121,12 @@ Every key starts with the namespace `foodstack`. Redis holds caches and coordina
 | `foodstack:identity:code:{LOGIN or PASSWORD_RESET}:{userId}` | `identity` | Hash of the 6-digit code and the tries left | 5 min | Deleted when used or after 5 wrong tries |
 | `foodstack:{module}:rl:{scope}:{id}:{window}` | `identity` (codes per email), `cart` (coupon checks), `order` (placements) | Count in a fixed window | The window plus 1 s | Expires |
 | `foodstack:order:rt:order:{orderId}`, `…:store:{storeId}` (pub/sub channels, not keys) | `order` | `{orderId, storeId, status, revision}` after each step | Not stored | — |
+| `foodstack:rider:geo:online` | `rider` | GEO set of operator riders who can take an offer now (online, active, free) | No expiry; a rider leaves it when busy, offline or suspended | Every ping re-adds or removes the rider |
+| `foodstack:rider:pos:{riderId}` | `rider` | Last position and time of every online rider | 10 min | Overwritten on each ping |
+| `foodstack:rider:rt:all`, `…:rt:order:{orderId}` (pub/sub channels) | `rider` | Position and busy flag after each ping, online state changes | Not stored | — |
+| `foodstack:dispatch:offer:{riderId}` | `dispatch` | The order a rider has an open offer for (`SET NX`), so a rider never gets two offers at once | Offer timeout + 5 s | Deleted on accept, decline, expiry or hand-back |
+| `foodstack:dispatch:matcher:leader` | `dispatch` | Id of the replica running the matcher | 15 s, renewed every 2 s | Expires |
+| `foodstack:dispatch:rt:rider:{riderId}`, `…:rt:all` (pub/sub channels) | `dispatch` | `{orderId, status, riderId, kind}` after each job change | Not stored | — |
 | `foodstack:{module}:outbox:leader` | each publishing module | Id of the replica that relays the outbox | 10 s, renewed every poll | Released on shutdown |
 | `foodstack:search:rebuild` | `search` | Marks that one replica took this round of the daily re-read of every branch (`SET NX`) | 90% of the interval (`foodstack.search.rebuild-interval`, 24 h) | Expires, freeing the next round |
 

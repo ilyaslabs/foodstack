@@ -36,6 +36,13 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+    consumer:
+      properties:
+        # A topic is created by the module that publishes it, with the configured partitions. A
+        # consumer that starts first must not create it with one partition by subscribing, and
+        # must notice it (and any partitions added) soon after.
+        allow.auto.create.topics: false
+        metadata.max.age.ms: 30000
     admin:
       fail-fast: false
   elasticsearch:
