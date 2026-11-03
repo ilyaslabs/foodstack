@@ -328,9 +328,11 @@ class OrderStorageTest {
         given(this.payments.startCard(any())).willReturn(new CardSessionView("x", "https://pay/1", 0));
         String id = this.placement.place(this.customer, "k11", delivery()).orderId();
         this.lifecycle.paymentSucceeded(id, 170_000);
-        String code = this.lifecycle.require(id).deliveryCode();
+        String cipher = this.lifecycle.require(id).deliveryCodeCipher();
+        String code = this.pii.decrypt(cipher);
         assertThat(code).matches("[0-9]{4}");
-        assertThat(lastEvent(id).get("data", String.class)).contains("\"deliveryCode\":\"" + code + "\"");
+        String confirmed = lastEvent(id).get("data", String.class);
+        assertThat(confirmed).contains("\"deliveryCodeCipher\":\"" + cipher + "\"").doesNotContain("\"" + code + "\"");
 
         signIn("owner-1", STORE);
         assertThatThrownBy(() -> this.orders.storeAction(id, "ACCEPT", 20, null, "store-rider-1"))

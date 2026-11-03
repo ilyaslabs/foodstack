@@ -151,8 +151,8 @@ public class NotificationConfiguration {
 
     @Bean
     OrderMessages notificationOrderMessages(NotificationService notificationService, Templates notificationTemplates,
-            SettingsApi settingsApi, OrderApi orderApi, ServiceCalls serviceCalls) {
-        return new OrderMessages(notificationService, notificationTemplates, settingsApi, orderApi, serviceCalls);
+            SettingsApi settingsApi, OrderApi orderApi, ServiceCalls serviceCalls, PiiCipher piiCipher) {
+        return new OrderMessages(notificationService, notificationTemplates, settingsApi, orderApi, serviceCalls, piiCipher);
     }
 
     @Bean

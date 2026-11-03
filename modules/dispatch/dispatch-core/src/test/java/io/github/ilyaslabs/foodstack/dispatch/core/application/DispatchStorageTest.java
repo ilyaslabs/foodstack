@@ -345,7 +345,8 @@ class DispatchStorageTest {
 
     private OrderDelivery delivery(DeliveryMode mode, String storeRider, String code, long cash) {
         return new OrderDelivery(mode, storeRider, new GeoPoint(31.52, 74.35), "1 Main Boulevard", new GeoPoint(31.5, 74.3),
-                "12 Canal Road", "Gate 2", "Sara", this.pii.encrypt("+92 300 1234567"), 15_000, 2_000, cash, "PKR", code);
+                "12 Canal Road", "Gate 2", "Sara", this.pii.encrypt("+92 300 1234567"), 15_000, 2_000, cash, "PKR",
+                (code != null) ? this.pii.encrypt(code) : null);
     }
 
     private static RiderView rider(String id, String name, RiderKind kind, String storeId) {

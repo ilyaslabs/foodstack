@@ -166,7 +166,7 @@ public class OrderPlacementService {
                 String actor = "customer:" + customerId;
                 this.outbox.append(new OrderPlaced(OrderLifecycleService.summary(placed), actor));
                 if (cash) {
-                    this.outbox.append(new OrderConfirmed(OrderLifecycleService.summary(placed), actor, placed.deliveryCode()));
+                    this.outbox.append(new OrderConfirmed(OrderLifecycleService.summary(placed), actor, placed.deliveryCodeCipher()));
                 }
                 return placed;
             });
@@ -252,7 +252,7 @@ public class OrderPlacementService {
                 order.store(), OrderStatus.CONFIRMED, order.fulfilment(), order.deliveryMode(), order.destination(),
                 order.paymentMethod(), order.currency(), order.language(), order.lines(), order.totals(), order.coupon(),
                 order.commission(), order.prepMinutes(), order.travelMinutes(), this.lifecycle.acceptBy(now), null, null, 0, 0, 0,
-                order.cartVersion(), List.copyOf(timeline), null, order.placedAt(), now, 1, order.deliveryCode(), null, null);
+                order.cartVersion(), List.copyOf(timeline), null, order.placedAt(), now, 1, order.deliveryCodeCipher(), null, null);
     }
 
     private OrderDocument newOrder(String orderId, String customerId, PlaceOrder request, CheckoutView checkout, Instant now) {
@@ -295,7 +295,7 @@ public class OrderPlacementService {
                 destination, request.paymentMethod(), checkout.currency(), language(request.language()), lines, totals, coupon,
                 new OrderDocument.Commission(s.commissionBasisPoints(), s.commissionFixedMinor()), s.prepMinutes(), travel, null,
                 null, null, 0, 0, 0, checkout.cartVersion(), List.copyOf(timeline), null, now, now, 0,
-                this.lifecycle.deliveryCodeFor(request.fulfilment(), totals.totalMinor()), null, null);
+                encrypt(this.lifecycle.deliveryCodeFor(request.fulfilment(), totals.totalMinor())), null, null);
     }
 
     private String customerName(String customerId) {
@@ -344,5 +344,10 @@ public class OrderPlacementService {
         catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException(ex);
         }
+    }
+
+    /** The delivery code is kept and sent in events encrypted (TDD 9); only the customer's view decrypts it. */
+    private String encrypt(String code) {
+        return (code != null) ? this.pii.encrypt(code) : null;
     }
 }
