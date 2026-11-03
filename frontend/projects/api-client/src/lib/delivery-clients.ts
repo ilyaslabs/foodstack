@@ -10,6 +10,9 @@ import {
   Earnings,
   JobChange,
   LiveRider,
+  RiderDocumentInput,
+  RiderPapers,
+  RiderPayoutInput,
   LocationPoint,
   PushConfig,
   Rider,
@@ -106,6 +109,37 @@ export class RiderClient {
 
   removeStoreRider(storeId: string, riderId: string): Observable<void> {
     return this.http.delete<void>(this.url(`/riders/stores/${storeId}/${riderId}`));
+  }
+
+  /** An operator rider's ID documents and payout details. */
+  papers(riderId: string): Observable<RiderPapers> {
+    return this.http.get<RiderPapers>(this.url(`/riders/${riderId}/papers`));
+  }
+
+  /** Operator riders whose papers are complete. */
+  completePapers(): Observable<string[]> {
+    return this.http.get<string[]>(this.url('/riders/papers/complete'));
+  }
+
+  addDocument(riderId: string, input: RiderDocumentInput): Observable<RiderPapers> {
+    return this.http.post<RiderPapers>(this.url(`/riders/${riderId}/papers/documents`), input);
+  }
+
+  verifyDocument(riderId: string, documentId: string): Observable<RiderPapers> {
+    return this.http.post<RiderPapers>(
+      this.url(`/riders/${riderId}/papers/documents/${documentId}/verify`),
+      null,
+    );
+  }
+
+  removeDocument(riderId: string, documentId: string): Observable<RiderPapers> {
+    return this.http.delete<RiderPapers>(
+      this.url(`/riders/${riderId}/papers/documents/${documentId}`),
+    );
+  }
+
+  setPayout(riderId: string, input: RiderPayoutInput): Observable<RiderPapers> {
+    return this.http.put<RiderPapers>(this.url(`/riders/${riderId}/papers/payout`), input);
   }
 
   /** Every online rider, for the live map. */

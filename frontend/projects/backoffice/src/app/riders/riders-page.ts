@@ -92,6 +92,9 @@ import { RiderFormDialog, RiderFormData, VEHICLE_LABELS } from './rider-form-dia
                       {{ rider.city ? ' · ' + rider.city : '' }}
                     </span>
                     <span class="meta">
+                      @if (rider.kind === 'OPERATOR' && complete() && !complete()!.has(rider.id)) {
+                        <span class="papers-missing">Papers missing</span> ·
+                      }
                       {{ rider.deliveries }} deliveries · {{ rider.acceptancePercent }}% accepted
                       @if (rider.lastSeenAt) {
                         · seen {{ rider.lastSeenAt * 1000 | date: 'd MMM, HH:mm' }}
@@ -193,6 +196,10 @@ import { RiderFormDialog, RiderFormData, VEHICLE_LABELS } from './rider-form-dia
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .papers-missing {
+      color: var(--mat-sys-error);
+      font-weight: 500;
+    }
     .chip.busy {
       background: var(--mat-sys-tertiary-container);
       color: var(--mat-sys-on-tertiary-container);
@@ -233,6 +240,8 @@ export class RidersPage implements OnInit {
   protected readonly query = signal('');
   protected readonly loading = signal(true);
   protected readonly list = signal<Rider[] | null>(null);
+  /** Operator riders with complete papers; null until known (or for staff who cannot see them). */
+  protected readonly complete = signal<Set<string> | null>(null);
 
   protected readonly shown = computed(() => {
     const q = this.query().trim().toLowerCase();
@@ -256,6 +265,12 @@ export class RidersPage implements OnInit {
     try {
       const kind = this.kind();
       this.list.set(await firstValueFrom(this.riders.list(kind ? { kind } : {})));
+      if (kind !== 'STORE') {
+        this.riders.completePapers().subscribe({
+          next: (ids) => this.complete.set(new Set(ids)),
+          error: () => this.complete.set(null),
+        });
+      }
     } catch {
       this.list.set([]);
     } finally {

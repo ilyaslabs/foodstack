@@ -15,6 +15,7 @@ import { confirmAction } from '../shared/confirm-dialog';
 import { describeError } from '../shared/errors';
 import { EarningsView } from '../rider/earnings-view';
 import { RiderFormDialog, RiderFormData, VEHICLE_LABELS } from './rider-form-dialog';
+import { RiderPapers } from './rider-papers';
 
 /** One rider: details, where they were last seen, suspending, and what they earned. */
 @Component({
@@ -28,6 +29,7 @@ import { RiderFormDialog, RiderFormData, VEHICLE_LABELS } from './rider-form-dia
     MatSnackBarModule,
     EarningsView,
     FsMap,
+    RiderPapers,
     Icon,
   ],
   template: `
@@ -121,6 +123,9 @@ import { RiderFormDialog, RiderFormData, VEHICLE_LABELS } from './rider-form-dia
           }
         </mat-card>
       </div>
+      @if (r.kind === 'OPERATOR') {
+        <app-rider-papers [riderId]="r.id" />
+      }
       <mat-card appearance="outlined" class="earnings">
         <h2>Last 7 days</h2>
         @if (earnings(); as e) {
