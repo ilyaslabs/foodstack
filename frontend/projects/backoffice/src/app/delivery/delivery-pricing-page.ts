@@ -139,11 +139,10 @@ import { toMajor, toMinor } from '../shared/money';
                   step="0.1"
                   [(ngModel)]="peakFactor"
                 />
-                <mat-hint
-                  >1 to 3; 1.5 makes a {{ sample().normal }} delivery {{ sample().peak }}</mat-hint
-                >
+                <mat-hint>1 to 3</mat-hint>
               </mat-form-field>
             </div>
+            <p class="section-hint">{{ sample() }}</p>
             <ul class="windows" role="list">
               @for (w of windows(); track $index; let i = $index) {
                 <li class="window">
@@ -261,7 +260,12 @@ import { toMajor, toMinor } from '../shared/money';
       border-radius: 12px;
     }
     .window mat-button-toggle-group {
-      flex-wrap: wrap;
+      max-inline-size: 100%;
+    }
+    @media (max-width: 599.98px) {
+      .window ::ng-deep .mat-button-toggle-label-content {
+        padding-inline: 8px;
+      }
     }
     .times {
       display: flex;
@@ -321,15 +325,15 @@ export class DeliveryPricingPage implements OnInit {
     this.peakFactorValue.set(value);
   }
 
-  /** A 3 km delivery at the normal and the peak charge. */
+  /** What a 3 km delivery costs at the peak charge. */
   protected readonly sample = computed(() => {
     const base = toMinor(this.baseText(), this.currency()) ?? 0;
     const perKm = toMinor(this.perKmText(), this.currency()) ?? 0;
+    const factor = Number(this.peakFactorValue());
     const normal = base + perKm * 3;
-    return {
-      normal: this.locale.money(normal),
-      peak: this.locale.money(Math.round(normal * 1.5)),
-    };
+    if (!(factor > 1)) return 'At ×1 peak hours cost the same as other hours.';
+    const peak = this.locale.money(Math.round(normal * factor));
+    return `In peak hours a 3 km delivery costs ${peak} instead of ${this.locale.money(normal)}.`;
   });
 
   protected get base(): string {

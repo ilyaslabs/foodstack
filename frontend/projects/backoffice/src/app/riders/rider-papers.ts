@@ -37,9 +37,9 @@ import {
         </div>
         @if (papers(); as p) {
           @if (p.complete) {
-            <span class="chip live"><fs-icon name="check_circle" /> Complete</span>
+            <span class="chip live">Complete</span>
           } @else {
-            <span class="chip warn"><fs-icon name="warning" /> {{ missing(p) }}</span>
+            <span class="chip warn">{{ missing(p) }}</span>
           }
         }
       </header>
