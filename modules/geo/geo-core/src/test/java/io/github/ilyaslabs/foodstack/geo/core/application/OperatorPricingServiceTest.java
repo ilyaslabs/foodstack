@@ -73,4 +73,24 @@ class OperatorPricingServiceTest {
         assertThatThrownBy(() -> this.service.update(new UpdateOperatorPricing(true, -1, 0, 100), 2, "admin-1"))
             .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("PRICING_INVALID"));
     }
+
+    @Test
+    @DisplayName("keeps the minimum order, free threshold and peak hours, and checks them (DR-1b)")
+    @SuppressWarnings("unchecked")
+    void extras() {
+        assertThat(this.service.get().peakMultiplierPercent()).isEqualTo(100);
+        java.util.List<PeakWindow> evening = java.util.List.of(new PeakWindow(java.util.List.of(), "19:00", "22:00"));
+        OperatorPricing updated = this.service.update(new UpdateOperatorPricing(true, 15_000, 4_000, 10_000, 50_000, 200_000L,
+                150, evening), 2, "admin-1");
+        assertThat(updated.minOrderMinor()).isEqualTo(50_000);
+        assertThat(updated.freeDeliveryAboveMinor()).isEqualTo(200_000);
+        assertThat(updated.peakMultiplierPercent()).isEqualTo(150);
+        assertThat(updated.peakWindows()).isEqualTo(evening);
+
+        assertThatThrownBy(() -> this.service.update(new UpdateOperatorPricing(true, 0, 0, 8000, -1, 0L, 400,
+                java.util.List.of(new PeakWindow(null, "7pm", "22:00"), new PeakWindow(null, "10:00", "10:00"))), 3, "admin-1"))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat(
+                    (java.util.Map<String, String>) ex.details().get("errors")).containsOnlyKeys("minOrderMinor",
+                            "freeDeliveryAboveMinor", "peakMultiplierPercent", "peakWindows[0]", "peakWindows[1]"));
+    }
 }

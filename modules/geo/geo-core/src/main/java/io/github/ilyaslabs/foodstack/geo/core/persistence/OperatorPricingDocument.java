@@ -1,6 +1,9 @@
 package io.github.ilyaslabs.foodstack.geo.core.persistence;
 
 import java.time.Instant;
+import java.util.List;
+
+import io.github.ilyaslabs.foodstack.geo.core.application.PeakWindow;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
@@ -8,7 +11,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
  * The operator's delivery pricing, document {@code operator-delivery} of {@code geo_settings}
- * (unsharded): base charge plus a rate per km of road distance, up to a maximum distance (PRD DR-1b).
+ * (unsharded): base charge plus a rate per km of road distance, up to a maximum distance, with a
+ * minimum order, a free-delivery threshold and dearer peak hours (PRD DR-1b).
  */
 @Document("geo_settings")
 public class OperatorPricingDocument {
@@ -26,6 +30,15 @@ public class OperatorPricingDocument {
     private long perKmMinor;
 
     private int maxDistanceMeters;
+
+    private long minOrderMinor;
+
+    private Long freeDeliveryAboveMinor;
+
+    /** 0 in documents written before peak hours existed; read as 100. */
+    private int peakMultiplierPercent;
+
+    private List<PeakWindow> peakWindows;
 
     private Instant updatedAt;
 
@@ -72,6 +85,38 @@ public class OperatorPricingDocument {
 
     public void setMaxDistanceMeters(int maxDistanceMeters) {
         this.maxDistanceMeters = maxDistanceMeters;
+    }
+
+    public long getMinOrderMinor() {
+        return this.minOrderMinor;
+    }
+
+    public void setMinOrderMinor(long minOrderMinor) {
+        this.minOrderMinor = minOrderMinor;
+    }
+
+    public Long getFreeDeliveryAboveMinor() {
+        return this.freeDeliveryAboveMinor;
+    }
+
+    public void setFreeDeliveryAboveMinor(Long freeDeliveryAboveMinor) {
+        this.freeDeliveryAboveMinor = freeDeliveryAboveMinor;
+    }
+
+    public int getPeakMultiplierPercent() {
+        return this.peakMultiplierPercent;
+    }
+
+    public void setPeakMultiplierPercent(int peakMultiplierPercent) {
+        this.peakMultiplierPercent = peakMultiplierPercent;
+    }
+
+    public List<PeakWindow> getPeakWindows() {
+        return this.peakWindows;
+    }
+
+    public void setPeakWindows(List<PeakWindow> peakWindows) {
+        this.peakWindows = peakWindows;
     }
 
     public Instant getUpdatedAt() {

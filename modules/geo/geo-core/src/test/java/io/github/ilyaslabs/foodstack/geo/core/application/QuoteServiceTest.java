@@ -1,5 +1,10 @@
 package io.github.ilyaslabs.foodstack.geo.core.application;
 
+import java.time.Clock;
+import java.time.DayOfWeek;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaRequest;
@@ -61,7 +66,7 @@ class QuoteServiceTest {
     @Test
     @DisplayName("prices operator delivery as base plus per km of estimated road distance")
     void operatorDelivery() {
-        given(this.pricing.get()).willReturn(new OperatorPricing(true, 10_000, 3_000, 8000, 1, null));
+        given(this.pricing.get()).willReturn(new OperatorPricing(true, 10_000, 3_000, 8000, 0, null, 100, List.of(), 1, null));
 
         DeliveryQuoteView quote = this.service.quote(new QuoteRequest("s1", STORE, DeliveryMode.OPERATOR, MIDDLE));
 
@@ -72,13 +77,43 @@ class QuoteServiceTest {
     }
 
     @Test
+    @DisplayName("operator delivery carries the minimum order and free threshold, and costs more in peak hours (DR-1b)")
+    void operatorExtras() {
+        // given Friday 20:30 in Karachi (15:30 UTC), with Friday evenings and late nights at x1.5
+        Clock friday = Clock.fixed(Instant.parse("2026-11-06T15:30:00Z"), ZoneOffset.UTC);
+        Clock sunday = Clock.fixed(Instant.parse("2026-11-08T15:30:00Z"), ZoneOffset.UTC);
+        Clock saturdayEarly = Clock.fixed(Instant.parse("2026-11-06T20:30:00Z"), ZoneOffset.UTC);
+        List<PeakWindow> peaks = List.of(new PeakWindow(List.of(DayOfWeek.FRIDAY), "19:00", "21:00"),
+                new PeakWindow(List.of(DayOfWeek.FRIDAY), "23:00", "02:00"));
+        given(this.pricing.get()).willReturn(new OperatorPricing(true, 10_000, 0, 8000, 50_000, 200_000L, 150, peaks, 1, null));
+        QuoteRequest request = new QuoteRequest("s1", STORE, DeliveryMode.OPERATOR, NEAR);
+
+        // when
+        DeliveryQuoteView peak = at(friday).quote(request);
+        DeliveryQuoteView normal = at(sunday).quote(request);
+        DeliveryQuoteView pastMidnight = at(saturdayEarly).quote(request);
+
+        // then
+        assertThat(peak.chargeMinor()).isEqualTo(15_000);
+        assertThat(peak.minOrderMinor()).isEqualTo(50_000);
+        assertThat(peak.freeDeliveryAboveMinor()).isEqualTo(200_000);
+        assertThat(normal.chargeMinor()).isEqualTo(10_000);
+        assertThat(pastMidnight.chargeMinor()).isEqualTo(15_000);
+    }
+
+    private QuoteService at(Clock clock) {
+        return new QuoteService(this.zones, this.pricing, 1.3, RoutingService.estimating(1.3), clock,
+                () -> ZoneId.of("Asia/Karachi"));
+    }
+
+    @Test
     @DisplayName("refuses operator delivery beyond the maximum distance or while it is off")
     void operatorRefusals() {
-        given(this.pricing.get()).willReturn(new OperatorPricing(true, 10_000, 3_000, 8000, 1, null));
+        given(this.pricing.get()).willReturn(new OperatorPricing(true, 10_000, 3_000, 8000, 0, null, 100, List.of(), 1, null));
         assertThat(this.service.quote(new QuoteRequest("s1", STORE, DeliveryMode.OPERATOR, FAR)).reason())
             .isEqualTo(DeliveryQuoteView.TOO_FAR);
 
-        given(this.pricing.get()).willReturn(new OperatorPricing(false, 10_000, 3_000, 8000, 1, null));
+        given(this.pricing.get()).willReturn(new OperatorPricing(false, 10_000, 3_000, 8000, 0, null, 100, List.of(), 1, null));
         assertThat(this.service.quote(new QuoteRequest("s1", STORE, DeliveryMode.OPERATOR, NEAR)).reason())
             .isEqualTo(DeliveryQuoteView.OPERATOR_DELIVERY_OFF);
     }
@@ -87,7 +122,7 @@ class QuoteServiceTest {
     @DisplayName("gives the zone polygons, or the operator circle, as the delivery area")
     void deliveryArea() {
         given(this.zones.getZones("s1")).willReturn(List.of(ring("z1", 3000, 0)));
-        given(this.pricing.get()).willReturn(new OperatorPricing(true, 0, 0, 13_000, 1, null));
+        given(this.pricing.get()).willReturn(new OperatorPricing(true, 0, 0, 13_000, 0, null, 100, List.of(), 1, null));
 
         assertThat(this.service.deliveryArea(new DeliveryAreaRequest("s1", STORE, DeliveryMode.SELF)).polygons()).hasSize(1);
         List<GeoPoint> circle = this.service.deliveryArea(new DeliveryAreaRequest("s1", STORE, DeliveryMode.OPERATOR))

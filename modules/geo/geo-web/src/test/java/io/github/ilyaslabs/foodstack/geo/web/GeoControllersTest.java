@@ -8,6 +8,7 @@ import io.github.ilyaslabs.foodstack.geo.core.application.AddressSuggestion;
 import io.github.ilyaslabs.foodstack.geo.core.application.GeocodingService;
 import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricing;
 import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricingService;
+import io.github.ilyaslabs.foodstack.geo.core.application.PeakWindow;
 import io.github.ilyaslabs.foodstack.geo.core.application.UpdateOperatorPricing;
 import io.github.ilyaslabs.foodstack.geo.core.application.ZoneDetails;
 import io.github.ilyaslabs.foodstack.geo.core.application.ZoneInput;
@@ -113,7 +114,8 @@ class GeoControllersTest {
     void pricing() throws Exception {
         String body = "{\"enabled\":true,\"baseChargeMinor\":15000,\"perKmMinor\":4000,\"maxDistanceMeters\":10000}";
         given(this.pricingService.update(new UpdateOperatorPricing(true, 15_000, 4_000, 10_000), 2, "admin-1"))
-            .willReturn(new OperatorPricing(true, 15_000, 4_000, 10_000, 3, Instant.ofEpochSecond(1_800_000_000L)));
+            .willReturn(new OperatorPricing(true, 15_000, 4_000, 10_000, 0, null, 100, List.of(), 3,
+                    Instant.ofEpochSecond(1_800_000_000L)));
 
         this.mvc.perform(put("/api/v1/geo/operator-pricing").with(admin()).header("If-Match", "\"operator-pricing-2\"")
             .contentType(MediaType.APPLICATION_JSON).content(body))
@@ -126,6 +128,28 @@ class GeoControllersTest {
         this.mvc.perform(put("/api/v1/geo/operator-pricing").with(admin()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("IF_MATCH_REQUIRED"));
+    }
+
+    @Test
+    @DisplayName("minimum order, free threshold and peak hours go through to the pricing service (DR-1b)")
+    void pricingExtras() throws Exception {
+        PeakWindow evening = new PeakWindow(List.of(java.time.DayOfWeek.FRIDAY), "19:00", "23:00");
+        UpdateOperatorPricing update = new UpdateOperatorPricing(true, 15_000, 4_000, 10_000, 50_000, 200_000L, 150,
+                List.of(evening));
+        given(this.pricingService.update(update, 2, "admin-1"))
+            .willReturn(new OperatorPricing(true, 15_000, 4_000, 10_000, 50_000, 200_000L, 150, List.of(evening), 3, null));
+
+        this.mvc.perform(put("/api/v1/geo/operator-pricing").with(admin()).header("If-Match", "\"operator-pricing-2\"")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"enabled\":true,\"baseChargeMinor\":15000,\"perKmMinor\":4000,\"maxDistanceMeters\":10000,"
+                    + "\"minOrderMinor\":50000,\"freeDeliveryAboveMinor\":200000,\"peakMultiplierPercent\":150,"
+                    + "\"peakWindows\":[{\"days\":[\"FRIDAY\"],\"start\":\"19:00\",\"end\":\"23:00\"}]}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.minOrderMinor").value(50_000))
+            .andExpect(jsonPath("$.freeDeliveryAboveMinor").value(200_000))
+            .andExpect(jsonPath("$.peakMultiplierPercent").value(150))
+            .andExpect(jsonPath("$.peakWindows[0].days[0]").value("FRIDAY"))
+            .andExpect(jsonPath("$.peakWindows[0].start").value("19:00"));
     }
 
     private static JwtRequestPostProcessor admin() {
