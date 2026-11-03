@@ -54,6 +54,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param deliveryCodeCipher the 4-digit code the customer gives the rider (PRD DR-6), encrypted with the PII key, or {@code null}
  * @param rider the rider on a delivery order, from dispatch, or {@code null}
  * @param handedBackAt when support gave an operator delivery back to the store, or {@code null}
+ * @param normalDeliveryChargeMinor the delivery charge before a free-delivery threshold or coupon, which rider pay is
+ *        based on; {@code null} for pickup and for orders placed before it was kept
  */
 @Document("order_orders")
 public record OrderDocument(@Id String id, String number, String customerId, String customerName, String contactPhone,
@@ -62,7 +64,7 @@ public record OrderDocument(@Id String id, String number, String customerId, Str
         Commission commission, int prepMinutes, int travelMinutes, Instant acceptBy, Instant readyBy, String paymentUrl,
         long paidMinor, long refundRequestedMinor, long refundedMinor, long cartVersion, List<TimelineEntry> timeline,
         String closeReason, Instant placedAt, Instant updatedAt, long revision, String deliveryCodeCipher, Rider rider,
-        Instant handedBackAt) {
+        Instant handedBackAt, Long normalDeliveryChargeMinor) {
 
     /**
      * The rider on the order, as dispatch reported it.
