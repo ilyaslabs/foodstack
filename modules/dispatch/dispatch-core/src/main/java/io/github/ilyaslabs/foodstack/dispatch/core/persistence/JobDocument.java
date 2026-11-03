@@ -58,6 +58,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param cashCollectedMinor cash the rider took
  * @param earningMinor what the rider earned
  * @param distanceMeters store to customer by road
+ * @param payBasisMinor the normal delivery charge that operator rider pay is a share of; 0 in jobs made before it was kept
  * @param createdAt created at
  * @param updatedAt last change
  * @param revision number of changes
@@ -71,7 +72,7 @@ public record JobDocument(@Id String id, String orderNumber, String customerId, 
         Instant searchStartedAt, int radiusMeters, int widenings, String offerRiderId, Instant offerExpiresAt,
         List<String> triedRiderIds, Instant alertedAt, Instant assignedAt, Instant atStoreAt, Instant pickedUpAt,
         Instant closedAt, String closeReason, String proof, String proofPhotoUrl, long cashCollectedMinor, long earningMinor,
-        long distanceMeters, Instant createdAt, Instant updatedAt, long revision) {
+        long distanceMeters, long payBasisMinor, Instant createdAt, Instant updatedAt, long revision) {
 
     public List<String> triedRiderIds() {
         return (this.triedRiderIds != null) ? this.triedRiderIds : List.of();

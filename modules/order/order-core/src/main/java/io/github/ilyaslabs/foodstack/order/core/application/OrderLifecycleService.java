@@ -347,10 +347,12 @@ public class OrderLifecycleService {
         OrderDocument.Store s = o.store();
         long charge = Math.max(0, o.totals().deliveryChargeMinor() - o.totals().deliveryDiscountMinor());
         long cash = (o.paymentMethod() == PaymentMethod.CASH) ? o.totals().totalMinor() : 0;
+        // rider pay is based on the normal charge, so free and discounted deliveries pay the rider the same (ilyas, 2026-11-03)
+        long payBasis = Math.max(charge, (o.normalDeliveryChargeMinor() != null) ? o.normalDeliveryChargeMinor() : 0);
         return new OrderDelivery(o.deliveryMode(), storeRiderId, new GeoPoint(s.lat(), s.lng()), s.addressLine(),
                 new GeoPoint(o.destination().lat(), o.destination().lng()), o.destination().addressLine(),
                 o.destination().instructions(), o.customerName(), o.contactPhone(), charge, o.totals().tipMinor(), cash,
-                o.currency(), o.deliveryCodeCipher());
+                o.currency(), o.deliveryCodeCipher(), payBasis);
     }
 
     /** Rejects confirmed orders the store did not answer in time (PRD 3); returns how many. */

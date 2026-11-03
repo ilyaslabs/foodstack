@@ -152,7 +152,7 @@ public class DispatchService {
                 delivery.dropoff().lng(), delivery.dropoffAddress(), delivery.instructions(), delivery.deliveryChargeMinor(),
                 delivery.tipMinor(), delivery.cashToCollectMinor(), delivery.currency(), hash(decrypt(delivery.deliveryCodeCipher())),
                 order.language(), readyBy, searchFrom, null, rules.searchRadiusMeters(), 0, null, null, List.of(), null, null,
-                null, null, null, null, null, null, 0, 0, distance, now, now, 0);
+                null, null, null, null, null, null, 0, 0, distance, delivery.riderPayBasisMinor(), now, now, 0);
         try {
             this.transaction.executeWithoutResult((tx) -> {
                 this.mongo.insert(job);
@@ -633,12 +633,17 @@ public class DispatchService {
                         (j.riderId() != null) ? j.tipMinor() : 0, cash, j.currency(), j.distanceMeters(), proof))));
     }
 
-    /** Rider pay (TDD 5.6): a share of the delivery charge with a floor for operator riders; the store pays its own. */
+    /**
+     * Rider pay (TDD 5.6): a share of the normal delivery charge with a floor for operator riders; the store pays its own.
+     * The normal charge is before a free-delivery threshold or coupon, so a free delivery pays the rider the same
+     * (ilyas, 2026-11-03).
+     */
     static long earningFor(JobDocument job, RiderKind kind, DeliveryView rules) {
         if (kind != RiderKind.OPERATOR) {
             return 0;
         }
-        long share = Math.round(job.deliveryChargeMinor() * rules.riderPayBasisPoints() / 10_000.0);
+        long basis = Math.max(job.payBasisMinor(), job.deliveryChargeMinor());
+        long share = Math.round(basis * rules.riderPayBasisPoints() / 10_000.0);
         return Math.max(share, rules.riderPayMinMinor());
     }
 

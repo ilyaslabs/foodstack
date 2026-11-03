@@ -342,7 +342,9 @@ class OrderStorageTest {
         assertThat(accepted.deliveryCode()).isNull();
         String data = lastEvent(id).get("data", String.class);
         assertThat(data).contains("\"mode\":\"OPERATOR\"").contains("\"dropoffAddress\":\"12 Canal Road\"")
-            .contains("\"cashToCollectMinor\":0");
+            .contains("\"cashToCollectMinor\":0")
+            // delivery was free (above the threshold), but the rider is paid on the normal charge
+            .contains("\"deliveryChargeMinor\":0").contains("\"riderPayBasisMinor\":15000");
 
         this.lifecycle.riderAssigned(id, "rider-1", "Ali", "MOTORBIKE", "rider:rider-1");
         this.lifecycle.riderAssigned(id, "rider-1", "Ali", "MOTORBIKE", "rider:rider-1");
@@ -430,7 +432,7 @@ class OrderStorageTest {
                 List.of(new OrderValidationView.PricedOption("g1", Map.of("en", "Size"), "o1", Map.of("en", "Large"), 0)), 170_000);
         long discount = (coupon != null) ? coupon.itemsDiscountMinor() : 0;
         CheckoutView.Delivery delivery = (fulfilment == Fulfilment.DELIVERY)
-                ? new CheckoutView.Delivery(true, null, DeliveryMode.OPERATOR, 0, 0, null, 3_000) : null;
+                ? new CheckoutView.Delivery(true, null, DeliveryMode.OPERATOR, 15_000, 0, 150_000L, 3_000) : null;
         return new CheckoutView(this.customer, 7, store, "PKR", fulfilment, List.of(new CheckoutView.Line("l1", "Less spicy", line)),
                 170_000, delivery, coupon, discount, 0, 0, 0, 0, 0, 170_000 - discount, 35, List.of(method), true, List.of());
     }

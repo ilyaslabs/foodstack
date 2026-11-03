@@ -169,7 +169,7 @@ sequenceDiagram
     end
 ```
 
-The photo is uploaded first through `media` (purpose `RIDER_DOCUMENT`) and sent as `media:<id>`. Support may finish a job without the code (proof `SUPPORT`).
+The photo is uploaded first through `media` (purpose `RIDER_DOCUMENT`) and sent as `media:<id>`. Support may finish a job without the code (proof `SUPPORT`). The rider's earning is a share of the normal delivery charge (`riderPayBasisMinor`, before a free-delivery threshold or delivery coupon), with the minimum pay as a floor, so free deliveries pay the rider the same.
 
 ## 7.6 Support: reassign and hand back
 
