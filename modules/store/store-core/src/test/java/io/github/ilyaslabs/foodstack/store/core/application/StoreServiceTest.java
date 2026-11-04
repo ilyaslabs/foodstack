@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,6 +34,7 @@ import io.github.ilyaslabs.foodstack.store.api.TimeRange;
 import io.github.ilyaslabs.foodstack.store.api.events.BrandChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreAvailabilityChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreChanged;
+import io.github.ilyaslabs.foodstack.store.core.domain.BranchTimeZones;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuItemRepository;
@@ -55,6 +57,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -239,6 +242,42 @@ class StoreServiceTest {
     }
 
     @Test
+    @DisplayName("a branch's time zone follows its location unless the owner chose another one")
+    void branchTimezone() {
+        // given
+        BranchTimeZones timeZones = mock(BranchTimeZones.class);
+        given(timeZones.zoneAt(eq(31.47), eq(74.40), any())).willReturn(ZoneId.of("Asia/Karachi"));
+        given(timeZones.zoneAt(eq(24.86), eq(67.0), any())).willReturn(ZoneId.of("Asia/Dubai"));
+        StoreService withZones = new StoreService(this.brands, this.stores, this.slugs, this.items, this.settings, this.media,
+                this.identity, this.geo, this.outbox, this.transaction, Clock.fixed(NOW, ZoneOffset.UTC), timeZones);
+        StoreDocument store = store(StoreStatus.DRAFT);
+        store.setTimezone(null);
+        given(this.stores.findById("s1")).willReturn(Optional.of(store));
+        given(this.brands.findById("b1")).willReturn(Optional.of(brand()));
+        Address address = new Address("2 Phase 5", "DHA", "Lahore", null);
+        GeoPoint lahore = new GeoPoint(31.47, 74.40);
+        GeoPoint moved = new GeoPoint(24.86, 67.0);
+
+        // then: an older branch without a zone gets one from its location
+        assertThat(withZones.updateBranch("s1", new UpdateBranch(null, address, lahore, 30, DeliveryMode.SELF, false), 3, "o")
+            .timezone()).isEqualTo("Asia/Karachi");
+        // the owner's choice wins and stays while the branch stays put
+        assertThat(withZones.updateBranch("s1",
+                new UpdateBranch(null, address, lahore, 30, DeliveryMode.SELF, false, "Asia/Kolkata"), 4, "o")
+            .timezone()).isEqualTo("Asia/Kolkata");
+        assertThat(withZones.updateBranch("s1",
+                new UpdateBranch(null, address, lahore, 30, DeliveryMode.SELF, false, "Asia/Kolkata"), 5, "o")
+            .timezone()).isEqualTo("Asia/Kolkata");
+        // moving the branch without touching the zone finds it again
+        assertThat(withZones.updateBranch("s1",
+                new UpdateBranch(null, address, moved, 30, DeliveryMode.SELF, false, "Asia/Kolkata"), 6, "o")
+            .timezone()).isEqualTo("Asia/Dubai");
+        assertThatThrownBy(() -> withZones.updateBranch("s1",
+                new UpdateBranch(null, address, moved, 30, DeliveryMode.SELF, false, "Mars/Base"), 7, "o"))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("STORE_INVALID"));
+    }
+
+    @Test
     @DisplayName("withdrawing operator delivery moves the branch back to self-delivery")
     void updateAdmin() {
         StoreDocument store = store(StoreStatus.LIVE);
@@ -330,7 +369,8 @@ class StoreServiceTest {
         assertThat(quote.deliverable()).isTrue();
         assertThat(quote.etaMinutes()).isEqualTo(20 + 15);
         assertThat(quote.currency()).isEqualTo("PKR");
-        verify(this.geo).quote(new QuoteRequest("s1", new GeoPoint(31.52, 74.35), DeliveryMode.SELF, new GeoPoint(31.50, 74.33)));
+        verify(this.geo).quote(new QuoteRequest("s1", new GeoPoint(31.52, 74.35), DeliveryMode.SELF, new GeoPoint(31.50, 74.33),
+                "Asia/Karachi"));
     }
 
     @Test

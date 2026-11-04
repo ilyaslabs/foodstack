@@ -44,6 +44,10 @@
             <artifactId>foodstack-identity-api</artifactId>
         </dependency>
         <dependency>
+            <groupId>net.iakovlev</groupId>
+            <artifactId>timeshape</artifactId>
+        </dependency>
+        <dependency>
             <groupId>io.github.ilyaslabs</groupId>
             <artifactId>foodstack-platform-test</artifactId>
             <scope>test</scope>

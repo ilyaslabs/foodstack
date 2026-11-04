@@ -44,7 +44,7 @@ public class QuoteService {
     }
 
     /**
-     * @param timeZone the deployment's time zone, which peak hours are in
+     * @param timeZone the deployment's time zone, for a branch without its own
      */
     public QuoteService(ZoneService zones, OperatorPricingService pricing, double roadFactor, RoutingService routing,
             Clock clock, Supplier<ZoneId> timeZone) {
@@ -69,7 +69,7 @@ public class QuoteService {
                 return refusal(DeliveryQuoteView.TOO_FAR, distance, DeliveryMode.OPERATOR);
             }
             long charge = operator.baseChargeMinor() + Math.round(operator.perKmMinor() * distance / 1000.0);
-            if (operator.peakMultiplierPercent() > 100 && isPeak(operator.peakWindows())) {
+            if (operator.peakMultiplierPercent() > 100 && isPeak(operator.peakWindows(), request.storeTimezone())) {
                 charge = Math.round(charge * operator.peakMultiplierPercent() / 100.0);
             }
             return new DeliveryQuoteView(true, null, charge, operator.minOrderMinor(), operator.freeDeliveryAboveMinor(),
@@ -98,13 +98,26 @@ public class QuoteService {
                 this.zones.getZones(request.storeId()).stream().map(ZoneDetails::polygon).toList());
     }
 
-    private boolean isPeak(List<PeakWindow> windows) {
+    /** Peak hours are the branch's local time (TDD 7.5, gap 11), so one window fits every zone of a country. */
+    private boolean isPeak(List<PeakWindow> windows, String storeTimezone) {
         if (windows.isEmpty()) {
             return false;
         }
-        ZonedDateTime now = this.clock.instant().atZone(this.timeZone.get());
+        ZonedDateTime now = this.clock.instant().atZone(zoneOf(storeTimezone));
         LocalTime time = now.toLocalTime();
         return windows.stream().anyMatch((w) -> w.contains(now.getDayOfWeek(), time));
+    }
+
+    private ZoneId zoneOf(String storeTimezone) {
+        if (storeTimezone != null && !storeTimezone.isBlank()) {
+            try {
+                return ZoneId.of(storeTimezone);
+            }
+            catch (RuntimeException ex) {
+                // fall back to the deployment's zone
+            }
+        }
+        return this.timeZone.get();
     }
 
     private static DeliveryQuoteView refusal(String reason, long distance, DeliveryMode mode) {

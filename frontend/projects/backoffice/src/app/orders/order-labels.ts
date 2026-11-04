@@ -61,17 +61,30 @@ export function statusTone(status: OrderStatus): 'new' | 'progress' | 'ready' | 
   }
 }
 
-export function clock(epochSeconds: number | null): string {
+/** A time of day, in the branch's own time zone when given (tickets show the kitchen's clock). */
+export function clock(epochSeconds: number | null, timeZone?: string | null): string {
   if (!epochSeconds) return '';
   return new Date(epochSeconds * 1000).toLocaleTimeString([], {
     hour: 'numeric',
     minute: '2-digit',
+    ...zone(timeZone),
   });
 }
 
-export function dateTime(epochSeconds: number): string {
+export function dateTime(epochSeconds: number, timeZone?: string | null): string {
   return new Date(epochSeconds * 1000).toLocaleString([], {
     dateStyle: 'medium',
     timeStyle: 'short',
+    ...zone(timeZone),
   });
+}
+
+function zone(timeZone?: string | null): { timeZone?: string } {
+  if (!timeZone) return {};
+  try {
+    new Intl.DateTimeFormat([], { timeZone });
+    return { timeZone };
+  } catch {
+    return {};
+  }
 }

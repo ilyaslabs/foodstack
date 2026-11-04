@@ -99,7 +99,7 @@ class StoresController {
         StoreDetails updated = this.storeService.updateBranch(storeId,
                 new UpdateBranch(request.branchName(), StoreMapper.address(request.address()),
                         StoreMapper.point(request.location()), request.prepMinutes(),
-                        StoreMapper.deliveryMode(request.deliveryMode()), request.pickupEnabled()),
+                        StoreMapper.deliveryMode(request.deliveryMode()), request.pickupEnabled(), request.timezone()),
                 StoreMapper.requireIfMatch("store", ifMatch), CurrentUser.id());
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }

@@ -71,6 +71,7 @@
         <bouncycastle.version>1.86</bouncycastle.version>
         <webp-imageio.version>0.11.0</webp-imageio.version>
         <metadata-extractor.version>2.22.0</metadata-extractor.version>
+        <timeshape.version>2026b.29</timeshape.version>
         <archunit.version>1.5.1</archunit.version>
         <instancio.version>6.1.0</instancio.version>
         <rest-assured.version>6.3.0</rest-assured.version>
@@ -414,6 +415,12 @@
                 <groupId>com.drewnoakes</groupId>
                 <artifactId>metadata-extractor</artifactId>
                 <version>${metadata-extractor.version}</version>
+            </dependency>
+            <dependency>
+                <!-- Time zone boundaries (timezone-boundary-builder data), for a branch's time zone from its location -->
+                <groupId>net.iakovlev</groupId>
+                <artifactId>timeshape</artifactId>
+                <version>${timeshape.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.tngtech.archunit</groupId>

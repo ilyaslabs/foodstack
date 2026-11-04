@@ -216,6 +216,8 @@ export interface Order {
     lat: number;
     lng: number;
     logoUrls: Record<string, string>;
+    /** IANA zone of the branch; tickets and order times are shown in it. */
+    timezone?: string | null;
   };
   destination: {
     lat: number;
