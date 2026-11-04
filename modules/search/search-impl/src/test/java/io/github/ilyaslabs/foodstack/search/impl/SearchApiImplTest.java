@@ -23,7 +23,7 @@ class SearchApiImplTest {
     @DisplayName("delegates store search to the core service")
     void delegates() {
         StoreSearchQuery query = new StoreSearchQuery(31.5, 74.3, "pizza", null, Fulfilment.DELIVERY, 0, 20);
-        StoreSearchPage page = new StoreSearchPage(List.of(), List.of(), 0, 0, 20);
+        StoreSearchPage page = new StoreSearchPage(List.of(), List.of(), 0, 0, 20, false, 8000, 15_000);
         given(this.service.search(query)).willReturn(page);
 
         assertThat(this.api.searchStores(query)).isEqualTo(page);

@@ -10,6 +10,7 @@ import java.util.Map;
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch._types.ElasticsearchException;
 import co.elastic.clients.elasticsearch._types.FieldValue;
+import co.elastic.clients.elasticsearch._types.VersionType;
 import co.elastic.clients.elasticsearch._types.aggregations.Aggregate;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
@@ -59,6 +60,9 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
 
     private static final String[] TEXT_FIELDS = { "brandName^4", "branchName^2", "cuisines.text^3", "area", "dishes.*",
             "description.*" };
+
+    /** Ids read per page when listing a brand's or a delivery mode's branches. */
+    static final int ID_PAGE = 1000;
 
     private final ElasticsearchClient client;
 
@@ -116,6 +120,9 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
                 log.info("Created search index {} with alias {}", index, alias());
                 this.createdHere = true;
             }
+            else {
+                applyReplicas(index);
+            }
             this.ready = true;
         }
         catch (ElasticsearchException ex) {
@@ -127,6 +134,19 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         }
         catch (IOException ex) {
             throw unavailable(ex);
+        }
+    }
+
+    /** Replicas are a live setting: a changed configuration reaches the existing index at startup. */
+    private void applyReplicas(String index) {
+        String settings = this.properties.autoExpandReplicas().isEmpty()
+                ? "{\"index\":{\"auto_expand_replicas\":false,\"number_of_replicas\":" + this.properties.replicas() + "}}"
+                : "{\"index\":{\"auto_expand_replicas\":\"" + this.properties.autoExpandReplicas() + "\"}}";
+        try {
+            this.client.indices().putSettings((p) -> p.index(index).withJson(new StringReader(settings)));
+        }
+        catch (IOException | ElasticsearchException ex) {
+            log.warn("Could not apply the replica settings to {}: {}", index, ex.getMessage());
         }
     }
 
@@ -175,10 +195,23 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         prepare();
         Map<String, Object> source = toSource(store);
         try {
-            // requireAlias: never let a write create an unmapped index under the alias name
-            this.client.index((i) -> i.index(alias()).id(store.storeId()).requireAlias(true).document(source));
+            // requireAlias: never let a write create an unmapped index under the alias name. The
+            // branch's version orders writes: an older read that arrives late is refused (TDD 7.5).
+            this.client.index((i) -> i.index(alias())
+                .id(store.storeId())
+                .requireAlias(true)
+                .version(store.version())
+                .versionType(VersionType.ExternalGte)
+                .document(source));
         }
-        catch (IOException | ElasticsearchException ex) {
+        catch (ElasticsearchException ex) {
+            if (ex.status() == 409) {
+                log.debug("Kept the newer indexed version of branch {}", store.storeId());
+                return;
+            }
+            throw unavailable(ex);
+        }
+        catch (IOException ex) {
             throw unavailable(ex);
         }
     }
@@ -208,18 +241,72 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         return idsWhere("deliveryMode", deliveryMode);
     }
 
+    /**
+     * Every id matching a term, page by page over a point-in-time, so a brand or delivery mode with
+     * any number of branches is read completely and consistently (no 10,000 hit window).
+     */
     private List<String> idsWhere(String field, String value) {
-        ObjectNode body = this.jsonMapper.createObjectNode();
-        body.put("size", 10_000);
-        body.put("_source", false);
-        body.putObject("query").putObject("term").put(field, value);
-        return search(body).hits().hits().stream().map(co.elastic.clients.elasticsearch.core.search.Hit::id).toList();
+        prepare();
+        String pit;
+        try {
+            pit = this.client.openPointInTime((p) -> p.index(alias()).keepAlive((k) -> k.time("1m"))).id();
+        }
+        catch (IOException | ElasticsearchException ex) {
+            throw unavailable(ex);
+        }
+        List<String> ids = new ArrayList<>();
+        try {
+            List<FieldValue> after = null;
+            while (true) {
+                ObjectNode body = this.jsonMapper.createObjectNode();
+                body.put("size", ID_PAGE);
+                body.put("_source", false);
+                body.put("track_total_hits", false);
+                body.putObject("query").putObject("term").put(field, value);
+                ObjectNode pitNode = body.putObject("pit");
+                pitNode.put("id", pit);
+                pitNode.put("keep_alive", "1m");
+                body.putArray("sort").add("_shard_doc");
+                if (after != null) {
+                    ArrayNode searchAfter = body.putArray("search_after");
+                    for (FieldValue v : after) {
+                        searchAfter.add(v.longValue());
+                    }
+                }
+                String json = this.jsonMapper.writeValueAsString(body);
+                SearchResponse<Map> page;
+                try {
+                    page = this.client.search(SearchRequest.of((r) -> r.withJson(new StringReader(json))), Map.class);
+                }
+                catch (IOException | ElasticsearchException ex) {
+                    throw unavailable(ex);
+                }
+                List<co.elastic.clients.elasticsearch.core.search.Hit<Map>> hits = page.hits().hits();
+                hits.forEach((hit) -> ids.add(hit.id()));
+                if (hits.size() < ID_PAGE) {
+                    return ids;
+                }
+                after = hits.getLast().sort();
+                if (page.pitId() != null) {
+                    pit = page.pitId();
+                }
+            }
+        }
+        finally {
+            String id = pit;
+            try {
+                this.client.closePointInTime((c) -> c.id(id));
+            }
+            catch (IOException | ElasticsearchException ex) {
+                // it expires on its own
+            }
+        }
     }
 
     @Override
-    public Result search(StoreSearchQuery query) {
+    public Result search(StoreSearchQuery query, int from) {
         ObjectNode body = this.jsonMapper.createObjectNode();
-        body.put("from", query.page() * query.size());
+        body.put("from", from);
         body.put("size", query.size());
         body.put("track_total_hits", false);
         body.putObject("_source").putArray("excludes").add("deliveryArea").add("dishes");
@@ -238,6 +325,12 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
             point.put("type", "point");
             point.putArray("coordinates").add(query.lng()).add(query.lat());
             shape.put("relation", "intersects");
+            if (query.radiusMeters() != null) {
+                // discovery radius: road distance turned into the straight line Elasticsearch measures
+                ObjectNode near = filter.addObject().putObject("geo_distance");
+                near.put("distance", Math.round(query.radiusMeters() / this.properties.roadFactor()) + "m");
+                location(near.putObject("location"), query);
+            }
         }
         boolean hasText = query.text() != null && !query.text().isBlank();
         if (hasText) {
@@ -424,8 +517,13 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
     private String indexDefinition() {
         ObjectNode root = this.jsonMapper.createObjectNode();
         ObjectNode settings = root.putObject("settings");
-        settings.put("number_of_shards", 1);
-        settings.put("number_of_replicas", this.properties.replicas());
+        settings.put("number_of_shards", this.properties.shards());
+        if (this.properties.autoExpandReplicas().isEmpty()) {
+            settings.put("number_of_replicas", this.properties.replicas());
+        }
+        else {
+            settings.put("auto_expand_replicas", this.properties.autoExpandReplicas());
+        }
         ObjectNode analysis = settings.putObject("analysis");
         ObjectNode analyzer = analysis.putObject("analyzer").putObject("foodstack_text");
         analyzer.put("type", "custom");

@@ -59,14 +59,16 @@ class SearchControllerTest {
         given(this.searchService.search(new StoreSearchQuery(31.5, 74.3, "pizza", "italian", Fulfilment.PICKUP, 1, 10)))
             .willReturn(new StoreSearchPage(List.of(new StoreCard("s1", "napoli-pizza-dha", "b1", "Napoli Pizza", "DHA", 1, Map.of(),
                     List.of("italian"), Map.of(), Map.of(), "DHA", "Lahore", 1900, "SELF", true, true, false, 20, List.of())),
-                    List.of(new CuisineCount("italian", 1)), 1, 1, 10));
+                    List.of(new CuisineCount("italian", 1)), 1, 1, 10, false, 15_000, null));
 
         this.mvc.perform(get("/api/v1/search/stores").param("lat", "31.5").param("lng", "74.3").param("q", "pizza")
             .param("cuisine", "italian").param("fulfilment", "pickup").param("page", "1").param("size", "10"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.stores[0].storeId").value("s1"))
             .andExpect(jsonPath("$.stores[0].openNow").value(true))
-            .andExpect(jsonPath("$.cuisines[0].cuisine").value("italian"));
+            .andExpect(jsonPath("$.cuisines[0].cuisine").value("italian"))
+            .andExpect(jsonPath("$.hasMore").value(false))
+            .andExpect(jsonPath("$.radiusMeters").value(15_000));
         this.mvc.perform(get("/api/v1/search/stores").param("lat", "31.5").param("lng", "74.3").param("fulfilment", "drone"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("SEARCH_INVALID"));

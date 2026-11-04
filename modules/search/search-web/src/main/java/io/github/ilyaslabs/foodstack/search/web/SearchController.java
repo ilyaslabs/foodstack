@@ -39,7 +39,8 @@ class SearchController {
     @GetMapping("/stores")
     StoreSearchPage stores(@RequestParam double lat, @RequestParam double lng, @RequestParam(required = false) String q,
             @RequestParam(required = false) String cuisine, @RequestParam(defaultValue = "DELIVERY") String fulfilment,
-            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) Integer radius) {
         Fulfilment mode;
         try {
             mode = Fulfilment.valueOf(fulfilment.trim().toUpperCase(Locale.ROOT));
@@ -47,7 +48,7 @@ class SearchController {
         catch (RuntimeException ex) {
             throw new ModuleException.BadRequest("fulfilment must be DELIVERY or PICKUP", "SEARCH_INVALID");
         }
-        return this.searchService.search(new StoreSearchQuery(lat, lng, q, cuisine, mode, page, size));
+        return this.searchService.search(new StoreSearchQuery(lat, lng, q, cuisine, mode, page, size, radius));
     }
 
     /** Re-reads every branch into the index in the background. */

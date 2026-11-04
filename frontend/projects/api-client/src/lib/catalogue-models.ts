@@ -333,6 +333,12 @@ export interface StoreSearchPage {
   total: number;
   page: number;
   size: number;
+  /** Whether another page follows; results stop at a fixed depth. */
+  hasMore: boolean;
+  /** How far this search looked, road metres. */
+  radiusMeters: number;
+  /** The next, wider step for "show restaurants further away", or null at the widest (and for pickup). */
+  widerRadiusMeters: number | null;
 }
 
 export interface StoreSearch {
@@ -343,6 +349,8 @@ export interface StoreSearch {
   fulfilment?: Fulfilment;
   page?: number;
   size?: number;
+  /** Delivery only: road metres to look within; the first discovery step when left out. */
+  radius?: number | null;
 }
 
 export const DIETARY_TAGS = [

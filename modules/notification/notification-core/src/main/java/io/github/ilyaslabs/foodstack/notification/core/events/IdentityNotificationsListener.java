@@ -25,7 +25,8 @@ public class IdentityNotificationsListener {
         this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(id = "${foodstack.namespace:foodstack}-notification-identity",
+    @KafkaListener(concurrency = "${foodstack.kafka.concurrency.notification:${foodstack.kafka.listener-concurrency:3}}",
+            id = "${foodstack.namespace:foodstack}-notification-identity",
             groupId = "${foodstack.namespace:foodstack}-notification",
             topics = "${foodstack.namespace:foodstack}.identity.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
