@@ -21,6 +21,15 @@ public final class CurrentUser {
         throw new ModuleException.Unauthorized("Authentication required", "UNAUTHENTICATED");
     }
 
+    /** The {@code sid} of the current token: the sign-in it belongs to, or {@code null}. */
+    public static String sessionId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication instanceof JwtAuthenticationToken jwt) {
+            return jwt.getToken().getClaimAsString(TokenClaims.SESSION_ID);
+        }
+        return null;
+    }
+
     /** Whether the current token grants {@code authority} (a permission such as {@code store:manage}). */
     public static boolean hasAuthority(String authority) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();

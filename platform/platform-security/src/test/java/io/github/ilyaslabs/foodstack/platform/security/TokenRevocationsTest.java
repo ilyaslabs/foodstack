@@ -60,4 +60,38 @@ class TokenRevocationsTest {
         assertThat(otherModule.isRevoked("user-1", 3)).isFalse();
         assertThat(otherModule.isRevoked("user-2", 0)).isFalse();
     }
+
+    @Test
+    @DisplayName("keeps at most the configured number of users in memory, and trusts them only for the TTL")
+    void boundedCache() {
+        java.util.concurrent.atomic.AtomicLong millis = new java.util.concurrent.atomic.AtomicLong(1_000_000);
+        Clock clock = new Clock() {
+            @Override
+            public java.time.ZoneId getZone() {
+                return java.time.ZoneOffset.UTC;
+            }
+
+            @Override
+            public Clock withZone(java.time.ZoneId zone) {
+                return this;
+            }
+
+            @Override
+            public java.time.Instant instant() {
+                return java.time.Instant.ofEpochMilli(millis.get());
+            }
+        };
+        TokenRevocations revocations = new TokenRevocations(this.redis, this.namespace, Duration.ofSeconds(5), 100, clock);
+        for (int i = 0; i < 1000; i++) {
+            revocations.isRevoked("user-" + i, 0);
+        }
+        assertThat(revocations.cachedUsers()).isLessThanOrEqualTo(100);
+
+        // a revocation written by another process is seen once the cached floor has expired
+        revocations.isRevoked("user-x", 0);
+        this.redis.opsForValue().set(this.namespace + ":identity:revoked:user-x", "2");
+        assertThat(revocations.isRevoked("user-x", 1)).isFalse();
+        millis.addAndGet(6_000);
+        assertThat(revocations.isRevoked("user-x", 1)).isTrue();
+    }
 }

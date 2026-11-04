@@ -6,7 +6,11 @@ import java.util.Set;
 
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
+import io.github.ilyaslabs.foodstack.identity.core.application.EmailCodeService;
 import io.github.ilyaslabs.foodstack.identity.core.application.NewUser;
+import io.github.ilyaslabs.foodstack.identity.core.application.SessionService;
+import io.github.ilyaslabs.foodstack.identity.core.application.SessionService.Client;
+import io.github.ilyaslabs.foodstack.identity.core.application.SessionService.Session;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserAccount;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserDirectory;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
@@ -29,9 +33,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -49,6 +56,12 @@ class IdentityControllersTest {
 
     @MockitoBean
     UserDirectory userDirectory;
+
+    @MockitoBean
+    SessionService sessions;
+
+    @MockitoBean
+    EmailCodeService codes;
 
     @MockitoBean
     JwtDecoder jwtDecoder;
@@ -148,6 +161,120 @@ class IdentityControllersTest {
             .content("{\"reason\":\"Fraudulent orders\"}")).andExpect(status().isOk());
         this.mvc.perform(post("/api/v1/users/u3/unblock").with(manager)).andExpect(status().isOk());
         verify(this.userDirectory).block("u3", "Fraudulent orders", "admin");
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/login: a browser gets the refresh token only as a locked-down cookie")
+    void loginWeb() throws Exception {
+        given(this.sessions.signInWithPassword("a@example.com", "correct horse", Client.WEB)).willReturn(session(Client.WEB));
+
+        this.mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"client\":\"web\",\"email\":\"a@example.com\",\"password\":\"correct horse\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").value("access"))
+            .andExpect(jsonPath("$.tokenType").value("Bearer"))
+            .andExpect(jsonPath("$.expiresIn").value(600))
+            .andExpect(jsonPath("$.refreshToken").doesNotExist())
+            .andExpect(header().string("Cache-Control", "no-store"))
+            .andExpect(cookie().value("fs_refresh", "refresh"))
+            .andExpect(cookie().httpOnly("fs_refresh", true))
+            .andExpect(cookie().secure("fs_refresh", true))
+            .andExpect(cookie().sameSite("fs_refresh", "Strict"))
+            .andExpect(cookie().path("fs_refresh", "/api/v1/auth/refresh"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/login: a mobile app gets the refresh token in the body, with a code too")
+    void loginMobile() throws Exception {
+        given(this.sessions.signInWithCode("a@example.com", "123456", Client.MOBILE)).willReturn(session(Client.MOBILE));
+
+        this.mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"client\":\"mobile\",\"email\":\"a@example.com\",\"code\":\"123456\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.refreshToken").value("refresh"))
+            .andExpect(cookie().doesNotExist("fs_refresh"));
+
+        this.mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"client\":\"tv\",\"email\":\"a@example.com\",\"code\":\"123456\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("AUTH_CLIENT_INVALID"));
+        this.mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"client\":\"web\",\"email\":\"a@example.com\"}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("LOGIN_INVALID"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/refresh reads the cookie or the body, never both, and clears a dead cookie")
+    void refresh() throws Exception {
+        given(this.sessions.refresh("from-cookie", Client.WEB)).willReturn(session(Client.WEB));
+        given(this.sessions.refresh("from-body", Client.MOBILE)).willReturn(session(Client.MOBILE));
+        given(this.sessions.refresh("dead", Client.WEB))
+            .willThrow(new ModuleException.Unauthorized("ended", "REFRESH_REUSED"));
+
+        this.mvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON).content("{}")
+            .cookie(new jakarta.servlet.http.Cookie("fs_refresh", "from-cookie")))
+            .andExpect(status().isOk())
+            .andExpect(cookie().value("fs_refresh", "refresh"))
+            .andExpect(jsonPath("$.refreshToken").doesNotExist());
+        this.mvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"refreshToken\":\"from-body\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.refreshToken").value("refresh"));
+        this.mvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"refreshToken\":\"from-body\"}").cookie(new jakarta.servlet.http.Cookie("fs_refresh", "from-cookie")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("REFRESH_TWO_CHANNELS"));
+        this.mvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON).content("{}")
+            .cookie(new jakarta.servlet.http.Cookie("fs_refresh", "dead")))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("REFRESH_REUSED"))
+            .andExpect(cookie().maxAge("fs_refresh", 0));
+        // a form post from another site cannot send JSON
+        this.mvc.perform(post("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+            .cookie(new jakarta.servlet.http.Cookie("fs_refresh", "from-cookie")))
+            .andExpect(status().isUnsupportedMediaType());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/logout ends the token's sign-in and clears the cookie")
+    void logout() throws Exception {
+        this.mvc.perform(post("/api/v1/auth/logout")).andExpect(status().isUnauthorized());
+        this.mvc.perform(post("/api/v1/auth/logout").with(jwt().jwt((t) -> t.subject("u1").claim("sid", "family-1"))))
+            .andExpect(status().isNoContent())
+            .andExpect(cookie().maxAge("fs_refresh", 0));
+
+        verify(this.sessions).end("u1", "family-1");
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/code emails a code for sign-in or reset, and nothing else")
+    void code() throws Exception {
+        this.mvc.perform(post("/api/v1/auth/code").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\" a@example.com \",\"purpose\":\"login\"}"))
+            .andExpect(status().isAccepted());
+        verify(this.codes).issue("a@example.com", "LOGIN");
+
+        this.mvc.perform(post("/api/v1/auth/code").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"email\":\"a@example.com\",\"purpose\":\"other\"}"))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/reset sets a new password and signs in")
+    void reset() throws Exception {
+        given(this.sessions.resetPassword("a@example.com", "123456", "a new long password", Client.WEB))
+            .willReturn(session(Client.WEB));
+
+        this.mvc.perform(post("/api/v1/auth/reset").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"client\":\"web\",\"email\":\"a@example.com\",\"code\":\"123456\",\"newPassword\":\"a new long password\"}"))
+            .andExpect(status().isOk())
+            .andExpect(cookie().exists("fs_refresh"));
+        verifyNoInteractions(this.codes);
+    }
+
+    private static Session session(Client client) {
+        return new Session("access", 600, "refresh", Instant.now().plus(java.time.Duration.ofDays(30)), client, "u1");
     }
 
     private static UserAccount account(String id, Role role) {

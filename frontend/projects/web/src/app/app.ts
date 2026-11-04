@@ -127,6 +127,6 @@ export class App {
   protected async signOut(): Promise<void> {
     // this browser stops getting the person's push messages
     await this.push.disable();
-    this.auth.signOut();
+    await this.auth.signOut();
   }
 }

@@ -4,6 +4,9 @@ package io.github.ilyaslabs.foodstack.platform.security;
 public final class TokenClaims {
 
     /** Granted permissions, such as {@code settings:manage}. */
+    /** The sign-in (refresh token family) a user access token belongs to. */
+    public static final String SESSION_ID = "sid";
+
     public static final String PERMISSIONS = "perms";
 
     /** Roles, such as {@code ADMIN}. */

@@ -1,77 +1,58 @@
 package io.github.ilyaslabs.foodstack.identity.core.security;
 
-import java.util.List;
-import java.util.Set;
-
-import io.github.ilyaslabs.foodstack.identity.api.Role;
-import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
-import io.github.ilyaslabs.moduleswitch.ModuleException;
+import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
-import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
 
 class FoodstackTokenCustomizerTest {
 
-    private final UserService users = mock(UserService.class);
-
-    private final FoodstackTokenCustomizer customizer = new FoodstackTokenCustomizer(this.users);
+    private final FoodstackTokenCustomizer customizer = new FoodstackTokenCustomizer();
 
     @Test
-    @DisplayName("signs with ES256 and adds roles, permissions and token version to access tokens")
-    void accessToken() {
-        given(this.users.tokenClaims("user-1"))
-            .willReturn(new UserService.TokenClaims(Set.of(Role.ADMIN), Set.of("media:upload", "settings:manage"), 3,
-                    Set.of(), Set.of()));
+    @DisplayName("signs service tokens with ES256 and gives the service client its permission")
+    void serviceToken() {
         JwsHeader.Builder header = JwsHeader.with(SignatureAlgorithm.RS256);
-        JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject("user-1");
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject(ModuleAccess.SERVICE_CLIENT);
 
-        this.customizer.customize(context(OAuth2TokenType.ACCESS_TOKEN, header, claims));
+        this.customizer.customize(context(ModuleAccess.SERVICE_CLIENT, header, claims));
 
         assertThat(header.build().getAlgorithm()).isEqualTo(SignatureAlgorithm.ES256);
-        JwtClaimsSet built = claims.build();
-        assertThat(built.getClaimAsStringList("roles")).containsExactly("ADMIN");
-        assertThat(built.getClaimAsStringList("perms")).containsExactlyInAnyOrder("media:upload", "settings:manage");
-        assertThat(built.<Long>getClaim("tv")).isEqualTo(3L);
+        assertThat(claims.build().getClaimAsStringList("perms")).containsExactly(ModuleAccess.SERVICE);
     }
 
     @Test
-    @DisplayName("refuses new tokens for blocked users")
-    void blocked() {
-        given(this.users.tokenClaims("user-1")).willThrow(new ModuleException.Forbidden("blocked", "USER_BLOCKED"));
+    @DisplayName("gives no permission to any other client")
+    void otherClient() {
+        JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject("other");
 
-        assertThatExceptionOfType(OAuth2AuthenticationException.class).isThrownBy(() -> this.customizer.customize(
-                context(OAuth2TokenType.ACCESS_TOKEN, JwsHeader.with(SignatureAlgorithm.RS256), JwtClaimsSet.builder())));
+        this.customizer.customize(context("other", JwsHeader.with(SignatureAlgorithm.RS256), claims));
+
+        assertThat(claims.build().getClaims()).doesNotContainKey("perms");
     }
 
-    @Test
-    @DisplayName("leaves ID tokens without authorization claims")
-    void idToken() {
-        JwtClaimsSet.Builder claims = JwtClaimsSet.builder().subject("user-1");
-
-        this.customizer.customize(context(new OAuth2TokenType("id_token"), JwsHeader.with(SignatureAlgorithm.RS256), claims));
-
-        assertThat(claims.build().getClaims()).doesNotContainKeys("roles", "perms", "tv");
-        assertThat(List.of()).isEmpty();
-    }
-
-    private static JwtEncodingContext context(OAuth2TokenType type, JwsHeader.Builder header, JwtClaimsSet.Builder claims) {
+    private static JwtEncodingContext context(String clientId, JwsHeader.Builder header, JwtClaimsSet.Builder claims) {
+        RegisteredClient client = RegisteredClient.withId(clientId)
+            .clientId(clientId)
+            .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+            .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+            .build();
         return JwtEncodingContext.with(header, claims)
-            .tokenType(type)
-            .principal(new TestingAuthenticationToken("user-1", null))
-            .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+            .tokenType(OAuth2TokenType.ACCESS_TOKEN)
+            .registeredClient(client)
+            .principal(new TestingAuthenticationToken(clientId, null))
+            .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
             .build();
     }
 }

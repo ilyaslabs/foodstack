@@ -73,3 +73,22 @@ databaseChangeLog:
             collectionName: identity_addresses
             keys: '{ "userId": 1, "createdAt": 1 }'
             options: '{ "name": "user_created" }'
+  - changeSet:
+      id: identity-6
+      author: foodstack
+      comment: "identity_refresh_tokens: refresh tokens of stateless sign-in (TDD 9.1, gap 1); shard key { _id: hashed }"
+      changes:
+        - createCollection:
+            collectionName: identity_refresh_tokens
+        - createIndex:
+            collectionName: identity_refresh_tokens
+            keys: '{ "familyId": 1 }'
+            options: '{ "name": "family" }'
+        - createIndex:
+            collectionName: identity_refresh_tokens
+            keys: '{ "userId": 1 }'
+            options: '{ "name": "user" }'
+        - createIndex:
+            collectionName: identity_refresh_tokens
+            keys: '{ "expiresAt": 1 }'
+            options: '{ "name": "expires_ttl", "expireAfterSeconds": 0 }'

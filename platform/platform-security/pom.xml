@@ -28,6 +28,10 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+        <dependency>
             <!-- ModuleCallContext: the caller's headers on the receiving side of a module call -->
             <groupId>io.github.ilyaslabs</groupId>
             <artifactId>module-switch-core</artifactId>

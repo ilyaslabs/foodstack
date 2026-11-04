@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-import { AuthCallback, authGuard } from '@foodstack/auth';
+import { authGuard } from '@foodstack/auth';
 
 export const routes: Routes = [
   { path: '', loadComponent: () => import('./home/home').then((m) => m.Home) },
@@ -28,6 +28,9 @@ export const routes: Routes = [
     canActivate: [authGuard],
     loadComponent: () => import('./account/account-page').then((m) => m.AccountPage),
   },
-  { path: 'auth/callback', component: AuthCallback },
+  {
+    path: 'sign-in',
+    loadComponent: () => import('./sign-in/sign-in-page').then((m) => m.SignInPage),
+  },
   { path: '**', redirectTo: '' },
 ];

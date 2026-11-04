@@ -21,8 +21,8 @@
 		-Server
 	}
 
-	# API, login and OIDC endpoints: the FoodStack server (every module local).
-	@server path /api/* /oauth2/* /login /login/* /logout /.well-known/* /userinfo /connect/* /actuator/health/*
+	# The API (sign-in included) and the token keys: the FoodStack server (every module local).
+	@server path /api/* /oauth2/* /.well-known/* /actuator/health/*
 	handle @server {
 		reverse_proxy server:8080 {
 			health_uri /actuator/health/readiness

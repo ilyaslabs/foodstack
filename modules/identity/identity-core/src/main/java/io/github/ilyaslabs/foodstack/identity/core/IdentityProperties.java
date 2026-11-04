@@ -2,9 +2,7 @@ package io.github.ilyaslabs.foodstack.identity.core;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -18,12 +16,24 @@ public class IdentityProperties {
      */
     private List<String> signingKeys = new ArrayList<>();
 
+    /** How long access tokens live (TDD 9.1). */
     private Duration accessTokenTtl = Duration.ofMinutes(10);
 
     private final BootstrapAdmin bootstrapAdmin = new BootstrapAdmin();
 
-    /** OAuth2 clients (public, Authorization Code + PKCE) by client id. */
-    private Map<String, Client> clients = new LinkedHashMap<>();
+    /**
+     * Whether the web refresh cookie is marked {@code Secure} (HTTPS only). Leave on; turn off
+     * only for a plain-HTTP trial on a machine whose browser refuses Secure cookies there.
+     */
+    private boolean refreshCookieSecure = true;
+
+    public boolean isRefreshCookieSecure() {
+        return this.refreshCookieSecure;
+    }
+
+    public void setRefreshCookieSecure(boolean refreshCookieSecure) {
+        this.refreshCookieSecure = refreshCookieSecure;
+    }
 
     public List<String> getSigningKeys() {
         return this.signingKeys;
@@ -43,14 +53,6 @@ public class IdentityProperties {
 
     public BootstrapAdmin getBootstrapAdmin() {
         return this.bootstrapAdmin;
-    }
-
-    public Map<String, Client> getClients() {
-        return this.clients;
-    }
-
-    public void setClients(Map<String, Client> clients) {
-        this.clients = clients;
     }
 
     /** The first administrator, created at startup when no user has this email yet (set by install.sh). */
@@ -84,29 +86,6 @@ public class IdentityProperties {
 
         public void setDisplayName(String displayName) {
             this.displayName = displayName;
-        }
-    }
-
-    public static class Client {
-
-        private List<String> redirectUris = new ArrayList<>();
-
-        private List<String> postLogoutRedirectUris = new ArrayList<>();
-
-        public List<String> getRedirectUris() {
-            return this.redirectUris;
-        }
-
-        public void setRedirectUris(List<String> redirectUris) {
-            this.redirectUris = redirectUris;
-        }
-
-        public List<String> getPostLogoutRedirectUris() {
-            return this.postLogoutRedirectUris;
-        }
-
-        public void setPostLogoutRedirectUris(List<String> postLogoutRedirectUris) {
-            this.postLogoutRedirectUris = postLogoutRedirectUris;
         }
     }
 }

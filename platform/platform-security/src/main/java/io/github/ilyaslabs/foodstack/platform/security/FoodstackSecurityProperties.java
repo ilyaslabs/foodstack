@@ -33,6 +33,9 @@ public class FoodstackSecurityProperties {
     /** How long a module trusts its in-memory copy of a user's revocation state. */
     private Duration revocationCacheTtl = Duration.ofSeconds(5);
 
+    /** Most users whose revocation floor each process keeps in memory (least recently used dropped). */
+    private long revocationCacheMaxUsers = TokenRevocations.DEFAULT_MAX_CACHED;
+
     public String getIssuer() {
         return this.issuer;
     }
@@ -55,6 +58,14 @@ public class FoodstackSecurityProperties {
 
     public void setPiiKey(String piiKey) {
         this.piiKey = piiKey;
+    }
+
+    public long getRevocationCacheMaxUsers() {
+        return this.revocationCacheMaxUsers;
+    }
+
+    public void setRevocationCacheMaxUsers(long revocationCacheMaxUsers) {
+        this.revocationCacheMaxUsers = revocationCacheMaxUsers;
     }
 
     public Duration getRevocationCacheTtl() {

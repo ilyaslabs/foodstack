@@ -1,59 +1,61 @@
-import { HttpBackend, HttpClient, HttpParams } from '@angular/common/http';
+import { HttpBackend, HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, PLATFORM_ID, inject, signal } from '@angular/core';
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
+import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 
 import { RUNTIME_CONFIG } from '@foodstack/api-client';
 
 import { BrowserNavigation } from './browser-navigation';
-import { randomUrlSafe, s256Challenge } from './pkce';
 
-const TOKEN_KEY = 'foodstack.auth.token';
-const FLOW_KEY = 'foodstack.auth.flow';
+/** Not a secret: only remembers that this browser holds a sign-in cookie worth refreshing. */
+const HINT_KEY = 'foodstack.auth.signedIn';
 
-interface StoredToken {
-  accessToken: string;
-  idToken: string | null;
-  expiresAt: number;
-}
-
-interface PendingFlow {
-  state: string;
-  verifier: string;
-  returnTo: string;
-}
-
-interface TokenResponse {
-  access_token: string;
-  id_token?: string;
-  expires_in: number;
-}
+/** Cross-tab lock, so two tabs never spend the same refresh token. */
+const REFRESH_LOCK = 'foodstack-auth-refresh';
 
 /** Renew this long before the access token runs out. */
 const RENEW_BEFORE_MS = 60_000;
 
+interface Token {
+  accessToken: string;
+  expiresAt: number;
+}
+
+interface TokenResponse {
+  accessToken: string;
+  tokenType: string;
+  expiresIn: number;
+  refreshExpiresAt: number;
+}
+
+/** What a code is for: signing in, or setting a new password. */
+export type CodePurpose = 'LOGIN' | 'PASSWORD_RESET';
+
 /**
- * Sign-in with the authorization code flow and PKCE against the FoodStack identity module
- * (TDD 9.1). Public SPA clients get no refresh token, and access tokens last minutes, so the
- * service renews in the background: it runs the authorize request again with a same-origin fetch,
- * which the identity session answers with a fresh code, and swaps the code for a token. The page
- * and any half-filled form stay as they are. Only when the identity session itself has ended does
- * the user go back to the login page.
+ * Stateless sign-in against the identity module's auth API (TDD 9.1). The access token lives in
+ * memory only, for 10 minutes. The refresh token is an httpOnly, SameSite=Strict cookie that
+ * scripts never see, sent only to the refresh endpoint; each refresh rotates it. A reload or a new
+ * tab gets a fresh access token from that cookie without asking again. Tabs take turns refreshing
+ * (Web Locks), because a refresh token used twice ends the whole sign-in.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly config = inject(RUNTIME_CONFIG);
   private readonly document = inject(DOCUMENT);
   private readonly navigation = inject(BrowserNavigation);
+  private readonly router = inject(Router);
   // Token requests must not pass through the auth interceptor.
   private readonly http = new HttpClient(inject(HttpBackend));
   private readonly browser = isPlatformBrowser(inject(PLATFORM_ID));
-  private readonly token = signal<StoredToken | null>(this.readToken());
+  private readonly token = signal<Token | null>(null);
+  private readonly hinted = signal(this.readHint());
   private renewing: Promise<boolean> | null = null;
   private renewTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
-    this.scheduleRenewal();
+    // a reload keeps the person signed in: the cookie gets a new access token
+    if (this.browser && this.hinted()) void this.renew();
   }
 
   /** Whether the user holds an access token that has not expired yet. Checked at call time. */
@@ -62,15 +64,15 @@ export class AuthService {
     return token !== null && token.expiresAt > Date.now();
   }
 
-  /** Whether the user signed in during this browser session, even if the token has since expired. */
+  /** Whether this browser is signed in, even if the access token has to be renewed first. */
   hasSession(): boolean {
-    return this.token() !== null;
+    return this.token() !== null || this.hinted();
   }
 
   /** Whether the token is gone or runs out within `marginMs`, so a request should renew first. */
   expiresSoon(marginMs = 5_000): boolean {
     const token = this.token();
-    return token !== null && token.expiresAt - marginMs <= Date.now();
+    return token === null ? this.hinted() : token.expiresAt - marginMs <= Date.now();
   }
 
   accessToken(): string | null {
@@ -78,9 +80,8 @@ export class AuthService {
   }
 
   /**
-   * Gets a fresh token without leaving the page; false when the identity session has ended (or
-   * the issuer is on another origin), and the user has to sign in again. Calls made while a
-   * renewal runs share it.
+   * Gets a fresh access token from the refresh cookie without leaving the page; false when the
+   * sign-in has ended, and the user has to sign in again. Calls made while a renewal runs share it.
    */
   renew(): Promise<boolean> {
     this.renewing ??= this.renewOnce().finally(() => (this.renewing = null));
@@ -95,135 +96,108 @@ export class AuthService {
 
   /** The current page as a router URL, to come back to after signing in. */
   currentPath(): string {
-    const location = this.document.location;
-    const base = new URL(this.document.baseURI).pathname;
-    const path = location.pathname.startsWith(base)
-      ? location.pathname.slice(base.length - 1)
-      : location.pathname;
-    return path + location.search;
+    return this.router.url || '/';
   }
 
-  /**
-   * Sends the browser to the login page; after sign-in it comes back to {@link redirectUri}.
-   * With `signUp` the hosted page opens on "Create account" (customer app only).
-   */
+  /** Opens this app's sign-in page; after signing in the user comes back to `returnTo`. */
   async signIn(returnTo = '/', options: { signUp?: boolean } = {}): Promise<void> {
-    const flow: PendingFlow = { state: randomUrlSafe(16), verifier: randomUrlSafe(48), returnTo };
-    this.storage()?.setItem(FLOW_KEY, JSON.stringify(flow));
-    this.navigation.assign(await this.authorizeUrl(flow, options.signUp === true));
+    const queryParams: Record<string, string> = {};
+    if (returnTo && returnTo !== '/' && !returnTo.startsWith('/sign-in'))
+      queryParams['returnTo'] = returnTo;
+    if (options.signUp) queryParams['mode'] = 'signup';
+    await this.router.navigate(['/sign-in'], { queryParams });
   }
 
-  /** Finishes sign-in on the callback page; returns where the user was going. */
-  async completeSignIn(query: URLSearchParams): Promise<string> {
-    const flow = JSON.parse(this.storage()?.getItem(FLOW_KEY) ?? 'null') as PendingFlow | null;
-    this.storage()?.removeItem(FLOW_KEY);
-    const code = query.get('code');
-    if (!flow || !code || query.get('state') !== flow.state) {
-      throw new Error(
-        query.get('error_description') ?? 'Sign-in could not be completed. Please try again.',
-      );
+  loginWithPassword(email: string, password: string): Promise<void> {
+    return this.start('/login', { client: 'web', email, password });
+  }
+
+  loginWithCode(email: string, code: string): Promise<void> {
+    return this.start('/login', { client: 'web', email, code });
+  }
+
+  /** Emails a 6-digit code; the answer is the same whether or not the email has an account. */
+  async requestCode(email: string, purpose: CodePurpose): Promise<void> {
+    await firstValueFrom(this.http.post<void>(this.url('/code'), { email, purpose }));
+  }
+
+  /** Sets a new password with an emailed reset code, and signs in. */
+  resetPassword(email: string, code: string, newPassword: string): Promise<void> {
+    return this.start('/reset', { client: 'web', email, code, newPassword });
+  }
+
+  /** Creates a customer account and signs in with it. */
+  async register(email: string, password: string, displayName: string): Promise<void> {
+    await firstValueFrom(this.http.post(this.url('/register'), { email, password, displayName }));
+    await this.loginWithPassword(email, password);
+  }
+
+  /** Ends this sign-in on the server too, then reloads the app signed out. */
+  async signOut(): Promise<void> {
+    const token = this.accessToken() ?? ((await this.renew()) ? this.accessToken() : null);
+    if (token) {
+      try {
+        await firstValueFrom(
+          this.http.post(this.url('/logout'), null, {
+            headers: { Authorization: `Bearer ${token}` },
+            withCredentials: true,
+          }),
+        );
+      } catch {
+        // signed out here regardless; the cookie expires on its own
+      }
     }
-    await this.exchange(code, flow.verifier);
-    return flow.returnTo;
+    this.forget();
+    this.navigation.assign(this.document.baseURI);
   }
 
-  /** Ends the identity session too (OIDC RP-initiated logout), so the next sign-in asks again. */
-  signOut(): void {
-    const idToken = this.token()?.idToken;
-    clearTimeout(this.renewTimer);
-    this.storage()?.removeItem(TOKEN_KEY);
-    this.token.set(null);
-    const params = new HttpParams({
-      fromObject: {
-        client_id: this.config.clientId,
-        post_logout_redirect_uri: this.document.baseURI,
-        ...(idToken ? { id_token_hint: idToken } : {}),
-      },
-    });
-    this.navigation.assign(`${this.config.issuer}/connect/logout?${params.toString()}`);
-  }
-
-  /** The callback URL registered for this app: `<base href>auth/callback`. */
-  redirectUri(): string {
-    return new URL('auth/callback', this.document.baseURI).toString();
-  }
-
-  private async authorizeUrl(
-    flow: { state: string; verifier: string },
-    signUp = false,
-  ): Promise<string> {
-    const params = new HttpParams({
-      fromObject: {
-        response_type: 'code',
-        client_id: this.config.clientId,
-        redirect_uri: this.redirectUri(),
-        scope: 'openid',
-        state: flow.state,
-        code_challenge: await s256Challenge(flow.verifier),
-        code_challenge_method: 'S256',
-        ...(signUp ? { fs_screen: 'signup' } : {}),
-      },
-    });
-    return `${this.config.issuer}/oauth2/authorize?${params.toString()}`;
-  }
-
-  private async exchange(code: string, verifier: string): Promise<void> {
-    const body = new HttpParams({
-      fromObject: {
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: this.redirectUri(),
-        client_id: this.config.clientId,
-        code_verifier: verifier,
-      },
-    });
+  private async start(path: string, body: Record<string, string>): Promise<void> {
     const response = await firstValueFrom(
-      this.http.post<TokenResponse>(`${this.config.issuer}/oauth2/token`, body.toString(), {
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      }),
+      this.http.post<TokenResponse>(this.url(path), body, { withCredentials: true }),
     );
-    const previous = this.token();
-    const token: StoredToken = {
-      accessToken: response.access_token,
-      idToken: response.id_token ?? previous?.idToken ?? null,
-      expiresAt: Date.now() + response.expires_in * 1000,
-    };
-    this.storage()?.setItem(TOKEN_KEY, JSON.stringify(token));
-    this.token.set(token);
+    this.keep(response);
+  }
+
+  private async renewOnce(): Promise<boolean> {
+    if (!this.browser) return false;
+    const locks = this.document.defaultView?.navigator?.locks;
+    const run = () => this.refresh();
+    return locks ? locks.request(REFRESH_LOCK, run) : run();
+  }
+
+  /** One refresh; another tab that just refreshed answers 409, so wait for its cookie and retry. */
+  private async refresh(attempt = 0): Promise<boolean> {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<TokenResponse>(this.url('/refresh'), {}, { withCredentials: true }),
+      );
+      this.keep(response);
+      return true;
+    } catch (error) {
+      if (error instanceof HttpErrorResponse && error.status === 409 && attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return this.refresh(attempt + 1);
+      }
+      if (error instanceof HttpErrorResponse && (error.status === 401 || error.status === 400)) {
+        this.forget();
+      }
+      return false;
+    }
+  }
+
+  private keep(response: TokenResponse): void {
+    this.token.set({
+      accessToken: response.accessToken,
+      expiresAt: Date.now() + response.expiresIn * 1000,
+    });
+    this.writeHint(true);
     this.scheduleRenewal();
   }
 
-  /**
-   * The identity session answers the authorize request with a redirect to our callback carrying a
-   * code; a same-origin fetch follows it and shows the final URL. Without a session it lands on the
-   * login page instead, and renewal reports false.
-   */
-  private async renewOnce(): Promise<boolean> {
-    const view = this.document.defaultView;
-    if (!this.browser || !view?.fetch || !this.hasSession()) return false;
-    const flow = { state: randomUrlSafe(16), verifier: randomUrlSafe(48) };
-    try {
-      const response = await view.fetch(await this.authorizeUrl(flow), {
-        credentials: 'same-origin',
-        redirect: 'follow',
-        cache: 'no-store',
-      });
-      const landed = new URL(response.url);
-      const callback = new URL(this.redirectUri());
-      const code = landed.searchParams.get('code');
-      if (
-        landed.origin !== callback.origin ||
-        landed.pathname !== callback.pathname ||
-        landed.searchParams.get('state') !== flow.state ||
-        !code
-      ) {
-        return false;
-      }
-      await this.exchange(code, flow.verifier);
-      return true;
-    } catch {
-      return false;
-    }
+  private forget(): void {
+    clearTimeout(this.renewTimer);
+    this.token.set(null);
+    this.writeHint(false);
   }
 
   /** Renews a minute before the token runs out, so an open form never meets an expired token. */
@@ -235,11 +209,29 @@ export class AuthService {
     this.renewTimer = setTimeout(() => void this.renew(), delay);
   }
 
-  private readToken(): StoredToken | null {
-    return JSON.parse(this.storage()?.getItem(TOKEN_KEY) ?? 'null') as StoredToken | null;
+  private url(path: string): string {
+    return `${this.config.apiUrl}/api/v1/auth${path}`;
+  }
+
+  private readHint(): boolean {
+    try {
+      return this.storage()?.getItem(HINT_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  private writeHint(value: boolean): void {
+    this.hinted.set(value);
+    try {
+      if (value) this.storage()?.setItem(HINT_KEY, '1');
+      else this.storage()?.removeItem(HINT_KEY);
+    } catch {
+      // private mode: a reload asks to sign in again
+    }
   }
 
   private storage(): Storage | null {
-    return this.document.defaultView?.sessionStorage ?? null;
+    return this.browser ? (this.document.defaultView?.localStorage ?? null) : null;
   }
 }

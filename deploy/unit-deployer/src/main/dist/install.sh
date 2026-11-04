@@ -133,6 +133,8 @@ FOODSTACK_ADMIN_ROOT_HOST=$([[ $admin_domain != "$domain" ]] && echo "$admin_dom
 FOODSTACK_PUBLIC_URL=$(url "$api_domain")
 FOODSTACK_WEB_URL=$(url "$domain")
 FOODSTACK_ADMIN_URL=$(url "$admin_domain")
+# Browsers keep the sign-in cookie only over HTTPS when it is marked Secure; a plain-HTTP trial turns that off.
+FOODSTACK_REFRESH_COOKIE_SECURE=$([[ $scheme == http ]] && echo false || echo true)
 HTTP_PORT=$http_port
 HTTPS_PORT=$https_port
 FOODSTACK_ADMIN_EMAIL=$admin_email

@@ -7,10 +7,6 @@ import { InjectionToken } from '@angular/core';
 export interface RuntimeConfig {
   /** Base URL of the REST API, without a trailing slash; empty for the same origin. */
   apiUrl: string;
-  /** OIDC issuer: the identity module's public URL. */
-  issuer: string;
-  /** OAuth client id of this app. */
-  clientId: string;
   /** Map tiles as an XYZ URL template, such as `https://tile.openstreetmap.org/{z}/{x}/{y}.png`. */
   mapTiles?: string;
   /** Credit shown on the map, as the tile provider requires. */
@@ -28,8 +24,6 @@ export function normalizeConfig(config: RuntimeConfig): RuntimeConfig {
   const trim = (value: string) => (value ?? '').replace(/\/+$/, '');
   return {
     apiUrl: trim(config.apiUrl),
-    issuer: trim(config.issuer),
-    clientId: config.clientId,
     mapTiles: config.mapTiles || DEFAULT_MAP_TILES,
     mapAttribution: config.mapAttribution || DEFAULT_MAP_ATTRIBUTION,
   };
