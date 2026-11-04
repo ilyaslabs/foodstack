@@ -28,6 +28,11 @@
             <artifactId>spring-boot-starter-jackson</artifactId>
         </dependency>
         <dependency>
+            <!-- The current trace, stored with each outbox row so the trace carries on through Kafka -->
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.liquibase</groupId>
             <artifactId>liquibase-core</artifactId>
         </dependency>

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.platform.kafka;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Date;
@@ -10,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.bson.Document;
@@ -35,6 +37,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 public class OutboxRelay implements SmartLifecycle {
 
     private static final Log logger = LogFactory.getLog(OutboxRelay.class);
+
+    /** W3C trace context header, also a CloudEvents distributed-tracing attribute. */
+    static final String TRACEPARENT = "traceparent";
 
     private final String module;
 
@@ -134,7 +139,14 @@ public class OutboxRelay implements SmartLifecycle {
         }
         List<CompletableFuture<?>> sends = new ArrayList<>(rows.size());
         for (Document row : rows) {
-            sends.add(this.kafka.send(this.topic, row.getString("subject"), CloudEvents.fromOutbox(row, this.jsonMapper)));
+            ProducerRecord<String, String> record = new ProducerRecord<>(this.topic, row.getString("subject"),
+                    CloudEvents.fromOutbox(row, this.jsonMapper));
+            String traceparent = row.getString("traceparent");
+            if (traceparent != null) {
+                // a listener with observation on continues the writer's trace from this header
+                record.headers().add(TRACEPARENT, traceparent.getBytes(StandardCharsets.US_ASCII));
+            }
+            sends.add(this.kafka.send(record));
         }
         List<String> sent = new ArrayList<>();
         String failedId = null;
