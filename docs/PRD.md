@@ -57,8 +57,8 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 
 | ID | Requirement | P |
 |---|---|---|
-| ID-1 | Customer sign-up and login by **email and password** or **email one-time code**. A phone number is collected at checkout so the rider can call (not verified in v1). Phone login arrives with a future SMS adapter | M |
-| ID-2 | Social login (Google, Apple) through OIDC, enabled per deployment | S |
+| ID-1 | Customer sign-up and login by **email and password** or **email one-time code**, on the app's own sign-in screen (no redirect to another page). A person stays signed in on a device for 30 days after their last visit, across reloads and tabs, and can sign out. A phone number is collected at checkout so the rider can call (not verified in v1). Phone login arrives with a future SMS adapter | M |
+| ID-2 | Social login (Google, Apple), enabled per deployment: the app signs in with the provider and hands its token to FoodStack (no redirect through FoodStack) | S |
 | ID-3 | Guest browsing; login required at checkout | M |
 | ID-4 | Admins invite back-office users by email; roles and permissions assigned by admin | M |
 | ID-5 | Optional TOTP two-factor login for back-office users; mandatory for `ADMIN` and `FINANCE` | M |
@@ -71,7 +71,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | ID | Requirement | P |
 |---|---|---|
 | ST-1 | Admin onboards a store: legal name, display name, logo, cover image, address and location, cuisines, tax ID, commission (percentage, fixed amount per order, or both), pickup enabled, payment collection (operator, or direct when allowed, see 4.14) | M |
-| ST-2 | The **store owner** sets opening hours per weekday (several time ranges per day allowed) and holiday closures; within those hours the store receives orders automatically | M |
+| ST-2 | The **store owner** sets opening hours per weekday (several time ranges per day allowed) and holiday closures; within those hours the store receives orders automatically. Hours are in the **branch's own time zone**, set automatically from its location and changeable by the owner; kitchen tickets and order times show the branch's local time | M |
 | ST-2a | **Temporarily closed** safety switch: the store owner turns the store off at any time; it shows as "Temporarily closed" and takes no orders **until the owner turns it back on**, whatever the timetable says. An optional reason is shown to customers. Admins can see and override it | M |
 | ST-3 | Menu: categories, items (name, description, photos, price, tax class, dietary tags, allergens), modifier groups (required or optional, min and max choices, price deltas) | M |
 | ST-4 | Item and modifier availability toggles (sold out today) | M |
@@ -110,7 +110,7 @@ Decided in grooming on 2026-10-31. The data model ships in M1 with single-branch
 
 | ID | Requirement | P |
 |---|---|---|
-| SE-1 | Home shows stores that deliver to the chosen address, ordered by relevance (open now, distance, rating, ETA) | M |
+| SE-1 | Home shows stores that deliver to the chosen address and are within the **discovery radius** (8 km by road by default, set by the operator), ordered by relevance (open now, distance, rating, ETA). The page says the radius used, and a **Show restaurants further away** button widens it in steps (default 15 km, then 25 km). A store's own link always works wherever its zones reach | M |
 | SE-2 | Full-text search across stores, cuisines and dishes, typo-tolerant, in every configured language | M |
 | SE-3 | Filters: cuisine, rating, delivery fee, ETA, dietary tags, pickup available, offers | M |
 | SE-4 | Autocomplete suggestions under 150 ms p95 | M |
@@ -153,7 +153,7 @@ Decided in grooming on 2026-10-31. The data model ships in M1 with single-branch
 |---|---|---|
 | DR-1 | Operator rider onboarding by admin: identity documents, vehicle type, city, payout details. Store riders are invited by the store owner and belong only to that store | M |
 | DR-1a | The **operator rider service** is a global setting, off by default, so a new operator can launch with stores delivering themselves | M |
-| DR-1b | **Operator delivery pricing** (what customers of operator-delivery stores pay): base charge + charge per km of road distance from store to customer, a maximum delivery distance, optional minimum order and free-delivery threshold, and an optional peak-hour multiplier. Set by the operator; optional override per city | M |
+| DR-1b | **Operator delivery pricing** (what customers of operator-delivery stores pay): base charge + charge per km of road distance from store to customer, a maximum delivery distance, optional minimum order and free-delivery threshold, and an optional peak-hour multiplier (peak hours are each branch's local time). Set by the operator; optional override per city | M |
 | DR-1c | **Operator rider pay:** a configurable percentage of the operator delivery charge (default 70%), an optional minimum per delivery, plus 100% of tips. The operator keeps the rest. Store riders are paid by their store outside FoodStack | M |
 | DR-2 | Rider goes online or offline; location reported every 10 s while online (adaptive when stationary) | M |
 | DR-3 | Dispatch offers a job to the best-ranked available rider (distance to store, current load, acceptance rate); offer expires after 30 s and moves to the next rider | M |
@@ -283,17 +283,17 @@ By default the operator collects every card payment and pays stores later. The o
 | Area | Requirement |
 |---|---|
 | Performance | API p95 < 300 ms for reads and < 600 ms for order placement at target load; search autocomplete p95 < 150 ms; customer web LCP < 2.5 s on mid-range phone over 4G |
-| Scale (reference) | Monolith: 200 orders per hour sustained. Split preset: 5,000 orders per hour with horizontal scaling of `order`, `dispatch`, `search` |
+| Scale (reference) | Monolith: 200 orders per hour sustained. Split preset: 5,000 orders per hour with horizontal scaling of `order`, `dispatch`, `search`. Beyond that, a country-wide deployment grows by adding machines (replicas, MongoDB shards, Redis Cluster nodes, Kafka brokers, Elasticsearch nodes) with configuration changes only, never code changes; one deployment serves one country |
 | Availability | Kubernetes reference setup (3 replicas, multi-zone datastores): 99.9% monthly for order placement. Single server: no high availability; restart within minutes and restore from daily backups |
 | Real time | Order status and rider position reach the customer within 3 s |
-| Security | OWASP ASVS L2 targets; mTLS between all pods; TLS 1.2+ at the edge; secrets never in images; PII encrypted at rest; no card data stored |
+| Security | OWASP ASVS L2 targets; mTLS between all pods; TLS 1.2+ at the edge; per-IP rate limits at the edge before any request reaches the app; access tokens only in memory and refresh tokens in an http-only cookie (web) or the device keystore (mobile); secrets never in images; PII encrypted at rest; no card data stored |
 | Privacy | Data export and deletion; configurable retention for location history (default 30 days) |
 | Observability | Traces, metrics and logs for every request, correlated by trace ID |
 | Localisation | All user-facing strings externalised; RTL layout verified for Arabic and Urdu |
 | Accessibility | WCAG 2.2 AA |
 | Portability | Runs on one Linux server with Docker through the unit deployer; optionally on any CNCF-conformant Kubernetes 1.31+; no cloud-specific dependency |
 | Media | Images resized to fixed variants and stored as WebP (AVIF where supported); originals over 10 MB rejected; typical menu photo under 80 KB |
-| Time | Stored in UTC; API requests and responses carry date-times as UTC epoch seconds |
+| Time | Stored in UTC; API requests and responses carry date-times as UTC epoch seconds. Each branch has its own time zone for hours and order times |
 | Developer setup | Clone and run the server from the IDE or one Maven command with Testcontainers starting every dependency; `test-seed` profile loads demo data |
 | Upgrade | Rolling upgrades with backward-compatible migrations; API changes are additive within `/api/v1` |
 

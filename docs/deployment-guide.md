@@ -103,8 +103,11 @@ Edit `/opt/foodstack/.env`, then run `./restart.sh server`. The main settings:
 | `MAP_TILE_URL`, `MAP_TILE_ORIGIN`, `MAP_ATTRIBUTION` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, `https://tile.openstreetmap.org`, `© OpenStreetMap contributors` | Map tiles in the back office, where stores draw their delivery zones. OpenStreetMap's public tiles allow light use only (see their tile usage policy); with many stores, use your own tile server or a hosted provider. `MAP_TILE_ORIGIN` must be the scheme and host of `MAP_TILE_URL`, because the page's security policy only loads tiles from there |
 | `ELASTICSEARCH_URIS`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD` | set by `install.sh` | Point at an external Elasticsearch 9 cluster if you run one; the index is rebuilt from store data on start |
 | `JAVA_HEAP`, `ES_HEAP` | `4g`, `2g` | Sized by `install.sh` from server memory |
+| `FOODSTACK_RATE_LIMIT_API`, `FOODSTACK_RATE_LIMIT_SIGN_IN`, `FOODSTACK_RATE_LIMIT_ORDERS` | `1200`, `60`, `20` | Requests per minute per client address, checked by the proxy before the server sees them (429 with `Retry-After` above it): the whole API, sign-in and codes, order placement. Mobile networks put many people behind one address, so raise them rather than lower them if customers see "too many requests". Apply with `./restart.sh proxy` |
+| `FOODSTACK_REFRESH_COOKIE_SECURE` | `true` | Keep `true`. Only a plain-HTTP trial (`--local`) sets `false`, or browsers would drop the sign-in cookie |
+| `FOODSTACK_TRACING_EXPORT`, `FOODSTACK_OTLP_ENDPOINT`, `FOODSTACK_TRACING_SAMPLING` | `false`, `http://collector:4318/v1/traces`, `0.1` | Send traces to an OpenTelemetry collector (Jaeger, Tempo, a vendor). Off by default; a trace follows a request through every module and through Kafka events |
 
-Everything else (branding, languages, currency, timezone, fees, commission, feature switches) is set in the admin panel after login. Card payment also has a switch on the back office **Ordering** page: customers see it only when the gateway is set here and the switch is on.
+Everything else (branding, languages, currency, timezone, fees, commission, feature switches) is set in the admin panel after login. Each branch also has its own time zone, found from its location (useful in countries with several zones); the store's owner can change it on the branch page. Card payment also has a switch on the back office **Ordering** page: customers see it only when the gateway is set here and the switch is on.
 
 ### 3.4 First login checklist
 
@@ -155,6 +158,8 @@ Migrations are always backward compatible with the previous release, so a rollba
 - [ ] Real SMTP, maps and payment credentials set; demo map services not used.
 - [ ] `FOODSTACK_ENVIRONMENT=production` (blocks the `test-seed` demo data).
 - [ ] Disk usage alert at 80% (`status.sh` reports it).
+- [ ] Edge rate limits reviewed for your traffic (`FOODSTACK_RATE_LIMIT_*`).
+- [ ] The web app and the API on the same site (for example `example.com` and `api.example.com`), so the sign-in cookie is sent; `FOODSTACK_REFRESH_COOKIE_SECURE=true`.
 
 ## 4. Kubernetes (Helm)
 
@@ -263,7 +268,18 @@ The install runs migrations in a pre-install job first. Then follow the first-lo
 
 A topology change rolls one Deployment at a time; calls between modules are retried while targets start, so traffic keeps flowing. **No data moves** when you change topology.
 
-Kafka consumers: the chart keeps `replicas × listener concurrency ≤ 24` per module and warns if you exceed it, since extra consumers would sit idle.
+Kafka consumers: the chart keeps `replicas × listener concurrency ≤ 24` per module and warns if you exceed it, since extra consumers would sit idle. Listener threads per module are `foodstack.kafka.concurrency.<module>` (default 3).
+
+Background work needs no leader: the outbox relay, the dispatch matcher and the accept-timeout sweep split 64 work buckets between the replicas that run them, so adding a replica adds capacity and losing one hands its share to the others within seconds ([TDD 7.3](TDD.md#73-work-buckets-background-work-on-every-replica)).
+
+### 4.6a Growing the other datastores
+
+| Store | How to grow | FoodStack setting |
+|---|---|---|
+| Redis | A primary with replicas and Sentinel for failover, or Redis Cluster for more memory and throughput | One of `SPRING_DATA_REDIS_URL`, `SPRING_DATA_REDIS_SENTINEL_MASTER` + `SPRING_DATA_REDIS_SENTINEL_NODES`, or `SPRING_DATA_REDIS_CLUSTER_NODES` (with `SPRING_DATA_REDIS_PASSWORD`). Nothing else changes: every command uses one key, and live messages switch to sharded pub/sub on a cluster |
+| Elasticsearch | Add nodes | `foodstack.search.auto-expand-replicas` (`0-1` by default, `0-all` to keep a copy on every node) applies to the live index on the next start. More primary shards (`foodstack.search.shards`) take effect on the next index rebuild |
+| Kafka | Add brokers; set replication factor 3 | `KAFKA_REPLICATION_FACTOR=3`. Topics start with 24 partitions; adding partitions later re-maps keys, so choose the count early |
+| CDN (optional) | Put a CDN or the Gateway's cache in front of the API host | Live branch pages and menus answer with `Cache-Control: public, s-maxage=30` and an ETag, so a shared cache serves most views for up to 30 s; everything else is `no-store` or private |
 
 ### 4.7 Moving one module's data to its own MongoDB cluster
 
@@ -292,7 +308,7 @@ helm install foodstack-observability oci://ghcr.io/ilyaslabs/charts/foodstack-ob
   -n monitoring --create-namespace
 ```
 
-Installs the OpenTelemetry Collector, Prometheus, Grafana (FoodStack dashboards), Tempo and Loki with alert rules for error rate, latency, outbox lag, Kafka consumer lag, dead-letter growth and certificate expiry. To use an existing stack instead, point `observability.otlpEndpoint` at your collector.
+Installs the OpenTelemetry Collector, Prometheus, Grafana (FoodStack dashboards), Tempo and Loki with alert rules for error rate, latency, outbox lag, Kafka consumer lag, dead-letter growth and certificate expiry. To use an existing stack instead, point `observability.otlpEndpoint` at your collector. Either way the server exports traces when `FOODSTACK_TRACING_EXPORT=true` (endpoint `FOODSTACK_OTLP_ENDPOINT`, sampling `FOODSTACK_TRACING_SAMPLING`).
 
 ### 4.10 Upgrades and rollback
 

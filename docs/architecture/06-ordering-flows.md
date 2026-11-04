@@ -209,27 +209,32 @@ Counters live in `promotion_codes` (uses in total), `promotion_customer_usage` (
 
 ## 6.8 Notifications: in-app and email
 
+The Kafka listener only writes: a slow mail server or push service must never hold an order-event partition (TDD 7.5). Sending happens off the consumer thread.
+
 ```mermaid
 sequenceDiagram
     autonumber
-    participant K as Kafka (identity, order, payment events)
+    participant K as Kafka (identity, order, payment, dispatch events)
     participant L as notification listeners
     participant NS as NotificationService
     participant ID as IdentityApi / OrderApi / SettingsApi
     participant DB as foodstack_notification
-    participant SW as notification-email (every 10 s)
-    participant SMTP as SMTP server
+    participant VT as sender (virtual thread)
+    participant SW as periodic sender (every 5 s, every replica)
+    participant OUT as SMTP server / FCM
 
-    K-->>L: UserRegistered, EmailCodeIssued, OrderConfirmed, OrderAccepted, OrderReady, ... RefundSucceeded
+    K-->>L: UserRegistered, EmailCodeIssued, OrderConfirmed, ... RiderOffered
     L->>ID: who to tell, their language, the order, branding
     L->>NS: message (customer, and store owners for a new order)
-    NS->>DB: notification_inbox (id from the event: sent once)
-    NS->>DB: notification_preferences allow email? then notification_deliveries QUEUED
-    NS->>SMTP: send now
-    alt SMTP fails
-        NS->>DB: retry in 1, 5, 30, 120 min, FAILED after 5 tries
-        SW->>DB: due deliveries
-        SW->>SMTP: send again
+    NS->>DB: notification_inbox (id from the event: written once)
+    NS->>DB: preferences allow it? notification_deliveries QUEUED (EMAIL, PUSH)
+    NS-->>L: done: the listener commits its offset
+    NS->>VT: hand the new deliveries to a bounded sender
+    VT->>DB: claim (QUEUED → SENDING, conditional update)
+    VT->>OUT: send
+    alt sending fails or this replica stops first
+        SW->>DB: claim due deliveries (any replica)
+        SW->>OUT: send again (email: 1, 5, 30, 120 min, FAILED after 5 tries,<br/>push: 10 s, 30 s, then given up)
     end
 ```
 
@@ -242,25 +247,28 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber
-    participant U as Browser
-    participant W as identity-web EmailCodePagesController
+    participant U as App sign-in screen
+    participant W as identity-web AuthController
     participant CS as EmailCodeService
+    participant SS as SessionService
     participant R as Redis
     participant DB as foodstack_identity
     participant K as Kafka
     participant N as notification
 
-    U->>W: POST /login/code (email)
+    U->>W: POST /api/v1/auth/code {email, purpose: LOGIN}
     W->>CS: issue(LOGIN, email)
     CS->>R: rate limit: 5 codes per email per 15 min
-    CS->>DB: find user by email blind index (unknown or blocked: say the same, send nothing)
+    CS->>DB: find user by email blind index (unknown or blocked: same 202, send nothing)
     CS->>R: HSET <ns>:identity:code:LOGIN:{userId} hash(userId:code) and tries, 5 min TTL
     CS->>DB: outbox EmailCodeIssued (code encrypted)
+    W-->>U: 202
     DB-->>K: relay
     K-->>N: sealed email with the 6-digit code
-    U->>W: POST /login/code/verify (code)
+    U->>W: POST /api/v1/auth/login {client, email, code}
     W->>CS: verify: at most 5 tries, then DEL (single use)
-    W->>W: sign in (factor OTT), new session id, continue to the app
+    W->>SS: start a sign-in: access token + refresh token (flow 4.1)
+    W-->>U: tokens (cookie for web, body for mobile)
 ```
 
-Password reset is the same with purpose `PASSWORD_RESET`: the new password is checked before the code is used up, then the password is changed and every token of the user is revoked (`PASSWORD_RESET`). A signed-in user changes their password with `PUT /api/v1/me/password` (current password required).
+Password reset is the same with purpose `PASSWORD_RESET` and `POST /api/v1/auth/reset {client, email, code, newPassword}`: the new password is checked before the code is used up, then the password is changed, every token of the user is revoked (`PASSWORD_RESET`, which also ends every other sign-in at its next refresh) and a new sign-in starts. A signed-in user changes their password with `PUT /api/v1/me/password` (current password required).

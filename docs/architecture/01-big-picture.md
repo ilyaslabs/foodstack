@@ -14,7 +14,7 @@ flowchart LR
     end
 
     subgraph Server["One server (Docker Compose)"]
-        P["Caddy<br/>TLS, routing by path,<br/>security headers, 25 MB body limit"]
+        P["Caddy (foodstack-proxy)<br/>TLS, routing by path, rate limits per IP,<br/>security headers, 25 MB body limit"]
         W["web<br/>Angular SSR on Node :4000"]
         BO["backoffice<br/>nginx with Angular build"]
         S["server<br/>Spring Boot, every module local :8080"]
@@ -30,7 +30,7 @@ flowchart LR
 
     C --> P
     B --> P
-    P -- "/api/*, /oauth2/*, /login, /logout,<br/>/.well-known/*, /userinfo, /connect/*" --> S
+    P -- "/api/*, /oauth2/*, /.well-known/*" --> S
     P -- "/foodstack-public/*, /foodstack-private/*" --> O
     P -- "/admin*" --> BO
     P -- "everything else" --> W
@@ -56,7 +56,7 @@ Solid arrows are **synchronous calls** through another module's `-api` interface
 flowchart TB
     subgraph identity
         ID[identity]
-        IDdb[("foodstack_identity<br/>users, login_keys,<br/>authorizations")]
+        IDdb[("foodstack_identity<br/>users, login_keys,<br/>refresh_tokens")]
     end
     subgraph settings
         SE[settings]
