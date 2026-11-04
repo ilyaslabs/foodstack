@@ -6,6 +6,7 @@
 	servers {
 		trusted_proxies static private_ranges
 	}
+	order rate_limit before basic_auth
 }
 
 (foodstack) {
@@ -19,6 +20,38 @@
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Frame-Options "DENY"
 		-Server
+	}
+
+	# Edge rate limits per client address (TDD 18.3), before any request reaches the server: one
+	# budget for the whole API, a tighter one for sign-in and order placement. Over the limit the
+	# answer is 429 with Retry-After. Limits are per minute, from .env; the server keeps its own
+	# per-user limits as well. Mobile networks put many people behind one address, so stay generous.
+	rate_limit {
+		zone api {
+			match {
+				path /api/* /oauth2/*
+			}
+			key {client_ip}
+			events {$FOODSTACK_RATE_LIMIT_API:1200}
+			window 1m
+		}
+		zone auth {
+			match {
+				path /api/v1/auth/*
+			}
+			key {client_ip}
+			events {$FOODSTACK_RATE_LIMIT_SIGN_IN:60}
+			window 1m
+		}
+		zone orders {
+			match {
+				method POST
+				path /api/v1/orders
+			}
+			key {client_ip}
+			events {$FOODSTACK_RATE_LIMIT_ORDERS:20}
+			window 1m
+		}
 	}
 
 	# The API (sign-in included) and the token keys: the FoodStack server (every module local).
