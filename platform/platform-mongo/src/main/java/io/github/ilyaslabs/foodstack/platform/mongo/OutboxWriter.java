@@ -7,6 +7,8 @@ import io.github.ilyaslabs.foodstack.platform.core.Buckets;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
 import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
 import org.bson.Document;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -22,6 +24,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * Each row carries the {@link Buckets bucket} of its subject (the aggregate id): the collection is
  * sharded on {@code { bucket: 1, _id: 1 }}, so writes spread over every shard, and each relay
  * replica reads only the buckets it holds while keeping the order of one aggregate's events.
+ * Rows also keep the W3C {@code traceparent} of the writing request, when tracing is on.
  */
 public class OutboxWriter {
 
@@ -63,11 +66,28 @@ public class OutboxWriter {
             .append("data", this.jsonMapper.writeValueAsString(event))
             .append("status", STATUS_NEW)
             .append("attempts", 0);
+        String traceparent = traceparent();
+        if (traceparent != null) {
+            record.append("traceparent", traceparent);
+        }
         this.template.insert(record, this.collection);
         return id;
     }
 
     public String collection() {
         return this.collection;
+    }
+
+    /**
+     * The W3C {@code traceparent} of the request that wrote the event (TDD 7.5, gap 8): the relay
+     * sends it as a Kafka header, so a consumer's work joins the same trace. {@code null} when
+     * tracing is off.
+     */
+    static String traceparent() {
+        SpanContext span = Span.current().getSpanContext();
+        if (!span.isValid()) {
+            return null;
+        }
+        return "00-" + span.getTraceId() + "-" + span.getSpanId() + "-" + span.getTraceFlags().asHex();
     }
 }

@@ -28,6 +28,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <dependency>
+            <!-- Traces over HTTP, module calls and Kafka; exported over OTLP when switched on (TDD 7.5) -->
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-opentelemetry</artifactId>
+        </dependency>
 
         <!-- Modules: core (logic and data), impl (module API) and web (REST) of each -->
         <dependency>

@@ -45,6 +45,9 @@ spring:
         metadata.max.age.ms: 30000
     admin:
       fail-fast: false
+    listener:
+      # continues the trace of the request that wrote the event (traceparent header from the outbox)
+      observation-enabled: true
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://localhost:9200}
     username: ${ELASTICSEARCH_USERNAME:}
@@ -75,6 +78,24 @@ management:
   health:
     elasticsearch:
       enabled: false
+  # Tracing (TDD 7.5): W3C traceparent through HTTP, module calls, the outbox and Kafka. Spans are
+  # exported over OTLP only when FOODSTACK_TRACING_EXPORT is true, to FOODSTACK_OTLP_ENDPOINT.
+  tracing:
+    sampling:
+      probability: ${FOODSTACK_TRACING_SAMPLING:0.1}
+    export:
+      otlp:
+        enabled: ${FOODSTACK_TRACING_EXPORT:false}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${FOODSTACK_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+  otlp:
+    metrics:
+      export:
+        # metrics stay on the actuator; nothing is pushed
+        enabled: false
 
 # Monolith by default: every module local. Helm and the integration tests override per deployment.
 module-switch:
