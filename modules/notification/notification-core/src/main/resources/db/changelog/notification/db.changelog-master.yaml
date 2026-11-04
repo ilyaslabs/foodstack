@@ -45,3 +45,16 @@ databaseChangeLog:
             collectionName: notification_devices
             keys: '{ "userId": 1 }'
             options: '{ "name": "user" }'
+  - changeSet:
+      id: notification-3
+      author: foodstack
+      comment: "Push messages join the delivery log, sent by every replica's senders (TDD 7.5); the admin log lists emails"
+      changes:
+        - createIndex:
+            collectionName: notification_deliveries
+            keys: '{ "status": 1, "channel": 1, "nextAttemptAt": 1 }'
+            options: '{ "name": "due_by_channel" }'
+        - createIndex:
+            collectionName: notification_deliveries
+            keys: '{ "channel": 1, "createdAt": -1 }'
+            options: '{ "name": "channel_newest" }'
