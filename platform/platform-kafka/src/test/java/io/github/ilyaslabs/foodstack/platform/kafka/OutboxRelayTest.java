@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.platform.kafka;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,6 +14,11 @@ import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.TopicDescription;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.api.trace.TraceFlags;
+import io.opentelemetry.api.trace.TraceState;
+import io.opentelemetry.context.Scope;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -59,16 +65,22 @@ class OutboxRelayTest {
     JsonMapper jsonMapper;
 
     @Test
-    @DisplayName("publishes stored events to the module topic as CloudEvents keyed by aggregate, and marks them sent")
+    @DisplayName("publishes stored events to the module topic as CloudEvents keyed by aggregate, with the writer's trace, and marks them sent")
     void publishesOutbox() {
-        // given
+        // given a request being traced
         String topic = this.eventing.topic("relaytest");
+        String traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
+        String spanId = "00f067aa0ba902b7";
+        Span request = Span.wrap(SpanContext.create(traceId, spanId, TraceFlags.getSampled(), TraceState.getDefault()));
         try (KafkaConsumer<String, String> consumer = consumer()) {
             consumer.subscribe(List.of(topic));
 
             // when
-            String eventId = this.relaytestMongo.transactionTemplate()
-                .execute((status) -> this.relaytestOutbox.append(new DishRenamed("dish-1", "Biryani")));
+            String eventId;
+            try (Scope scope = request.makeCurrent()) {
+                eventId = this.relaytestMongo.transactionTemplate()
+                    .execute((status) -> this.relaytestOutbox.append(new DishRenamed("dish-1", "Biryani")));
+            }
 
             // then
             List<ConsumerRecord<String, String>> received = new ArrayList<>();
@@ -84,6 +96,8 @@ class OutboxRelayTest {
             assertThat(envelope.source()).isEqualTo("foodstack/relaytest");
             assertThat(envelope.subject()).isEqualTo("dish-1");
             assertThat(envelope.dataAs(DishRenamed.class, this.jsonMapper)).isEqualTo(new DishRenamed("dish-1", "Biryani"));
+            assertThat(new String(record.headers().lastHeader("traceparent").value(), StandardCharsets.US_ASCII))
+                .isEqualTo("00-" + traceId + "-" + spanId + "-01");
 
             await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
                 Document row = this.relaytestMongo.template().findById(eventId, Document.class, "relaytest_outbox");
