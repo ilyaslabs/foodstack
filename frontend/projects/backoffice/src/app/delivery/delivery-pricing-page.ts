@@ -124,7 +124,7 @@ import { toMajor, toMinor } from '../shared/money';
             <h2>Peak hours</h2>
             <p class="section-hint">
               At these times the delivery charge is multiplied, to bring more riders out. Times are
-              in {{ timezone() }}.
+              each branch's local time.
             </p>
             <div class="grid-3">
               <mat-form-field appearance="outline">
@@ -315,7 +315,6 @@ export class DeliveryPricingPage implements OnInit {
     SATURDAY: 'Sat',
     SUNDAY: 'Sun',
   };
-  protected readonly timezone = computed(() => this.locale.locale().timezone);
   private etag = '';
 
   protected get peakFactor(): number {

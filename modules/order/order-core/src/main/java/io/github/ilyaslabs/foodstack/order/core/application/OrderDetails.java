@@ -69,9 +69,10 @@ public record OrderDetails(String id, String number, OrderStatus status, Fulfilm
      * @param lat latitude
      * @param lng longitude
      * @param logoUrls logo variants
+     * @param timezone IANA zone of the branch, which tickets and order times are shown in
      */
     public record StoreInfo(String storeId, String name, String slug, String addressLine, String city, double lat, double lng,
-            Map<String, String> logoUrls) {
+            Map<String, String> logoUrls, String timezone) {
     }
 
     /**

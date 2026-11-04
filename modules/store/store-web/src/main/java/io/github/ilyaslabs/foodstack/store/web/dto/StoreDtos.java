@@ -56,9 +56,13 @@ public final class StoreDtos {
             String logoMediaId, String coverMediaId) {
     }
 
-    /** {@code PUT /api/v1/stores/{id}/branch} with {@code If-Match}. */
+    /**
+     * {@code PUT /api/v1/stores/{id}/branch} with {@code If-Match}. Without a {@code timezone}, or with the
+     * current one while the location moves, the zone is found from the location.
+     */
     public record BranchRequest(@Size(max = 60) String branchName, @NotNull @Valid AddressDto address, @Valid LatLng location,
-            @Min(5) @Max(120) int prepMinutes, @NotBlank String deliveryMode, boolean pickupEnabled) {
+            @Min(5) @Max(120) int prepMinutes, @NotBlank String deliveryMode, boolean pickupEnabled,
+            @Size(max = 64) String timezone) {
     }
 
     /** {@code PUT /api/v1/stores/{id}/admin} with {@code If-Match} (operator only). */

@@ -63,6 +63,9 @@ public class StoreDocument {
 
     private int prepMinutes;
 
+    /** IANA zone of the hours; {@code null} on branches saved before it existed, which use the deployment's. */
+    private String timezone;
+
     private DeliveryMode deliveryMode;
 
     /** Set by the operator: operator delivery may be chosen (PRD ST-13). */
@@ -208,6 +211,14 @@ public class StoreDocument {
 
     public void setClosedAt(Instant closedAt) {
         this.closedAt = closedAt;
+    }
+
+    public String getTimezone() {
+        return this.timezone;
+    }
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
     }
 
     public int getPrepMinutes() {

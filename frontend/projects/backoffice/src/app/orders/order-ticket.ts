@@ -14,9 +14,10 @@ import { clock } from './order-labels';
       <article class="ticket">
         <h1>#{{ o.number }}</h1>
         <p class="meta">
-          {{ o.fulfilment === 'PICKUP' ? 'PICKUP' : 'DELIVERY' }} · {{ clock(o.placedAt) }}
+          {{ o.fulfilment === 'PICKUP' ? 'PICKUP' : 'DELIVERY' }} ·
+          {{ clock(o.placedAt, o.store.timezone) }}
           @if (o.readyBy) {
-            · ready by {{ clock(o.readyBy) }}
+            · ready by {{ clock(o.readyBy, o.store.timezone) }}
           }
         </p>
         <p class="meta">
