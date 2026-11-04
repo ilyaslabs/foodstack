@@ -65,7 +65,7 @@ public final class ModuleMongo implements DisposableBean {
     }
 
     public TransactionTemplate transactionTemplate() {
-        return new TransactionTemplate(this.transactionManager);
+        return new RetryingTransactionTemplate(this.transactionManager);
     }
 
     @Override
