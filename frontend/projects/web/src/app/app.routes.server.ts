@@ -1,8 +1,8 @@
 import { RenderMode, ServerRoute } from '@angular/ssr';
 
 export const serverRoutes: ServerRoute[] = [
-  // The callback only makes sense in the browser, which holds the PKCE verifier.
-  { path: 'auth/callback', renderMode: RenderMode.Client },
+  // Sign-in talks to the auth API from the browser, which receives the refresh cookie.
+  { path: 'sign-in', renderMode: RenderMode.Client },
   // Signed-in pages: the token lives in the browser, so the server has nothing to render for them.
   { path: 'checkout', renderMode: RenderMode.Client },
   { path: 'orders', renderMode: RenderMode.Client },

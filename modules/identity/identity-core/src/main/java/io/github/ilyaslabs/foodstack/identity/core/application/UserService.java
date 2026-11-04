@@ -58,6 +58,8 @@ public class UserService {
 
     private final Clock clock;
 
+    private volatile String dummyHash;
+
     public UserService(UserRepository users, LoginKeyRepository loginKeys, PiiCipher pii, PasswordEncoder passwordEncoder,
             OutboxWriter outbox, TransactionTemplate transaction, TokenRevocations revocations, Clock clock) {
         this.users = users;
@@ -184,6 +186,37 @@ public class UserService {
         user.setPasswordHash(this.passwordEncoder.encode(newPassword));
         user.setUpdatedAt(this.clock.instant());
         this.users.save(user);
+    }
+
+    /**
+     * Checks an email and password for sign-in.
+     * @return the user id when the password is right and the account active
+     */
+    public Optional<String> checkPassword(String email, String password) {
+        if (email == null || email.isBlank() || password == null || password.isEmpty()
+                || password.length() > MAX_PASSWORD) {
+            return Optional.empty();
+        }
+        Optional<UserDocument> user = findByEmail(email.trim());
+        String hash = user.map(UserDocument::getPasswordHash).orElse(null);
+        if (hash == null) {
+            // the same work as a real check, so timing does not tell which emails have accounts
+            this.passwordEncoder.matches(password, dummyHash());
+            return Optional.empty();
+        }
+        if (!this.passwordEncoder.matches(password, hash) || user.get().getStatus() != UserStatus.ACTIVE) {
+            return Optional.empty();
+        }
+        return Optional.of(user.get().getId());
+    }
+
+    private String dummyHash() {
+        String hash = this.dummyHash;
+        if (hash == null) {
+            hash = this.passwordEncoder.encode("not-a-real-password-" + java.util.UUID.randomUUID());
+            this.dummyHash = hash;
+        }
+        return hash;
     }
 
     /** Throws {@code PASSWORD_INVALID} unless the password has 10 to 128 characters. */

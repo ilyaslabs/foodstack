@@ -14,13 +14,6 @@ foodstack:
     bootstrap-admin:
       email: admin@local.foodstack.local
       password: foodstack-local
-    clients:
-      foodstack-web:
-        redirect-uris: http://localhost:4200/auth/callback
-        post-logout-redirect-uris: http://localhost:4200/
-      foodstack-backoffice:
-        redirect-uris: http://localhost:4300/admin/auth/callback
-        post-logout-redirect-uris: http://localhost:4300/admin/
   storage:
     create-buckets: true
   payment:

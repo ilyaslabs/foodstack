@@ -23,8 +23,6 @@ const angularApp = new AngularNodeAppEngine({ allowedHosts });
 app.get('/config.json', (_req, res) => {
   res.set('Cache-Control', 'no-store').json({
     apiUrl: process.env['FOODSTACK_API_URL'] ?? '',
-    issuer: process.env['FOODSTACK_ISSUER'] ?? '',
-    clientId: 'foodstack-web',
     mapTiles: process.env['MAP_TILE_URL'] ?? '',
     mapAttribution: process.env['MAP_ATTRIBUTION'] ?? '',
   });

@@ -14,7 +14,7 @@ describe('SettingsClient', () => {
         provideHttpClientTesting(),
         {
           provide: RUNTIME_CONFIG,
-          useValue: { apiUrl: 'https://api.example', issuer: '', clientId: 'x' },
+          useValue: { apiUrl: 'https://api.example' },
         },
       ],
     });

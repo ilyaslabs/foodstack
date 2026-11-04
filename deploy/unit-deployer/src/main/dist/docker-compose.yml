@@ -81,7 +81,6 @@ services:
     environment:
       PORT: "4000"
       FOODSTACK_API_URL: ""
-      FOODSTACK_ISSUER: ""
       FOODSTACK_INTERNAL_API_URL: http://server:8080
       FOODSTACK_ALLOWED_HOSTS: ${FOODSTACK_HOSTNAMES}
       # Map tiles for address pins and live rider tracking.
@@ -100,7 +99,6 @@ services:
     image: nginxinc/nginx-unprivileged:1.29-alpine
     environment:
       FOODSTACK_API_URL: ""
-      FOODSTACK_ISSUER: ""
       # Map tiles for drawing delivery zones; the origin is allowed by the page's security policy.
       MAP_TILE_URL: ${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
       MAP_TILE_ORIGIN: ${MAP_TILE_ORIGIN:-https://tile.openstreetmap.org}

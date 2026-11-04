@@ -1,144 +1,162 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { Router, provideRouter } from '@angular/router';
 
 import { RUNTIME_CONFIG } from '@foodstack/api-client';
 
 import { AuthService } from './auth.service';
 import { BrowserNavigation } from './browser-navigation';
 
+/** Lets awaited calls inside the service move on. */
+const settle = () => new Promise((resolve) => setTimeout(resolve));
+
 describe('AuthService', () => {
   let assigned: string[];
 
-  beforeEach(() => {
-    assigned = [];
-    sessionStorage.clear();
+  function setUp() {
+    TestBed.resetTestingModule();
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        {
-          provide: RUNTIME_CONFIG,
-          useValue: {
-            apiUrl: '',
-            issuer: 'https://food.example',
-            clientId: 'foodstack-backoffice',
-          },
-        },
+        provideRouter([]),
+        { provide: RUNTIME_CONFIG, useValue: { apiUrl: 'https://food.example' } },
         { provide: BrowserNavigation, useValue: { assign: (url: string) => assigned.push(url) } },
       ],
     });
-  });
-
-  it('sends the browser to the authorize endpoint with a PKCE challenge', async () => {
-    // when
-    await TestBed.inject(AuthService).signIn('/settings/branding');
-
-    // then
-    const url = new URL(assigned[0]);
-    expect(url.origin + url.pathname).toBe('https://food.example/oauth2/authorize');
-    expect(url.searchParams.get('client_id')).toBe('foodstack-backoffice');
-    expect(url.searchParams.get('code_challenge_method')).toBe('S256');
-    expect(url.searchParams.get('redirect_uri')).toMatch(/auth\/callback$/);
-    expect(url.searchParams.get('code_challenge')).toBeTruthy();
-  });
-
-  it('exchanges the code for a token and returns to the page the user wanted', async () => {
-    // given
-    const auth = TestBed.inject(AuthService);
-    await auth.signIn('/settings/branding');
-    const state = new URL(assigned[0]).searchParams.get('state')!;
-
-    // when
-    const done = auth.completeSignIn(new URLSearchParams({ code: 'the-code', state }));
-    const request = TestBed.inject(HttpTestingController).expectOne(
-      'https://food.example/oauth2/token',
-    );
-    request.flush({ access_token: 'token-1', expires_in: 600 });
-
-    // then
-    expect(await done).toBe('/settings/branding');
-    expect(request.request.body).toContain('grant_type=authorization_code');
-    expect(request.request.body).toContain('code_verifier=');
-    expect(auth.signedIn()).toBe(true);
-    expect(auth.accessToken()).toBe('token-1');
-  });
-
-  it('refuses a callback whose state does not match', async () => {
-    // given
-    const auth = TestBed.inject(AuthService);
-    await auth.signIn('/');
-
-    // then
-    await expect(
-      auth.completeSignIn(new URLSearchParams({ code: 'c', state: 'forged' })),
-    ).rejects.toThrow();
-    expect(auth.signedIn()).toBe(false);
-  });
-
-  async function signedIn(auth: AuthService): Promise<void> {
-    await auth.signIn('/');
-    const state = new URL(assigned.pop()!).searchParams.get('state')!;
-    const done = auth.completeSignIn(new URLSearchParams({ code: 'first', state }));
-    TestBed.inject(HttpTestingController)
-      .expectOne('https://food.example/oauth2/token')
-      .flush({ access_token: 'token-1', id_token: 'id-1', expires_in: 600 });
-    await done;
+    return TestBed.inject(AuthService);
   }
 
-  it('renews in the background through the identity session, keeping the page', async () => {
+  beforeEach(() => {
+    assigned = [];
+    localStorage.clear();
+  });
+
+  it('signs in with a password as a web client, keeping the token in memory only', async () => {
     // given
-    const auth = TestBed.inject(AuthService);
-    await signedIn(auth);
-    const fetch = vi.spyOn(window, 'fetch').mockImplementation(async (input) => {
-      const state = new URL(String(input)).searchParams.get('state');
-      return { url: `${auth.redirectUri()}?code=again&state=${state}` } as Response;
-    });
+    const auth = setUp();
 
     // when
-    const renewal = auth.renew();
-    // PKCE hashing and the fetch resolve over several turns, so wait for the token request
-    const request = await vi.waitFor(() =>
-      TestBed.inject(HttpTestingController).expectOne('https://food.example/oauth2/token'),
+    const done = auth.loginWithPassword('a@example.com', 'correct horse');
+    const request = TestBed.inject(HttpTestingController).expectOne(
+      'https://food.example/api/v1/auth/login',
     );
-    request.flush({ access_token: 'token-2', expires_in: 600 });
+    request.flush({
+      accessToken: 'token-1',
+      tokenType: 'Bearer',
+      expiresIn: 600,
+      refreshExpiresAt: 1,
+    });
+    await done;
 
     // then
-    expect(await renewal).toBe(true);
-    expect(request.request.body).toContain('code=again');
-    expect(auth.accessToken()).toBe('token-2');
-    expect(assigned).toEqual([]);
-    fetch.mockRestore();
-  });
-
-  it('reports a failed renewal when the identity session has ended', async () => {
-    // given
-    const auth = TestBed.inject(AuthService);
-    await signedIn(auth);
-    const fetch = vi
-      .spyOn(window, 'fetch')
-      .mockResolvedValue({ url: 'https://food.example/login' } as Response);
-
-    // then
-    expect(await auth.renew()).toBe(false);
+    expect(request.request.body).toEqual({
+      client: 'web',
+      email: 'a@example.com',
+      password: 'correct horse',
+    });
+    expect(request.request.withCredentials).toBe(true);
+    expect(auth.signedIn()).toBe(true);
     expect(auth.accessToken()).toBe('token-1');
-    fetch.mockRestore();
+    expect(JSON.stringify(localStorage)).not.toContain('token-1');
+    expect(JSON.stringify(sessionStorage)).not.toContain('token-1');
   });
 
-  it('treats a token as expired once its time passes', async () => {
-    // given
-    const auth = TestBed.inject(AuthService);
-    await signedIn(auth);
-    vi.useFakeTimers({ toFake: ['Date'] });
+  it('after a reload, gets a new access token from the refresh cookie', async () => {
+    // given: this browser signed in before
+    localStorage.setItem('foodstack.auth.signedIn', '1');
 
     // when
-    vi.setSystemTime(Date.now() + 601_000);
+    const auth = setUp();
+    expect(auth.hasSession()).toBe(true);
+    const request = TestBed.inject(HttpTestingController).expectOne(
+      'https://food.example/api/v1/auth/refresh',
+    );
+    request.flush({
+      accessToken: 'token-2',
+      tokenType: 'Bearer',
+      expiresIn: 600,
+      refreshExpiresAt: 1,
+    });
+    await settle();
 
     // then
-    expect(auth.signedIn()).toBe(false);
-    expect(auth.accessToken()).toBeNull();
-    expect(auth.hasSession()).toBe(true);
-    expect(auth.expiresSoon()).toBe(true);
-    vi.useRealTimers();
+    expect(request.request.withCredentials).toBe(true);
+    expect(request.request.body).toEqual({});
+    expect(auth.accessToken()).toBe('token-2');
+  });
+
+  it('retries when another tab refreshed at the same moment', async () => {
+    // given
+    const auth = setUp();
+    const http = TestBed.inject(HttpTestingController);
+
+    // when
+    const renewed = auth.renew();
+    await settle();
+    http
+      .expectOne('https://food.example/api/v1/auth/refresh')
+      .flush({ code: 'REFRESH_RACE' }, { status: 409, statusText: 'Conflict' });
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    http
+      .expectOne('https://food.example/api/v1/auth/refresh')
+      .flush({ accessToken: 'token-3', tokenType: 'Bearer', expiresIn: 600, refreshExpiresAt: 1 });
+
+    // then
+    expect(await renewed).toBe(true);
+    expect(auth.accessToken()).toBe('token-3');
+  });
+
+  it('forgets the sign-in when the refresh token is refused', async () => {
+    // given
+    localStorage.setItem('foodstack.auth.signedIn', '1');
+    const auth = setUp();
+
+    // when
+    TestBed.inject(HttpTestingController)
+      .expectOne('https://food.example/api/v1/auth/refresh')
+      .flush({ code: 'REFRESH_REUSED' }, { status: 401, statusText: 'Unauthorized' });
+    await settle();
+
+    // then
+    expect(auth.hasSession()).toBe(false);
+    expect(localStorage.getItem('foodstack.auth.signedIn')).toBeNull();
+  });
+
+  it('opens the sign-in page with the way back', async () => {
+    // given
+    const auth = setUp();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+
+    // when
+    await auth.signIn('/checkout', { signUp: true });
+
+    // then
+    expect(navigate).toHaveBeenCalledWith(['/sign-in'], {
+      queryParams: { returnTo: '/checkout', mode: 'signup' },
+    });
+  });
+
+  it('signs out on the server, then reloads the app signed out', async () => {
+    // given
+    const auth = setUp();
+    const http = TestBed.inject(HttpTestingController);
+    const login = auth.loginWithCode('a@example.com', '123456');
+    http
+      .expectOne('https://food.example/api/v1/auth/login')
+      .flush({ accessToken: 'token-1', tokenType: 'Bearer', expiresIn: 600, refreshExpiresAt: 1 });
+    await login;
+
+    // when
+    const done = auth.signOut();
+    const logout = http.expectOne('https://food.example/api/v1/auth/logout');
+    logout.flush(null, { status: 204, statusText: 'No Content' });
+    await done;
+
+    // then
+    expect(logout.request.headers.get('Authorization')).toBe('Bearer token-1');
+    expect(auth.hasSession()).toBe(false);
+    expect(assigned).toHaveLength(1);
   });
 });

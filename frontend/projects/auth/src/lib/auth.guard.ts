@@ -4,8 +4,8 @@ import { CanActivateFn } from '@angular/router';
 import { AuthService } from './auth.service';
 
 /**
- * Lets signed-in users through. An expired token is renewed in the background first; only users
- * with no identity session go to sign in, coming back here afterwards.
+ * Lets signed-in users through. An expired token is renewed from the refresh cookie first; only
+ * users who are not signed in go to the sign-in page, coming back here afterwards.
  */
 export const authGuard: CanActivateFn = async (_route, state) => {
   const auth = inject(AuthService);

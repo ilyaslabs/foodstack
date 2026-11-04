@@ -14,8 +14,7 @@ public final class ModuleRoutes {
 
     static {
         Map<String, List<String>> prefixes = new LinkedHashMap<>();
-        prefixes.put("identity", List.of("/api/v1/auth", "/api/v1/me", "/api/v1/users", "/oauth2", "/login",
-                "/logout", "/.well-known", "/userinfo", "/connect"));
+        prefixes.put("identity", List.of("/api/v1/auth", "/api/v1/me", "/api/v1/users", "/oauth2", "/.well-known"));
         prefixes.put("settings", List.of("/api/v1/settings"));
         prefixes.put("media", List.of("/api/v1/media"));
         prefixes.put("geo", List.of("/api/v1/geo", "/api/v1/zones"));

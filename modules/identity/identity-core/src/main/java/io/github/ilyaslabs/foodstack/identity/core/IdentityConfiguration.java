@@ -13,6 +13,11 @@ import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
+import io.github.ilyaslabs.foodstack.platform.security.FoodstackSecurityProperties;
+import io.github.ilyaslabs.foodstack.identity.core.application.SessionService;
+import io.github.ilyaslabs.foodstack.identity.core.security.AccessTokens;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.proc.SecurityContext;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
@@ -50,7 +55,8 @@ public class IdentityConfiguration {
         return ShardKeys.builder()
             .hashed("identity_users", "_id")
             .ranged("identity_login_keys", "loginKey")
-            .hashed("identity_addresses", "userId");
+            .hashed("identity_addresses", "userId")
+            .hashed("identity_refresh_tokens", "_id");
     }
 
     @Bean
@@ -105,6 +111,20 @@ public class IdentityConfiguration {
             @Value("${foodstack.namespace:foodstack}") String namespace, Clock clock) {
         return new EmailCodeService(identityUserService, redis, rateLimiter, piiCipher, identityOutbox,
                 identityMongo.transactionTemplate(), namespace, clock);
+    }
+
+    @Bean
+    AccessTokens identityAccessTokens(JWKSource<SecurityContext> identityJwkSource, FoodstackSecurityProperties security,
+            IdentityProperties properties, Clock clock) {
+        return new AccessTokens(identityJwkSource, security.getIssuer(), properties.getAccessTokenTtl(), clock);
+    }
+
+    @Bean
+    SessionService identitySessionService(ModuleMongo identityMongo, UserService identityUserService,
+            EmailCodeService identityEmailCodeService, AccessTokens identityAccessTokens, RateLimiter rateLimiter,
+            PiiCipher piiCipher, Clock clock) {
+        return new SessionService(identityMongo.template(), identityUserService, identityEmailCodeService,
+                identityAccessTokens, rateLimiter, piiCipher, clock);
     }
 
     @Bean
