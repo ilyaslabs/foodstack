@@ -40,15 +40,25 @@ public class ZoneService {
 
     private final Clock clock;
 
+    private final GeoCache cache;
+
     public ZoneService(ZoneRepository zones, OutboxWriter outbox, TransactionTemplate transaction, Clock clock) {
+        this(zones, outbox, transaction, clock, GeoCache.none());
+    }
+
+    public ZoneService(ZoneRepository zones, OutboxWriter outbox, TransactionTemplate transaction, Clock clock,
+            GeoCache cache) {
         this.zones = zones;
         this.outbox = outbox;
         this.transaction = transaction;
         this.clock = clock;
+        this.cache = cache;
     }
 
+    /** The branch's zones, from the cache when there. */
     public List<ZoneDetails> getZones(String storeId) {
-        return this.zones.findByStoreIdOrderBySortOrderAsc(storeId).stream().map(ZoneService::toDetails).toList();
+        return this.cache.zones(storeId,
+                () -> this.zones.findByStoreIdOrderBySortOrderAsc(storeId).stream().map(ZoneService::toDetails).toList());
     }
 
     /** Replaces every zone of the branch and publishes {@link ZoneChanged}. */
@@ -65,6 +75,7 @@ public class ZoneService {
             this.outbox.append(new ZoneChanged(storeId, result.size(), userId));
             return result;
         });
+        this.cache.evictZones(storeId);
         return saved.stream().map(ZoneService::toDetails).toList();
     }
 

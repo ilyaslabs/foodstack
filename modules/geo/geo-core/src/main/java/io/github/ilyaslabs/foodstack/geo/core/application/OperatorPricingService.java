@@ -30,16 +30,25 @@ public class OperatorPricingService {
 
     private final Clock clock;
 
+    private final GeoCache cache;
+
     public OperatorPricingService(OperatorPricingRepository repository, OutboxWriter outbox, TransactionTemplate transaction,
             Clock clock) {
+        this(repository, outbox, transaction, clock, GeoCache.none());
+    }
+
+    public OperatorPricingService(OperatorPricingRepository repository, OutboxWriter outbox, TransactionTemplate transaction,
+            Clock clock, GeoCache cache) {
         this.repository = repository;
         this.outbox = outbox;
         this.transaction = transaction;
         this.clock = clock;
+        this.cache = cache;
     }
 
+    /** The pricing, from the cache when there; changes always check the stored version. */
     public OperatorPricing get() {
-        return toDetails(load());
+        return this.cache.operatorPricing(() -> toDetails(load()));
     }
 
     public OperatorPricing update(UpdateOperatorPricing update, long expectedVersion, String userId) {
@@ -65,6 +74,7 @@ public class OperatorPricingService {
             this.outbox.append(new OperatorDeliveryPricingChanged(result.getVersion(), userId));
             return result;
         });
+        this.cache.evictOperatorPricing();
         return toDetails(saved);
     }
 
