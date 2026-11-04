@@ -1,24 +1,25 @@
 package io.github.ilyaslabs.foodstack.dispatch.core.application;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
+import io.github.ilyaslabs.foodstack.platform.core.GeoCells;
+import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.springframework.dao.DataAccessException;
-import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
-import org.springframework.data.redis.listener.ChannelTopic;
-import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 
 /**
  * Dispatch's Redis side (TDD 5.6, 8.3): one open offer per rider at a time
  * ({@code <ns>:dispatch:offer:<riderId>}, SET NX with expiry), and live channels
- * {@code <ns>:dispatch:rt:rider:<riderId>} (the rider app) and {@code <ns>:dispatch:rt:all} (the
- * operator's live map). Messages carry ids and statuses only; screens reload what changed.
+ * {@code <ns>:dispatch:rt:rider:<riderId>} (the rider app) and {@code <ns>:dispatch:rt:cell:<cell>}
+ * (the operator's live board, which follows the {@link GeoCells map cells} it shows, by the job's
+ * pickup point; TDD 7.5). Messages carry ids and statuses only; screens reload what changed.
  */
 public class DispatchLive {
 
@@ -33,13 +34,13 @@ public class DispatchLive {
 
     private final StringRedisTemplate redis;
 
-    private final RedisMessageListenerContainer listeners;
+    private final LiveChannels live;
 
     private final String prefix;
 
-    public DispatchLive(StringRedisTemplate redis, RedisMessageListenerContainer listeners, String namespace) {
+    public DispatchLive(StringRedisTemplate redis, LiveChannels live, String namespace) {
         this.redis = redis;
-        this.listeners = listeners;
+        this.live = live;
         this.prefix = namespace + ":dispatch:";
     }
 
@@ -60,7 +61,7 @@ public class DispatchLive {
             return;
         }
         try {
-            this.redis.execute(RELEASE, java.util.List.of(this.prefix + "offer:" + riderId), orderId);
+            this.redis.execute(RELEASE, List.of(this.prefix + "offer:" + riderId), orderId);
         }
         catch (DataAccessException ex) {
             // expires on its own
@@ -76,37 +77,30 @@ public class DispatchLive {
         }
     }
 
-    /** Tells a rider's app and the live map that a job changed. */
-    public void publish(String orderId, String status, String riderId, String kind) {
+    /** Tells a rider's app and the live boards showing the pickup point that a job changed. */
+    public void publish(String orderId, double pickupLat, double pickupLng, String status, String riderId, String kind) {
         String message = "{\"orderId\":\"" + orderId + "\",\"status\":\"" + status + "\",\"kind\":\"" + kind + "\""
                 + ((riderId != null) ? ",\"riderId\":\"" + riderId + "\"" : "") + "}";
         if (riderId != null) {
-            send(this.prefix + "rt:rider:" + riderId, message);
+            this.live.publish(this.prefix + "rt:rider:" + riderId, message);
         }
-        send(this.prefix + "rt:all", message);
+        this.live.publish(this.prefix + "rt:cell:" + GeoCells.of(pickupLat, pickupLng), message);
     }
 
     public AutoCloseable onRider(String riderId, Consumer<String> receiver) {
-        return subscribe(this.prefix + "rt:rider:" + riderId, receiver);
+        return this.live.subscribe(this.prefix + "rt:rider:" + riderId, receiver);
     }
 
-    public AutoCloseable onAll(Consumer<String> receiver) {
-        return subscribe(this.prefix + "rt:all", receiver);
-    }
-
-    private void send(String channel, String message) {
-        try {
-            this.redis.convertAndSend(channel, message);
+    /** Receives job changes with a pickup in these cells (a live board's view) until closed. */
+    public AutoCloseable onCells(List<String> cells, Consumer<String> receiver) {
+        List<AutoCloseable> subscriptions = new ArrayList<>(cells.size());
+        for (String cell : cells) {
+            subscriptions.add(this.live.subscribe(this.prefix + "rt:cell:" + cell, receiver));
         }
-        catch (DataAccessException ex) {
-            log.debug("Live message on {} not sent: {}", channel, ex.getMessage());
-        }
-    }
-
-    private AutoCloseable subscribe(String channel, Consumer<String> receiver) {
-        ChannelTopic topic = new ChannelTopic(channel);
-        MessageListener listener = (message, pattern) -> receiver.accept(new String(message.getBody(), StandardCharsets.UTF_8));
-        this.listeners.addMessageListener(listener, topic);
-        return () -> this.listeners.removeMessageListener(listener, topic);
+        return () -> {
+            for (AutoCloseable subscription : subscriptions) {
+                subscription.close();
+            }
+        };
     }
 }

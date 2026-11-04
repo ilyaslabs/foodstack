@@ -112,8 +112,10 @@ class RidersController {
 
     @GetMapping("/api/v1/riders/live")
     @PreAuthorize("isAuthenticated()")
-    List<LiveRider> live() {
-        return this.activity.live();
+    List<LiveRider> live(@RequestParam(required = false) Double south, @RequestParam(required = false) Double west,
+            @RequestParam(required = false) Double north, @RequestParam(required = false) Double east) {
+        boolean bounded = south != null && west != null && north != null && east != null;
+        return this.activity.live(bounded ? new RiderActivity.MapBounds(south, west, north, east) : null);
     }
 
     @GetMapping("/api/v1/riders/tracking/{orderId}")

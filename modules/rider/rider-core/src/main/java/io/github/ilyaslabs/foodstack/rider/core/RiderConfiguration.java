@@ -7,6 +7,7 @@ import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.media.api.MediaApi;
 import io.github.ilyaslabs.foodstack.platform.core.PeriodicTask;
+import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
@@ -33,9 +34,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.kafka.core.KafkaAdmin;
 
 /**
@@ -99,17 +98,10 @@ public class RiderConfiguration {
         return new InboxGuard(riderMongo, clock);
     }
 
-    @Bean(destroyMethod = "destroy")
-    RedisMessageListenerContainer riderLiveListeners(RedisConnectionFactory connectionFactory) {
-        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
-        container.setConnectionFactory(connectionFactory);
-        return container;
-    }
-
     @Bean
-    RiderPresence riderPresence(StringRedisTemplate redis, RedisMessageListenerContainer riderLiveListeners,
+    RiderPresence riderPresence(StringRedisTemplate redis, LiveChannels liveChannels,
             @Value("${foodstack.namespace:foodstack}") String namespace) {
-        return new RiderPresence(redis, riderLiveListeners, namespace);
+        return new RiderPresence(redis, liveChannels, namespace);
     }
 
     @Bean
