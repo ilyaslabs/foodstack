@@ -1,1 +1,2 @@
 io.github.ilyaslabs.foodstack.platform.kafka.FoodstackKafkaAutoConfiguration
+io.github.ilyaslabs.foodstack.platform.kafka.FoodstackLiveAutoConfiguration

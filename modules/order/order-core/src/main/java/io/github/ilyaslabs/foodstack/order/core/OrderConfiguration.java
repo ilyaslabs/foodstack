@@ -15,6 +15,7 @@ import io.github.ilyaslabs.foodstack.order.core.events.OrderProjectionListener;
 import io.github.ilyaslabs.foodstack.order.core.events.PaymentEventsListener;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
 import io.github.ilyaslabs.foodstack.platform.kafka.BucketLeases;
+import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
 import io.github.ilyaslabs.foodstack.platform.kafka.PartitionedTask;
@@ -38,9 +39,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.MongoTransactionManager;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.kafka.core.KafkaAdmin;
 
 /**
@@ -99,17 +98,9 @@ public class OrderConfiguration {
         return new InboxGuard(orderMongo, clock);
     }
 
-    @Bean(destroyMethod = "destroy")
-    RedisMessageListenerContainer orderLiveListeners(RedisConnectionFactory connectionFactory) {
-        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
-        container.setConnectionFactory(connectionFactory);
-        return container;
-    }
-
     @Bean
-    OrderLiveUpdates orderLiveUpdates(StringRedisTemplate redis, RedisMessageListenerContainer orderLiveListeners,
-            @Value("${foodstack.namespace:foodstack}") String namespace) {
-        return new OrderLiveUpdates(redis, orderLiveListeners, namespace);
+    OrderLiveUpdates orderLiveUpdates(LiveChannels liveChannels, @Value("${foodstack.namespace:foodstack}") String namespace) {
+        return new OrderLiveUpdates(liveChannels, namespace);
     }
 
     @Bean

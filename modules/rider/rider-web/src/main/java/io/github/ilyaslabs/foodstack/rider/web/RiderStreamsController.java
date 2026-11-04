@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.rider.web;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -16,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -46,9 +48,11 @@ class RiderStreamsController {
 
     @GetMapping(value = "/api/v1/riders/live/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
-    SseEmitter live() {
+    SseEmitter live(@RequestParam double south, @RequestParam double west, @RequestParam double north,
+            @RequestParam double east) {
         this.activity.requireLive();
-        return stream((emitter) -> this.presence.onAll((message) -> send(emitter, message)));
+        List<String> cells = MapView.cells(south, west, north, east);
+        return stream((emitter) -> this.presence.onCells(cells, (message) -> send(emitter, message)));
     }
 
     @GetMapping(value = "/api/v1/riders/tracking/{orderId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

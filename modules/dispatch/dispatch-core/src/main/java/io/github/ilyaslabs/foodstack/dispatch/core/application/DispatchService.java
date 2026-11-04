@@ -162,7 +162,7 @@ public class DispatchService {
         catch (DuplicateKeyException ex) {
             return;
         }
-        this.live.publish(job.id(), job.status(), null, "job");
+        this.live.publish(job.id(), job.pickupLat(), job.pickupLng(), job.status(), null, "job");
         if (!operator && delivery.storeRiderId() != null) {
             try {
                 assignStoreRiderAs(job.id(), delivery.storeRiderId(), actor);
@@ -286,7 +286,7 @@ public class DispatchService {
                 return false;
             }
             offeredThisRound.add(candidate.riderId());
-            this.live.publish(job.id(), DeliveryStatus.OFFERED.name(), candidate.riderId(), "offer");
+            this.live.publish(job.id(), job.pickupLat(), job.pickupLng(), DeliveryStatus.OFFERED.name(), candidate.riderId(), "offer");
             return true;
         }
         // nobody free nearby: widen after a round, alert support once, keep searching
@@ -342,7 +342,7 @@ public class DispatchService {
                 new Update().set("triedRiderIds", tried).unset("offerRiderId").unset("offerExpiresAt"), (a) -> List.of()));
         if (after != null) {
             this.live.releaseRider(riderId, job.id());
-            this.live.publish(job.id(), DeliveryStatus.SEARCHING.name(), riderId, kind);
+            this.live.publish(job.id(), job.pickupLat(), job.pickupLng(), DeliveryStatus.SEARCHING.name(), riderId, kind);
         }
     }
 
@@ -711,9 +711,9 @@ public class DispatchService {
             return changed;
         });
         if (after != null) {
-            this.live.publish(after.id(), after.status(), after.riderId(), "job");
+            this.live.publish(after.id(), after.pickupLat(), after.pickupLng(), after.status(), after.riderId(), "job");
             if (job.riderId() != null && !job.riderId().equals(after.riderId())) {
-                this.live.publish(after.id(), after.status(), job.riderId(), "job");
+                this.live.publish(after.id(), after.pickupLat(), after.pickupLng(), after.status(), job.riderId(), "job");
             }
         }
         return after;

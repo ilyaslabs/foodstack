@@ -22,7 +22,9 @@ import io.github.ilyaslabs.foodstack.media.api.MediaOwner;
 import io.github.ilyaslabs.foodstack.media.api.MediaPurpose;
 import io.github.ilyaslabs.foodstack.media.api.MediaStatus;
 import io.github.ilyaslabs.foodstack.media.api.MediaVariantView;
+import io.github.ilyaslabs.foodstack.platform.core.GeoCells;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
+import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
@@ -57,9 +59,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -96,12 +96,6 @@ class RiderStorageTest {
             return new ModuleMigrations(riderMongo, factory.connectionString("rider"), RiderConfiguration.shardKeys(), properties);
         }
 
-        @Bean(destroyMethod = "destroy")
-        RedisMessageListenerContainer riderLiveListeners(RedisConnectionFactory connectionFactory) {
-            RedisMessageListenerContainer container = new RedisMessageListenerContainer();
-            container.setConnectionFactory(connectionFactory);
-            return container;
-        }
     }
 
     @DynamicPropertySource
@@ -117,7 +111,7 @@ class RiderStorageTest {
     StringRedisTemplate redis;
 
     @Autowired
-    RedisMessageListenerContainer riderLiveListeners;
+    LiveChannels liveChannels;
 
     private final AtomicReference<Instant> now = new AtomicReference<>(START);
 
@@ -170,7 +164,7 @@ class RiderStorageTest {
                 "R", Set.of(Role.RIDER), UserStatus.ACTIVE, 0, Set.of(), Set.of()));
         given(this.settings.getDelivery()).willReturn(new DeliveryView(7000, 0, 30, 5000, 10, 300, null, 30, 0));
         OutboxWriter outbox = new OutboxWriter(this.riderMongo, JsonMapper.builder().build(), clock);
-        RiderPresence presence = new RiderPresence(this.redis, this.riderLiveListeners, this.namespace);
+        RiderPresence presence = new RiderPresence(this.redis, this.liveChannels, this.namespace);
         this.riders = new RiderService(this.riderMongo.template(), this.riderMongo.transactionTemplate(), outbox, this.identity,
                 this.serviceCalls, presence, this.pii, clock);
         this.activity = new RiderActivity(this.riderMongo.template(), this.riderMongo.transactionTemplate(), outbox, this.riders,
@@ -182,6 +176,24 @@ class RiderStorageTest {
     @AfterEach
     void signOut() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    @DisplayName("riders sit in one GEO set per map cell: a rider who crosses a cell line moves sets, and a search near the line reads both (TDD 7.5)")
+    void geoCells() {
+        RiderPresence presence = new RiderPresence(this.redis, this.liveChannels, this.namespace);
+        // 31.49 and 31.51 lie on either side of the 31.5 cell line, about 2.2 km apart
+        presence.moved("cell-rider", new RiderPresence.Position(31.49, 74.34, 1), true);
+        assertThat(this.redis.hasKey(this.namespace + ":rider:geo:" + GeoCells.of(31.49, 74.34))).isTrue();
+        assertThat(presence.near(31.505, 74.34, 3_000, 5)).extracting(RiderPresence.Nearby::riderId).containsExactly("cell-rider");
+
+        presence.moved("cell-rider", new RiderPresence.Position(31.51, 74.34, 2), true);
+        assertThat(this.redis.opsForZSet().score(this.namespace + ":rider:geo:" + GeoCells.of(31.49, 74.34), "cell-rider"))
+            .isNull();
+        assertThat(presence.near(31.495, 74.34, 3_000, 5)).extracting(RiderPresence.Nearby::riderId).containsExactly("cell-rider");
+
+        presence.unmatchable("cell-rider");
+        assertThat(presence.near(31.51, 74.34, 3_000, 5)).isEmpty();
     }
 
     @Test
@@ -260,6 +272,11 @@ class RiderStorageTest {
 
         signIn("admin", null, "rider:manage");
         assertThat(this.activity.live()).extracting(LiveRider::riderId).contains(rider.id());
+        // a map loads only the riders of the area it shows (TDD 7.5)
+        assertThat(this.activity.live(new RiderActivity.MapBounds(31.4, 74.2, 31.6, 74.4))).extracting(LiveRider::riderId)
+            .contains(rider.id());
+        assertThat(this.activity.live(new RiderActivity.MapBounds(24.8, 66.9, 25.0, 67.1))).extracting(LiveRider::riderId)
+            .doesNotContain(rider.id());
         this.now.set(START.plus(Duration.ofMinutes(6)));
         assertThat(this.activity.sweepStale()).isGreaterThanOrEqualTo(1);
         assertThat(this.riders.get(rider.id()).online()).isFalse();

@@ -48,3 +48,12 @@ databaseChangeLog:
       changes:
         - createCollection:
             collectionName: rider_onboarding
+  - changeSet:
+      id: rider-4
+      author: foodstack
+      comment: "Live maps load the online riders of the area they show (TDD 7.5)"
+      changes:
+        - createIndex:
+            collectionName: rider_riders
+            keys: '{ "online": 1, "lat": 1, "lng": 1 }'
+            options: '{ "name": "online_area" }'

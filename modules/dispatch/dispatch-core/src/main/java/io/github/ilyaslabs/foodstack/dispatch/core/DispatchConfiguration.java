@@ -8,6 +8,7 @@ import io.github.ilyaslabs.foodstack.dispatch.core.application.DispatchService;
 import io.github.ilyaslabs.foodstack.dispatch.core.events.OrderEventsListener;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.platform.kafka.BucketLeases;
+import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
 import io.github.ilyaslabs.foodstack.platform.kafka.PartitionedTask;
@@ -31,9 +32,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.kafka.core.KafkaAdmin;
 
 /**
@@ -93,17 +92,10 @@ public class DispatchConfiguration {
         return new InboxGuard(dispatchMongo, clock);
     }
 
-    @Bean(destroyMethod = "destroy")
-    RedisMessageListenerContainer dispatchLiveListeners(RedisConnectionFactory connectionFactory) {
-        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
-        container.setConnectionFactory(connectionFactory);
-        return container;
-    }
-
     @Bean
-    DispatchLive dispatchLive(StringRedisTemplate redis, RedisMessageListenerContainer dispatchLiveListeners,
+    DispatchLive dispatchLive(StringRedisTemplate redis, LiveChannels liveChannels,
             @Value("${foodstack.namespace:foodstack}") String namespace) {
-        return new DispatchLive(redis, dispatchLiveListeners, namespace);
+        return new DispatchLive(redis, liveChannels, namespace);
     }
 
     @Bean

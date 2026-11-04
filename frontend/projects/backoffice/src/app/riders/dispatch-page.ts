@@ -1,5 +1,5 @@
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
@@ -17,7 +17,7 @@ import {
   RiderClient,
   RiderLiveMessage,
 } from '@foodstack/api-client';
-import { FsMap, Icon, MapMarker } from '@foodstack/ui';
+import { FsMap, Icon, MAX_MAP_CELLS, MapMarker, MapView, mapCells } from '@foodstack/ui';
 
 import { confirmAction } from '../shared/confirm-dialog';
 import { describeError } from '../shared/errors';
@@ -34,6 +34,11 @@ const STATUS_LABELS: Record<DeliveryStatus, string> = {
   CANCELLED: 'Cancelled',
   HANDED_BACK: 'Handed back to the store',
 };
+
+/** Wait for the map to settle before following a new area. */
+const VIEW_DEBOUNCE_MS = 600;
+/** Jobs outside the followed area still change; the whole board is re-read this often. */
+const BOARD_REFRESH_MS = 30_000;
 
 /** After this long searching, a job counts as needing attention (matches the default alert). */
 const ATTENTION_SECONDS = 300;
@@ -87,10 +92,14 @@ type Filter = 'all' | 'attention' | 'moving';
           [zoom]="12"
           [markers]="markers()"
           [route]="route()"
-          [fit]="true"
+          [fit]="fitToMarkers()"
           label="Riders and deliveries"
           (markerClick)="select($event)"
+          (viewChanged)="onView($event)"
         />
+        @if (tooWide()) {
+          <p class="too-wide" role="status"><fs-icon name="info" />Zoom in to follow riders live</p>
+        }
         <div class="legend" aria-hidden="true">
           <span><i class="dot free"></i>Free</span>
           <span><i class="dot busy"></i>On a delivery</span>
@@ -210,6 +219,25 @@ type Filter = 'all' | 'attention' | 'moving';
     }
     .map {
       block-size: min(68vh, 640px);
+    }
+    .too-wide {
+      position: absolute;
+      inset-block-start: 12px;
+      inset-inline: 0;
+      margin-inline: auto;
+      inline-size: fit-content;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-block: 0;
+      padding: 8px 14px;
+      border-radius: var(--mat-sys-corner-full);
+      background: var(--mat-sys-inverse-surface);
+      color: var(--mat-sys-inverse-on-surface);
+      font: var(--mat-sys-label-large);
+      box-shadow: var(--mat-sys-level2);
+      z-index: 2;
+      --fs-icon-size: 18px;
     }
     .legend {
       display: flex;
@@ -374,6 +402,13 @@ export class DispatchPage implements OnInit {
   protected readonly selected = signal<string | null>(null);
   protected readonly filter = signal<Filter>('all');
   private readonly now = signal(Date.now() / 1000);
+  /** Fit the map to the first markers only; after that the person decides where it looks. */
+  protected readonly fitToMarkers = signal(true);
+  protected readonly tooWide = signal(false);
+  private view: MapView | null = null;
+  private viewTimer: ReturnType<typeof setTimeout> | null = null;
+  private streams: Subscription | null = null;
+  private pending: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly online = computed(() => [...this.live().values()]);
   protected readonly free = computed(() => this.online().filter((r) => !r.busy).length);
@@ -447,26 +482,55 @@ export class DispatchPage implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.loadRiders(), this.loadJobs()]);
+    await this.loadJobs();
     this.loading.set(false);
-    const token = () => this.auth.freshToken();
-    const riders = this.riders.watchLive(token).subscribe((m) => this.onRider(m));
-    let pending: ReturnType<typeof setTimeout> | null = null;
-    const jobs = this.dispatch.watchAll(token).subscribe(() => {
-      // a burst of changes reloads once
-      if (pending) return;
-      pending = setTimeout(() => {
-        pending = null;
-        void this.loadJobs();
-      }, 400);
-    });
     const ticker = setInterval(() => this.now.set(Date.now() / 1000), 15_000);
+    const board = setInterval(() => void this.loadJobs(), BOARD_REFRESH_MS);
     this.destroyRef.onDestroy(() => {
-      riders.unsubscribe();
-      jobs.unsubscribe();
+      this.streams?.unsubscribe();
       clearInterval(ticker);
-      if (pending) clearTimeout(pending);
+      clearInterval(board);
+      if (this.pending) clearTimeout(this.pending);
+      if (this.viewTimer) clearTimeout(this.viewTimer);
     });
+  }
+
+  /** The map moved: follow riders and jobs in the new area once it settles. */
+  protected onView(view: MapView): void {
+    if (this.markers().length > 0) this.fitToMarkers.set(false);
+    if (this.viewTimer) clearTimeout(this.viewTimer);
+    this.viewTimer = setTimeout(() => {
+      this.viewTimer = null;
+      void this.follow(view);
+    }, VIEW_DEBOUNCE_MS);
+  }
+
+  private async follow(view: MapView): Promise<void> {
+    this.view = view;
+    this.streams?.unsubscribe();
+    this.streams = null;
+    if (mapCells(view) > MAX_MAP_CELLS) {
+      this.tooWide.set(true);
+      this.live.set(new Map());
+      return;
+    }
+    this.tooWide.set(false);
+    await this.loadRiders();
+    if (this.view !== view) return;
+    const token = () => this.auth.freshToken();
+    const streams = new Subscription();
+    streams.add(this.riders.watchLive(view, token).subscribe((m) => this.onRider(m)));
+    streams.add(
+      this.dispatch.watchAll(view, token).subscribe(() => {
+        // a burst of changes reloads once
+        if (this.pending) return;
+        this.pending = setTimeout(() => {
+          this.pending = null;
+          void this.loadJobs();
+        }, 400);
+      }),
+    );
+    this.streams = streams;
   }
 
   protected needsAttention(job: DeliveryJob): boolean {
@@ -556,7 +620,10 @@ export class DispatchPage implements OnInit {
 
   private async loadRiders(): Promise<void> {
     try {
-      const riders = await firstValueFrom(this.riders.live());
+      const view = this.view;
+      if (!view) return;
+      const riders = await firstValueFrom(this.riders.live(view));
+      if (this.view !== view) return;
       this.live.set(new Map(riders.map((r) => [r.riderId, r])));
     } catch {
       // keep what is shown

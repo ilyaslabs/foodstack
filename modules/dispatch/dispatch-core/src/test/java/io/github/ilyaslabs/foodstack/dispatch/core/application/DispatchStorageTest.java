@@ -22,6 +22,7 @@ import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
 import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
+import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
@@ -57,9 +58,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -99,12 +98,6 @@ class DispatchStorageTest {
                     properties);
         }
 
-        @Bean(destroyMethod = "destroy")
-        RedisMessageListenerContainer dispatchLiveListeners(RedisConnectionFactory connectionFactory) {
-            RedisMessageListenerContainer container = new RedisMessageListenerContainer();
-            container.setConnectionFactory(connectionFactory);
-            return container;
-        }
     }
 
     @DynamicPropertySource
@@ -120,7 +113,7 @@ class DispatchStorageTest {
     StringRedisTemplate redis;
 
     @Autowired
-    RedisMessageListenerContainer dispatchLiveListeners;
+    LiveChannels liveChannels;
 
     private final AtomicReference<Instant> now = new AtomicReference<>(START);
 
@@ -165,7 +158,7 @@ class DispatchStorageTest {
         given(this.riders.getRider("sr2")).willReturn(rider("sr2", "Usman", RiderKind.STORE, "s1"));
         OutboxWriter outbox = new OutboxWriter(this.dispatchMongo, JsonMapper.builder().build(), clock);
         this.dispatch = new DispatchService(this.dispatchMongo.template(), this.dispatchMongo.transactionTemplate(), outbox,
-                new DispatchLive(this.redis, this.dispatchLiveListeners, namespace), this.riders, this.settings, this.geo,
+                new DispatchLive(this.redis, this.liveChannels, namespace), this.riders, this.settings, this.geo,
                 this.serviceCalls, new RateLimiter(this.redis, namespace, clock), this.pii, clock);
     }
 

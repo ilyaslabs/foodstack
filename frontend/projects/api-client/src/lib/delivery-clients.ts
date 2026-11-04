@@ -14,6 +14,7 @@ import {
   RiderPapers,
   RiderPayoutInput,
   LocationPoint,
+  MapBounds,
   PushConfig,
   Rider,
   RiderInput,
@@ -27,6 +28,14 @@ import { Versioned } from './models';
 import { RUNTIME_CONFIG } from './runtime-config';
 
 type Token = () => Promise<string | null>;
+
+function boundsParams(view: MapBounds): Record<string, number> {
+  return { south: view.south, west: view.west, north: view.north, east: view.east };
+}
+
+function boundsQuery(view: MapBounds): string {
+  return new HttpParams({ fromObject: boundsParams(view) }).toString();
+}
 
 function timeZone(): string {
   try {
@@ -142,13 +151,19 @@ export class RiderClient {
     return this.http.put<RiderPapers>(this.url(`/riders/${riderId}/papers/payout`), input);
   }
 
-  /** Every online rider, for the live map. */
-  live(): Observable<LiveRider[]> {
-    return this.http.get<LiveRider[]>(this.url('/riders/live'));
+  /** Online riders, for the live map; with a view, only those inside it. */
+  live(view?: MapBounds): Observable<LiveRider[]> {
+    return this.http.get<LiveRider[]>(this.url('/riders/live'), {
+      params: view ? boundsParams(view) : {},
+    });
   }
 
-  watchLive(token: Token): Observable<RiderLiveMessage> {
-    return liveStream<RiderLiveMessage>(this.url('/riders/live/stream'), token);
+  /** Riders moving inside a map view; the server refuses a view wider than 64 cells. */
+  watchLive(view: MapBounds, token: Token): Observable<RiderLiveMessage> {
+    return liveStream<RiderLiveMessage>(
+      this.url(`/riders/live/stream?${boundsQuery(view)}`),
+      token,
+    );
   }
 
   /** Where the rider of an order is and when they should arrive. */
@@ -229,9 +244,9 @@ export class DispatchClient {
     return liveStream<JobChange>(this.url('/dispatch/rider/stream'), token);
   }
 
-  /** Every job as it changes, for the dispatch board. */
-  watchAll(token: Token): Observable<JobChange> {
-    return liveStream<JobChange>(this.url('/dispatch/live/stream'), token);
+  /** Jobs picked up inside a map view as they change, for the dispatch board. */
+  watchAll(view: MapBounds, token: Token): Observable<JobChange> {
+    return liveStream<JobChange>(this.url(`/dispatch/live/stream?${boundsQuery(view)}`), token);
   }
 }
 
