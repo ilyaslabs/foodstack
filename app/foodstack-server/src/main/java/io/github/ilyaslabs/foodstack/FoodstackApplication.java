@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.Bean;
 
 /**
  * The FoodStack server. Every module is on the classpath; Module-Switch configuration decides
@@ -14,6 +15,11 @@ import org.springframework.context.ConfigurableApplicationContext;
  */
 @SpringBootApplication
 public class FoodstackApplication {
+
+    @Bean
+    static RemoteSettingsCache remoteSettingsCache() {
+        return new RemoteSettingsCache();
+    }
 
     public static void main(String[] args) {
         SpringApplication application = new SpringApplication(FoodstackApplication.class);
