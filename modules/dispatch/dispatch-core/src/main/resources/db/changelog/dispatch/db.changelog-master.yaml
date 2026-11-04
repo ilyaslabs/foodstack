@@ -28,3 +28,16 @@ databaseChangeLog:
             collectionName: dispatch_active
             keys: '{ "storeId": 1 }'
             options: '{ "name": "store" }'
+  - changeSet:
+      id: dispatch-2
+      author: foodstack
+      comment: "Work buckets of the matcher (TDD 7.5): each replica sweeps the open jobs of its buckets"
+      changes:
+        - createIndex:
+            collectionName: dispatch_active
+            keys: '{ "status": 1, "bucket": 1, "searchFrom": 1 }'
+            options: '{ "name": "status_bucket_search_from" }'
+        - createIndex:
+            collectionName: dispatch_active
+            keys: '{ "status": 1, "bucket": 1, "offerExpiresAt": 1 }'
+            options: '{ "name": "status_bucket_offer_expiry" }'

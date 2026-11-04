@@ -1,8 +1,12 @@
 package io.github.ilyaslabs.foodstack.platform.mongo;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
+import io.github.ilyaslabs.foodstack.platform.core.Buckets;
 import liquibase.Liquibase;
 import liquibase.database.DatabaseFactory;
 import liquibase.ext.mongodb.database.MongoLiquibaseDatabase;
@@ -45,6 +49,7 @@ public class ModuleMigrations implements InitializingBean {
     public void afterPropertiesSet() throws Exception {
         if (this.properties.getMigrations().isEnabled()) {
             migrate();
+            backfillOutboxBuckets();
         }
         if (this.properties.getSharding().isEnabled()) {
             applyShardKeys();
@@ -69,12 +74,30 @@ public class ModuleMigrations implements InitializingBean {
         logger.info("Migrated module '" + module + "' (database " + this.mongo.databaseName() + ")");
     }
 
+    /**
+     * Gives outbox rows written before work buckets existed their bucket (TDD 7.5), so the relay
+     * and the shard key see them. Rows live seven days, so this finds nothing on later starts.
+     */
+    public void backfillOutboxBuckets() {
+        MongoCollection<Document> outbox = this.mongo.template().getCollection(this.mongo.collection("outbox"));
+        for (Document row : outbox.find(Filters.exists("bucket", false)).projection(new Document("subject", 1))) {
+            outbox.updateOne(Filters.eq("_id", row.get("_id")),
+                    new Document("$set", new Document("bucket", Buckets.of(row.getString("subject")))));
+        }
+    }
+
+    /** The module's own keys plus the platform's: outbox by bucket range, inbox hashed (TDD 7.5). */
+    Map<String, Document> allShardKeys() {
+        Map<String, Document> keys = new LinkedHashMap<>();
+        keys.put(this.mongo.collection("outbox"), new Document("bucket", 1).append("_id", 1));
+        keys.put(this.mongo.collection("inbox"), new Document("_id", "hashed"));
+        keys.putAll(this.shardKeys.asMap());
+        return keys;
+    }
+
     /** Shards each declared collection that is not sharded yet. Requires {@code mongos}. */
     public void applyShardKeys() {
-        Map<String, Document> keys = this.shardKeys.asMap();
-        if (keys.isEmpty()) {
-            return;
-        }
+        Map<String, Document> keys = allShardKeys();
         String db = this.mongo.databaseName();
         MongoDatabase admin = this.mongo.databaseFactory().getMongoDatabase("admin");
         admin.runCommand(new Document("enableSharding", db));

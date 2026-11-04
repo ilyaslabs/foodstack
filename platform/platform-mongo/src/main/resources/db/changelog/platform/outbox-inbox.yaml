@@ -1,5 +1,7 @@
 # Outbox and inbox collections of a module (TDD 7.2). Included by every module's master changelog;
-# ${module} is set by ModuleMigrations. Both stay unsharded (small, TTL-pruned).
+# ${module} is set by ModuleMigrations. Shard keys (TDD 7.5, applied by ModuleMigrations when
+# sharding is on): outbox { bucket: 1, _id: 1 } so writes spread over every shard and each relay
+# bucket reads one range; inbox { _id: hashed }.
 databaseChangeLog:
   - changeSet:
       id: platform-outbox-1
@@ -25,3 +27,28 @@ databaseChangeLog:
             collectionName: ${module}_inbox
             keys: '{ "processedAt": 1 }'
             options: '{ "name": "processed_ttl", "expireAfterSeconds": 2592000 }'
+  - changeSet:
+      id: platform-outbox-2
+      author: foodstack
+      comment: "Work buckets (TDD 7.5): the relay reads NEW rows of its buckets in id order; { bucket, _id } is the shard key"
+      changes:
+        - createIndex:
+            collectionName: ${module}_outbox
+            keys: '{ "status": 1, "bucket": 1, "_id": 1 }'
+            options: '{ "name": "status_bucket_id" }'
+        - createIndex:
+            collectionName: ${module}_outbox
+            keys: '{ "bucket": 1, "_id": 1 }'
+            options: '{ "name": "bucket_id" }'
+        - dropIndex:
+            collectionName: ${module}_outbox
+            keys: '{ "status": 1, "_id": 1 }'
+  - changeSet:
+      id: platform-inbox-2
+      author: foodstack
+      comment: "Shard key { _id: hashed } (TDD 7.5): one insert per consumed event, spread over every shard"
+      changes:
+        - createIndex:
+            collectionName: ${module}_inbox
+            keys: '{ "_id": "hashed" }'
+            options: '{ "name": "id_hashed" }'

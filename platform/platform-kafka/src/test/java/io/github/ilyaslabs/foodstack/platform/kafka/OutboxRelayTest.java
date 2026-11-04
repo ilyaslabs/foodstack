@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Properties;
 
 import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
+import io.github.ilyaslabs.foodstack.platform.core.Buckets;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
@@ -88,6 +89,7 @@ class OutboxRelayTest {
                 Document row = this.relaytestMongo.template().findById(eventId, Document.class, "relaytest_outbox");
                 assertThat(row.getString("status")).isEqualTo("SENT");
                 assertThat(row.getDate("sentAt")).isNotNull();
+                assertThat(row.getInteger("bucket")).isEqualTo(Buckets.of("dish-1"));
             });
         }
     }

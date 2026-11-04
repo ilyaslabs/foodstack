@@ -191,7 +191,10 @@ class DispatchStorageTest {
                 new RiderCandidate("r1", "Ali", Vehicle.MOTORBIKE, 400, 600, 90)));
         assertThat(this.dispatch.match()).isZero();
         this.dispatch.orderReady(id);
-        assertThat(this.dispatch.match()).isEqualTo(1);
+        int bucket = io.github.ilyaslabs.foodstack.platform.core.Buckets.of(job.storeId());
+        // only the replica holding the branch's bucket matches its jobs (TDD 7.5)
+        assertThat(this.dispatch.match(java.util.Set.of((bucket + 1) % 64))).isZero();
+        assertThat(this.dispatch.match(java.util.Set.of(bucket))).isEqualTo(1);
         assertThat(job(id).offerRiderId()).isEqualTo("r1");
         assertThat(lastEventData(id)).contains("\"earningMinor\":10500").contains("\"riderId\":\"r1\"");
 

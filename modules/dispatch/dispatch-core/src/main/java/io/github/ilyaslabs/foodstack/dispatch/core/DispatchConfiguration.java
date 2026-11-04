@@ -7,10 +7,10 @@ import io.github.ilyaslabs.foodstack.dispatch.core.application.DispatchLive;
 import io.github.ilyaslabs.foodstack.dispatch.core.application.DispatchService;
 import io.github.ilyaslabs.foodstack.dispatch.core.events.OrderEventsListener;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
-import io.github.ilyaslabs.foodstack.platform.core.PeriodicTask;
+import io.github.ilyaslabs.foodstack.platform.kafka.BucketLeases;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
-import io.github.ilyaslabs.foodstack.platform.kafka.RedisLeaderLock;
+import io.github.ilyaslabs.foodstack.platform.kafka.PartitionedTask;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.InboxGuard;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
@@ -121,16 +121,12 @@ public class DispatchConfiguration {
         return new OrderEventsListener(dispatchService, dispatchInbox, jsonMapper);
     }
 
-    /** The matcher, every two seconds, on the replica holding {@code <ns>:dispatch:matcher:leader}. */
+    /** The matcher, every two seconds, on every replica over the work buckets it holds (TDD 7.5). */
     @Bean
     @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
-    PeriodicTask dispatchMatcher(DispatchService dispatchService, StringRedisTemplate redis,
-            @Value("${foodstack.namespace:foodstack}") String namespace) {
-        RedisLeaderLock leader = new RedisLeaderLock(redis, namespace + ":dispatch:matcher:leader", Duration.ofSeconds(15));
-        return PeriodicTask.start("dispatch-matcher", Duration.ofSeconds(5), Duration.ofSeconds(2), () -> {
-            if (leader.acquireOrRenew()) {
-                dispatchService.match();
-            }
-        });
+    PartitionedTask dispatchMatcher(DispatchService dispatchService, StringRedisTemplate redis,
+            @Value("${foodstack.namespace:foodstack}") String namespace, Clock clock) {
+        BucketLeases leases = new BucketLeases(redis, namespace, "dispatch:matcher", Duration.ofSeconds(15), clock);
+        return PartitionedTask.start(leases, Duration.ofSeconds(5), Duration.ofSeconds(2), dispatchService::match);
     }
 }

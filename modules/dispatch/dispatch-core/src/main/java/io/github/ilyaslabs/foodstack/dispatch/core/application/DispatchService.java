@@ -219,14 +219,21 @@ public class DispatchService {
     // ---- matching ------------------------------------------------------------------------------
 
     /**
-     * One round of the matcher (run by one replica at a time): lapsed offers go back to searching,
+     * One round of the matcher (each replica over its work buckets, TDD 7.5): lapsed offers go back to searching,
      * then each job due for a rider gets an offer, a wider radius or an alert. Returns offers made.
      */
     public int match() {
+        return match(null);
+    }
+
+    /** One round over the jobs of the given work buckets ({@code null} = every bucket). */
+    public int match(Set<Integer> buckets) {
         Instant now = this.clock.instant();
-        expireOffers(now);
-        List<ActiveJobDocument> due = this.mongo.find(Query.query(Criteria.where("status").is(DeliveryStatus.SEARCHING.name())
-            .and("searchFrom").lte(now)).with(Sort.by("searchFrom")).limit(100), ActiveJobDocument.class);
+        expireOffers(now, buckets);
+        List<ActiveJobDocument> due = this.mongo.find(Query.query(inBuckets(Criteria.where("status")
+            .is(DeliveryStatus.SEARCHING.name())
+            .and("searchFrom")
+            .lte(now), buckets)).with(Sort.by("searchFrom")).limit(100), ActiveJobDocument.class);
         if (due.isEmpty()) {
             return 0;
         }
@@ -304,9 +311,19 @@ public class DispatchService {
         return c.distanceMeters() - Math.min(c.idleSeconds(), 1_800) + (100L - c.acceptancePercent()) * 20;
     }
 
-    private void expireOffers(Instant now) {
-        List<ActiveJobDocument> lapsed = this.mongo.find(Query.query(Criteria.where("status").is(DeliveryStatus.OFFERED.name())
-            .and("offerExpiresAt").lt(now)).limit(200), ActiveJobDocument.class);
+    /** Limits a sweep to work buckets; rows from before buckets existed have none and any replica takes them. */
+    private static Criteria inBuckets(Criteria criteria, Set<Integer> buckets) {
+        if (buckets == null) {
+            return criteria;
+        }
+        return criteria.orOperator(Criteria.where("bucket").in(buckets), Criteria.where("bucket").exists(false));
+    }
+
+    private void expireOffers(Instant now, Set<Integer> buckets) {
+        List<ActiveJobDocument> lapsed = this.mongo.find(Query.query(inBuckets(Criteria.where("status")
+            .is(DeliveryStatus.OFFERED.name())
+            .and("offerExpiresAt")
+            .lt(now), buckets)).limit(200), ActiveJobDocument.class);
         for (ActiveJobDocument active : lapsed) {
             JobDocument job = this.mongo.findById(active.id(), JobDocument.class);
             if (job == null || status(job) != DeliveryStatus.OFFERED) {

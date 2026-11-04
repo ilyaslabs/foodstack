@@ -93,7 +93,7 @@ public class FoodstackKafkaProperties {
         private int batchSize = 500;
 
         /** Lifetime of the per-module leader lock; renewed on every poll. */
-        private Duration leaderLease = Duration.ofSeconds(10);
+        private Duration lease = Duration.ofSeconds(10);
 
         /** Time to wait for Kafka to acknowledge a batch. */
         private Duration sendTimeout = Duration.ofSeconds(10);
@@ -114,12 +114,12 @@ public class FoodstackKafkaProperties {
             this.batchSize = batchSize;
         }
 
-        public Duration getLeaderLease() {
-            return this.leaderLease;
+        public Duration getLease() {
+            return this.lease;
         }
 
-        public void setLeaderLease(Duration leaderLease) {
-            this.leaderLease = leaderLease;
+        public void setLease(Duration lease) {
+            this.lease = lease;
         }
 
         public Duration getSendTimeout() {
