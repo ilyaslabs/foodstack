@@ -6,7 +6,7 @@ The customer app is `frontend/projects/web` (Angular, server-side rendered on No
 
 ## 3.1 Nearby store search
 
-`GET /api/v1/search/stores?lat=&lng=&q=&cuisine=&fulfilment=DELIVERY|PICKUP&page=&size=` (public, no token).
+`GET /api/v1/search/stores?lat=&lng=&q=&cuisine=&fulfilment=DELIVERY|PICKUP&radius=&page=&size=` (public, no token).
 
 **What is used:** Elasticsearch only. No MongoDB, no Redis, no Kafka on this path.
 
@@ -27,17 +27,19 @@ sequenceDiagram
     Wb->>Cd: GET /api/v1/search/stores?lat=31.51&lng=74.34&q=biryani
     Cd->>Ct: public endpoint, no token check
     Ct->>Sv: search(query)
-    Sv->>Sv: validate lat/lng, text ≤ 100 chars, cuisine pattern,<br/>clamp size 1..50 and page 0..50
-    Sv->>En: search(clean query)
+    Sv->>Sv: validate lat/lng, text ≤ 100 chars, cuisine pattern,<br/>clamp size 1..50, radius = smallest discovery step ≥ the asked one<br/>(8, 15, 25 km road), stop at 500 results (empty page past it)
+    Sv->>En: search(clean query, from)
     En->>Es: one _search request
-    Note right of Es: filter DELIVERY: geo_shape deliveryArea intersects the point<br/>filter PICKUP: pickupEnabled and within 15 km<br/>must (if text): bool_prefix OR fuzzy multi_match on<br/>brandName^4, cuisines^3, branchName^2, area, dishes.*, description.*<br/>post_filter: cuisine (so chip counts stay complete)<br/>collapse on brandId (nearest branch per brand)<br/>sort: _score (if text), then distance<br/>aggs: cuisine counts, distinct brands
+    Note right of Es: filter DELIVERY: geo_shape deliveryArea intersects the point<br/>AND geo_distance ≤ radius / 1.3 (road → straight line)<br/>filter PICKUP: pickupEnabled and within 15 km<br/>must (if text): bool_prefix OR fuzzy multi_match on<br/>brandName^4, cuisines^3, branchName^2, area, dishes.*, description.*<br/>post_filter: cuisine (so chip counts stay complete)<br/>collapse on brandId (nearest branch per brand)<br/>sort: _score (if text), then distance<br/>aggs: cuisine counts, distinct brands
     Es-->>En: hits with distance, cuisine buckets, brand count
     En-->>Sv: Result(hits, cuisines, total)
     Sv->>Sv: work out "open now" for each hit from the hours,<br/>holidays and temporary-close flag copied into the index
     Sv->>Sv: move open branches before closed ones (within this page)
-    Sv-->>Ct: StoreSearchPage(cards, cuisines, total)
+    Sv-->>Ct: StoreSearchPage(cards, cuisines, total, hasMore,<br/>radiusMeters, widerRadiusMeters)
     Ct-->>Wb: 200 JSON
-    Wb-->>Cu: store cards with distance, open/closed, cuisine chips
+    Wb-->>Cu: store cards with distance, open/closed, cuisine chips,<br/>"within 8 km" and "Show restaurants further away (up to 15 km)"
+    Cu->>Wb: Show further away
+    Wb->>Cd: same search with radius=15000
 
     alt Elasticsearch unreachable
         En-->>Ct: ModuleException SEARCH_UNAVAILABLE
@@ -46,6 +48,10 @@ sequenceDiagram
 ```
 
 **Where the "delivers to me" answer comes from.** Each indexed branch carries a `deliveryArea` shape. For a self-delivery branch it is the union of the zone polygons the owner drew. For an operator-delivery branch it is a 48-point circle around the branch whose radius is the operator's maximum delivery distance divided by the road factor (1.3). The shape is computed by `geo` when the branch is indexed (flow 4.2), so the search request itself never calls `geo`.
+
+**Discovery radius.** A self-delivery branch may draw zones as large as it likes, so the zone alone could fill a search with far-away branches. Search therefore also asks for the branch to be within the discovery radius of the customer (road distance, `foodstack.search.discovery-steps-km`, default 8, 15 and 25 km, divided by `road-factor` 1.3 for the straight-line filter). The page says which radius it used and the next step, and the customer widens it with one tap. Pickup uses its own 15 km radius. A direct branch link and checkout never apply the radius: only the zone decides whether a branch delivers.
+
+**Scale settings.** Shards and replicas of the index come from `foodstack.search.shards` and `auto-expand-replicas` (default `0-1`, `0-all` on a large cluster); a branch's document is written with its version as an external version, so a late, older re-read is refused; brand lookups page through a point in time.
 
 **Languages.** Dish names and descriptions are stored per language (`dishes.en`, `dishes.ar`, …) with one analyzer that lower-cases, folds accents and normalises Arabic and Persian script, so "برياني" and "biryani" each match their own language's text.
 
@@ -149,22 +155,29 @@ sequenceDiagram
     participant Sc as StoresController
     participant Ss as StoreService (store-core)
     participant Ga as GeoApi → QuoteService (geo-core)
+    participant Rd as Redis<br/>geo quote caches
     participant Mo as MongoDB<br/>foodstack_store / foodstack_geo
 
     Wb->>Sc: GET /api/v1/stores/{id}/delivery-quote?lat&lng
     Sc->>Ss: quote(storeId, point)
-    Ss->>Mo: store_stores (location, delivery mode, prep minutes)
-    Ss->>Ga: quote(storeId, storeLocation, deliveryMode, destination)
+    Ss->>Mo: store_stores (location, delivery mode, prep minutes, time zone)
+    Ss->>Ga: quote(storeId, storeLocation, deliveryMode, destination, timezone)
     Ga->>Ga: distance = straight line × 1.3 (road factor)
     alt deliveryMode = OPERATOR
-        Ga->>Mo: geo_settings (operator pricing)
+        Ga->>Rd: geo:cache:operator-pricing:{gen}
+        opt cache miss
+            Ga->>Mo: geo_settings (operator pricing), then cache it
+        end
         Ga->>Ga: off → OPERATOR_DELIVERY_OFF<br/>beyond max distance → TOO_FAR<br/>else charge = base + per-km × km
-        opt now is in a peak window (deployment time zone from SettingsApi)
+        opt now is in a peak window (the branch's own time zone, sent with the quote)
             Ga->>Ga: charge × peak multiplier
         end
         Ga->>Ga: the operator's minimum order and free-delivery threshold
     else deliveryMode = SELF
-        Ga->>Mo: geo_zones of the branch, in sort order
+        Ga->>Rd: geo:cache:zones:{storeId}:{gen}
+        opt cache miss
+            Ga->>Mo: geo_zones of the branch, in sort order, then cache them
+        end
         Ga->>Ga: first zone whose polygon contains the point gives<br/>charge, minimum order, free-delivery threshold<br/>none → OUT_OF_AREA
     end
     Ga-->>Ss: DeliveryQuoteView
@@ -172,4 +185,4 @@ sequenceDiagram
     Ss-->>Wb: deliverable, reason, charge, min order, free above, distance, minutes, currency
 ```
 
-The point-in-polygon test runs in Java (`GeoMath.contains`), not in MongoDB. Zones and operator pricing are read from MongoDB on every quote; there is no cache for them yet. Peak windows are days and times in the deployment's time zone; a window whose end is before its start runs past midnight. Checkout enforces the quote's minimum order and free-delivery threshold for both delivery modes.
+The point-in-polygon test runs in Java (`GeoMath.contains`), not in MongoDB. A branch's zones and the operator pricing are cached in Redis for 10 minutes (`GeoCache`, generation keys raised after each change and again by `geo`'s event listener on every replica), so a quote normally reads no MongoDB in `geo`. Peak windows are days and times in the branch's local time zone (each branch has its own, found from its location); a window whose end is before its start runs past midnight. Checkout enforces the quote's minimum order and free-delivery threshold for both delivery modes.

@@ -61,16 +61,16 @@ sequenceDiagram
     Oc-->>K: OrderAccepted with OrderDelivery
     K-->>Dc: dispatch-orders listener (inbox)
     Dc->>Dc: insert dispatch_jobs and dispatch_active (SEARCHING, searchFrom = readyBy minus lead time)
-    loop every 2 s on the replica holding dispatch:matcher:leader
+    loop every 2 s on every replica, over the work buckets it holds (bucket = branch)
         Dc->>Dc: expire lapsed offers back to SEARCHING
         Dc->>Rc: RiderApi.findAvailable(store point, radius, 5, tried riders)
-        Rc->>R: GEOSEARCH rider:geo:online, then rider:pos:{id} for a fresh ping
+        Rc->>R: GEOSEARCH rider:geo:{cell} for each cell the circle touches,<br/>then rider:pos:{id} for a fresh ping
         Rc-->>Dc: free, active, online riders with distance, idle time, acceptance
         Dc->>Dc: rank by distance less idle bonus plus decline penalty
         Dc->>R: SET NX dispatch:offer:{riderId} (offer timeout + 5 s)
         Dc->>Dc: SEARCHING to OFFERED (offerRiderId, offerExpiresAt, earning)
         Dc-->>K: RiderOffered
-        Dc-->>R: publish dispatch:rt:rider:{riderId} and dispatch:rt:all
+        Dc-->>R: publish dispatch:rt:rider:{riderId} and dispatch:rt:cell:{pickup cell}
     end
     K-->>Nc: notification-dispatch listener (inbox)
     Nc->>F: push "New delivery" to the rider's devices
@@ -104,11 +104,11 @@ sequenceDiagram
     K-->>Nc: rider-assigned to the customer (in-app and push), rider-job-assigned to the rider unless they accepted it themselves
 ```
 
-An operator rider holds one job at a time, so a busy rider is removed from `rider:geo:online` until the job ends.
+An operator rider holds one job at a time, so a busy rider is removed from the GEO set of their cell until the job ends.
 
 ## 7.4 Live position and tracking
 
-The rider app sends its position every 10 seconds while online (and a queued batch after being offline). The customer and the store follow one delivery; the operator's map follows everyone.
+The rider app sends its position every 10 seconds while online (and a queued batch after being offline). The customer and the store follow one delivery; the operator's dispatch map follows the riders and jobs in the area it shows.
 
 ```mermaid
 sequenceDiagram
@@ -122,8 +122,8 @@ sequenceDiagram
 
     Rd->>Rc: POST /api/v1/rider/me/locations (up to 120 points)
     Rc->>R: rate limit 30 a minute
-    Rc->>R: rider:pos:{id} (last point, 10 min expiry), GEOADD rider:geo:online when free
-    Rc-->>R: publish rider:rt:all and rider:rt:order:{orderId} for each active order
+    Rc->>R: rider:pos:{id} (last point, 10 min expiry), GEOADD rider:geo:{cell} when free<br/>(ZREM from the old cell's set after a move, rider:cell:{id})
+    Rc-->>R: publish rider:rt:cell:{cell} and rider:rt:order:{orderId} for each active order
     opt first ping in the sample window, or a batch
         Rc->>M: rider_riders lat, lng, lastSeenAt and rider_locations samples (expire after retention days)
     end
@@ -134,6 +134,8 @@ sequenceDiagram
     R-->>Rc: rider:rt:order:{orderId}
     Rc-->>Cu: new position, map moves
 ```
+
+**The operator's live map at country scale.** The map sends its view (south, west, north, east) and subscribes to the live channels of the 0.25° cells it shows, at most 64 (an area of about 220 × 220 km at most); a wider view gets the board without live dots and the hint "Zoom in to follow riders live". Moving the map re-subscribes after 600 ms. On Redis Cluster the channels use sharded pub/sub, so each message reaches only the node that owns its channel.
 
 `geo` answers routes with OSRM when `ROUTING_PROVIDER=osrm`, otherwise with the straight-line distance times a road factor at an urban average speed. The customer sees the arrival time only after pickup; before that the card says the rider is heading to the restaurant. Riders that stop pinging for 5 minutes are set offline by `rider-stale-sweep` (every minute).
 
