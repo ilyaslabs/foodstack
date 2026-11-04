@@ -177,7 +177,7 @@ public class NotificationConfiguration {
     @Bean
     @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
     PeriodicTask notificationEmailWorker(NotificationService notificationService) {
-        return PeriodicTask.start("notification-email", Duration.ofSeconds(15), Duration.ofSeconds(10),
+        return PeriodicTask.start("notification-senders", Duration.ofSeconds(15), Duration.ofSeconds(5),
                 notificationService::sendDue);
     }
 }

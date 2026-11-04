@@ -3,8 +3,11 @@ package io.github.ilyaslabs.foodstack.notification.core.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Semaphore;
 
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
@@ -47,6 +50,17 @@ public class NotificationService {
             Duration.ofMinutes(120));
 
     static final Duration SEND_LEASE = Duration.ofMinutes(5);
+
+    public static final String PUSH = "PUSH";
+
+    static final List<Duration> PUSH_BACKOFF = List.of(Duration.ofSeconds(10), Duration.ofSeconds(30));
+
+    /** At most this many sends run at once per replica; the rest wait for the periodic sender. */
+    static final int MAX_CONCURRENT_SENDS = 64;
+
+    private final Semaphore senders = new Semaphore(MAX_CONCURRENT_SENDS);
+
+    private Executor sender = (task) -> Thread.ofVirtual().name("notification-send").start(task);
 
     private final MongoTemplate mongo;
 
@@ -111,6 +125,11 @@ public class NotificationService {
 
     private PushService push;
 
+    /** Replaces how queued messages are sent right away (tests send on the caller's thread). */
+    public void useSender(Executor sender) {
+        this.sender = sender;
+    }
+
     /** Turns on push messages (TDD 8.3); without it, messages go to the notification centre and email only. */
     public void usePush(PushService push) {
         this.push = push;
@@ -132,12 +151,15 @@ public class NotificationService {
         }
         if (message.push() && fresh && message.userId() != null && this.push != null && this.push.enabled()) {
             String url = (message.link() != null) ? (message.backOffice() ? this.adminUrl : this.webUrl) + message.link() : null;
+            String pushId = message.eventId() + ":" + message.userId() + ":" + PUSH;
             try {
-                this.push.send(message.userId(), message.backOffice() ? "backoffice" : "web", rendered.title(), rendered.body(),
-                        url, Map.of("type", message.template(), "link", (message.link() != null) ? message.link() : ""));
+                this.mongo.insert(new DeliveryDocument(pushId, message.userId(), PUSH, message.template(), null,
+                        rendered.title(), null, rendered.body(), DeliveryDocument.QUEUED, 0, null, now, null, now, null,
+                        message.backOffice() ? "backoffice" : "web", url));
+                kick(pushId);
             }
-            catch (RuntimeException ex) {
-                log.warn("Push for {} not sent: {}", message.template(), ex.getMessage());
+            catch (DuplicateKeyException ex) {
+                // already queued for this event
             }
         }
         if (!message.email()) {
@@ -183,19 +205,53 @@ public class NotificationService {
             return;
         }
         if (ready) {
-            sendOne(id);
+            kick(id);
         }
     }
 
-    /** Sends emails that are due; returns how many went out. */
+    /**
+     * Sends a queued message soon, off the caller's thread: an event consumer only queues, so a
+     * slow mail server or push service never holds up its partition (TDD 7.5). If this replica
+     * stops first, {@link #sendDue()} on any replica picks the message up.
+     */
+    private void kick(String id) {
+        if (!this.senders.tryAcquire()) {
+            return; // busy: the periodic sender takes it
+        }
+        try {
+            this.sender.execute(() -> {
+                try {
+                    sendOne(id);
+                }
+                catch (RuntimeException ex) {
+                    log.warn("Sending {} failed; the periodic sender retries it: {}", id, ex.getMessage());
+                }
+                finally {
+                    this.senders.release();
+                }
+            });
+        }
+        catch (RuntimeException ex) {
+            this.senders.release();
+        }
+    }
+
+    /** Sends emails and push messages that are due (queued, or a retry); returns how many went out. */
     public int sendDue() {
-        if (this.mail == null) {
+        List<String> channels = new ArrayList<>();
+        if (this.mail != null) {
+            channels.add(EMAIL);
+        }
+        if (this.push != null && this.push.enabled()) {
+            channels.add(PUSH);
+        }
+        if (channels.isEmpty()) {
             return 0;
         }
         int sent = 0;
-        for (int i = 0; i < 50; i++) {
+        for (int i = 0; i < 200; i++) {
             DeliveryDocument claimed = claim(Criteria.where("status").in(DeliveryDocument.QUEUED, DeliveryDocument.SENDING)
-                .and("nextAttemptAt").lte(this.clock.instant()));
+                .and("nextAttemptAt").lte(this.clock.instant()).and("channel").in(channels));
             if (claimed == null) {
                 break;
             }
@@ -220,7 +276,7 @@ public class NotificationService {
                     "DELIVERY_NOT_FAILED");
         }
         if (this.mail != null) {
-            sendOne(deliveryId);
+            kick(deliveryId);
         }
     }
 
@@ -262,7 +318,7 @@ public class NotificationService {
 
     /** The admin's view of the log, newest first. */
     public List<DeliveryItem> deliveries(String status, Long before, int limit) {
-        Criteria criteria = new Criteria();
+        Criteria criteria = Criteria.where("channel").is(EMAIL);
         if (status != null && !status.isBlank()) {
             criteria = criteria.and("status").is(status);
         }
@@ -303,6 +359,9 @@ public class NotificationService {
     }
 
     private boolean deliver(DeliveryDocument delivery) {
+        if (PUSH.equals(delivery.channel())) {
+            return deliverPush(delivery);
+        }
         Instant now = this.clock.instant();
         try {
             if (delivery.sealed()) {
@@ -327,6 +386,32 @@ public class NotificationService {
             else {
                 update.set("status", DeliveryDocument.QUEUED)
                     .set("nextAttemptAt", now.plus(BACKOFF.get(Math.min(delivery.attempts(), BACKOFF.size()) - 1)));
+            }
+            this.mongo.updateFirst(Query.query(Criteria.where("_id").is(delivery.id())), update, DeliveryDocument.class);
+            return false;
+        }
+    }
+
+    private boolean deliverPush(DeliveryDocument delivery) {
+        Instant now = this.clock.instant();
+        try {
+            this.push.send(delivery.userId(), delivery.app(), delivery.subject(), delivery.text(), delivery.link(),
+                    Map.of("type", delivery.template(), "link", (delivery.link() != null) ? delivery.link() : ""));
+            this.mongo.updateFirst(Query.query(Criteria.where("_id").is(delivery.id())),
+                    new Update().set("status", DeliveryDocument.SENT).set("sentAt", now).unset("lastError"), DeliveryDocument.class);
+            return true;
+        }
+        catch (RuntimeException ex) {
+            // a push is only worth sending soon after the event: a few quick retries, then give up
+            boolean last = delivery.attempts() >= PUSH_BACKOFF.size() + 1;
+            log.warn("Push {} not sent (try {}): {}", delivery.id(), delivery.attempts(), ex.getMessage());
+            Update update = new Update().set("lastError", truncate(ex.getMessage()));
+            if (last) {
+                update.set("status", DeliveryDocument.FAILED);
+            }
+            else {
+                update.set("status", DeliveryDocument.QUEUED)
+                    .set("nextAttemptAt", now.plus(PUSH_BACKOFF.get(Math.max(0, delivery.attempts() - 1))));
             }
             this.mongo.updateFirst(Query.query(Criteria.where("_id").is(delivery.id())), update, DeliveryDocument.class);
             return false;

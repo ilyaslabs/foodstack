@@ -29,6 +29,7 @@ import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -137,8 +138,71 @@ class NotificationStorageTest {
     }
 
     private NotificationService service(MailTransport transport, Clock clock) {
-        return new NotificationService(this.notificationMongo.template(), new Templates(JsonMapper.builder().build()), this.settings,
-                this.identity, this.serviceCalls, this.pii, transport, "https://eats.example/", "https://eats.example/admin", clock);
+        NotificationService service = new NotificationService(this.notificationMongo.template(),
+                new Templates(JsonMapper.builder().build()), this.settings, this.identity, this.serviceCalls, this.pii, transport,
+                "https://eats.example/", "https://eats.example/admin", clock);
+        // send on the test's thread so assertions see the result at once
+        service.useSender(Runnable::run);
+        return service;
+    }
+
+    @Test
+    @DisplayName("the event consumer only queues: sending happens on another thread or in the periodic sender (TDD 7.5)")
+    void consumerOnlyQueues() {
+        this.notifications.useSender((task) -> {
+            // a sender that never runs: the message must wait in the queue, not on the caller
+        });
+        Message message = new Message("e-queue", this.user, null, "order-accepted", "en",
+                Map.of("number", "Q-1", "store", "Karahi Corner", "minutes", 15), "/orders/o9", false, true, true, false);
+        this.notifications.send(message);
+        verify(this.mail, never()).send(anyString(), anyString(), anyString(), anyString());
+        assertThat(this.notifications.deliveries("QUEUED", null, 10)).extracting(NotificationService.DeliveryItem::id)
+            .contains("e-queue:" + this.user + ":EMAIL");
+
+        assertThat(this.notifications.sendDue()).isGreaterThanOrEqualTo(1);
+        verify(this.mail, times(1)).send(eq("sara@example.com"), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("a push that fails is tried again shortly, then given up")
+    void pushRetries() {
+        PushTransport transport = mock(PushTransport.class);
+        given(transport.send(anyString(), anyString(), anyString(), any(), any())).willThrow(new IllegalStateException("FCM down"));
+        AtomicReference<Instant> now = new AtomicReference<>(START);
+        Clock clock = new Clock() {
+            @Override
+            public ZoneId getZone() {
+                return ZoneOffset.UTC;
+            }
+
+            @Override
+            public Clock withZone(ZoneId zone) {
+                return this;
+            }
+
+            @Override
+            public Instant instant() {
+                return now.get();
+            }
+        };
+        NotificationService service = service(null, clock);
+        PushService push = new PushService(this.notificationMongo.template(), transport, this.pii, clock);
+        service.usePush(push);
+        push.register(this.user, "tok-retry", "android", "web");
+        service.send(new Message("e-push", this.user, null, "dispatch-alert", "en",
+                Map.of("number", "A-1", "store", "Karahi Corner", "minutes", 4), "/dispatch", false, false, false, false, true));
+        verify(transport, times(1)).send(eq("tok-retry"), anyString(), anyString(), any(), any());
+
+        now.set(START.plusSeconds(11));
+        service.sendDue();
+        now.set(START.plusSeconds(60));
+        service.sendDue();
+        now.set(START.plusSeconds(600));
+        service.sendDue();
+        verify(transport, times(3)).send(eq("tok-retry"), anyString(), anyString(), any(), any());
+        Document row = this.notificationMongo.template().findById("e-push:" + this.user + ":PUSH", Document.class,
+                "notification_deliveries");
+        assertThat(row.getString("status")).isEqualTo("FAILED");
     }
 
     @Test
