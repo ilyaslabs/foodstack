@@ -16,9 +16,20 @@ public class GeoProperties {
      */
     private double roadFactor = 1.3;
 
+    /** How long zones and the operator's pricing stay in Redis; changes evict them at once. 0 turns the cache off. */
+    private Duration quoteCacheTtl = Duration.ofMinutes(10);
+
     private final Geocoding geocoding = new Geocoding();
 
     private final Routing routing = new Routing();
+
+    public Duration getQuoteCacheTtl() {
+        return this.quoteCacheTtl;
+    }
+
+    public void setQuoteCacheTtl(Duration quoteCacheTtl) {
+        this.quoteCacheTtl = quoteCacheTtl;
+    }
 
     public Routing getRouting() {
         return this.routing;

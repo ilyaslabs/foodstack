@@ -3,7 +3,9 @@ package io.github.ilyaslabs.foodstack.geo.core;
 import java.time.Clock;
 import java.time.ZoneId;
 
+import io.github.ilyaslabs.foodstack.geo.core.application.GeoCache;
 import io.github.ilyaslabs.foodstack.geo.core.application.GeocodingService;
+import io.github.ilyaslabs.foodstack.geo.core.events.GeoCacheListener;
 import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricingService;
 import io.github.ilyaslabs.foodstack.geo.core.application.QuoteService;
 import io.github.ilyaslabs.foodstack.geo.core.application.RoutingService;
@@ -88,14 +90,28 @@ public class GeoConfiguration {
     }
 
     @Bean
-    ZoneService geoZoneService(ZoneRepository zoneRepository, OutboxWriter geoOutbox, ModuleMongo geoMongo, Clock clock) {
-        return new ZoneService(zoneRepository, geoOutbox, geoMongo.transactionTemplate(), clock);
+    GeoCache geoCache(StringRedisTemplate redis, JsonMapper jsonMapper, GeoProperties properties,
+            @Value("${foodstack.namespace:foodstack}") String namespace) {
+        return new GeoCache(redis, jsonMapper, namespace, properties.getQuoteCacheTtl());
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    GeoCacheListener geoCacheListener(GeoCache geoCache, JsonMapper jsonMapper) {
+        return new GeoCacheListener(geoCache, jsonMapper);
+    }
+
+    @Bean
+    ZoneService geoZoneService(ZoneRepository zoneRepository, OutboxWriter geoOutbox, ModuleMongo geoMongo, Clock clock,
+            GeoCache geoCache) {
+        return new ZoneService(zoneRepository, geoOutbox, geoMongo.transactionTemplate(), clock, geoCache);
     }
 
     @Bean
     OperatorPricingService geoOperatorPricingService(OperatorPricingRepository operatorPricingRepository,
-            OutboxWriter geoOutbox, ModuleMongo geoMongo, Clock clock) {
-        return new OperatorPricingService(operatorPricingRepository, geoOutbox, geoMongo.transactionTemplate(), clock);
+            OutboxWriter geoOutbox, ModuleMongo geoMongo, Clock clock, GeoCache geoCache) {
+        return new OperatorPricingService(operatorPricingRepository, geoOutbox, geoMongo.transactionTemplate(), clock,
+                geoCache);
     }
 
     @Bean
