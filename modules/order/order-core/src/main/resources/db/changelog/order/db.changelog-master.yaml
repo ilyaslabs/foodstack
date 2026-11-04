@@ -52,3 +52,16 @@ databaseChangeLog:
             collectionName: order_placement_keys
             keys: '{ "createdAt": 1 }'
             options: '{ "name": "expiry", "expireAfterSeconds": 86400 }'
+  - changeSet:
+      id: order-4
+      author: foodstack
+      comment: "order_active sharded on { storeId: hashed } (TDD 7.5): written on every order step, so it must spread over every shard; the accept-timeout sweep reads its work buckets"
+      changes:
+        - createIndex:
+            collectionName: order_active
+            keys: '{ "storeId": "hashed" }'
+            options: '{ "name": "store_hashed" }'
+        - createIndex:
+            collectionName: order_active
+            keys: '{ "status": 1, "bucket": 1, "acceptBy": 1 }'
+            options: '{ "name": "accept_deadline_bucket" }'

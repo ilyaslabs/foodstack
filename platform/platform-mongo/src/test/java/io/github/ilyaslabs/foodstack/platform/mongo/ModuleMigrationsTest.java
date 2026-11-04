@@ -56,6 +56,21 @@ class ModuleMigrationsTest {
     }
 
     @Test
+    @DisplayName("shards the platform outbox by work bucket and the inbox by hashed id (TDD 7.5)")
+    void shardsOutboxAndInbox() {
+        var collections = this.testmodMongo.databaseFactory().getMongoDatabase("config").getCollection("collections");
+        String db = this.testmodMongo.databaseName();
+
+        Document outbox = collections.find(new Document("_id", db + ".testmod_outbox")).first();
+        Document inbox = collections.find(new Document("_id", db + ".testmod_inbox")).first();
+
+        assertThat(outbox).isNotNull();
+        assertThat(outbox.get("key", Document.class)).isEqualTo(new Document("bucket", 1).append("_id", 1));
+        assertThat(inbox).isNotNull();
+        assertThat(inbox.get("key", Document.class)).isEqualTo(new Document("_id", "hashed"));
+    }
+
+    @Test
     @DisplayName("running the migrations again changes nothing")
     void idempotent() throws Exception {
         // when
@@ -64,6 +79,6 @@ class ModuleMigrationsTest {
 
         // then
         long changeSets = this.testmodMongo.template().getCollection("testmod_databasechangelog").countDocuments();
-        assertThat(changeSets).isEqualTo(3);
+        assertThat(changeSets).isEqualTo(5);
     }
 }

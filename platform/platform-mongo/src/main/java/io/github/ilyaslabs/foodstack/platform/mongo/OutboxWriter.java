@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.platform.mongo;
 import java.time.Clock;
 import java.time.Instant;
 
+import io.github.ilyaslabs.foodstack.platform.core.Buckets;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
 import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
@@ -17,6 +18,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * <p>
  * Must be called inside the module's transaction, together with the aggregate write, so the
  * event is stored if and only if the change is. The relay publishes it to Kafka afterwards.
+ * <p>
+ * Each row carries the {@link Buckets bucket} of its subject (the aggregate id): the collection is
+ * sharded on {@code { bucket: 1, _id: 1 }}, so writes spread over every shard, and each relay
+ * replica reads only the buckets it holds while keeping the order of one aggregate's events.
  */
 public class OutboxWriter {
 
@@ -53,6 +58,7 @@ public class OutboxWriter {
             .append("type", EventTypes.type(this.module, event.getClass()))
             .append("source", EventTypes.source(this.module))
             .append("subject", event.subject())
+            .append("bucket", Buckets.of(event.subject()))
             .append("occurredAt", java.util.Date.from(now))
             .append("data", this.jsonMapper.writeValueAsString(event))
             .append("status", STATUS_NEW)

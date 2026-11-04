@@ -289,7 +289,11 @@ class OrderStorageTest {
         this.lifecycle.rejectUnanswered();
         assertThat(this.lifecycle.require(id).status()).isEqualTo(OrderStatus.CONFIRMED);
         this.now.set(START.plusSeconds(181));
-        assertThat(this.lifecycle.rejectUnanswered()).isGreaterThanOrEqualTo(1);
+        int bucket = io.github.ilyaslabs.foodstack.platform.core.Buckets.of(id);
+        // a replica holding other buckets leaves it alone (TDD 7.5)
+        this.lifecycle.rejectUnanswered(java.util.Set.of((bucket + 1) % 64));
+        assertThat(this.lifecycle.require(id).status()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(this.lifecycle.rejectUnanswered(java.util.Set.of(bucket))).isGreaterThanOrEqualTo(1);
         OrderDocument order = this.lifecycle.require(id);
         assertThat(order.status()).isEqualTo(OrderStatus.REJECTED);
         assertThat(lastEvent(id).get("data", String.class)).contains("\"automatic\":true").contains("\"refundMinor\":170000");

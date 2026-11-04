@@ -357,11 +357,20 @@ public class OrderLifecycleService {
 
     /** Rejects confirmed orders the store did not answer in time (PRD 3); returns how many. */
     public int rejectUnanswered() {
+        return rejectUnanswered(null);
+    }
+
+    /** Rejects late orders of the given work buckets ({@code null} = every bucket). */
+    public int rejectUnanswered(java.util.Set<Integer> buckets) {
         Instant now = this.clock.instant();
-        List<ActiveOrderDocument> late = this.mongo.find(Query.query(Criteria.where("status").is(OrderStatus.CONFIRMED)
-            .and("acceptBy").lt(now)).limit(100), ActiveOrderDocument.class);
+        Criteria late = Criteria.where("status").is(OrderStatus.CONFIRMED).and("acceptBy").lt(now);
+        if (buckets != null) {
+            // rows written before buckets existed have none; every replica may take those (the step is conditional)
+            late = late.orOperator(Criteria.where("bucket").in(buckets), Criteria.where("bucket").exists(false));
+        }
+        List<ActiveOrderDocument> lateOrders = this.mongo.find(Query.query(late).limit(100), ActiveOrderDocument.class);
         int count = 0;
-        for (ActiveOrderDocument active : late) {
+        for (ActiveOrderDocument active : lateOrders) {
             try {
                 step(active.id(), EnumSet.of(OrderStatus.CONFIRMED), OrderStatus.REJECTED, Actor.system(),
                         "The store did not answer in time", (order, at) -> {
@@ -454,7 +463,8 @@ public class OrderLifecycleService {
                 return null;
             }
             if (to.isFinal()) {
-                this.mongo.remove(Query.query(Criteria.where("_id").is(order.id())), ActiveOrderDocument.class);
+                this.mongo.remove(Query.query(Criteria.where("_id").is(order.id()).and("storeId").is(order.store().storeId())),
+                        ActiveOrderDocument.class);
             }
             else {
                 this.mongo.save(new ActiveOrderDocument(order.id(), order.store().storeId(), to,

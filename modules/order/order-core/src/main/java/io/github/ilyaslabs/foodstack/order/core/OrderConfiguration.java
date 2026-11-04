@@ -14,9 +14,10 @@ import io.github.ilyaslabs.foodstack.order.core.events.DispatchEventsListener;
 import io.github.ilyaslabs.foodstack.order.core.events.OrderProjectionListener;
 import io.github.ilyaslabs.foodstack.order.core.events.PaymentEventsListener;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
-import io.github.ilyaslabs.foodstack.platform.core.PeriodicTask;
+import io.github.ilyaslabs.foodstack.platform.kafka.BucketLeases;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
+import io.github.ilyaslabs.foodstack.platform.kafka.PartitionedTask;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.InboxGuard;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
@@ -58,7 +59,8 @@ public class OrderConfiguration {
             .hashed("order_orders", "_id")
             .hashed("order_by_customer", "customerId")
             .ranged("order_by_store", "storeId", "placedAt")
-            .hashed("order_placement_keys", "_id");
+            .hashed("order_placement_keys", "_id")
+            .hashed("order_active", "storeId");
     }
 
     @Bean
@@ -160,8 +162,10 @@ public class OrderConfiguration {
 
     @Bean
     @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
-    PeriodicTask orderAcceptTimeoutSweep(OrderLifecycleService orderLifecycleService) {
-        return PeriodicTask.start("order-accept-timeout", Duration.ofSeconds(20), Duration.ofSeconds(15),
+    PartitionedTask orderAcceptTimeoutSweep(OrderLifecycleService orderLifecycleService, StringRedisTemplate redis,
+            @Value("${foodstack.namespace:foodstack}") String namespace, Clock clock) {
+        BucketLeases leases = new BucketLeases(redis, namespace, "order:accept-timeout", Duration.ofSeconds(30), clock);
+        return PartitionedTask.start(leases, Duration.ofSeconds(20), Duration.ofSeconds(15),
                 orderLifecycleService::rejectUnanswered);
     }
 }
