@@ -24,13 +24,13 @@ All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHu
 
 | Action | MongoDB | Redis | Elasticsearch | Kafka | Object storage | External |
 |---|---|---|---|---|---|---|
-| Nearby store search (`GET /api/v1/search/stores`) | — | — | ✅ only store | — | — | — |
+| Nearby store search (`GET /api/v1/search/stores`) | — | — | ✅ only store (discovery radius and zone) | — | — | — |
 | Address search / reverse geocode | — | ✅ cache (read, then write on miss) | — | — | — | Nominatim on a cache miss |
 | Store page (`GET /api/v1/stores/{slug}`) | ✅ | ✅ settings cache | — | — | — | — |
 | Store menu (`GET /api/v1/stores/{slug}/menu`) | ✅ on a cache miss | ✅ menu cache | — | — | — | — |
-| Delivery quote | ✅ store, zones or operator pricing | ✅ settings cache | — | — | — | — |
-| Sign-in (authorization code + PKCE) | ✅ users, authorizations | — | — | — | — | — |
-| Any authenticated API call | — | ✅ revoked token version (5 s local cache) | — | — | — | — |
+| Delivery quote | ✅ store; zones or operator pricing on a cache miss | ✅ settings cache, zones and pricing caches | — | — | — | — |
+| Sign-in and token refresh (`/api/v1/auth/*`) | ✅ users, refresh tokens | ✅ sign-in rate limit | — | — | — | — |
+| Any authenticated API call | — | ✅ revoked token version (5 s bounded local cache) | — | — | — | — |
 | Onboard store, edit branch, hours, menu, sold-out, zones, go live | ✅ | ✅ menu cache evicted on menu edits | ✅ later, through the search listener | ✅ | — | — |
 | Image upload | ✅ | — | — | ✅ `MediaReady` | ✅ | — |
 | Branding / locale change | ✅ | ✅ settings cache evicted | — | ✅ `SettingsChanged` | ✅ logo claim | — |
@@ -41,9 +41,9 @@ All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHu
 | Store accepts, ready, collected | ✅ order, order_active | ✅ live message | — | ✅ one event per step | — | — |
 | Live order page and board (SSE) | ✅ on each reload | ✅ pub/sub subscription | — | — | — | — |
 | Saved addresses (`/api/v1/me/addresses`) | ✅ identity_addresses | — | — | — | — | — |
-| Dispatch matcher (every 2 s, one replica) | ✅ dispatch_active, dispatch_jobs | ✅ leader lock, offer lock, rider GEO set and positions, live message | — | ✅ `RiderOffered`, `DispatchAlert` | — | Routing (OSRM) when set |
+| Dispatch matcher (every 2 s, each replica over its work buckets) | ✅ dispatch_active, dispatch_jobs | ✅ bucket leases, offer lock, rider GEO sets per cell and positions, live message | — | ✅ `RiderOffered`, `DispatchAlert` | — | Routing (OSRM) when set |
 | Rider accepts, arrives, picks up, delivers | ✅ dispatch_jobs, dispatch_active | ✅ offer lock released, code tries limit, live message | — | ✅ `RiderAssigned`, `DeliveryPickedUp`, `DeliveryCompleted` | ✅ proof photo (through media) | — |
-| Rider position (`POST /api/v1/rider/me/locations`) | ✅ sampled: rider_riders, rider_locations | ✅ position, GEO set, rate limit, live message | — | — | — | — |
+| Rider position (`POST /api/v1/rider/me/locations`) | ✅ sampled: rider_riders, rider_locations | ✅ position, GEO set of its cell, rate limit, live message on its cell | — | — | — | — |
 | Customer tracking (`/api/v1/riders/tracking/{orderId}`) | ✅ rider_assignments | ✅ position, pub/sub for the stream | — | — | — | Routing (OSRM) when set |
 | Push to a device | ✅ notification_devices | — | — | read: dispatch, order events | — | FCM |
 | Notification and email | ✅ inbox, deliveries, preferences | — | — | read: order, payment, identity events | — | SMTP server |

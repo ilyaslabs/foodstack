@@ -10,8 +10,7 @@ Spring Security picks the first filter chain whose path matches. The chains, in 
 
 | Order | Chain | Paths | Rule |
 |---|---|---|---|
-| 1 | Authorization server (`identity-web`) | `/oauth2/**`, `/.well-known/**`, `/userinfo`, `/connect/logout` | Spring Authorization Server endpoints; a browser without a login session is sent to `/login` |
-| 2 | Login (`identity-web`) | `/login`, `/login/**`, `/logout` | Form login page, open to all; keeps a server-side session |
+| 1 | Token keys and service token (`identity-web`) | `/oauth2/**`, `/.well-known/**` | Spring Authorization Server, kept only for the public keys (JWKS), its metadata and the client-credentials service token of split deployments. Stateless: no login page, no session |
 | 10 | API (`platform-security`) | `/api/**` | Stateless JWT resource server. Endpoints a module declares as `PublicEndpoints` are open; everything else needs a valid token |
 | last | Default | everything else | Only `/actuator/health/**`, `/actuator/info` and `/error` are open; the rest is denied |
 
@@ -32,7 +31,7 @@ sequenceDiagram
     else token required
         F->>F: verify ES256 signature with identity's keys<br/>(in memory, no call to identity)
         F->>F: check issuer, expiry, not-before
-        F->>Rd: GET foodstack:identity:revoked:{userId}<br/>(skipped if cached in this JVM < 5 s)
+        F->>Rd: GET foodstack:identity:revoked:{userId}<br/>(skipped if cached in this JVM < 5 s, at most 100,000 users kept)
         Rd-->>F: minimum token version, or nothing
         alt token's tv claim is older
             F-->>Br: 401 invalid_token (revoked)
@@ -47,8 +46,9 @@ sequenceDiagram
 ```
 
 - **Where the signing keys come from.** In the JVM that runs `identity`, the decoder reads the keys straight from `identity`'s `JWKSource` bean. In any other JVM (split topology) it downloads them once from `/oauth2/jwks` and caches them.
-- **Revocation.** `identity` raises the user's `tokenVersion` (for example on "sign out everywhere"), writes the new minimum to Redis and also publishes `UserTokensRevoked`. Other modules read Redis, not the event. Each JVM caches the value for 5 seconds (`foodstack.security.revocation-cache-ttl`), so a revoked token can still pass for up to 5 seconds on a JVM that just checked it.
-- **Public API endpoints today** (each declared by its module's `-web` configuration): `GET /api/v1/search/stores`; `GET /api/v1/stores/{key}`, `/{key}/menu`, `/{key}/delivery-quote`; `GET /api/v1/settings/branding`, `/locale`; `GET /api/v1/geo/addresses`, `/addresses/reverse`, `/addresses/availability`; `POST /api/v1/auth/register`. Everything else under `/api/**` needs a token.
+- **Revocation.** `identity` raises the user's `tokenVersion` (for example on "sign out everywhere"), writes the new minimum to Redis and also publishes `UserTokensRevoked`. Other modules read Redis, not the event. Each JVM caches the value for 5 seconds (`foodstack.security.revocation-cache-ttl`) in a bounded Caffeine cache (`foodstack.security.revocation-cache-max-users`, default 100,000), so a revoked token can still pass for up to 5 seconds on a JVM that just checked it, and a busy JVM's memory stays flat however many users sign in. The user's refresh tokens stop working at once (the refresh checks the version too).
+- **Signing in** is the stateless auth API, flow 4.1: no redirect, no server session.
+- **Public API endpoints today** (each declared by its module's `-web` configuration): `GET /api/v1/search/stores`; `GET /api/v1/stores/{key}`, `/{key}/menu`, `/{key}/delivery-quote`; `GET /api/v1/settings/branding`, `/locale`; `GET /api/v1/geo/addresses`, `/addresses/reverse`, `/addresses/availability`; `POST /api/v1/auth/register`, `/login`, `/code`, `/reset`, `/refresh`. Everything else under `/api/**` needs a token (`POST /api/v1/auth/logout` too).
 
 ## 2.2 Each module gets its own database
 
@@ -84,20 +84,18 @@ sequenceDiagram
 
     Note over Svc,Mo: One MongoDB transaction
     Svc->>Mo: save branch (store_stores)
-    Svc->>Mo: insert store_outbox {type, subject=storeId, data, status NEW}
+    Svc->>Mo: insert store_outbox {type, subject=storeId, bucket=crc32(storeId)%64,<br/>traceparent of the request, data, status NEW}
     Note over Svc,Mo: commit: both rows or neither
 
-    loop every 100 ms (sooner when a full batch was found)
-        Rl->>Rd: acquire or renew foodstack:store:outbox:leader (10 s lease)
-        alt this replica is the leader
-            Rl->>Mo: find status NEW, order by _id, limit 500
-            Rl->>Kf: send each row, key = subject,<br/>value = CloudEvents JSON (acks=all, idempotent)
-            Kf-->>Rl: acknowledged
-            Rl->>Mo: mark sent rows SENT (TTL index drops them after 7 days)
-        end
+    loop every 100 ms on every replica (sooner when a full batch was found)
+        Rl->>Rd: heartbeat foodstack:workers:store:outbox, renew this replica's<br/>bucket leases …:bucket:{n} (10 s), take free ones up to its share
+        Rl->>Mo: find status NEW in this replica's buckets, order by _id, limit 500
+        Rl->>Kf: send each row, key = subject, header traceparent,<br/>value = CloudEvents JSON (acks=all, idempotent)
+        Kf-->>Rl: acknowledged
+        Rl->>Mo: mark sent rows SENT (TTL index drops them after 7 days)
     end
 
-    Kf->>Ls: deliver event
+    Kf->>Ls: deliver event (the listener's span joins the writer's trace)
     Ls->>Ls: route by type (StoreChanged, ZoneChanged, …)
     Note over Ls: search re-reads the branch instead of trusting the event body,<br/>so duplicates and reordering are harmless (flow 4.2)
 ```
@@ -105,7 +103,9 @@ sequenceDiagram
 - **Topics:** one per publishing module, `foodstack.<module>.events`, 24 partitions, 7-day retention, plus `.dlt` (30 days). They are created at start-up by each module's `KafkaAdmin.NewTopics` bean.
 - **Ordering:** the key is the aggregate id, so events of one branch stay in order. If a send fails, only rows before the failure are marked sent; the failed row and the ones after it go again on the next poll.
 - **Delivery guarantee:** at least once. Consumers whose handler is naturally idempotent skip the inbox: search re-reads the branch, order projections rebuild a row, notification keys every message by the event id, and payment uses the event id as the refund id. Consumers that change counters or state once per event (promotion's coupon counters, order's payment listener) record the event id in `<module>_inbox` in the same transaction.
-- **Leader lock:** one relay per module across all replicas. A Lua script takes the lock if free or renews it if this replica already holds it.
+- **Work buckets, not a leader:** every replica relays. Each outbox row carries `bucket = crc32(subject) % 64`, and the 64 buckets are split between the live replicas like a consumer group (`BucketLeases`): each takes up to `ceil(64 / replicas)` leases and gives back what is over its share when a replica joins; a dead replica's leases lapse and the others pick them up. One aggregate's events are always in one bucket, so they stay in order. The outbox is sharded on `{ bucket: 1, _id: 1 }`, so writes spread over every shard. The dispatch matcher and the accept-timeout sweep use the same buckets (TDD 7.3).
+- **Tracing:** the outbox row keeps the W3C `traceparent` of the request that wrote it; the relay sends it as a Kafka header and in the CloudEvents envelope, and listeners (observation on) continue the same trace (TDD 7.4).
+- **Concurrency:** each module's listeners run `foodstack.kafka.concurrency.<module>` threads (default `foodstack.kafka.listener-concurrency`, 3); replicas × threads above the partition count only leaves threads idle.
 - **When a consumer fails:** `platform-kafka` retries 3 times with a growing pause (`foodstack.kafka.retry.*`), then `DeadLetters` publishes the record to `<topic>.dlt` with the error in its headers, so nothing is lost silently. Replaying from the `.dlt` topics has no screen yet.
 
 ## 2.4 What is in Redis
@@ -121,16 +121,17 @@ Every key starts with the namespace `foodstack`. Redis holds caches and coordina
 | `foodstack:identity:code:{LOGIN or PASSWORD_RESET}:{userId}` | `identity` | Hash of the 6-digit code and the tries left | 5 min | Deleted when used or after 5 wrong tries |
 | `foodstack:{module}:rl:{scope}:{id}:{window}` | `identity` (codes per email), `cart` (coupon checks), `order` (placements) | Count in a fixed window | The window plus 1 s | Expires |
 | `foodstack:order:rt:order:{orderId}`, `…:store:{storeId}` (pub/sub channels, not keys) | `order` | `{orderId, storeId, status, revision}` after each step | Not stored | — |
-| `foodstack:rider:geo:online` | `rider` | GEO set of operator riders who can take an offer now (online, active, free) | No expiry; a rider leaves it when busy, offline or suspended | Every ping re-adds or removes the rider |
+| `foodstack:rider:geo:{cell}` | `rider` | GEO set per map cell (0.25° grid) of operator riders who can take an offer now (online, active, free); a search reads the cells its circle touches | No expiry; a rider leaves it when busy, offline, suspended or moved to another cell | Every ping re-adds or removes the rider |
+| `foodstack:rider:cell:{riderId}` | `rider` | The cell the rider was last put in, so a move removes them from the old set | 10 min | Overwritten on each ping |
 | `foodstack:rider:pos:{riderId}` | `rider` | Last position and time of every online rider | 10 min | Overwritten on each ping |
-| `foodstack:rider:rt:all`, `…:rt:order:{orderId}` (pub/sub channels) | `rider` | Position and busy flag after each ping, online state changes | Not stored | — |
+| `foodstack:rider:rt:cell:{cell}`, `…:rt:order:{orderId}` (pub/sub channels) | `rider` | Position and busy flag after each ping, online state changes; live maps subscribe to the cells they show (at most 64) | Not stored | — |
 | `foodstack:dispatch:offer:{riderId}` | `dispatch` | The order a rider has an open offer for (`SET NX`), so a rider never gets two offers at once | Offer timeout + 5 s | Deleted on accept, decline, expiry or hand-back |
-| `foodstack:dispatch:matcher:leader` | `dispatch` | Id of the replica running the matcher | 15 s, renewed every 2 s | Expires |
-| `foodstack:dispatch:rt:rider:{riderId}`, `…:rt:all` (pub/sub channels) | `dispatch` | `{orderId, status, riderId, kind}` after each job change | Not stored | — |
-| `foodstack:{module}:outbox:leader` | each publishing module | Id of the replica that relays the outbox | 10 s, renewed every poll | Released on shutdown |
+| `foodstack:dispatch:rt:rider:{riderId}`, `…:rt:cell:{cell}` (pub/sub channels) | `dispatch` | `{orderId, status, riderId, kind}` after each job change, on the pickup's cell | Not stored | — |
+| `foodstack:workers:{work}` and `…:{work}:bucket:{n}` | each publishing module (`{module}:outbox`), `dispatch` (`dispatch:matcher`), `order` (`order:accept-timeout`) | Live replicas (heartbeats) and the owner of each of the 64 work buckets | Lease 10 s (outbox), 15 s (matcher), 30 s (sweep), renewed while held | Released on shutdown; lapses when a replica dies |
+| `foodstack:geo:cache:zones:{storeId}:{generation}`, `…:operator-pricing:{generation}` and their `:gen` keys | `geo` | A branch's zones, the operator's delivery pricing, for quotes | 10 min (`foodstack.geo.quote-cache-ttl`); generation twice as long | A change raises the generation after commit; `geo`'s own event listener does it again on every replica |
 | `foodstack:search:rebuild` | `search` | Marks that one replica took this round of the daily re-read of every branch (`SET NX`) | 90% of the interval (`foodstack.search.rebuild-interval`, 24 h) | Expires, freeing the next round |
 
-Not in Redis yet (designed in TDD 10, built later): rider locations and dispatch locks (M3). Idempotency keys for placing an order are kept in MongoDB (`order_placement_keys`, inside the order's transaction) instead of Redis.
+On Redis Cluster every command touches one key and live messages use sharded pub/sub (`SPUBLISH`/`SSUBSCRIBE`), so the same code runs on one Redis, Sentinel or a cluster; only `spring.data.redis.*` changes. Idempotency keys for placing an order are kept in MongoDB (`order_placement_keys`, inside the order's transaction) instead of Redis.
 
 ## 2.5 Module to module: monolith vs split
 

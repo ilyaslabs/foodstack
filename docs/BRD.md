@@ -54,7 +54,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | BO-1 | Time to launch | A new operator goes from unzipping the unit deployer on one server to a branded, working marketplace in **under 1 day** with the quick-start guide |
 | BO-2 | No team needed to start | Operator launches without code changes: branding, currency, language, commission and the operator rider service are all configuration |
 | BO-3 | Low cost at small scale | The unit deployer runs a city pilot (≤ 200 orders per hour) on **one server** (8 vCPU, 32 GB RAM reference) with every dependency included |
-| BO-4 | Scale without rewrite | Moving from one server to Kubernetes, and splitting any module into its own deployment, needs configuration only; proven in CI by installing the `monolith`, `split` and `microservices` topologies on every release |
+| BO-4 | Scale without rewrite | Moving from one server to Kubernetes, splitting any module into its own deployment, and growing to national scale (more replicas, database shards, cache and broker nodes) needs configuration and machines only, never code; proven in CI by installing the `monolith`, `split` and `microservices` topologies on every release and by testing every collection on a sharded database |
 | BO-5 | Trust and safety | No critical or high open security findings at release; all service-to-service traffic encrypted (mTLS) |
 | BO-6 | Money is traceable | Every order produces balanced ledger entries; payout reports reconcile to the cent |
 | BO-7 | Community adoption | Public docs, quick start, contribution guide; first external operator pilot after v1 |
@@ -76,7 +76,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | Payment collection | By default the **operator collects** card payments and pays stores later. As an option the operator can **allow an individual store to collect card payments directly** into the store's own merchant account; FoodStack then records what the store owes the operator (commission, fees) and nets it in settlement |
 | Engagement | **Promotions and coupons** by the operator or by a store, **ratings and reviews**, **notifications** (in-app, email, push) |
 | In-store | Printable **QR code** per store that opens its menu, for customers at the table (view only in v1) |
-| Localisation | **Multi-language with RTL**, one currency and timezone per deployment (config) |
+| Localisation | **Multi-language with RTL**, one currency per deployment (config); one country per deployment; a default time zone per deployment, and each branch has its own (set from its location) |
 | Branding | Name, logo, colours and fonts set from the admin panel **at runtime**, without a rebuild |
 | Operations | **Unit deployer** for launch: one zip (`unit-deployer-<version>.zip`) with the application, a Docker Compose file and install, start, stop and restart scripts that run everything, including MongoDB, Kafka, Redis, Elasticsearch and object storage, on one server. **Kubernetes** Helm chart with service mesh (mTLS) is optional, for when the operator outgrows one server. Docker images, observability, CI/CD |
 | Media | Images stored in S3-compatible object storage, resized and compressed on upload to keep storage small |

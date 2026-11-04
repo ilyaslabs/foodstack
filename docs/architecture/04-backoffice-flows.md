@@ -6,40 +6,50 @@ The back office is `frontend/projects/backoffice` (Angular, served by nginx unde
 
 ## 4.1 Sign-in and silent token renewal
 
-Authorization Code with PKCE against the `identity` module (Spring Authorization Server). The same flow is used by the customer app with client `foodstack-web`.
+The stateless auth API of `identity` (TDD 9.1). Both apps show their own sign-in screen (`fs-sign-in` in the `auth` library, at `/admin/sign-in` and `/sign-in`): password, emailed code, password reset and, in the customer app, sign-up. There is no redirect and no server session, so any replica answers any call.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor U as Staff user
-    participant Ap as backoffice app<br/>(auth library)
-    participant As as identity: authorization server<br/>/oauth2/*
-    participant Lg as identity: login page<br/>/login (server session)
+    actor U as User
+    participant Ap as app (auth library)
+    participant Au as identity: /api/v1/auth/*
     participant Mo as MongoDB<br/>foodstack_identity
+    participant Rd as Redis
 
-    U->>Ap: open /admin
-    Ap->>Ap: no token in sessionStorage → create PKCE verifier + challenge
-    Ap->>As: redirect GET /oauth2/authorize?client_id=foodstack-backoffice<br/>&code_challenge=…&scope=openid
-    As-->>U: 302 to /login (no login session yet)
-    U->>Lg: email + password
-    Lg->>Mo: identity_users (Argon2id hash check)
-    Lg-->>U: login session cookie (held in server memory), back to /oauth2/authorize
-    As->>Mo: save authorization (code) in identity_authorizations
-    As-->>Ap: 302 /admin/auth/callback?code=…
-    Ap->>As: POST /oauth2/token (code + verifier)
-    As->>Mo: load authorization, users (roles, perms, brandIds, storeIds, tokenVersion)
-    As->>As: sign JWT with ES256, 10-minute lifetime,<br/>claims: sub, roles, perms, tv, brandIds?, storeIds?
-    As-->>Ap: access token (no refresh token for public clients)
-    Ap->>Ap: keep token in sessionStorage (this tab only)
+    U->>Ap: email + password (or the 6-digit code from the email)
+    Ap->>Au: POST /login {client: web, email, password | code}
+    Au->>Rd: rate limit (10 per 15 min per email)
+    Au->>Mo: identity_users (Argon2id check, same work when the email is unknown)
+    Au->>Mo: insert identity_refresh_tokens {_id: sha256(token), familyId = sid,<br/>client WEB, tokenVersion, expiresAt now + 30 d}
+    Au->>Au: sign JWT (ES256, 10 min): sub, sid, roles, perms, tv, brandIds?, storeIds?
+    Au-->>Ap: {accessToken, expiresIn} + Set-Cookie fs_refresh<br/>(HttpOnly, Secure, SameSite=Strict, Path=/api/v1/auth/refresh)
+    Ap->>Ap: access token in memory only, localStorage hint "signed in"
 
-    Note over Ap,As: About 1 minute before expiry
-    Ap->>As: same-origin fetch of /oauth2/authorize (new PKCE pair)
-    As-->>Ap: redirect to callback with a new code (login session still alive)
-    Ap->>As: POST /oauth2/token → new access token
-    Note over Ap: A 401 from the API triggers one renewal and a retry.<br/>If the login session has ended (server restart), the user is sent to /login.
+    Note over Ap,Au: One minute before expiry, on a reload, or in a new tab
+    Ap->>Ap: Web Lock foodstack-auth-refresh (one tab at a time)
+    Ap->>Au: POST /refresh (the browser adds the cookie)
+    Au->>Mo: findAndModify {_id, usedAt: null} → set usedAt (claims it once)
+    Au->>Mo: check user not blocked and tokenVersion current
+    Au->>Mo: insert the next token of the same family
+    Au-->>Ap: new access token + new cookie
+    alt the token was already used less than 10 s ago (another tab won)
+        Au-->>Ap: 409 REFRESH_RACE → wait 300 ms, retry with the new cookie
+    else used before that (leaked)
+        Au->>Mo: delete the whole family
+        Au-->>Ap: 401 REFRESH_REUSED → sign in again
+    end
+
+    U->>Ap: Sign out
+    Ap->>Au: POST /logout (Bearer token)
+    Au->>Mo: delete the family named by the token's sid
+    Au-->>Ap: cookie cleared
 ```
 
-The signing keys come from `FOODSTACK_SIGNING_KEYS`. Without them (development only) a temporary key is generated, and every token stops working on restart.
+- **Mobile apps** log in with `client: mobile`: the refresh token comes in the body, is kept in the Keychain or Keystore and sent back in the body. A token is accepted only on its own channel (`REFRESH_WRONG_CHANNEL`), and a call with both a cookie and a body token is refused (`REFRESH_TWO_CHANNELS`).
+- **Sign-out everywhere, block or password reset** raise the user's `tokenVersion` (flow 4.9): access tokens stop at once (flow 2.1) and each sign-in ends at its next refresh.
+- **Keys:** the signing keys come from `FOODSTACK_SIGNING_KEYS`. Without them (development only) a temporary key is generated, and every token stops working on restart. Spring Authorization Server remains only for `/oauth2/jwks`, its metadata and the service token of split deployments.
+- **Cookie on plain HTTP:** a local trial without TLS sets `FOODSTACK_REFRESH_COOKIE_SECURE=false` (install.sh `--local` does it), or the browser would drop the cookie.
 
 ## 4.2 Store change → search index (the read model)
 
