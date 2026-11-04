@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.store.web;
 
+import java.time.Duration;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
@@ -20,6 +21,7 @@ import io.github.ilyaslabs.moduleswitch.ModuleException;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -44,6 +46,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/stores")
 class StoresController {
+
+    static final Duration SHARED_CACHE = Duration.ofSeconds(30);
 
     static final String OPERATOR_PERMISSION = "store:manage";
 
@@ -191,15 +195,29 @@ class StoresController {
 
     /** A branch's page by its slug ({@code spice-route-gulberg}) or its id. */
     @GetMapping("/{key}")
-    StoreDtos.StorePageResponse page(@PathVariable String key) {
-        return StoreMapper.page(visible(this.storeService.resolve(key)));
+    ResponseEntity<StoreDtos.StorePageResponse> page(@PathVariable String key) {
+        StoreDetails store = visible(this.storeService.resolve(key));
+        return ResponseEntity.ok().cacheControl(shared(store)).body(StoreMapper.page(store));
     }
 
     @GetMapping("/{key}/menu")
-    MenuDtos.MenuResponse menu(@PathVariable String key) {
+    ResponseEntity<MenuDtos.MenuResponse> menu(@PathVariable String key) {
         String storeId = this.storeService.resolve(key);
-        visible(storeId);
-        return StoreMapper.menu(this.menuService.effectiveMenu(storeId));
+        StoreDetails store = visible(storeId);
+        return ResponseEntity.ok().cacheControl(shared(store)).body(StoreMapper.menu(this.menuService.effectiveMenu(storeId)));
+    }
+
+    /**
+     * A live branch's page and menu are the same for everyone, so a CDN or the edge proxy may keep
+     * them for {@link #SHARED_CACHE} (TDD 7.5) and answer most views without reaching the app; the
+     * browser revalidates with the ETag. Checkout prices everything again, so a few seconds of
+     * staleness (a sold-out mark) never reaches an order. Drafts are never stored by a shared cache.
+     */
+    private static CacheControl shared(StoreDetails store) {
+        if (store.status() != StoreStatus.LIVE) {
+            return CacheControl.noStore();
+        }
+        return CacheControl.noCache().cachePublic().sMaxAge(SHARED_CACHE);
     }
 
     @GetMapping("/{key}/delivery-quote")

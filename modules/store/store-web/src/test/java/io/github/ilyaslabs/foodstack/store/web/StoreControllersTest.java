@@ -183,6 +183,13 @@ class StoreControllersTest {
         given(this.storeService.quote("s1", new GeoPoint(31.5, 74.33)))
             .willReturn(new DeliveryQuote(true, null, 10_000, 50_000, null, 2500, 28, "PKR"));
 
+        String etag = this.mvc.perform(get("/api/v1/stores/spice-route-gulberg"))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "no-cache, public, s-maxage=30"))
+            .andExpect(header().exists("ETag"))
+            .andReturn().getResponse().getHeader("ETag");
+        this.mvc.perform(get("/api/v1/stores/spice-route-gulberg").header("If-None-Match", etag))
+            .andExpect(status().isNotModified());
         this.mvc.perform(get("/api/v1/stores/spice-route-gulberg"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.slug").value("spice-route-gulberg"))
@@ -190,6 +197,7 @@ class StoreControllersTest {
             .andExpect(jsonPath("$.legalName").doesNotExist());
         this.mvc.perform(get("/api/v1/stores/spice-route-gulberg/menu"))
             .andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "no-cache, public, s-maxage=30"))
             .andExpect(jsonPath("$.sections[0].items[0].name.ar").value("برياني"));
         this.mvc.perform(get("/api/v1/stores/s1/delivery-quote").param("lat", "31.5").param("lng", "74.33"))
             .andExpect(status().isOk())
@@ -197,7 +205,9 @@ class StoreControllersTest {
         this.mvc.perform(get("/api/v1/stores/s2"))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value("STORE_NOT_FOUND"));
-        this.mvc.perform(get("/api/v1/stores/s2").with(admin())).andExpect(status().isOk());
+        this.mvc.perform(get("/api/v1/stores/s2").with(admin()))
+            .andExpect(status().isOk())
+            .andExpect(header().string("Cache-Control", "no-store"));
         this.mvc.perform(get("/api/v1/stores/s1/details")).andExpect(status().isUnauthorized());
     }
 
