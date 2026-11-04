@@ -163,6 +163,8 @@ export class FsMap {
 
   /** With `centerPin`: the point under the pin after the person moved the map. */
   readonly moved = output<LatLng>();
+  /** The visible area, once the map is ready and after every move or zoom. */
+  readonly viewChanged = output<MapView>();
   readonly markerClick = output<string>();
 
   protected readonly failed = signal(false);
@@ -234,6 +236,7 @@ export class FsMap {
       map.touchZoomRotate.disableRotation();
       map.addControl(new library.NavigationControl({ showCompass: false }), 'top-right');
       map.on('moveend', () => {
+        this.emitView(map);
         if (!this.centerPin() || this.movingProgrammatically) return;
         const point = map.getCenter();
         this.moved.emit({ lat: round(point.lat), lng: round(point.lng) });
@@ -252,11 +255,22 @@ export class FsMap {
         });
         this.ready = true;
         this.draw(this.markers(), this.route());
+        this.emitView(map);
       });
       this.map = map;
     } catch {
       this.failed.set(true);
     }
+  }
+
+  private emitView(map: MapLibreMap): void {
+    const bounds = map.getBounds();
+    this.viewChanged.emit({
+      south: round(bounds.getSouth()),
+      west: round(bounds.getWest()),
+      north: round(bounds.getNorth()),
+      east: round(bounds.getEast()),
+    });
   }
 
   private draw(markers: MapMarker[], route: LatLng[]): void {
@@ -321,6 +335,31 @@ export class FsMap {
     this.fittedOnce = true;
     map.fitBounds(bounds, { padding: 56, maxZoom: 16, duration: force ? 0 : 600 });
   }
+}
+
+/** The visible area of a map, in degrees. */
+export interface MapView {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+/** Size of the server's live-map cells, in degrees (GeoCells.SIZE_DEGREES). */
+export const MAP_CELL_DEGREES = 0.25;
+/** Most cells one live map may follow (GeoCells.MAX_CELLS). */
+export const MAX_MAP_CELLS = 64;
+
+/** How many live-map cells a view touches; above {@link MAX_MAP_CELLS} the server refuses it. */
+export function mapCells(view: MapView): number {
+  const row = (lat: number) =>
+    Math.floor((Math.max(-90, Math.min(90, lat)) + 90) / MAP_CELL_DEGREES);
+  const column = (lng: number) =>
+    Math.floor((Math.max(-180, Math.min(180, lng)) + 180) / MAP_CELL_DEGREES);
+  const rows = row(Math.max(view.south, view.north)) - row(Math.min(view.south, view.north)) + 1;
+  const columns =
+    column(Math.max(view.west, view.east)) - column(Math.min(view.west, view.east)) + 1;
+  return rows * columns;
 }
 
 /** MapLibre's own styles, added once when the first map opens, so pages without a map stay light. */

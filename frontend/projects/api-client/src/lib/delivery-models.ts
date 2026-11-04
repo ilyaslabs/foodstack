@@ -245,3 +245,11 @@ export interface RiderPayoutInput {
   /** The whole account number or IBAN, entered again on every change. */
   account: string;
 }
+
+/** A map area in degrees, for the live map and the dispatch board. */
+export interface MapBounds {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}

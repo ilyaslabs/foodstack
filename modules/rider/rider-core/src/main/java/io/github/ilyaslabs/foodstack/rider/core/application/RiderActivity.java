@@ -431,11 +431,22 @@ public class RiderActivity {
 
     /** Every online rider with a position, for the operator's live map (PRD AD-9). */
     public List<LiveRider> live() {
+        return live(null);
+    }
+
+    /**
+     * Online riders for a live map, those last seen inside {@code view} when given (TDD 7.5): a map
+     * shows one area, so it never loads every rider of a country.
+     */
+    public List<LiveRider> live(MapBounds view) {
         if (!CurrentUser.hasAuthority(RiderService.MANAGE) && !CurrentUser.hasAuthority(RiderService.DISPATCH)) {
             throw new ModuleException.Forbidden("Only operator staff can see the live map", "RIDER_ACCESS_DENIED");
         }
-        List<RiderDocument> online = this.mongo.find(Query.query(Criteria.where("online").is(true)).limit(5000),
-                RiderDocument.class);
+        Criteria criteria = Criteria.where("online").is(true);
+        if (view != null) {
+            criteria = criteria.and("lat").gte(view.south()).lte(view.north()).and("lng").gte(view.west()).lte(view.east());
+        }
+        List<RiderDocument> online = this.mongo.find(Query.query(criteria).limit(MAX_LIVE), RiderDocument.class);
         List<RiderPresence.Position> positions = this.presence.positions(online.stream().map(RiderDocument::id).toList());
         List<LiveRider> live = new ArrayList<>(online.size());
         for (int i = 0; i < online.size(); i++) {
@@ -448,6 +459,13 @@ public class RiderActivity {
         }
         live.sort(Comparator.comparing(LiveRider::name));
         return live;
+    }
+
+    /** The most riders one live map loads. */
+    static final int MAX_LIVE = 2_000;
+
+    /** A map's visible area. */
+    public record MapBounds(double south, double west, double north, double east) {
     }
 
     public void requireLive() {

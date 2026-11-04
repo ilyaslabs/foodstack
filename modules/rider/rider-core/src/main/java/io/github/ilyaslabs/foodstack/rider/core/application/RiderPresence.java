@@ -1,13 +1,14 @@
 package io.github.ilyaslabs.foodstack.rider.core.application;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
 
+import io.github.ilyaslabs.foodstack.platform.core.GeoCells;
+import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,19 +17,18 @@ import org.springframework.data.geo.Distance;
 import org.springframework.data.geo.GeoResult;
 import org.springframework.data.geo.GeoResults;
 import org.springframework.data.geo.Point;
-import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.domain.geo.GeoReference;
-import org.springframework.data.redis.listener.ChannelTopic;
-import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 
 /**
- * Where riders are right now, in Redis (TDD 8.3, 5.6): the GEO set {@code <ns>:rider:geo:online} of
- * online operator riders for matching, each rider's last position under {@code <ns>:rider:pos:<id>},
- * and live channels {@code <ns>:rider:rt:all} (the operator's live map) and
- * {@code <ns>:rider:rt:order:<orderId>} (the customer and the store following one delivery). Lost
- * messages only delay a map until the next ping.
+ * Where riders are right now, in Redis (TDD 8.3, 5.6, 7.5). Online operator riders sit in one GEO
+ * set per {@link GeoCells map cell}, {@code <ns>:rider:geo:<cell>}, so no single key holds a whole
+ * country; a search reads the cells its circle touches. Each rider's last position is under
+ * {@code <ns>:rider:pos:<id>} and its cell under {@code <ns>:rider:cell:<id>}. Live messages go to
+ * {@code <ns>:rider:rt:cell:<cell>} (the operator's and stores' live maps, which follow the cells
+ * they show) and {@code <ns>:rider:rt:order:<orderId>} (the customer and the store following one
+ * delivery). Lost messages only delay a map until the next ping.
  */
 public class RiderPresence {
 
@@ -39,13 +39,13 @@ public class RiderPresence {
 
     private final StringRedisTemplate redis;
 
-    private final RedisMessageListenerContainer listeners;
+    private final LiveChannels live;
 
     private final String prefix;
 
-    public RiderPresence(StringRedisTemplate redis, RedisMessageListenerContainer listeners, String namespace) {
+    public RiderPresence(StringRedisTemplate redis, LiveChannels live, String namespace) {
         this.redis = redis;
-        this.listeners = listeners;
+        this.live = live;
         this.prefix = namespace + ":rider:";
     }
 
@@ -63,21 +63,31 @@ public class RiderPresence {
             String[] parts = value.split(",");
             return new Position(Double.parseDouble(parts[0]), Double.parseDouble(parts[1]), Long.parseLong(parts[2]));
         }
+
+        String cell() {
+            return GeoCells.of(this.lat, this.lng);
+        }
     }
 
-    /** A rider near a point, from the GEO set. */
+    /** A rider near a point, from the GEO sets. */
     public record Nearby(String riderId, long distanceMeters) {
     }
 
-    /** Stores the position, and for a matchable rider puts it in the GEO set. */
+    /** Stores the position, and for a matchable rider puts it in its cell's GEO set (leaving the old cell). */
     public void moved(String riderId, Position position, boolean matchable) {
         try {
+            String cell = position.cell();
+            String previous = this.redis.opsForValue().get(cellKey(riderId));
+            if (previous != null && !previous.equals(cell)) {
+                this.redis.opsForGeo().remove(geoKey(previous), riderId);
+            }
             this.redis.opsForValue().set(this.prefix + "pos:" + riderId, position.encode(), POSITION_TTL);
+            this.redis.opsForValue().set(cellKey(riderId), cell, POSITION_TTL);
             if (matchable) {
-                this.redis.opsForGeo().add(geoKey(), new Point(position.lng(), position.lat()), riderId);
+                this.redis.opsForGeo().add(geoKey(cell), new Point(position.lng(), position.lat()), riderId);
             }
             else {
-                this.redis.opsForGeo().remove(geoKey(), riderId);
+                this.redis.opsForGeo().remove(geoKey(cell), riderId);
             }
         }
         catch (DataAccessException ex) {
@@ -88,7 +98,10 @@ public class RiderPresence {
     /** Takes a rider out of matching (offline, suspended, busy). */
     public void unmatchable(String riderId) {
         try {
-            this.redis.opsForGeo().remove(geoKey(), riderId);
+            String cell = this.redis.opsForValue().get(cellKey(riderId));
+            if (cell != null) {
+                this.redis.opsForGeo().remove(geoKey(cell), riderId);
+            }
         }
         catch (DataAccessException ex) {
             log.warn("Rider {} not taken out of matching: {}", riderId, ex.getMessage());
@@ -100,7 +113,7 @@ public class RiderPresence {
         Position position = position(riderId);
         if (position != null) {
             try {
-                this.redis.opsForGeo().add(geoKey(), new Point(position.lng(), position.lat()), riderId);
+                this.redis.opsForGeo().add(geoKey(position.cell()), new Point(position.lng(), position.lat()), riderId);
             }
             catch (DataAccessException ex) {
                 log.warn("Rider {} not put back into matching: {}", riderId, ex.getMessage());
@@ -108,7 +121,7 @@ public class RiderPresence {
         }
     }
 
-    /** Forgets a rider's position (offline). */
+    /** Forgets a rider's position (offline). The cell stays a while so the live maps hear the rider left. */
     public void forget(String riderId) {
         unmatchable(riderId);
         try {
@@ -145,24 +158,27 @@ public class RiderPresence {
         }
     }
 
-    /** Matchable riders within a radius, nearest first. */
+    /** Matchable riders within a radius, nearest first, from every cell the circle touches. */
     public List<Nearby> near(double lat, double lng, int radiusMeters, int limit) {
+        List<Nearby> nearby = new ArrayList<>();
         try {
-            GeoResults<RedisGeoCommands.GeoLocation<String>> results = this.redis.opsForGeo()
-                .search(geoKey(), GeoReference.fromCoordinate(lng, lat), new Distance(radiusMeters, RedisGeoCommands.DistanceUnit.METERS),
-                        RedisGeoCommands.GeoSearchCommandArgs.newGeoSearchArgs().includeDistance().sortAscending().limit(limit));
-            List<Nearby> nearby = new ArrayList<>();
-            if (results != null) {
-                for (GeoResult<RedisGeoCommands.GeoLocation<String>> result : results) {
-                    nearby.add(new Nearby(result.getContent().getName(), Math.round(result.getDistance().getValue())));
+            for (String cell : GeoCells.around(lat, lng, radiusMeters)) {
+                GeoResults<RedisGeoCommands.GeoLocation<String>> results = this.redis.opsForGeo()
+                    .search(geoKey(cell), GeoReference.fromCoordinate(lng, lat),
+                            new Distance(radiusMeters, RedisGeoCommands.DistanceUnit.METERS),
+                            RedisGeoCommands.GeoSearchCommandArgs.newGeoSearchArgs().includeDistance().sortAscending().limit(limit));
+                if (results != null) {
+                    for (GeoResult<RedisGeoCommands.GeoLocation<String>> result : results) {
+                        nearby.add(new Nearby(result.getContent().getName(), Math.round(result.getDistance().getValue())));
+                    }
                 }
             }
-            return nearby;
         }
-        catch (DataAccessException ex) {
+        catch (DataAccessException | IllegalArgumentException ex) {
             log.warn("Rider search failed: {}", ex.getMessage());
-            return List.of();
         }
+        nearby.sort(Comparator.comparingLong(Nearby::distanceMeters));
+        return (nearby.size() > limit) ? List.copyOf(nearby.subList(0, limit)) : nearby;
     }
 
     /** Lets this ping through at most once per period, for sampling (SET NX with expiry). */
@@ -176,53 +192,59 @@ public class RiderPresence {
         }
     }
 
-    /** Tells the live map and the people following the rider's deliveries. */
+    /** Tells the live maps showing the rider's cell, and the people following the rider's deliveries. */
     public void publish(String riderId, Position position, boolean busy, String kind, String storeId, List<String> orderIds) {
         String message = String.format(Locale.ROOT,
                 "{\"riderId\":\"%s\",\"lat\":%.6f,\"lng\":%.6f,\"at\":%d,\"busy\":%s,\"kind\":\"%s\"%s}", riderId,
                 position.lat(), position.lng(), position.at(), busy, kind,
                 (storeId != null) ? ",\"storeId\":\"" + storeId + "\"" : "");
-        send(this.prefix + "rt:all", message);
+        this.live.publish(cellChannel(position.cell()), message);
         for (String orderId : orderIds) {
-            send(this.prefix + "rt:order:" + orderId, message);
+            this.live.publish(this.prefix + "rt:order:" + orderId, message);
         }
     }
 
-    /** Tells the live map a rider went offline or changed state. */
+    /** Tells the live maps of the rider's last cell that the rider went offline or changed state. */
     public void publishState(String riderId, boolean online, boolean busy) {
-        send(this.prefix + "rt:all",
-                "{\"riderId\":\"" + riderId + "\",\"online\":" + online + ",\"busy\":" + busy + ",\"state\":true}");
+        String cell;
+        try {
+            cell = this.redis.opsForValue().get(cellKey(riderId));
+        }
+        catch (DataAccessException ex) {
+            return;
+        }
+        if (cell != null) {
+            this.live.publish(cellChannel(cell),
+                    "{\"riderId\":\"" + riderId + "\",\"online\":" + online + ",\"busy\":" + busy + ",\"state\":true}");
+        }
     }
 
-    public AutoCloseable onAll(Consumer<String> receiver) {
-        return subscribe(this.prefix + "rt:all", receiver);
+    /** Receives the riders of these cells (a live map's view) until the returned handle is closed. */
+    public AutoCloseable onCells(List<String> cells, Consumer<String> receiver) {
+        List<AutoCloseable> subscriptions = new ArrayList<>(cells.size());
+        for (String cell : cells) {
+            subscriptions.add(this.live.subscribe(cellChannel(cell), receiver));
+        }
+        return () -> {
+            for (AutoCloseable subscription : subscriptions) {
+                subscription.close();
+            }
+        };
     }
 
     public AutoCloseable onOrder(String orderId, Consumer<String> receiver) {
-        return subscribe(this.prefix + "rt:order:" + orderId, receiver);
+        return this.live.subscribe(this.prefix + "rt:order:" + orderId, receiver);
     }
 
-    private void send(String channel, String message) {
-        try {
-            this.redis.convertAndSend(channel, message);
-        }
-        catch (DataAccessException ex) {
-            log.debug("Live message on {} not sent: {}", channel, ex.getMessage());
-        }
+    private String geoKey(String cell) {
+        return this.prefix + "geo:" + cell;
     }
 
-    private AutoCloseable subscribe(String channel, Consumer<String> receiver) {
-        ChannelTopic topic = new ChannelTopic(channel);
-        MessageListener listener = (message, pattern) -> receiver.accept(new String(message.getBody(), StandardCharsets.UTF_8));
-        this.listeners.addMessageListener(listener, topic);
-        return () -> this.listeners.removeMessageListener(listener, topic);
+    private String cellKey(String riderId) {
+        return this.prefix + "cell:" + riderId;
     }
 
-    private String geoKey() {
-        return this.prefix + "geo:online";
-    }
-
-    static long epoch(Instant at) {
-        return at.getEpochSecond();
+    private String cellChannel(String cell) {
+        return this.prefix + "rt:cell:" + cell;
     }
 }

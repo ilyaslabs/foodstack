@@ -121,9 +121,15 @@ class RidersControllerTest {
         given(this.activity.requireFollow("o1")).willThrow(new ModuleException.NotFound("x", "TRACKING_NOT_FOUND"));
         this.mvc.perform(get("/api/v1/riders/tracking/o1/stream").with(jwt())).andExpect(status().isNotFound());
         this.mvc.perform(get("/api/v1/riders/live/stream")).andExpect(status().isUnauthorized());
-        this.mvc.perform(get("/api/v1/riders/live/stream").with(manage())).andExpect(status().isOk());
+        this.mvc.perform(get("/api/v1/riders/live/stream").with(manage()).param("south", "31.3").param("west", "74.1")
+            .param("north", "31.7").param("east", "74.6")).andExpect(status().isOk());
         verify(this.activity).requireLive();
-        verify(this.presence).onAll(any());
+        verify(this.presence).onCells(eq(List.of("485_1016", "485_1017", "485_1018", "486_1016", "486_1017", "486_1018")), any());
+        // a whole country at once would subscribe to hundreds of cells: the map must zoom in
+        this.mvc.perform(get("/api/v1/riders/live/stream").with(manage()).param("south", "24").param("west", "61")
+            .param("north", "37").param("east", "77"))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("MAP_VIEW_TOO_WIDE"));
     }
 
     private static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.JwtRequestPostProcessor portal() {
