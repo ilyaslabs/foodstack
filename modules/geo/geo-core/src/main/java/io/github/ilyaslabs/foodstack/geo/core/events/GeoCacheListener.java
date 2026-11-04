@@ -29,7 +29,8 @@ public class GeoCacheListener {
         this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(id = "${foodstack.namespace:foodstack}-geo-cache", groupId = "${foodstack.namespace:foodstack}-geo-cache",
+    @KafkaListener(concurrency = "${foodstack.kafka.concurrency.geo:${foodstack.kafka.listener-concurrency:3}}",
+            id = "${foodstack.namespace:foodstack}-geo-cache", groupId = "${foodstack.namespace:foodstack}-geo-cache",
             topics = "${foodstack.namespace:foodstack}.geo.events", properties = "auto.offset.reset=latest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);

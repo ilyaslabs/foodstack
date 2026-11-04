@@ -46,7 +46,8 @@ public class OrderNotificationsListener {
         this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(id = "${foodstack.namespace:foodstack}-notification-orders",
+    @KafkaListener(concurrency = "${foodstack.kafka.concurrency.notification:${foodstack.kafka.listener-concurrency:3}}",
+            id = "${foodstack.namespace:foodstack}-notification-orders",
             groupId = "${foodstack.namespace:foodstack}-notification",
             topics = { "${foodstack.namespace:foodstack}.order.events", "${foodstack.namespace:foodstack}.payment.events" },
             properties = "auto.offset.reset=earliest")

@@ -38,8 +38,9 @@ public class SearchConfiguration {
     }
 
     @Bean
-    StoreSearchService searchStoreSearchService(StoreSearchEngine searchStoreEngine, Clock clock) {
-        return new StoreSearchService(searchStoreEngine, clock);
+    StoreSearchService searchStoreSearchService(StoreSearchEngine searchStoreEngine, Clock clock,
+            SearchProperties properties) {
+        return new StoreSearchService(searchStoreEngine, clock, properties);
     }
 
     @Bean

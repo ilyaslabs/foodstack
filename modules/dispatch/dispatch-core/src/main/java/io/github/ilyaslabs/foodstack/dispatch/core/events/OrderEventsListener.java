@@ -51,7 +51,8 @@ public class OrderEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(id = "${foodstack.namespace:foodstack}-dispatch-orders", groupId = "${foodstack.namespace:foodstack}-dispatch",
+    @KafkaListener(concurrency = "${foodstack.kafka.concurrency.dispatch:${foodstack.kafka.listener-concurrency:3}}",
+            id = "${foodstack.namespace:foodstack}-dispatch-orders", groupId = "${foodstack.namespace:foodstack}-dispatch",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);

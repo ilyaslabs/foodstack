@@ -306,6 +306,7 @@ export class SearchClient {
     if (search.fulfilment) params = params.set('fulfilment', search.fulfilment);
     if (search.page) params = params.set('page', search.page);
     if (search.size) params = params.set('size', search.size);
+    if (search.radius) params = params.set('radius', search.radius);
     return this.http.get<StoreSearchPage>(`${this.config.apiUrl}/api/v1/search/stores`, { params });
   }
 }

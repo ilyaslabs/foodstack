@@ -285,6 +285,15 @@ h1 {
 .status-row {
   min-block-size: 24px;
   margin-block: 24px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.radius-note {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
 }
 
 .count-title {
@@ -342,6 +351,16 @@ h1 {
   display: flex;
   justify-content: center;
   margin-block-start: 32px;
+}
+
+.further button {
+  block-size: 48px;
+  padding-inline: 24px;
+  --fs-icon-size: 20px;
+}
+
+.further fs-icon {
+  margin-inline-end: 8px;
 }
 
 .steps {
