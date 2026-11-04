@@ -68,6 +68,8 @@ jobs:
           push foodstack-server app/foodstack-server
           push foodstack-web -f frontend/docker/web.Dockerfile frontend
           push foodstack-backoffice -f frontend/docker/backoffice.Dockerfile frontend
+          # The single-server proxy is versioned by its Caddy release, which docker-compose.yml names.
+          TAGS=caddy-2.10 push foodstack-proxy deploy/unit-deployer/src/main/dist/proxy
       - name: Attach the unit deployer to the release
         if: inputs.attach-to-release != ''
         env:
