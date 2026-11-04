@@ -27,6 +27,7 @@ public final class FoodstackSecurityCoreAutoConfiguration {
     TokenRevocations tokenRevocations(StringRedisTemplate redis, @Value("${foodstack.namespace:foodstack}") String namespace,
             FoodstackSecurityProperties properties, ObjectProvider<Clock> clock) {
         return new TokenRevocations(redis, namespace, properties.getRevocationCacheTtl(),
+                properties.getRevocationCacheMaxUsers(),
                 clock.getIfAvailable(Clock::systemUTC));
     }
 

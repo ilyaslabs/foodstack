@@ -1,17 +1,7 @@
 package io.github.ilyaslabs.foodstack.it.support;
 
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
-import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.function.BiFunction;
 import java.util.function.Supplier;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
@@ -26,17 +16,11 @@ import static io.restassured.RestAssured.given;
  */
 public final class ApiClient {
 
-    private static final Pattern CSRF = Pattern.compile("name=\"_csrf\" value=\"([^\"]+)\"");
-
-    private static final SecureRandom RANDOM = new SecureRandom();
-
     private final FoodstackPlatform platform;
 
     private String accessToken;
 
-    private String idToken;
-
-    private final Map<String, String> sessionCookies = new HashMap<>();
+    private String refreshToken;
 
     ApiClient(FoodstackPlatform platform) {
         this.platform = platform;
@@ -70,187 +54,70 @@ public final class ApiClient {
         return request(path).contentType(ContentType.JSON).body(body).post(path);
     }
 
-    /**
-     * Signs in through the authorization code flow with PKCE, as the back-office app does: the
-     * browser is sent to the login page, posts the form, and returns with a code that the app
-     * exchanges for an access token.
-     */
+    /** Signs in with email and password through the stateless auth API, as the mobile apps do. */
     public ApiClient logIn(String email, String password) {
-        return signIn((cookies, csrf) -> browser("/login", cookies).contentType(ContentType.URLENC)
-            .formParam("username", email)
-            .formParam("password", password)
-            .formParam("_csrf", csrf)
-            .post("/login"));
+        return keep(postAuth("/api/v1/auth/login", Map.of("client", "mobile", "email", email, "password", password)));
     }
 
-    /**
-     * Signs in with an emailed one-time code: asks for it on the login page, reads it with
-     * {@code readCode} (from the mailbox) and types it in.
-     */
+    /** Signs in with an emailed one-time code, read with {@code readCode} (from the mailbox). */
     public ApiClient logInWithEmailCode(String email, Supplier<String> readCode) {
-        return signIn((cookies, csrf) -> {
-            Response sent = browser("/login/code", cookies).contentType(ContentType.URLENC)
-                .formParam("email", email)
-                .formParam("_csrf", csrf)
-                .post("/login/code");
-            expectStatus(sent, 200);
-            return browser("/login/code/verify", cookies).contentType(ContentType.URLENC)
-                .formParam("email", email)
-                .formParam("code", readCode.get())
-                .formParam("_csrf", csrf)
-                .post("/login/code/verify");
-        });
+        expectStatus(postAuth("/api/v1/auth/code", Map.of("email", email, "purpose", "LOGIN")), 202);
+        return keep(postAuth("/api/v1/auth/login", Map.of("client", "mobile", "email", email, "code", readCode.get())));
     }
 
-    /**
-     * Forgot password: asks for a reset code on the login page, reads it with {@code readCode},
-     * chooses {@code newPassword} and is signed in with it.
-     */
+    /** Forgot password: asks for a reset code, reads it with {@code readCode}, sets {@code newPassword}. */
     public ApiClient resetPassword(String email, String newPassword, Supplier<String> readCode) {
-        return signIn((cookies, csrf) -> {
-            Response sent = browser("/login/reset", cookies).contentType(ContentType.URLENC)
-                .formParam("email", email)
-                .formParam("_csrf", csrf)
-                .post("/login/reset");
-            expectStatus(sent, 200);
-            return browser("/login/reset/verify", cookies).contentType(ContentType.URLENC)
-                .formParam("email", email)
-                .formParam("code", readCode.get())
-                .formParam("password", newPassword)
-                .formParam("_csrf", csrf)
-                .post("/login/reset/verify");
-        });
+        expectStatus(postAuth("/api/v1/auth/code", Map.of("email", email, "purpose", "PASSWORD_RESET")), 202);
+        return keep(postAuth("/api/v1/auth/reset",
+                Map.of("client", "mobile", "email", email, "code", readCode.get(), "newPassword", newPassword)));
     }
 
-    /**
-     * Runs the authorization code flow; {@code signInStep} posts the login page's forms with the
-     * browser's cookies and CSRF token and returns the answer that resumes the authorization.
-     */
-    private ApiClient signIn(BiFunction<Map<String, String>, String, Response> signInStep) {
-        String verifier = randomUrlSafe(48);
-        String state = randomUrlSafe(12);
-        Map<String, String> query = new HashMap<>();
-        query.put("response_type", "code");
-        query.put("client_id", FoodstackPlatform.BACKOFFICE_CLIENT);
-        query.put("redirect_uri", FoodstackPlatform.BACKOFFICE_REDIRECT);
-        query.put("scope", "openid");
-        query.put("state", state);
-        query.put("code_challenge", challenge(verifier));
-        query.put("code_challenge_method", "S256");
-
-        Response authorize = browser("/oauth2/authorize", Map.of()).queryParams(query).get("/oauth2/authorize");
-        expectRedirect(authorize, "/login");
-        Map<String, String> cookies = new HashMap<>(authorize.getCookies());
-
-        Response loginPage = browser("/login", cookies).get("/login");
-        cookies.putAll(loginPage.getCookies());
-        Matcher csrf = CSRF.matcher(loginPage.asString());
-        if (!csrf.find()) {
-            throw new AssertionError("The login page has no CSRF token");
+    /** Swaps the refresh token for new tokens (keeping them when it works) and returns the answer. */
+    public Response refresh() {
+        Response response = postAuth("/api/v1/auth/refresh",
+                (this.refreshToken != null) ? Map.of("refreshToken", this.refreshToken) : Map.<String, String>of());
+        if (response.statusCode() == 200) {
+            this.accessToken = response.path("accessToken");
+            this.refreshToken = response.path("refreshToken");
         }
+        return response;
+    }
 
-        Response login = signInStep.apply(cookies, csrf.group(1));
-        cookies.putAll(login.getCookies());
-        String savedRequest = expectRedirect(login, "/oauth2/authorize");
+    /** The refresh token this client holds (mobile sign-in). */
+    public String refreshToken() {
+        return this.refreshToken;
+    }
 
-        Response resumed = browser("/oauth2/authorize", cookies).urlEncodingEnabled(false)
-            .get(pathAndQuery(savedRequest));
-        String callback = expectRedirect(resumed, FoodstackPlatform.BACKOFFICE_REDIRECT);
-        Map<String, String> params = queryOf(callback);
-        if (!state.equals(params.get("state"))) {
-            throw new AssertionError("The authorization server returned another state");
-        }
+    /** Signs out of this sign-in; the refresh token stops working. */
+    public Response logOut() {
+        return request("/api/v1/auth/logout").post("/api/v1/auth/logout");
+    }
 
-        Response token = given().baseUri(this.platform.baseUrlFor("/oauth2/token"))
-            .contentType(ContentType.URLENC)
-            .formParam("grant_type", "authorization_code")
-            .formParam("code", params.get("code"))
-            .formParam("redirect_uri", FoodstackPlatform.BACKOFFICE_REDIRECT)
-            .formParam("client_id", FoodstackPlatform.BACKOFFICE_CLIENT)
-            .formParam("code_verifier", verifier)
-            .post("/oauth2/token");
-        if (token.statusCode() != 200) {
-            throw new AssertionError("Token exchange failed: " + token.statusCode() + " " + token.asString());
-        }
-        this.accessToken = token.path("access_token");
-        this.idToken = token.path("id_token");
-        this.sessionCookies.putAll(cookies);
+    /** A sign-in as the browser apps do it ({@code client=web}); the refresh token comes as a cookie. */
+    public Response webLogIn(String email, String password) {
+        return postAuth("/api/v1/auth/login", Map.of("client", "web", "email", email, "password", password));
+    }
+
+    /** A browser refresh: only the cookie carries the token. */
+    public Response webRefresh(String cookie) {
+        return given().baseUri(this.platform.baseUrlFor("/api/v1/auth/refresh")).contentType(ContentType.JSON)
+            .cookie("fs_refresh", cookie).body("{}").post("/api/v1/auth/refresh");
+    }
+
+    private Response postAuth(String path, Map<String, String> body) {
+        return given().baseUri(this.platform.baseUrlFor(path)).contentType(ContentType.JSON).body(body).post(path);
+    }
+
+    private ApiClient keep(Response tokens) {
+        expectStatus(tokens, 200);
+        this.accessToken = tokens.path("accessToken");
+        this.refreshToken = tokens.path("refreshToken");
         return this;
-    }
-
-    /**
-     * Signs out as the apps do (OIDC RP-initiated logout), ending the identity session. Returns the
-     * response, which redirects to the post-logout URI.
-     */
-    public Response logOut(String postLogoutRedirectUri) {
-        return browser("/connect/logout", this.sessionCookies)
-            .queryParam("client_id", FoodstackPlatform.BACKOFFICE_CLIENT)
-            .queryParam("post_logout_redirect_uri", postLogoutRedirectUri)
-            .queryParam("id_token_hint", this.idToken)
-            .get("/connect/logout");
-    }
-
-    /** Whether the identity session still signs the browser in without the login page. */
-    public boolean hasIdentitySession() {
-        Response authorize = browser("/oauth2/authorize", this.sessionCookies)
-            .queryParam("response_type", "code")
-            .queryParam("client_id", FoodstackPlatform.BACKOFFICE_CLIENT)
-            .queryParam("redirect_uri", FoodstackPlatform.BACKOFFICE_REDIRECT)
-            .queryParam("scope", "openid")
-            .queryParam("code_challenge", challenge(randomUrlSafe(48)))
-            .queryParam("code_challenge_method", "S256")
-            .get("/oauth2/authorize");
-        String location = authorize.header("Location");
-        return location != null && location.startsWith(FoodstackPlatform.BACKOFFICE_REDIRECT);
-    }
-
-    private RequestSpecification browser(String path, Map<String, String> cookies) {
-        return given().baseUri(this.platform.baseUrlFor(path)).redirects().follow(false)
-            .accept("text/html").cookies(cookies);
-    }
-
-    private static String expectRedirect(Response response, String expected) {
-        String location = response.header("Location");
-        if ((response.statusCode() != 302 && response.statusCode() != 303) || location == null || !location.contains(expected)) {
-            throw new AssertionError("Expected a redirect to " + expected + " but got " + response.statusCode()
-                    + " Location=" + location);
-        }
-        return location;
     }
 
     private static void expectStatus(Response response, int status) {
         if (response.statusCode() != status) {
             throw new AssertionError("Expected " + status + " but got " + response.statusCode() + ": " + response.asString());
-        }
-    }
-
-    private static String pathAndQuery(String url) {
-        URI uri = URI.create(url);
-        return uri.getRawPath() + (uri.getRawQuery() != null ? "?" + uri.getRawQuery() : "");
-    }
-
-    private static Map<String, String> queryOf(String url) {
-        Map<String, String> params = new HashMap<>();
-        for (String pair : URI.create(url).getRawQuery().split("&")) {
-            int eq = pair.indexOf('=');
-            params.put(pair.substring(0, eq), java.net.URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8));
-        }
-        return params;
-    }
-
-    private static String randomUrlSafe(int bytes) {
-        byte[] random = new byte[bytes];
-        RANDOM.nextBytes(random);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(random);
-    }
-
-    private static String challenge(String verifier) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(verifier.getBytes(StandardCharsets.US_ASCII));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
-        }
-        catch (NoSuchAlgorithmException ex) {
-            throw new IllegalStateException(ex);
         }
     }
 }

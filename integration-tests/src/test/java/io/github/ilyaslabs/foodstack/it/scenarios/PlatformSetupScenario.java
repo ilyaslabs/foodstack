@@ -121,24 +121,59 @@ class PlatformSetupScenario {
         });
         assertThat(PlatformEvents.awaitEvent(this.platform, "identity", "foodstack.identity.UserTokensRevoked.v1", "")).isNotBlank();
 
+        // and the refresh token of that sign-in is dead too
+        assertThat(admin.refresh().statusCode()).isEqualTo(401);
+
         // and a fresh sign-in works again
         ApiClient again = this.platform.client().logIn(FoodstackPlatform.ADMIN_EMAIL, FoodstackPlatform.ADMIN_PASSWORD);
         assertThat(again.get("/api/v1/users").statusCode()).isEqualTo(200);
     }
 
     @Test
-    @DisplayName("signing out ends the identity session, so the next sign-in asks for the password again")
-    void signOutEndsTheSession() {
+    @DisplayName("signing out ends that sign-in: its refresh token stops working, other sign-ins keep going")
+    void signOutEndsTheSignIn() {
         // given
-        ApiClient admin = this.platform.client().logIn(FoodstackPlatform.ADMIN_EMAIL, FoodstackPlatform.ADMIN_PASSWORD);
-        assertThat(admin.hasIdentitySession()).isTrue();
+        ApiClient phone = this.platform.client().logIn(FoodstackPlatform.ADMIN_EMAIL, FoodstackPlatform.ADMIN_PASSWORD);
+        ApiClient laptop = this.platform.client().logIn(FoodstackPlatform.ADMIN_EMAIL, FoodstackPlatform.ADMIN_PASSWORD);
+        assertThat(phone.refresh().statusCode()).isEqualTo(200);
 
         // when
-        Response logout = admin.logOut(FoodstackPlatform.BACKOFFICE_POST_LOGOUT);
+        assertThat(phone.logOut().statusCode()).isEqualTo(204);
 
         // then
-        assertThat(logout.statusCode()).isEqualTo(302);
-        assertThat(logout.header("Location")).isEqualTo(FoodstackPlatform.BACKOFFICE_POST_LOGOUT);
-        assertThat(admin.hasIdentitySession()).isFalse();
+        assertThat(phone.refresh().statusCode()).isEqualTo(401);
+        assertThat(laptop.refresh().statusCode()).isEqualTo(200);
+        assertThat(laptop.get("/api/v1/users").statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("browsers refresh with an httpOnly cookie that rotates; a stolen old cookie ends the sign-in")
+    void browserRefreshRotates() {
+        // given
+        ApiClient client = this.platform.client();
+        Response login = client.webLogIn(FoodstackPlatform.ADMIN_EMAIL, FoodstackPlatform.ADMIN_PASSWORD);
+        assertThat(login.statusCode()).isEqualTo(200);
+        assertThat(login.<String>path("refreshToken")).isNull();
+        assertThat(login.header("Set-Cookie")).contains("HttpOnly").contains("SameSite=Strict")
+            .contains("Path=/api/v1/auth/refresh");
+        String first = login.getCookie("fs_refresh");
+
+        // when
+        Response refreshed = client.webRefresh(first);
+        String second = refreshed.getCookie("fs_refresh");
+
+        // then
+        assertThat(refreshed.statusCode()).isEqualTo(200);
+        assertThat(second).isNotBlank().isNotEqualTo(first);
+        assertThat(client.withToken(refreshed.path("accessToken")).get("/api/v1/me").statusCode()).isEqualTo(200);
+        // a mobile-style body refresh with a browser token is refused
+        Response wrongChannel = io.restassured.RestAssured.given().baseUri(this.platform.baseUrlFor("/api/v1/auth/refresh"))
+            .contentType(io.restassured.http.ContentType.JSON).body(Map.of("refreshToken", second))
+            .post("/api/v1/auth/refresh");
+        assertThat(wrongChannel.statusCode()).isEqualTo(400);
+        // the old cookie is replayed after the grace period: the whole sign-in ends
+        await().pollDelay(Duration.ofSeconds(11)).atMost(Duration.ofSeconds(15))
+            .untilAsserted(() -> assertThat(client.webRefresh(first).statusCode()).isEqualTo(401));
+        assertThat(client.webRefresh(second).statusCode()).isEqualTo(401);
     }
 }

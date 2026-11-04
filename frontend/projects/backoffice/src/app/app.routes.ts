@@ -1,12 +1,15 @@
 import { Routes } from '@angular/router';
 
-import { AuthCallback, authGuard } from '@foodstack/auth';
+import { authGuard } from '@foodstack/auth';
 
 import { riderHome } from './rider/rider-home';
 import { Shell } from './shell/shell';
 
 export const routes: Routes = [
-  { path: 'auth/callback', component: AuthCallback },
+  {
+    path: 'sign-in',
+    loadComponent: () => import('./sign-in/sign-in-page').then((m) => m.SignInPage),
+  },
   {
     path: '',
     component: Shell,

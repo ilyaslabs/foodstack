@@ -39,7 +39,7 @@ describe('authInterceptor', () => {
       providers: [
         provideHttpClient(withInterceptors([authInterceptor])),
         provideHttpClientTesting(),
-        { provide: RUNTIME_CONFIG, useValue: { apiUrl: '', issuer: '', clientId: 'x' } },
+        { provide: RUNTIME_CONFIG, useValue: { apiUrl: '' } },
         { provide: AuthService, useValue: auth },
       ],
     });

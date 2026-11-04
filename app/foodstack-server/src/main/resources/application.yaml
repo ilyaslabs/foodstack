@@ -125,14 +125,8 @@ foodstack:
     bootstrap-admin:
       email: ${FOODSTACK_ADMIN_EMAIL:}
       password: ${FOODSTACK_ADMIN_PASSWORD:}
-    clients:
-      # The customer app and the back office may live on their own hostnames (deployment guide 2.1).
-      foodstack-web:
-        redirect-uris: ${FOODSTACK_WEB_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/auth/callback
-        post-logout-redirect-uris: ${FOODSTACK_WEB_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/
-      foodstack-backoffice:
-        redirect-uris: ${FOODSTACK_ADMIN_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/admin/auth/callback
-        post-logout-redirect-uris: ${FOODSTACK_ADMIN_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}/admin/
+    # Keep true; false only for a plain-HTTP trial in a browser that refuses Secure cookies there.
+    refresh-cookie-secure: ${FOODSTACK_REFRESH_COOKIE_SECURE:true}
   geo:
     # Address search and reverse geocoding (OpenStreetMap Nominatim by default, "none" to switch off).
     geocoding:

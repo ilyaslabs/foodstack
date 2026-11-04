@@ -5,10 +5,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
-import com.nimbusds.jose.KeySourceException;
-import com.nimbusds.jose.jwk.JWK;
-import com.nimbusds.jose.jwk.JWKMatcher;
-import com.nimbusds.jose.jwk.JWKSelector;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
@@ -68,14 +64,7 @@ public class LocalServiceTokens implements ServiceTokens {
         return this.token;
     }
 
-    /** The first key signs, as for the authorization server's own tokens (SigningKeys). */
     private String signingKeyId() {
-        try {
-            List<JWK> found = this.keys.get(new JWKSelector(new JWKMatcher.Builder().privateOnly(true).build()), null);
-            return found.getFirst().getKeyID();
-        }
-        catch (KeySourceException ex) {
-            throw new IllegalStateException("No signing key", ex);
-        }
+        return AccessTokens.signingKeyId(this.keys);
     }
 }

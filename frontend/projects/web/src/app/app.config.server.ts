@@ -18,8 +18,6 @@ const serverConfig: ApplicationConfig = {
       useFactory: () =>
         normalizeConfig({
           apiUrl: process.env['FOODSTACK_INTERNAL_API_URL'] ?? 'http://localhost:8080',
-          issuer: process.env['FOODSTACK_ISSUER'] ?? '',
-          clientId: 'foodstack-web',
         }),
     },
   ],

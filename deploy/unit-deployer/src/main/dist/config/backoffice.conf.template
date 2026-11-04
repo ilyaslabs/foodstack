@@ -8,7 +8,7 @@ server {
     location = /admin/config.json {
         default_type application/json;
         add_header Cache-Control "no-store";
-        return 200 '{"apiUrl":"${FOODSTACK_API_URL}","issuer":"${FOODSTACK_ISSUER}","clientId":"foodstack-backoffice","mapTiles":"${MAP_TILE_URL}","mapAttribution":"${MAP_ATTRIBUTION}"}';
+        return 200 '{"apiUrl":"${FOODSTACK_API_URL}","mapTiles":"${MAP_TILE_URL}","mapAttribution":"${MAP_ATTRIBUTION}"}';
     }
 
     # The map worker has a fixed name, so revalidate it; module workers need a JavaScript type.

@@ -392,7 +392,7 @@ export class AccountPage {
     try {
       await firstValueFrom(this.me.revokeTokens());
     } finally {
-      this.auth.signOut();
+      await this.auth.signOut();
     }
   }
 }
