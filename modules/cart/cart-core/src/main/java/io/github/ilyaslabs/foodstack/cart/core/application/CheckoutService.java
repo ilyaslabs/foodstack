@@ -90,7 +90,7 @@ public class CheckoutService {
         }
         else {
             DeliveryQuoteView quote = this.geo.quote(new QuoteRequest(store.storeId(), store.location(), store.deliveryMode(),
-                    request.destination()));
+                    request.destination(), store.timezone()));
             delivery = new CheckoutView.Delivery(quote.deliverable(), quote.reason(), quote.deliveryMode(), quote.chargeMinor(),
                     quote.minOrderMinor(), quote.freeDeliveryAboveMinor(), quote.distanceMeters());
             if (!quote.deliverable()) {

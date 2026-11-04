@@ -44,7 +44,7 @@ import { STATUS_LABELS, clock, dateTime, statusTone } from './order-labels';
           @if (o.contactPhone) {
             · <a [href]="'tel:' + o.contactPhone" dir="ltr">{{ o.contactPhone }}</a>
           }
-          · {{ dateTime(o.placedAt) }}
+          · {{ dateTime(o.placedAt, o.store.timezone) }}
         </p>
         <div class="grid">
           <section>
@@ -117,7 +117,7 @@ import { STATUS_LABELS, clock, dateTime, statusTone } from './order-labels';
             <ol class="timeline">
               @for (step of o.timeline; track $index) {
                 <li>
-                  <span class="when">{{ clock(step.at) }}</span>
+                  <span class="when">{{ clock(step.at, o.store.timezone) }}</span>
                   <span>
                     <strong>{{ labels[step.status] }}</strong>
                     @if (step.actorRole) {

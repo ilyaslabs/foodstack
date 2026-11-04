@@ -99,7 +99,7 @@ describe('DeliveryPricingPage', () => {
     expect(element.querySelector('.window-note')?.textContent).toContain(
       'Fri, 23:00 to 02:00, running past midnight',
     );
-    expect(element.textContent).toContain('Asia/Karachi');
+    expect(element.textContent).toContain("each branch's local time");
     const minOrder = element.querySelector('input[name=minOrder]') as HTMLInputElement;
     const freeAbove = element.querySelector('input[name=freeAbove]') as HTMLInputElement;
     minOrder.value = '500';

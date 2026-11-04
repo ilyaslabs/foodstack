@@ -258,7 +258,8 @@ public class OrderService {
         }
         return new OrderDetails(o.id(), o.number(), o.status(), o.fulfilment(), o.deliveryMode(), o.paymentMethod(), o.currency(),
                 o.customerId(), o.customerName(), phone,
-                new OrderDetails.StoreInfo(s.storeId(), s.name(), s.slug(), s.addressLine(), s.city(), s.lat(), s.lng(), s.logoUrls()),
+                new OrderDetails.StoreInfo(s.storeId(), s.name(), s.slug(), s.addressLine(), s.city(), s.lat(), s.lng(), s.logoUrls(),
+                        s.timezone()),
                 (o.destination() != null) ? new OrderDetails.Destination(o.destination().lat(), o.destination().lng(),
                         o.destination().addressLine(), o.destination().instructions()) : null,
                 o.lines().stream().map((l) -> new OrderDetails.Line(l.itemId(), l.name(), l.quantity(), l.unitPriceMinor(),

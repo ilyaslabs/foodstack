@@ -7,6 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRadioModule } from '@angular/material/radio';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 
@@ -37,6 +38,7 @@ import { StoreContext } from './store-context';
     MatInputModule,
     MatProgressBarModule,
     MatRadioModule,
+    MatSelectModule,
     MatSlideToggleModule,
     Icon,
     TranslatedField,
@@ -145,7 +147,15 @@ import { StoreContext } from './store-context';
                 <mat-label>City</mat-label>
                 <input matInput formControlName="city" maxlength="80" required />
               </mat-form-field>
-              <div></div>
+              <mat-form-field appearance="outline">
+                <mat-label>Time zone</mat-label>
+                <mat-select formControlName="timezone">
+                  @for (zone of zones(); track zone) {
+                    <mat-option [value]="zone">{{ zone.replaceAll('_', ' ') }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Set from the location. Opening hours and tickets use it.</mat-hint>
+              </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Latitude</mat-label>
                 <input matInput formControlName="lat" inputmode="decimal" />
@@ -366,7 +376,11 @@ export class StoreProfile {
     lng: ['', [Validators.min(-180), Validators.max(180)]],
     deliveryMode: ['SELF' as DeliveryMode],
     pickupEnabled: [false],
+    timezone: [''],
   });
+
+  /** Every zone the browser knows, with the branch's own first if the browser lacks it. */
+  protected readonly zones = signal<string[]>(knownZones());
 
   protected readonly adminForm = this.fb.group({
     legalName: ['', Validators.required],
@@ -439,7 +453,10 @@ export class StoreProfile {
       lng: s.location ? String(s.location.lng) : '',
       deliveryMode: s.deliveryMode,
       pickupEnabled: s.pickupEnabled,
+      timezone: s.timezone,
     });
+    if (s.timezone && !this.zones().includes(s.timezone))
+      this.zones.update((z) => [s.timezone, ...z]);
     this.adminForm.patchValue({
       legalName: s.legalName,
       taxId: s.taxId ?? '',
@@ -535,6 +552,7 @@ export class StoreProfile {
               prepMinutes: Number(v.prepMinutes),
               deliveryMode: v.deliveryMode,
               pickupEnabled: v.pickupEnabled,
+              timezone: v.timezone || null,
             },
             this.context.etag(),
           ),
@@ -599,5 +617,15 @@ export class StoreProfile {
     } finally {
       this.savingAdmin.set(false);
     }
+  }
+}
+
+function knownZones(): string[] {
+  try {
+    return (Intl as unknown as { supportedValuesOf(key: string): string[] }).supportedValuesOf(
+      'timeZone',
+    );
+  } catch {
+    return [];
   }
 }

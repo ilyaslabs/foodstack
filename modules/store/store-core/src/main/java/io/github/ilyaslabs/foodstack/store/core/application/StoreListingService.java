@@ -60,7 +60,7 @@ public class StoreListingService {
                 (store.getAddress() != null) ? store.getAddress().area() : null,
                 (store.getAddress() != null) ? store.getAddress().city() : null, store.getDeliveryMode(),
                 store.isPickupEnabled(), store.getStatus(), store.isTemporarilyClosed(), store.getPrepMinutes(),
-                StoreService.zone(locale).getId(), hours,
+                StoreService.zone(store, locale).getId(), hours,
                 store.getClosures().stream().flatMap((c) -> c.from().datesUntil(c.to().plusDays(1))).limit(400)
                     .map(Object::toString).toList(),
                 dishNames, List.copyOf(dietary), StoreService.version(store.getVersion()));

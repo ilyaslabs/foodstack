@@ -101,6 +101,23 @@ class QuoteServiceTest {
         assertThat(pastMidnight.chargeMinor()).isEqualTo(15_000);
     }
 
+    @Test
+    @DisplayName("peak hours are read in the branch's own time zone")
+    void peakInBranchTime() {
+        // given Friday 15:30 UTC: 20:30 in Karachi (peak), 19:30 in Dubai (peak), 16:30 in Paris (not)
+        Clock friday = Clock.fixed(Instant.parse("2026-11-06T15:30:00Z"), ZoneOffset.UTC);
+        List<PeakWindow> peaks = List.of(new PeakWindow(List.of(DayOfWeek.FRIDAY), "19:00", "21:00"));
+        given(this.pricing.get()).willReturn(new OperatorPricing(true, 10_000, 0, 8000, 0, null, 150, peaks, 1, null));
+
+        // then
+        assertThat(at(friday).quote(new QuoteRequest("s1", STORE, DeliveryMode.OPERATOR, NEAR, "Asia/Dubai")).chargeMinor())
+            .isEqualTo(15_000);
+        assertThat(at(friday).quote(new QuoteRequest("s1", STORE, DeliveryMode.OPERATOR, NEAR, "Europe/Paris")).chargeMinor())
+            .isEqualTo(10_000);
+        assertThat(at(friday).quote(new QuoteRequest("s1", STORE, DeliveryMode.OPERATOR, NEAR, "Bad/Zone")).chargeMinor())
+            .isEqualTo(15_000);
+    }
+
     private QuoteService at(Clock clock) {
         return new QuoteService(this.zones, this.pricing, 1.3, RoutingService.estimating(1.3), clock,
                 () -> ZoneId.of("Asia/Karachi"));

@@ -137,6 +137,8 @@ export interface BranchUpdate {
   prepMinutes: number;
   deliveryMode: DeliveryMode;
   pickupEnabled: boolean;
+  /** IANA zone; empty finds it from the location. Unchanged while the location moves, it is found again. */
+  timezone?: string | null;
 }
 
 export interface StoreOwner {

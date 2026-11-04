@@ -21,6 +21,7 @@ import io.github.ilyaslabs.foodstack.store.core.application.OrderValidationServi
 import io.github.ilyaslabs.foodstack.store.core.application.SlugBackfill;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreListingService;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreService;
+import io.github.ilyaslabs.foodstack.store.core.domain.BranchTimeZones;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.ItemOverrideRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuItemRepository;
@@ -109,7 +110,7 @@ public class StoreConfiguration {
             StoreSlugRepository storeSlugRepository, MenuItemRepository menuItemRepository, SettingsApi settingsApi, MediaApi mediaApi, IdentityApi identityApi,
             GeoApi geoApi, OutboxWriter storeOutbox, ModuleMongo storeMongo, Clock clock) {
         return new StoreService(brandRepository, storeRepository, storeSlugRepository, menuItemRepository, settingsApi, mediaApi, identityApi,
-                geoApi, storeOutbox, storeMongo.transactionTemplate(), clock);
+                geoApi, storeOutbox, storeMongo.transactionTemplate(), clock, new BranchTimeZones());
     }
 
     @Bean

@@ -40,6 +40,7 @@ import io.github.ilyaslabs.foodstack.store.api.TimeRange;
 import io.github.ilyaslabs.foodstack.store.api.events.BrandChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreAvailabilityChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreChanged;
+import io.github.ilyaslabs.foodstack.store.core.domain.BranchTimeZones;
 import io.github.ilyaslabs.foodstack.store.core.domain.OpeningHours;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
@@ -90,9 +91,21 @@ public class StoreService {
 
     private final Clock clock;
 
+    private final BranchTimeZones timeZones;
+
     public StoreService(BrandRepository brands, StoreRepository stores, StoreSlugRepository slugs, MenuItemRepository items,
             SettingsApi settings, MediaApi media, IdentityApi identity, GeoApi geo, OutboxWriter outbox,
             TransactionTemplate transaction, Clock clock) {
+        this(brands, stores, slugs, items, settings, media, identity, geo, outbox, transaction, clock, null);
+    }
+
+    /**
+     * @param timeZones finds a branch's time zone from its location; {@code null} keeps the deployment's
+     */
+    public StoreService(BrandRepository brands, StoreRepository stores, StoreSlugRepository slugs, MenuItemRepository items,
+            SettingsApi settings, MediaApi media, IdentityApi identity, GeoApi geo, OutboxWriter outbox,
+            TransactionTemplate transaction, Clock clock, BranchTimeZones timeZones) {
+        this.timeZones = timeZones;
         this.brands = brands;
         this.stores = stores;
         this.slugs = slugs;
@@ -154,6 +167,7 @@ public class StoreService {
         store.setTaxId(blankToNull(command.taxId()));
         store.setAddress(clean(command.address()));
         store.setLocation(point(command.location()));
+        store.setTimezone(timezoneAt(command.location(), locale).getId());
         store.setOpeningHours(defaultHours());
         store.setPrepMinutes(command.prepMinutes());
         store.setDeliveryMode(DeliveryMode.SELF);
@@ -387,6 +401,9 @@ public class StoreService {
         if (update.deliveryMode() == null) {
             errors.put("deliveryMode", "is required");
         }
+        if (update.timezone() != null && !update.timezone().isBlank() && BranchTimeZones.parse(update.timezone()).isEmpty()) {
+            errors.put("timezone", "must be an IANA time zone such as Asia/Karachi");
+        }
         failIfAny(errors, "STORE_INVALID");
         StoreDocument store = findStore(storeId);
         requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
@@ -396,6 +413,7 @@ public class StoreService {
         }
         store.setBranchName(blankToNull(update.branchName()));
         store.setAddress(clean(update.address()));
+        store.setTimezone(branchTimezone(store, update));
         store.setLocation(point(update.location()));
         store.setPrepMinutes(update.prepMinutes());
         store.setDeliveryMode(update.deliveryMode());
@@ -464,7 +482,7 @@ public class StoreService {
         StoreDocument store = findStore(storeId);
         requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
         store.setOpeningHours(cleanHours);
-        LocalDate today = LocalDate.ofInstant(this.clock.instant(), zone());
+        LocalDate today = LocalDate.ofInstant(this.clock.instant(), zone(store, this.settings.getLocale()));
         store.setClosures(cleanClosures.stream().filter((c) -> !c.to().isBefore(today.minusDays(1))).toList());
         return saveBranch(store, userId);
     }
@@ -594,7 +612,7 @@ public class StoreService {
             return new DeliveryQuote(false, DeliveryQuoteView.OUT_OF_AREA, 0, 0, null, 0, 0, currency);
         }
         DeliveryQuoteView quote = this.geo.quote(new QuoteRequest(storeId, location(store), store.getDeliveryMode(),
-                destination));
+                destination, zone(store, this.settings.getLocale()).getId()));
         int travel = (int) Math.ceil(quote.distanceMeters() / 1000.0 / RIDER_KMH * 60);
         return new DeliveryQuote(quote.deliverable(), quote.reason(), quote.chargeMinor(), quote.minOrderMinor(),
                 quote.freeDeliveryAboveMinor(), quote.distanceMeters(), store.getPrepMinutes() + travel, currency);
@@ -637,7 +655,7 @@ public class StoreService {
     }
 
     StoreDetails details(StoreDocument store, BrandDocument brand, LocaleView locale) {
-        ZoneId zone = zone(locale);
+        ZoneId zone = zone(store, locale);
         boolean open = store.getStatus() == StoreStatus.LIVE && OpeningHours.isOpen(store.getOpeningHours(),
                 closedDays(store.getClosures()), store.isTemporarilyClosed(), this.clock.instant(), zone);
         Commission commission = (store.getCommissionOverride() != null) ? store.getCommissionOverride() : brand.getCommission();
@@ -664,8 +682,38 @@ public class StoreService {
         return (store.getLocation() != null) ? new GeoPoint(store.getLocation().getY(), store.getLocation().getX()) : null;
     }
 
-    private ZoneId zone() {
-        return zone(this.settings.getLocale());
+    /**
+     * The zone the owner chose wins. Otherwise the zone is found from the location: on a new branch,
+     * when the location moves, or on a branch saved before branches had their own zone.
+     */
+    private String branchTimezone(StoreDocument store, UpdateBranch update) {
+        String chosen = BranchTimeZones.parse(update.timezone()).map(ZoneId::getId).orElse(null);
+        boolean moved = !Objects.equals(location(store), update.location());
+        if (chosen != null && (!chosen.equals(store.getTimezone()) || !moved)) {
+            return chosen;
+        }
+        if (chosen == null && store.getTimezone() != null && !moved) {
+            return store.getTimezone();
+        }
+        return timezoneAt(update.location(), this.settings.getLocale()).getId();
+    }
+
+    private ZoneId timezoneAt(GeoPoint location, LocaleView locale) {
+        ZoneId deployment = zone(locale);
+        if (this.timeZones == null || location == null || !location.isValid()) {
+            return deployment;
+        }
+        try {
+            return this.timeZones.zoneAt(location.lat(), location.lng(), deployment);
+        }
+        catch (RuntimeException ex) {
+            return deployment;
+        }
+    }
+
+    /** The branch's own zone, or the deployment's for a branch saved before branches had one. */
+    static ZoneId zone(StoreDocument store, LocaleView locale) {
+        return BranchTimeZones.parse(store.getTimezone()).orElseGet(() -> zone(locale));
     }
 
     static ZoneId zone(LocaleView locale) {
