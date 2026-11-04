@@ -78,12 +78,14 @@ public class CouponService {
         Instant now = this.clock.instant();
         try {
             return this.transaction.execute((status) -> {
-                Criteria limit = Criteria.where("_id").is(promotion.id());
+                // Only a limited coupon counts uses on its own document; a nationwide unlimited coupon
+                // would make that one document the hottest write of every order (TDD 7.5).
                 if (promotion.totalLimit() != null) {
-                    limit = limit.and("used").lt(promotion.totalLimit());
-                }
-                if (this.mongo.findAndModify(Query.query(limit), new Update().inc("used", 1), Document.class, PROMOTIONS) == null) {
-                    throw new LimitReached(CouponEvaluation.USED_UP);
+                    Criteria limit = Criteria.where("_id").is(promotion.id()).and("used").lt(promotion.totalLimit());
+                    if (this.mongo.findAndModify(Query.query(limit), new Update().inc("used", 1), Document.class,
+                            PROMOTIONS) == null) {
+                        throw new LimitReached(CouponEvaluation.USED_UP);
+                    }
                 }
                 Criteria usage = Criteria.where("_id").is(usageKey(promotion.id(), request.customerId()));
                 if (promotion.perCustomerLimit() != null) {
@@ -131,8 +133,8 @@ public class CouponService {
             if (before == null) {
                 return;
             }
-            this.mongo.updateFirst(Query.query(Criteria.where("_id").is(before.promotionId()).and("used").gt(0)),
-                    new Update().inc("used", -1), PROMOTIONS);
+            this.mongo.updateFirst(Query.query(Criteria.where("_id").is(before.promotionId()).and("totalLimit").ne(null)
+                .and("used").gt(0)), new Update().inc("used", -1), PROMOTIONS);
             this.mongo.updateFirst(Query.query(Criteria.where("_id").is(usageKey(before.promotionId(), before.customerId()))
                 .and("count").gt(0)), new Update().inc("count", -1), USAGE);
             this.outbox.append(new CouponReleased(orderId, before.promotionId(),
