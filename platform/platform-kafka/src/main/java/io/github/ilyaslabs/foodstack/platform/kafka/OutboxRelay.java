@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -25,8 +26,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 /**
  * Publishes a module's outbox to its Kafka topic (TDD 7.2).
  * <p>
- * One replica at a time holds the module's leader lease and polls {@code NEW} rows in id order,
- * sends them keyed by aggregate, waits for {@code acks=all} and marks them {@code SENT} (removed
+ * Every replica relays, each over the outbox {@link BucketLeases buckets} it holds (TDD 7.5): it
+ * polls {@code NEW} rows of its buckets in id order, sends them keyed by aggregate, waits for {@code acks=all} and marks them {@code SENT} (removed
  * by a TTL index after 7 days). When a send fails, only the rows before the first failure are
  * marked, so later events of the same aggregate are sent again after it: ordering per aggregate
  * is kept, at the price of duplicates that consumers drop through their inbox.
@@ -45,7 +46,7 @@ public class OutboxRelay implements SmartLifecycle {
 
     private final KafkaTemplate<String, String> kafka;
 
-    private final RedisLeaderLock leaderLock;
+    private final BucketLeases leases;
 
     private final JsonMapper jsonMapper;
 
@@ -58,13 +59,13 @@ public class OutboxRelay implements SmartLifecycle {
     private Thread worker;
 
     public OutboxRelay(ModuleMongo mongo, String topic, KafkaTemplate<String, String> kafka,
-            RedisLeaderLock leaderLock, JsonMapper jsonMapper, FoodstackKafkaProperties properties, Clock clock) {
+            BucketLeases leases, JsonMapper jsonMapper, FoodstackKafkaProperties properties, Clock clock) {
         this.module = mongo.module();
         this.collection = mongo.collection("outbox");
         this.topic = topic;
         this.template = mongo.template();
         this.kafka = kafka;
-        this.leaderLock = leaderLock;
+        this.leases = leases;
         this.jsonMapper = jsonMapper;
         this.settings = properties.getRelay();
         this.clock = clock;
@@ -88,12 +89,7 @@ public class OutboxRelay implements SmartLifecycle {
                 Thread.currentThread().interrupt();
             }
         }
-        try {
-            this.leaderLock.release();
-        }
-        catch (RuntimeException ex) {
-            logger.debug("Could not release outbox leader lock of " + this.module, ex);
-        }
+        this.leases.release();
     }
 
     @Override
@@ -105,8 +101,9 @@ public class OutboxRelay implements SmartLifecycle {
         while (this.running) {
             int published = 0;
             try {
-                if (this.leaderLock.acquireOrRenew()) {
-                    published = publishBatch();
+                Set<Integer> buckets = this.leases.current();
+                if (!buckets.isEmpty()) {
+                    published = publishBatch(buckets);
                 }
             }
             catch (RuntimeException ex) {
@@ -124,11 +121,11 @@ public class OutboxRelay implements SmartLifecycle {
     }
 
     /**
-     * Sends one batch of pending rows.
+     * Sends one batch of pending rows of the given buckets.
      * @return how many rows were marked sent
      */
-    public int publishBatch() {
-        Query pending = Query.query(Criteria.where("status").is(OutboxWriter.STATUS_NEW))
+    public int publishBatch(Set<Integer> buckets) {
+        Query pending = Query.query(Criteria.where("status").is(OutboxWriter.STATUS_NEW).and("bucket").in(buckets))
             .with(Sort.by("_id"))
             .limit(this.settings.getBatchSize());
         List<Document> rows = this.template.find(pending, Document.class, this.collection);

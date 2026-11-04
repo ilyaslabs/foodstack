@@ -43,10 +43,10 @@ public class ModuleEventing {
     }
 
     public OutboxRelay relay(ModuleMongo mongo) {
-        String lockKey = this.namespace + ":" + mongo.module() + ":outbox:leader";
-        return new OutboxRelay(mongo, topic(mongo.module()), this.kafka,
-                new RedisLeaderLock(this.redis, lockKey, this.properties.getRelay().getLeaderLease()), this.jsonMapper,
-                this.properties, this.clock);
+        BucketLeases leases = new BucketLeases(this.redis, this.namespace, mongo.module() + ":outbox",
+                this.properties.getRelay().getLease(), this.clock);
+        return new OutboxRelay(mongo, topic(mongo.module()), this.kafka, leases, this.jsonMapper, this.properties,
+                this.clock);
     }
 
     public KafkaAdmin.NewTopics topics(String module) {
