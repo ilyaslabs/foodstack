@@ -131,6 +131,27 @@ class PromotionStorageTest {
     }
 
     @Test
+    @DisplayName("an unlimited coupon writes no counter on its promotion; uses are counted from redemptions, and a later limit starts from them")
+    void unlimitedHasNoHotCounter() {
+        String code = code();
+        PromotionDetails created = this.promotions.create(null, input(code, null, null), "admin-1");
+        String first = Ids.newId();
+
+        assertThat(this.coupons.reserve(first, request(code, "c1")).applies()).isTrue();
+        assertThat(this.coupons.reserve(Ids.newId(), request(code, "c2")).applies()).isTrue();
+        assertThat(this.promotionMongo.template().findById(created.id(), Document.class, "promotion_promotions").get("used"))
+            .isEqualTo(0L);
+        assertThat(this.promotions.details(created.id()).used()).isEqualTo(2);
+        this.coupons.release(first);
+        assertThat(this.promotions.details(created.id()).used()).isEqualTo(1);
+
+        PromotionDetails limited = this.promotions.update(created.id(), input(code, 2, null), 0, "admin-1");
+        assertThat(limited.used()).isEqualTo(1);
+        assertThat(this.coupons.reserve(Ids.newId(), request(code, "c3")).applies()).isTrue();
+        assertThat(this.coupons.reserve(Ids.newId(), request(code, "c4")).reason()).isEqualTo(CouponEvaluation.USED_UP);
+    }
+
+    @Test
     @DisplayName("holds per-customer uses, redeems on confirmation with an event, and counts first orders")
     void perCustomer() {
         String code = code();

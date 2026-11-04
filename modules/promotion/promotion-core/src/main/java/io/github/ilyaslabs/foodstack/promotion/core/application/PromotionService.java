@@ -11,6 +11,7 @@ import java.util.regex.Pattern;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
 import io.github.ilyaslabs.foodstack.promotion.core.domain.CouponRules;
 import io.github.ilyaslabs.foodstack.promotion.core.persistence.PromotionDocument;
+import io.github.ilyaslabs.foodstack.promotion.core.persistence.RedemptionDocument;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 import org.bson.Document;
 
@@ -18,6 +19,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -104,11 +106,38 @@ public class PromotionService {
         Query query = (brandIds == null) ? new Query()
                 : Query.query(Criteria.where("owner").is(PromotionDocument.STORE).and("brandId").in(brandIds));
         query.with(Sort.by(Sort.Direction.DESC, "_id")).limit(Math.clamp(limit, 1, 500));
-        return this.mongo.find(query, PromotionDocument.class).stream().map(PromotionService::details).toList();
+        List<PromotionDocument> found = this.mongo.find(query, PromotionDocument.class);
+        Map<String, Long> unlimitedUses = activeUses(found.stream()
+            .filter((p) -> p.totalLimit() == null)
+            .map(PromotionDocument::id)
+            .toList());
+        return found.stream().map((p) -> details(p, unlimitedUses)).toList();
     }
 
     public PromotionDetails details(String promotionId) {
         return details(get(promotionId));
+    }
+
+    private PromotionDetails details(PromotionDocument p) {
+        return details(p, (p.totalLimit() == null) ? activeUses(List.of(p.id())) : Map.of());
+    }
+
+    /**
+     * Uses held or redeemed, counted from the redemptions. Only limited coupons keep a counter on
+     * their own document (TDD 7.5), so unlimited ones are counted here, for the back office only.
+     */
+    private Map<String, Long> activeUses(List<String> promotionIds) {
+        if (promotionIds.isEmpty()) {
+            return Map.of();
+        }
+        Aggregation count = Aggregation.newAggregation(
+                Aggregation.match(Criteria.where("promotionId").in(promotionIds).and("status").ne(RedemptionDocument.RELEASED)),
+                Aggregation.group("promotionId").count().as("uses"));
+        Map<String, Long> uses = new LinkedHashMap<>();
+        for (Document row : this.mongo.aggregate(count, RedemptionDocument.class, Document.class)) {
+            uses.put(row.getString("_id"), ((Number) row.get("uses")).longValue());
+        }
+        return uses;
     }
 
     PromotionDocument get(String promotionId) {
@@ -128,6 +157,11 @@ public class PromotionService {
             .set("paymentMethods", p.paymentMethods()).set("operatorMerchantOnly", p.operatorMerchantOnly())
             .set("operatorFundingBasisPoints", p.operatorFundingBasisPoints()).set("updatedAt", p.updatedAt())
             .set("updatedBy", p.updatedBy());
+        PromotionDocument current = this.mongo.findById(p.id(), PromotionDocument.class);
+        if (p.totalLimit() != null && current != null && current.totalLimit() == null) {
+            // an unlimited coupon gets a limit: start its counter from the uses so far
+            update.set("used", activeUses(List.of(p.id())).getOrDefault(p.id(), 0L));
+        }
         PromotionDocument saved = this.mongo.findAndModify(
                 Query.query(Criteria.where("_id").is(p.id()).and("version").is(expectedVersion)), update,
                 FindAndModifyOptions.options().returnNew(true), PromotionDocument.class);
@@ -204,11 +238,12 @@ public class PromotionService {
         return code;
     }
 
-    private static PromotionDetails details(PromotionDocument p) {
+    private static PromotionDetails details(PromotionDocument p, Map<String, Long> unlimitedUses) {
+        long used = (p.totalLimit() == null) ? unlimitedUses.getOrDefault(p.id(), 0L) : p.used();
         return new PromotionDetails(p.id(), p.owner(), p.brandId(), p.code(), p.title(), p.type(), p.percentBasisPoints(),
                 p.maxDiscountMinor(), p.amountMinor(), p.minOrderMinor(), p.startsAt(), p.endsAt(), p.totalLimit(),
                 p.perCustomerLimit(), p.firstOrderOnly(), p.storeIds(), p.cities(), p.paymentMethods(), p.operatorMerchantOnly(),
-                p.operatorFundingBasisPoints(), p.active(), p.used(), (p.version() != null) ? p.version() : 0, p.updatedAt());
+                p.operatorFundingBasisPoints(), p.active(), used, (p.version() != null) ? p.version() : 0, p.updatedAt());
     }
 
     private static ModuleException codeTaken(String code) {

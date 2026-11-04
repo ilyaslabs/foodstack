@@ -27,3 +27,12 @@ databaseChangeLog:
             collectionName: promotion_customer_usage
         - createCollection:
             collectionName: promotion_customers
+  - changeSet:
+      id: promotion-3
+      author: foodstack
+      comment: "Uses of unlimited coupons are counted from their redemptions for the back office (TDD 7.5)"
+      changes:
+        - createIndex:
+            collectionName: promotion_redemptions
+            keys: '{ "promotionId": 1, "status": 1 }'
+            options: '{ "name": "promotion_status" }'
