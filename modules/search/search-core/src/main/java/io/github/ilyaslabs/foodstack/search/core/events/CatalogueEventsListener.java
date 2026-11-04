@@ -49,7 +49,8 @@ public class CatalogueEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(id = "${foodstack.namespace:foodstack}-search-catalogue",
+    @KafkaListener(concurrency = "${foodstack.kafka.concurrency.search:${foodstack.kafka.listener-concurrency:3}}",
+            id = "${foodstack.namespace:foodstack}-search-catalogue",
             groupId = "${foodstack.namespace:foodstack}-search",
             topics = { "${foodstack.namespace:foodstack}.store.events", "${foodstack.namespace:foodstack}.geo.events" },
             properties = "auto.offset.reset=earliest")

@@ -101,6 +101,11 @@
     <div class="status-row">
       @if (!failed() && (stores().length || !loading())) {
         <h2 class="count-title">{{ countLabel() }}</h2>
+        @if (radiusMeters(); as meters) {
+          <span class="radius-note">{{
+            ui.t('withinDistance', { distance: ui.distance(meters) })
+          }}</span>
+        }
       }
     </div>
     @if (loading() && stores().length === 0) {
@@ -131,10 +136,17 @@
       }
     </div>
 
-    @if (stores().length < total()) {
+    @if (hasMore()) {
       <div class="more">
         <button mat-stroked-button type="button" (click)="more()" [disabled]="loading()">
           {{ ui.t('loadMore') }}
+        </button>
+      </div>
+    } @else if (!failed() && !loading() && widerMeters(); as wider) {
+      <div class="more further">
+        <button mat-flat-button type="button" (click)="further()">
+          <fs-icon name="place" />
+          {{ ui.t('showFurther', { distance: ui.distance(wider) }) }}
         </button>
       </div>
     }

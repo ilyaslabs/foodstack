@@ -60,6 +60,11 @@ export class Home {
   protected readonly stores = signal<Card[]>([]);
   protected readonly cuisines = signal<{ cuisine: string; count: number }[]>([]);
   protected readonly total = signal(0);
+  protected readonly hasMore = signal(false);
+  /** The discovery radius the customer widened to; null for the first step. */
+  private readonly radius = signal<number | null>(null);
+  protected readonly radiusMeters = signal<number | null>(null);
+  protected readonly widerMeters = signal<number | null>(null);
   protected readonly loading = signal(false);
   protected readonly failed = signal(false);
   private page = 0;
@@ -90,10 +95,11 @@ export class Home {
       const cuisine = this.cuisine();
       const fulfilment = this.fulfilment();
       if (!this.ready() || !location) return;
-      untracked(
-        () =>
-          void this.load(0, { lat: location.lat, lng: location.lng, query, cuisine, fulfilment }),
-      );
+      untracked(() => {
+        // a new place or search starts close by again
+        this.radius.set(null);
+        void this.load(0, { lat: location.lat, lng: location.lng, query, cuisine, fulfilment });
+      });
     });
   }
 
@@ -124,6 +130,14 @@ export class Home {
 
   protected more(): void {
     this.reload(this.page + 1);
+  }
+
+  /** Looks one discovery step further out ("show restaurants further away"). */
+  protected further(): void {
+    const wider = this.widerMeters();
+    if (!wider) return;
+    this.radius.set(wider);
+    this.reload(0);
   }
 
   protected retry(): void {
@@ -165,6 +179,7 @@ export class Home {
           fulfilment: search.fulfilment,
           page,
           size: PAGE_SIZE,
+          radius: search.fulfilment === 'DELIVERY' ? this.radius() : null,
         }),
       );
       if (id !== this.requestId) return;
@@ -174,6 +189,9 @@ export class Home {
       );
       this.cuisines.set(result.cuisines);
       this.total.set(result.total);
+      this.hasMore.set(result.hasMore);
+      this.radiusMeters.set(search.fulfilment === 'DELIVERY' ? result.radiusMeters : null);
+      this.widerMeters.set(result.widerRadiusMeters ?? null);
     } catch {
       if (id !== this.requestId) return;
       if (page === 0) this.stores.set([]);

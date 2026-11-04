@@ -24,8 +24,13 @@ public interface StoreSearchEngine {
     /** Ids of indexed branches using a delivery mode. */
     List<String> storeIdsWithDeliveryMode(String deliveryMode);
 
-    /** Matching branches, nearest branch per brand, with cuisine counts. */
-    Result search(StoreSearchQuery query);
+    /** Matching branches, nearest branch per brand, with cuisine counts; the page starts at {@code page * size}. */
+    default Result search(StoreSearchQuery query) {
+        return search(query, query.page() * query.size());
+    }
+
+    /** As {@link #search(StoreSearchQuery)}, starting at result {@code from}. */
+    Result search(StoreSearchQuery query, int from);
 
     /**
      * @param hits branches on the page, in engine order

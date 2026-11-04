@@ -217,6 +217,73 @@ class ElasticsearchStoreSearchEngineTest {
         assertThat(this.engine.storeIdsOfBrand("temp")).isEmpty();
     }
 
+    @Test
+    @DisplayName("delivery search stays within the discovery radius even when a far branch's zone covers the customer")
+    void discoveryRadius() throws Exception {
+        // given: a branch 12 km away (straight line) whose big zone reaches the customer
+        ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
+                new SearchProperties("radius_", 0, 15_000, null));
+        engine.index(store("far-big-zone", "far", "Far Kitchen", null, List.of("bbq"), new GeoPoint(LAT + 0.108, LNG),
+                ring(LAT + 0.108, LNG, 5), Map.of(), false));
+        engine.index(store("near", "near", "Near Kitchen", null, List.of("bbq"), new GeoPoint(LAT + 0.01, LNG),
+                ring(LAT + 0.01, LNG, 2), Map.of(), false));
+        this.client.indices().refresh((r) -> r.index(engine.alias()));
+
+        // when: 8 km by road (6.2 km straight), then 25 km by road
+        List<String> first = engine.search(new StoreSearchQuery(LAT, LNG, null, null, Fulfilment.DELIVERY, 0, 20, 8000))
+            .hits().stream().map((h) -> h.store().storeId()).toList();
+        List<String> wider = engine.search(new StoreSearchQuery(LAT, LNG, null, null, Fulfilment.DELIVERY, 0, 20, 25_000))
+            .hits().stream().map((h) -> h.store().storeId()).toList();
+
+        // then
+        assertThat(first).containsExactly("near");
+        assertThat(wider).containsExactly("near", "far-big-zone");
+    }
+
+    @Test
+    @DisplayName("writes carry the branch version: a late, older read never overwrites a newer one")
+    void versionedWrites() throws Exception {
+        // given
+        ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
+                new SearchProperties("versions_", 0, 15_000, null));
+        IndexedStore base = store("v-1", "ver", "Version Kitchen", null, List.of("bbq"), new GeoPoint(LAT, LNG),
+                ring(LAT, LNG, 2), Map.of(), false);
+
+        // when: version 5 lands, then a late version 4, then version 5 again (a rebuild)
+        engine.index(withVersion(base, "Fresh", 5));
+        engine.index(withVersion(base, "Stale", 4));
+        engine.index(withVersion(base, "Rebuilt", 5));
+        this.client.indices().refresh((r) -> r.index(engine.alias()));
+
+        // then
+        assertThat(engine.search(new StoreSearchQuery(LAT, LNG, null, null, Fulfilment.DELIVERY, 0, 20, 8000)).hits())
+            .extracting((h) -> h.store().brandName()).containsExactly("Rebuilt");
+    }
+
+    @Test
+    @DisplayName("lists every branch of a brand, past one page of ids")
+    void allIdsOfABrand() throws Exception {
+        ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
+                new SearchProperties("ids_", 0, 15_000, null));
+        engine.ensureIndex();
+        co.elastic.clients.elasticsearch.core.BulkRequest.Builder bulk = new co.elastic.clients.elasticsearch.core.BulkRequest.Builder();
+        int count = ElasticsearchStoreSearchEngine.ID_PAGE + 5;
+        for (int i = 0; i < count; i++) {
+            String id = "chain-" + i;
+            bulk.operations((o) -> o.index((x) -> x.index(engine.alias()).id(id).document(Map.of("brandId", "chain"))));
+        }
+        this.client.bulk(bulk.refresh(co.elastic.clients.elasticsearch._types.Refresh.True).build());
+
+        assertThat(engine.storeIdsOfBrand("chain")).hasSize(count).doesNotHaveDuplicates();
+    }
+
+    private static IndexedStore withVersion(IndexedStore s, String brandName, long version) {
+        return new IndexedStore(s.storeId(), s.slug(), s.brandId(), brandName, s.branchName(), s.branchCount(), s.description(),
+                s.cuisines(), s.logoUrls(), s.coverUrls(), s.location(), s.area(), s.city(), s.deliveryMode(), s.pickupEnabled(),
+                s.temporarilyClosed(), s.prepMinutes(), s.timezone(), s.openingHours(), s.closedDates(), s.dishNames(),
+                s.dietaryTags(), s.deliveryArea(), version);
+    }
+
     private static StoreSearchQuery query(String text, String cuisine, Fulfilment fulfilment) {
         return new StoreSearchQuery(LAT, LNG, text, cuisine, fulfilment, 0, 20);
     }

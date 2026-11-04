@@ -58,7 +58,8 @@ public class DispatchEventsListener {
         this.clock = clock;
     }
 
-    @KafkaListener(id = "${foodstack.namespace:foodstack}-rider-dispatch", groupId = "${foodstack.namespace:foodstack}-rider",
+    @KafkaListener(concurrency = "${foodstack.kafka.concurrency.rider:${foodstack.kafka.listener-concurrency:3}}",
+            id = "${foodstack.namespace:foodstack}-rider-dispatch", groupId = "${foodstack.namespace:foodstack}-rider",
             topics = "${foodstack.namespace:foodstack}.dispatch.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);

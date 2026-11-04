@@ -18,7 +18,8 @@ public class OrderProjectionListener {
         this.jsonMapper = jsonMapper;
     }
 
-    @KafkaListener(id = "${foodstack.namespace:foodstack}-order-projections",
+    @KafkaListener(concurrency = "${foodstack.kafka.concurrency.order:${foodstack.kafka.listener-concurrency:3}}",
+            id = "${foodstack.namespace:foodstack}-order-projections",
             groupId = "${foodstack.namespace:foodstack}-order-projections",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
