@@ -16,6 +16,9 @@ public class GeoProperties {
      */
     private double roadFactor = 1.3;
 
+    /** How far from a city's centre a new branch or rider is still suggested that city. */
+    private int cityRadiusMeters = 60_000;
+
     /** How long zones and the operator's pricing stay in Redis; changes evict them at once. 0 turns the cache off. */
     private Duration quoteCacheTtl = Duration.ofMinutes(10);
 
@@ -102,6 +105,14 @@ public class GeoProperties {
         public void setTimeout(Duration timeout) {
             this.timeout = timeout;
         }
+    }
+
+    public int getCityRadiusMeters() {
+        return this.cityRadiusMeters;
+    }
+
+    public void setCityRadiusMeters(int cityRadiusMeters) {
+        this.cityRadiusMeters = cityRadiusMeters;
     }
 
     public double getRoadFactor() {

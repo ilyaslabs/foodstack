@@ -38,3 +38,10 @@ databaseChangeLog:
       changes:
         - createCollection:
             collectionName: geo_seed
+  - changeSet:
+      id: geo-4
+      author: foodstack
+      comment: "geo_cities: the operator's cities, with optional own delivery pricing; unsharded (one country, few, rarely written)"
+      changes:
+        - createCollection:
+            collectionName: geo_cities

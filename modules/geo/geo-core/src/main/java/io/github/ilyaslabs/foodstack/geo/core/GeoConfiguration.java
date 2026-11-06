@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.geo.core;
 import java.time.Clock;
 import java.time.ZoneId;
 
+import io.github.ilyaslabs.foodstack.geo.core.application.CityService;
 import io.github.ilyaslabs.foodstack.geo.core.application.GeoCache;
 import io.github.ilyaslabs.foodstack.geo.core.application.GeocodingService;
 import io.github.ilyaslabs.foodstack.geo.core.events.GeoCacheListener;
@@ -16,6 +17,7 @@ import io.github.ilyaslabs.foodstack.geo.core.application.ZoneService;
 import io.github.ilyaslabs.foodstack.geo.core.geocoding.DisabledGeocodingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.geocoding.GeocodingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.geocoding.NominatimGeocodingProvider;
+import io.github.ilyaslabs.foodstack.geo.core.persistence.CityRepository;
 import io.github.ilyaslabs.foodstack.geo.core.persistence.OperatorPricingRepository;
 import io.github.ilyaslabs.foodstack.geo.core.persistence.ZoneRepository;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
@@ -132,10 +134,18 @@ public class GeoConfiguration {
     }
 
     @Bean
+    CityService geoCityService(CityRepository cityRepository, OutboxWriter geoOutbox, ModuleMongo geoMongo, Clock clock,
+            GeoCache geoCache, SettingsApi settingsApi, GeoProperties properties) {
+        return new CityService(cityRepository, geoOutbox, geoMongo.transactionTemplate(), clock, geoCache,
+                settingsApi::getLocale, properties.getCityRadiusMeters());
+    }
+
+    @Bean
     QuoteService geoQuoteService(ZoneService geoZoneService, OperatorPricingService geoOperatorPricingService,
-            GeoProperties properties, RoutingService geoRoutingService, SettingsApi settingsApi, Clock clock) {
+            GeoProperties properties, RoutingService geoRoutingService, SettingsApi settingsApi, Clock clock,
+            CityService geoCityService) {
         return new QuoteService(geoZoneService, geoOperatorPricingService, properties.getRoadFactor(), geoRoutingService, clock,
-                () -> ZoneId.of(settingsApi.getLocale().timezone()));
+                () -> ZoneId.of(settingsApi.getLocale().timezone()), geoCityService);
     }
 
     @Bean

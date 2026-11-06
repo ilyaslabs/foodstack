@@ -25,4 +25,13 @@ public interface GeoApi {
      * it is off or not answering, estimated from the straight line. Answers are cached briefly.
      */
     RouteView route(@Param("request") RouteRequest request);
+
+    /** Every city, active or not, sorted by name in the default language. Cheap: read from the cache. */
+    java.util.List<CityView> cities();
+
+    /**
+     * The active city whose centre is nearest to a point, within {@code foodstack.geo.city-radius-meters}
+     * (60 km by default), to suggest a new branch's or rider's city; {@code null} when there is none.
+     */
+    CityView nearestCity(@Param("point") GeoPoint point);
 }

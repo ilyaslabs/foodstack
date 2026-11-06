@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.geo.core.events;
 
+import io.github.ilyaslabs.foodstack.geo.api.events.CityChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.OperatorDeliveryPricingChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.ZoneChanged;
 import io.github.ilyaslabs.foodstack.geo.core.application.GeoCache;
@@ -17,6 +18,8 @@ import org.springframework.kafka.annotation.KafkaListener;
 public class GeoCacheListener {
 
     private static final String ZONE_CHANGED = EventTypes.type("geo", ZoneChanged.class);
+
+    private static final String CITY_CHANGED = EventTypes.type("geo", CityChanged.class);
 
     private static final String PRICING_CHANGED = EventTypes.type("geo", OperatorDeliveryPricingChanged.class);
 
@@ -39,6 +42,9 @@ public class GeoCacheListener {
         }
         else if (PRICING_CHANGED.equals(event.type())) {
             this.cache.evictOperatorPricing();
+        }
+        else if (CITY_CHANGED.equals(event.type())) {
+            this.cache.evictCities();
         }
     }
 }

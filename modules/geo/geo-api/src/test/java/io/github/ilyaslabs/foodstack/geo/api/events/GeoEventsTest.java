@@ -29,6 +29,13 @@ class GeoEventsTest {
                 OperatorDeliveryPricingChanged.class);
     }
 
+    @Test
+    @DisplayName("CityChanged matches its committed v1 snapshot and is keyed by city")
+    void cityChanged() throws IOException {
+        assertSnapshot("/events/CityChanged.v1.json", new CityChanged("city-1", 3, "user-1"), CityChanged.class);
+        assertThat(new CityChanged("city-1", 3, "user-1").subject()).isEqualTo("city-1");
+    }
+
     private <T> void assertSnapshot(String path, T event, Class<T> type) throws IOException {
         String snapshot = read(path);
         assertThat(this.jsonMapper.readTree(this.jsonMapper.writeValueAsString(event)))

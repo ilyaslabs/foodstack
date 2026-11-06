@@ -67,7 +67,34 @@ class GeoRepositoriesTest {
     OperatorPricingRepository pricing;
 
     @Autowired
+    CityRepository cities;
+
+    @Autowired
     MongoTemplate geoMongoTemplate;
+
+    @Test
+    @DisplayName("keeps a city with its own pricing, and refuses a stale write with the optimistic lock")
+    void cities() {
+        // given
+        CityDocument saved = this.cities.save(new CityDocument(Ids.newId(), java.util.Map.of("en", "Lahore", "ur", "لاہور"),
+                31.52, 74.35, true, new CityDocument.Pricing(20_000, 1_000, 12_000, 0, null, 150, java.util.List.of()),
+                Instant.now(), "user-1", null));
+
+        // when
+        CityDocument read = this.cities.findById(saved.id()).orElseThrow();
+        CityDocument renamed = this.cities.save(new CityDocument(read.id(), java.util.Map.of("en", "Lahore City"), 31.52, 74.35,
+                true, null, Instant.now(), "user-1", read.version()));
+
+        // then
+        assertThat(read.name()).containsEntry("ur", "لاہور");
+        assertThat(read.pricing().maxDistanceMeters()).isEqualTo(12_000);
+        assertThat(renamed.version()).isEqualTo(read.version() + 1);
+        assertThat(this.cities.findById(saved.id()).orElseThrow().pricing()).isNull();
+        org.assertj.core.api.Assertions
+            .assertThatThrownBy(() -> this.cities.save(new CityDocument(read.id(), java.util.Map.of("en", "Old"), 31.52,
+                    74.35, true, null, Instant.now(), "user-1", read.version())))
+            .isInstanceOf(org.springframework.dao.OptimisticLockingFailureException.class);
+    }
 
     @Test
     @DisplayName("keeps a branch's zones in order and finds the zone that contains a point with the 2dsphere index")
