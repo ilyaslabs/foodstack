@@ -102,11 +102,11 @@ class StoreControllersTest {
     }
 
     @Test
-    @DisplayName("a store owner lists only their own branches; operator staff list all")
+    @DisplayName("a store owner lists their own branches and their brands' branches; operator staff list all")
     void list() throws Exception {
         StoreSummary summary = new StoreSummary("s1", "b1", "Spice Route", "Gulberg", "Lahore", StoreStatus.LIVE, false,
                 DeliveryMode.SELF, Instant.ofEpochSecond(1_800_000_000L), Map.of("thumb", "https://cdn.example/logo.webp"));
-        given(this.storeService.list(Set.of("s1"), null, 50)).willReturn(List.of(summary));
+        given(this.storeService.listFor(Set.of("s1"), Set.of("b1"))).willReturn(List.of(summary));
         given(this.storeService.list(null, "spice", 50)).willReturn(List.of(summary));
 
         this.mvc.perform(get("/api/v1/stores").with(owner()))
@@ -236,7 +236,7 @@ class StoreControllersTest {
         this.mvc.perform(put("/api/v1/brands/b1/commission").with(owner()).contentType(MediaType.APPLICATION_JSON)
             .content("{\"percentBasisPoints\":0,\"fixedMinor\":0}"))
             .andExpect(status().isForbidden());
-        verify(this.storeService, never()).updateCommission(any(), any(), any());
+        verify(this.storeService, never()).updateCommission(any(), any(), any(), any());
     }
 
     private static BrandDetails brand() {

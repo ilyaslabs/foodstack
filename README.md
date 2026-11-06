@@ -50,8 +50,8 @@ These are fixed so every developer and tester uses the same ones. They exist onl
 | `LocalFoodstackApplication` | `finance@demo.foodstack.local` | `foodstack-demo` | Finance |
 | `LocalFoodstackApplication` | `support@demo.foodstack.local` | `foodstack-demo` | Support |
 | `LocalFoodstackApplication` | `customer@demo.foodstack.local` | `foodstack-demo` | Customer |
-| `LocalFoodstackApplication` | `spiceroute@demo.foodstack.local` | `foodstack-demo` | Store owner of Spice Route (Gulberg) |
-| `LocalFoodstackApplication` | `napoli@demo.foodstack.local` | `foodstack-demo` | Store owner of Napoli Slice (DHA) |
+| `LocalFoodstackApplication` | `spiceroute@demo.foodstack.local` | `foodstack-demo` | Brand owner of Spice Route (both branches) |
+| `LocalFoodstackApplication` | `napoli@demo.foodstack.local` | `foodstack-demo` | Branch manager of Napoli Slice (DHA) |
 | `LocalFoodstackApplication` | `rider@demo.foodstack.local` | `foodstack-demo` | Operator rider (Bilal Ahmed, motorbike) |
 | `LocalFoodstackApplication` | `rider2@demo.foodstack.local` | `foodstack-demo` | Operator rider (Ayesha Noor, scooter) |
 | `LocalFoodstackApplication` | `napoli.rider@demo.foodstack.local` | `foodstack-demo` | Napoli Slice's own rider (Usman Tariq) |

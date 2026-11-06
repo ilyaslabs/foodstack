@@ -20,6 +20,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param vehicle {@code BICYCLE}, {@code MOTORBIKE}, {@code SCOOTER} or {@code CAR}
  * @param plate number plate, or {@code null}
  * @param city where the rider works, as text until cities land (M4)
+ * @param cityId the operator's city the rider works in, or {@code null} for any city
  * @param status {@code ACTIVE} or {@code SUSPENDED}
  * @param online whether the rider is taking jobs
  * @param idleSince when the rider went online or finished the last job
@@ -36,7 +37,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  */
 @Document("rider_riders")
 public record RiderDocument(@Id String id, String kind, String storeId, String name, String phoneCipher, String vehicle,
-        String plate, String city, String status, boolean online, Instant idleSince, Double lat, Double lng,
+        String plate, String city, String cityId, String status, boolean online, Instant idleSince, Double lat, Double lng,
         Instant lastSeenAt, List<String> activeOrderIds, long offers, long accepted, long deliveries, Instant createdAt,
         Instant updatedAt, @Version Long version) {
 

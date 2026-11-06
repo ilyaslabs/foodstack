@@ -41,6 +41,15 @@ public final class FoodstackSecurityCoreAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    @ConditionalOnBean(StringRedisTemplate.class)
+    BranchBrands branchBrands(StringRedisTemplate redis, @Value("${foodstack.namespace:foodstack}") String namespace) {
+        BranchBrands branchBrands = new BranchBrands(redis, namespace, BranchBrands.DEFAULT_MAX_CACHED);
+        CurrentUser.useBranchBrands(branchBrands);
+        return branchBrands;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     @ConditionalOnProperty("foodstack.security.pii-key")
     PiiCipher piiCipher(FoodstackSecurityProperties properties) {
         return new PiiCipher(properties.getPiiKey());

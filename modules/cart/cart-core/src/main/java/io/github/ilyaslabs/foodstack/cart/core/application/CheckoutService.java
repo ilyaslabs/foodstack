@@ -90,7 +90,7 @@ public class CheckoutService {
         }
         else {
             DeliveryQuoteView quote = this.geo.quote(new QuoteRequest(store.storeId(), store.location(), store.deliveryMode(),
-                    request.destination(), store.timezone()));
+                    request.destination(), store.timezone(), store.cityId()));
             delivery = new CheckoutView.Delivery(quote.deliverable(), quote.reason(), quote.deliveryMode(), quote.chargeMinor(),
                     quote.minOrderMinor(), quote.freeDeliveryAboveMinor(), quote.distanceMeters());
             if (!quote.deliverable()) {
@@ -111,7 +111,7 @@ public class CheckoutService {
         if (request.couponCode() != null && !request.couponCode().isBlank()) {
             coupon = this.promotions.evaluate(new CouponRequest(request.couponCode().strip(), request.customerId(),
                     store.storeId(), store.brandId(), store.city(), subtotal, deliveryCharge, fulfilment,
-                    request.paymentMethod(), true, priced.currency()));
+                    request.paymentMethod(), true, priced.currency(), store.cityId()));
             if (coupon.applies()) {
                 itemsDiscount = Math.min(coupon.itemsDiscountMinor(), subtotal);
                 deliveryDiscount = Math.min(coupon.deliveryDiscountMinor(), deliveryCharge);

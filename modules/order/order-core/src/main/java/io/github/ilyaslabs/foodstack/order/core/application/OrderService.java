@@ -169,7 +169,7 @@ public class OrderService {
         if (userId == null) {
             throw new ModuleException.Unauthorized("Sign in first", "UNAUTHENTICATED");
         }
-        if (CurrentUser.storeIds().contains(order.store().storeId())) {
+        if (CurrentUser.managesStore(order.store().storeId())) {
             return Actor.store(userId);
         }
         if (CurrentUser.hasAuthority(ORDER_MANAGE)) {

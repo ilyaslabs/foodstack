@@ -140,7 +140,7 @@ public class OrderPlacementService {
         if (coupon != null) {
             CouponEvaluation held = this.promotions.reserve(orderId, new CouponRequest(coupon.code(), customerId, store.storeId(),
                     store.brandId(), store.city(), checkout.subtotalMinor(), checkout.deliveryChargeMinor(),
-                    request.fulfilment(), request.paymentMethod(), true, checkout.currency()));
+                    request.fulfilment(), request.paymentMethod(), true, checkout.currency(), store.cityId()));
             if (!held.applies() || held.totalDiscountMinor() != coupon.totalDiscountMinor()) {
                 if (held.applies()) {
                     this.promotions.release(orderId);
@@ -262,7 +262,7 @@ public class OrderPlacementService {
                 : s.brandName() + " · " + s.branchName();
         OrderDocument.Store store = new OrderDocument.Store(s.storeId(), s.brandId(), storeName, s.slug(), s.addressLine(), s.city(),
                 (s.location() != null) ? s.location().lat() : 0, (s.location() != null) ? s.location().lng() : 0,
-                s.logoUrls(), s.ownerUserIds(), s.timezone());
+                s.logoUrls(), s.ownerUserIds(), s.timezone(), s.cityId());
         List<OrderDocument.Line> lines = checkout.lines().stream()
             .map((line) -> new OrderDocument.Line(line.priced().itemId(), line.priced().name(), line.priced().quantity(),
                     line.priced().unitPriceMinor(),

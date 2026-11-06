@@ -186,7 +186,7 @@ class UserServiceTest {
     }
 
     @Test
-    @DisplayName("adds the store owner role and brand and branch ids to an existing account")
+    @DisplayName("adds the branch owner role and the branch id to an existing account, keeping its other roles")
     void grantStoreAccessToExistingUser() {
         // given
         UserDocument user = user(EnumSet.of(Role.CUSTOMER));
@@ -196,11 +196,11 @@ class UserServiceTest {
         given(this.users.save(any(UserDocument.class))).willAnswer((invocation) -> invocation.getArgument(0));
 
         // when
-        UserAccount account = this.service.grantStoreAccess("admin@example.com", null, null, "brand-1", "store-1", "admin-1");
+        UserAccount account = this.service.grantStoreAccess("admin@example.com", null, null, "store-1", "admin-1");
 
         // then
         assertThat(account.roles()).containsExactlyInAnyOrder(Role.CUSTOMER, Role.STORE_OWNER);
-        assertThat(account.brandIds()).containsExactly("brand-1");
+        assertThat(account.brandIds()).isEmpty();
         assertThat(account.storeIds()).containsExactly("store-1");
         assertThat(account.permissions()).contains("store:portal", "media:upload");
     }
@@ -219,8 +219,8 @@ class UserServiceTest {
         given(this.users.save(any(UserDocument.class))).willAnswer((invocation) -> invocation.getArgument(0));
 
         // when
-        UserAccount account = this.service.grantStoreAccess("owner@example.com", "Owner", "a-long-password", "brand-1",
-                "store-1", "admin-1");
+        UserAccount account = this.service.grantStoreAccess("owner@example.com", "Owner", "a-long-password", "store-1",
+                "admin-1");
 
         // then
         assertThat(account.roles()).containsExactly(Role.STORE_OWNER);
@@ -233,7 +233,7 @@ class UserServiceTest {
     void grantStoreAccessNeedsPassword() {
         given(this.loginKeys.findByLoginKey(any())).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> this.service.grantStoreAccess("owner@example.com", "Owner", null, "b", "s", "admin-1"))
+        assertThatThrownBy(() -> this.service.grantStoreAccess("owner@example.com", "Owner", null, "s", "admin-1"))
             .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("USER_INVALID"));
     }
 
@@ -247,11 +247,34 @@ class UserServiceTest {
         given(this.users.findById(user.getId())).willReturn(Optional.of(user));
 
         // when
-        this.service.revokeStoreAccess(user.getId(), "brand-1", "store-1");
+        this.service.revokeStoreAccess(user.getId(), "store-1");
 
         // then
         assertThat(user.getRoles()).containsExactly(Role.CUSTOMER);
         assertThat(user.getStoreIds()).isEmpty();
+        verify(this.revocations).revokeBefore(user.getId(), 2);
+    }
+
+    @Test
+    @DisplayName("brand owner access adds BRAND_OWNER and the brand; taking the last brand away drops the role")
+    void brandAccess() {
+        // given
+        UserDocument user = user(EnumSet.of(Role.STORE_OWNER));
+        user.getStoreIds().add("store-1");
+        given(this.loginKeys.findByLoginKey(this.pii.blindIndex("admin@example.com")))
+            .willReturn(Optional.of(new LoginKeyDocument("k", "x", user.getId())));
+        given(this.users.findById(user.getId())).willReturn(Optional.of(user));
+        given(this.users.save(any(UserDocument.class))).willAnswer((invocation) -> invocation.getArgument(0));
+
+        // when
+        UserAccount owner = this.service.grantBrandAccess("admin@example.com", null, null, "brand-1", "admin-1");
+        this.service.revokeBrandAccess(user.getId(), "brand-1");
+
+        // then
+        assertThat(owner.roles()).containsExactlyInAnyOrder(Role.STORE_OWNER, Role.BRAND_OWNER);
+        assertThat(owner.brandIds()).containsExactly("brand-1");
+        assertThat(user.getRoles()).containsExactly(Role.STORE_OWNER);
+        assertThat(user.getStoreIds()).containsExactly("store-1");
         verify(this.revocations).revokeBefore(user.getId(), 2);
     }
 

@@ -48,6 +48,13 @@ public class OrderValidationService {
         this.settings = settings;
     }
 
+    /** Everyone who runs the branch: its own owners and managers and the brand's owners (PRD BB-5). */
+    private static Set<String> owners(StoreDocument store, BrandDocument brand) {
+        Set<String> owners = new java.util.TreeSet<>(store.getOwnerUserIds());
+        owners.addAll(brand.getOwnerUserIds());
+        return Set.copyOf(owners);
+    }
+
     public OrderValidationView validate(OrderValidationRequest request) {
         List<OrderLineRequest> lines = (request.lines() != null) ? request.lines() : List.of();
         if (lines.size() > MAX_LINES) {
@@ -120,7 +127,8 @@ public class OrderValidationService {
                 brand.getId(), brand.getName(), store.getBranchName(), Map.copyOf(brand.getLogoUrls()), details.location(),
                 addressLine, (store.getAddress() != null) ? store.getAddress().city() : null, store.getDeliveryMode(), store.isPickupEnabled(), store.getStatus() == StoreStatus.LIVE,
                 details.openNow(), store.getPrepMinutes(), details.commission().percentBasisPoints(),
-                details.commission().fixedMinor(), Set.copyOf(store.getOwnerUserIds()), details.timezone());
+                details.commission().fixedMinor(), owners(store, brand), details.timezone(), store.getCityId(),
+                Set.copyOf(store.getOwnerUserIds()));
         return new OrderValidationView(snapshot, menu.currency(), List.copyOf(priced), subtotal, List.copyOf(problems));
     }
 }

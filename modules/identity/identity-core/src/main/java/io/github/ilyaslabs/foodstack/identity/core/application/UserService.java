@@ -241,27 +241,39 @@ public class UserService {
      * Gives owner access to a brand and its branch (PRD 4.2.1). An existing account keeps its other
      * roles; a missing one is created. New tokens carry the ids; existing tokens are unaffected.
      */
-    public UserAccount grantStoreAccess(String email, String displayName, String initialPassword, String brandId,
-            String storeId, String grantedBy) {
-        if (brandId == null || brandId.isBlank() || storeId == null || storeId.isBlank()) {
-            throw new ModuleException.BadRequest("Brand and branch are required", "USER_INVALID");
+    public UserAccount grantStoreAccess(String email, String displayName, String initialPassword, String storeId,
+            String grantedBy) {
+        if (storeId == null || storeId.isBlank()) {
+            throw new ModuleException.BadRequest("A branch is required", "USER_INVALID");
         }
-        Optional<UserDocument> existing = findByEmail(email);
-        if (existing.isEmpty()) {
-            UserAccount created = create(new NewUser(email, initialPassword, displayName, EnumSet.of(Role.STORE_OWNER)),
-                    grantedBy);
-            UserDocument user = find(created.id());
-            user.getBrandIds().add(brandId);
-            user.getStoreIds().add(storeId);
-            user.setUpdatedAt(this.clock.instant());
-            return toAccount(this.users.save(user));
-        }
-        UserDocument user = existing.get();
-        user.getRoles().add(Role.STORE_OWNER);
-        user.getBrandIds().add(brandId);
+        UserDocument user = findOrCreateOwner(email, displayName, initialPassword, Role.STORE_OWNER, grantedBy);
         user.getStoreIds().add(storeId);
         user.setUpdatedAt(this.clock.instant());
         return toAccount(this.users.save(user));
+    }
+
+    /** Brand owner access (PRD BB-5): the brand and, through it, every branch of it. */
+    public UserAccount grantBrandAccess(String email, String displayName, String initialPassword, String brandId,
+            String grantedBy) {
+        if (brandId == null || brandId.isBlank()) {
+            throw new ModuleException.BadRequest("A brand is required", "USER_INVALID");
+        }
+        UserDocument user = findOrCreateOwner(email, displayName, initialPassword, Role.BRAND_OWNER, grantedBy);
+        user.getBrandIds().add(brandId);
+        user.setUpdatedAt(this.clock.instant());
+        return toAccount(this.users.save(user));
+    }
+
+    private UserDocument findOrCreateOwner(String email, String displayName, String initialPassword, Role role,
+            String grantedBy) {
+        Optional<UserDocument> existing = findByEmail(email);
+        if (existing.isEmpty()) {
+            UserAccount created = create(new NewUser(email, initialPassword, displayName, EnumSet.of(role)), grantedBy);
+            return find(created.id());
+        }
+        UserDocument user = existing.get();
+        user.getRoles().add(role);
+        return user;
     }
 
     /**
@@ -300,23 +312,39 @@ public class UserService {
     }
 
     /** Removes a brand and branch from a user's claims and revokes their tokens so it takes effect now. */
-    public void revokeStoreAccess(String userId, String brandId, String storeId) {
+    public void revokeStoreAccess(String userId, String storeId) {
+        Optional<UserDocument> found = this.users.findById(userId);
+        if (found.isEmpty()) {
+            return;
+        }
+        UserDocument user = found.get();
+        user.getStoreIds().remove(storeId);
+        if (user.getStoreIds().isEmpty()) {
+            user.getRoles().remove(Role.STORE_OWNER);
+        }
+        saveWithoutOwnerRoles(user, userId, "STORE_ACCESS_REVOKED");
+    }
+
+    public void revokeBrandAccess(String userId, String brandId) {
         Optional<UserDocument> found = this.users.findById(userId);
         if (found.isEmpty()) {
             return;
         }
         UserDocument user = found.get();
         user.getBrandIds().remove(brandId);
-        user.getStoreIds().remove(storeId);
-        if (user.getStoreIds().isEmpty() && user.getBrandIds().isEmpty()) {
-            user.getRoles().remove(Role.STORE_OWNER);
-            if (user.getRoles().isEmpty()) {
-                user.getRoles().add(Role.CUSTOMER);
-            }
+        if (user.getBrandIds().isEmpty()) {
+            user.getRoles().remove(Role.BRAND_OWNER);
+        }
+        saveWithoutOwnerRoles(user, userId, "BRAND_ACCESS_REVOKED");
+    }
+
+    private void saveWithoutOwnerRoles(UserDocument user, String userId, String reason) {
+        if (user.getRoles().isEmpty()) {
+            user.getRoles().add(Role.CUSTOMER);
         }
         user.setUpdatedAt(this.clock.instant());
         this.users.save(user);
-        revokeTokens(userId, "STORE_ACCESS_REVOKED");
+        revokeTokens(userId, reason);
     }
 
     /**

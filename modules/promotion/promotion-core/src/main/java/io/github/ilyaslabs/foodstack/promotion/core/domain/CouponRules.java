@@ -95,8 +95,10 @@ public final class CouponRules {
             return false;
         }
         if (!promotion.cities().isEmpty()) {
+            // cities are the operator's city ids since M4; coupons made before keep matching by city name
             String city = (request.city() != null) ? request.city().strip().toLowerCase(Locale.ROOT) : "";
-            return promotion.cities().stream().anyMatch((c) -> c.strip().toLowerCase(Locale.ROOT).equals(city));
+            return promotion.cities().stream().anyMatch((c) -> c.equals(request.cityId())
+                    || c.strip().toLowerCase(Locale.ROOT).equals(city));
         }
         return true;
     }

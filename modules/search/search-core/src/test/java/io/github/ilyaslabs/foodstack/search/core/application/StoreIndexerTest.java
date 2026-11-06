@@ -117,6 +117,6 @@ class StoreIndexerTest {
     private static StoreListingView listing(String storeId, StoreStatus status) {
         return new StoreListingView(storeId, "spice-route-gulberg", "b1", "Spice Route", "Gulberg", 1, Map.of("en", "Biryani"), List.of("pakistani"),
                 Map.of(), Map.of(), LOCATION, "Gulberg", "Lahore", DeliveryMode.SELF, true, status, false, 25, "Asia/Karachi",
-                Map.of(), List.of(), Map.of("en", List.of("Biryani"), "ar", List.of("برياني")), List.of("halal"), 4);
+                Map.of(), List.of(), Map.of("en", List.of("Biryani"), "ar", List.of("برياني")), List.of("halal"), 4, null);
     }
 }

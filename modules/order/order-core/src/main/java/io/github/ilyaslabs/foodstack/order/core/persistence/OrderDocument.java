@@ -89,9 +89,10 @@ public record OrderDocument(@Id String id, String number, String customerId, Str
      * @param logoUrls logo variants
      * @param ownerUserIds people who manage the branch
      * @param timezone IANA time zone
+     * @param cityId the operator's city of the branch, or {@code null}
      */
     public record Store(String storeId, String brandId, String name, String slug, String addressLine, String city, double lat,
-            double lng, Map<String, String> logoUrls, Set<String> ownerUserIds, String timezone) {
+            double lng, Map<String, String> logoUrls, Set<String> ownerUserIds, String timezone, String cityId) {
     }
 
     /**

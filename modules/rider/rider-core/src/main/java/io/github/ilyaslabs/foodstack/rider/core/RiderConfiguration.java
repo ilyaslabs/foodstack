@@ -106,9 +106,9 @@ public class RiderConfiguration {
 
     @Bean
     RiderService riderService(ModuleMongo riderMongo, OutboxWriter riderOutbox, IdentityApi identityApi,
-            ServiceCalls serviceCalls, RiderPresence riderPresence, PiiCipher piiCipher, Clock clock) {
+            ServiceCalls serviceCalls, RiderPresence riderPresence, PiiCipher piiCipher, Clock clock, GeoApi geoApi) {
         return new RiderService(riderMongo.template(), riderMongo.transactionTemplate(), riderOutbox, identityApi, serviceCalls,
-                riderPresence, piiCipher, clock);
+                riderPresence, piiCipher, clock, geoApi);
     }
 
     @Bean

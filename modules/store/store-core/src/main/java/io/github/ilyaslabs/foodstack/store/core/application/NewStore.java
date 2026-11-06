@@ -21,8 +21,16 @@ import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
  * @param pickupEnabled whether customers may collect
  * @param prepMinutes average preparation time, 5 to 120
  * @param commission default commission of the brand
+ * @param cityId the operator's city, or {@code null} for the nearest one
  */
 public record NewStore(String brandName, String branchName, String legalName, String taxId, Map<String, String> description,
         List<String> cuisines, Address address, GeoPoint location, DeliveryMode deliveryMode, boolean pickupEnabled,
-        int prepMinutes, Commission commission) {
+        int prepMinutes, Commission commission, String cityId) {
+
+    public NewStore(String brandName, String branchName, String legalName, String taxId, Map<String, String> description,
+            List<String> cuisines, Address address, GeoPoint location, DeliveryMode deliveryMode, boolean pickupEnabled,
+            int prepMinutes, Commission commission) {
+        this(brandName, branchName, legalName, taxId, description, cuisines, address, location, deliveryMode, pickupEnabled,
+                prepMinutes, commission, null);
+    }
 }

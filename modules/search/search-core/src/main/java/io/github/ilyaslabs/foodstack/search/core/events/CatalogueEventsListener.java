@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.search.core.events;
 
+import io.github.ilyaslabs.foodstack.geo.api.events.CityChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.OperatorDeliveryPricingChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.ZoneChanged;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
@@ -40,6 +41,8 @@ public class CatalogueEventsListener {
 
     private static final String PRICING_CHANGED = EventTypes.type("geo", OperatorDeliveryPricingChanged.class);
 
+    private static final String CITY_CHANGED = EventTypes.type("geo", CityChanged.class);
+
     private final StoreIndexer indexer;
 
     private final JsonMapper jsonMapper;
@@ -75,7 +78,7 @@ public class CatalogueEventsListener {
         else if (ZONE_CHANGED.equals(type)) {
             this.indexer.refresh(event.dataAs(ZoneChanged.class, this.jsonMapper).storeId());
         }
-        else if (PRICING_CHANGED.equals(type)) {
+        else if (PRICING_CHANGED.equals(type) || CITY_CHANGED.equals(type)) {
             this.indexer.refreshOperatorDelivery();
         }
         else {

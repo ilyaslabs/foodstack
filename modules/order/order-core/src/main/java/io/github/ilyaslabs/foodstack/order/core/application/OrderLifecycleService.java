@@ -352,7 +352,7 @@ public class OrderLifecycleService {
         return new OrderDelivery(o.deliveryMode(), storeRiderId, new GeoPoint(s.lat(), s.lng()), s.addressLine(),
                 new GeoPoint(o.destination().lat(), o.destination().lng()), o.destination().addressLine(),
                 o.destination().instructions(), o.customerName(), o.contactPhone(), charge, o.totals().tipMinor(), cash,
-                o.currency(), o.deliveryCodeCipher(), payBasis);
+                o.currency(), o.deliveryCodeCipher(), payBasis, s.cityId());
     }
 
     /** Rejects confirmed orders the store did not answer in time (PRD 3); returns how many. */

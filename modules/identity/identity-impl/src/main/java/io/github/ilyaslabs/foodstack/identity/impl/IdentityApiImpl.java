@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.identity.impl;
 
+import io.github.ilyaslabs.foodstack.identity.api.BrandAccessGrant;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.RiderAccessGrant;
 import io.github.ilyaslabs.foodstack.identity.api.StoreAccessGrant;
@@ -36,7 +37,20 @@ class IdentityApiImpl implements IdentityApi {
     public UserView grantStoreAccess(StoreAccessGrant access) {
         ModuleAccess.requireServiceOr(Permissions.STORE_MANAGE);
         return toView(this.userService.grantStoreAccess(access.email(), access.displayName(), access.initialPassword(),
-                access.brandId(), access.storeId(), access.grantedBy()));
+                access.storeId(), access.grantedBy()));
+    }
+
+    @Override
+    public UserView grantBrandAccess(BrandAccessGrant access) {
+        ModuleAccess.requireServiceOr(Permissions.STORE_MANAGE);
+        return toView(this.userService.grantBrandAccess(access.email(), access.displayName(), access.initialPassword(),
+                access.brandId(), access.grantedBy()));
+    }
+
+    @Override
+    public void revokeBrandAccess(String userId, String brandId) {
+        ModuleAccess.requireServiceOr(Permissions.STORE_MANAGE);
+        this.userService.revokeBrandAccess(userId, brandId);
     }
 
     @Override
@@ -61,9 +75,9 @@ class IdentityApiImpl implements IdentityApi {
     }
 
     @Override
-    public void revokeStoreAccess(String userId, String brandId, String storeId) {
+    public void revokeStoreAccess(String userId, String storeId) {
         ModuleAccess.requireServiceOr(Permissions.STORE_MANAGE);
-        this.userService.revokeStoreAccess(userId, brandId, storeId);
+        this.userService.revokeStoreAccess(userId, storeId);
     }
 
     private static UserView toView(UserAccount user) {

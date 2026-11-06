@@ -1,9 +1,14 @@
 package io.github.ilyaslabs.foodstack.store.web;
 
+import java.util.List;
+
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.web.ETags;
 import io.github.ilyaslabs.foodstack.store.core.application.BrandDetails;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuService;
+import io.github.ilyaslabs.foodstack.store.core.application.NewBranch;
+import io.github.ilyaslabs.foodstack.store.core.application.NewOwner;
+import io.github.ilyaslabs.foodstack.store.core.application.StoreDetails;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreService;
 import io.github.ilyaslabs.foodstack.store.core.application.UpdateBrand;
 import io.github.ilyaslabs.foodstack.store.web.dto.MenuDtos;
@@ -66,12 +71,73 @@ class BrandsController {
         return ResponseEntity.ok().eTag(ETags.of("brand", updated.version())).body(StoreMapper.brand(updated));
     }
 
+    /** The brand's commission, now or from a date (operator only, PRD FI-2, BB-8). */
     @PutMapping("/{brandId}/commission")
     @PreAuthorize("hasAuthority('store:manage')")
     ResponseEntity<StoreDtos.BrandResponse> commission(@PathVariable String brandId,
-            @Valid @RequestBody StoreDtos.CommissionDto request) {
-        BrandDetails updated = this.storeService.updateCommission(brandId, StoreMapper.commission(request), CurrentUser.id());
+            @Valid @RequestBody StoreDtos.CommissionChangeRequest request) {
+        if (request.commission() == null) {
+            throw new io.github.ilyaslabs.moduleswitch.ModuleException.BadRequest("A brand always has a commission",
+                    "COMMISSION_INVALID");
+        }
+        BrandDetails updated = this.storeService.updateCommission(brandId, StoreMapper.commission(request.commission()),
+                (request.effectiveFrom() != null) ? java.time.Instant.ofEpochSecond(request.effectiveFrom()) : null,
+                CurrentUser.id());
         return ResponseEntity.ok().eTag(ETags.of("brand", updated.version())).body(StoreMapper.brand(updated));
+    }
+
+    // ---- Branches and owners (PRD BB-1, BB-5) ----------------------------------------------
+
+    @GetMapping("/{brandId}/branches")
+    @PreAuthorize("isAuthenticated()")
+    StoreDtos.StoreListResponse branches(@PathVariable String brandId) {
+        CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
+        return new StoreDtos.StoreListResponse(this.storeService.branches(brandId).stream().map(StoreMapper::summary).toList());
+    }
+
+    /** Adds a branch in draft; the operator makes it live. Operator staff and the brand's owners. */
+    @PostMapping("/{brandId}/branches")
+    @PreAuthorize("isAuthenticated()")
+    ResponseEntity<StoreDtos.StoreResponse> addBranch(@PathVariable String brandId,
+            @Valid @RequestBody StoreDtos.NewBranchRequest request) {
+        CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
+        StoreDetails created = this.storeService.addBranch(brandId, new NewBranch(request.branchName(), request.legalName(),
+                request.taxId(), StoreMapper.address(request.address()), StoreMapper.point(request.location()),
+                request.cityId(), request.prepMinutes(), request.pickupEnabled()), CurrentUser.id());
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .eTag(ETags.of("store", created.version()))
+            .body(StoreMapper.store(created));
+    }
+
+    @GetMapping("/{brandId}/owners")
+    @PreAuthorize("isAuthenticated()")
+    List<StoreDtos.OwnerResponse> owners(@PathVariable String brandId) {
+        CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
+        return this.storeService.brandOwners(brandId).stream().map(StoreMapper::owner).toList();
+    }
+
+    /** Brand owners are given by the operator. */
+    @PostMapping("/{brandId}/owners")
+    @PreAuthorize("hasAuthority('store:manage')")
+    @ResponseStatus(HttpStatus.CREATED)
+    StoreDtos.OwnerResponse addOwner(@PathVariable String brandId, @Valid @RequestBody StoreDtos.OwnerRequest request) {
+        return StoreMapper.owner(this.storeService.addBrandOwner(brandId,
+                new NewOwner(request.email(), request.displayName(), request.initialPassword()), CurrentUser.id()));
+    }
+
+    @DeleteMapping("/{brandId}/owners/{userId}")
+    @PreAuthorize("hasAuthority('store:manage')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void removeOwner(@PathVariable String brandId, @PathVariable String userId) {
+        this.storeService.removeBrandOwner(brandId, userId, CurrentUser.id());
+    }
+
+    @PutMapping("/{brandId}/branch-promotions")
+    @PreAuthorize("isAuthenticated()")
+    StoreDtos.BrandResponse branchPromotions(@PathVariable String brandId,
+            @Valid @RequestBody StoreDtos.BranchPromotionsRequest request) {
+        CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
+        return StoreMapper.brand(this.storeService.setBranchPromotionsAllowed(brandId, request.allowed(), CurrentUser.id()));
     }
 
     // ---- Menu editor ----------------------------------------------------------------------

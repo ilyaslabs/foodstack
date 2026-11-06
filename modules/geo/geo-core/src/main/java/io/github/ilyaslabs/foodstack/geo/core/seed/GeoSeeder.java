@@ -2,8 +2,12 @@ package io.github.ilyaslabs.foodstack.geo.core.seed;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
+import io.github.ilyaslabs.foodstack.geo.core.application.CityInput;
+import io.github.ilyaslabs.foodstack.geo.core.application.CityPricing;
+import io.github.ilyaslabs.foodstack.geo.core.application.CityService;
 import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricingService;
 import io.github.ilyaslabs.foodstack.geo.core.application.UpdateOperatorPricing;
 import io.github.ilyaslabs.foodstack.geo.core.application.ZoneInput;
@@ -40,7 +44,10 @@ class GeoSeeder {
 
     private final MongoTemplate mongo;
 
-    GeoSeeder(ZoneService zones, OperatorPricingService pricing, MongoTemplate geoMongoTemplate) {
+    private final CityService cities;
+
+    GeoSeeder(ZoneService zones, OperatorPricingService pricing, MongoTemplate geoMongoTemplate, CityService geoCityService) {
+        this.cities = geoCityService;
         this.zones = zones;
         this.pricing = pricing;
         this.mongo = geoMongoTemplate;
@@ -58,7 +65,12 @@ class GeoSeeder {
         rings(SPICE_ROUTE_GULBERG, new GeoPoint(31.5120, 74.3440));
         rings(NAPOLI_DHA, new GeoPoint(31.4630, 74.4080));
         this.pricing.update(new UpdateOperatorPricing(true, 15_000, 3_000, 10_000), this.pricing.get().version(), "seed");
-        logger.info("Seeded delivery zones for the demo restaurants and operator delivery pricing");
+        // The demo branches are in Lahore, which uses the operator-wide pricing; Islamabad shows a city's own prices
+        this.cities.create(new CityInput(Map.of("en", "Lahore", "ar", "لاهور"), new GeoPoint(31.5204, 74.3587), true, null),
+                "seed");
+        this.cities.create(new CityInput(Map.of("en", "Islamabad", "ar", "إسلام آباد"), new GeoPoint(33.6844, 73.0479), true,
+                new CityPricing(12_000, 2_500, 12_000, 0, null, 100, List.of())), "seed");
+        logger.info("Seeded delivery zones for the demo restaurants, operator delivery pricing and the cities");
     }
 
     private void rings(String storeId, GeoPoint center) {

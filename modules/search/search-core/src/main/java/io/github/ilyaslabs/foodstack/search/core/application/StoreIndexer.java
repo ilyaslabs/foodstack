@@ -66,7 +66,7 @@ public class StoreIndexer {
             return;
         }
         DeliveryAreaView area = this.geo.deliveryArea(
-                new DeliveryAreaRequest(storeId, listing.location(), listing.deliveryMode()));
+                new DeliveryAreaRequest(storeId, listing.location(), listing.deliveryMode(), listing.cityId()));
         this.engine.index(new IndexedStore(listing.storeId(), listing.slug(), listing.brandId(), listing.brandName(), listing.branchName(),
                 listing.branchCount(), listing.description(), listing.cuisines(), listing.logoUrls(), listing.coverUrls(),
                 listing.location(), listing.area(), listing.city(), listing.deliveryMode().name(), listing.pickupEnabled(),

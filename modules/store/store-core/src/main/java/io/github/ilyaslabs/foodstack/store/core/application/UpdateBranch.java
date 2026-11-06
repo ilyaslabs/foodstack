@@ -13,12 +13,18 @@ import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
  * @param deliveryMode who delivers; operator delivery only when the operator allows it
  * @param pickupEnabled whether customers may collect
  * @param timezone IANA zone of the hours; {@code null} or unchanged with a moved location finds it from the location
+ * @param ticketPaperMm kitchen printer paper width, 80 or 58 mm; {@code null} keeps it
  */
 public record UpdateBranch(String branchName, Address address, GeoPoint location, int prepMinutes, DeliveryMode deliveryMode,
-        boolean pickupEnabled, String timezone) {
+        boolean pickupEnabled, String timezone, Integer ticketPaperMm) {
 
     public UpdateBranch(String branchName, Address address, GeoPoint location, int prepMinutes, DeliveryMode deliveryMode,
             boolean pickupEnabled) {
-        this(branchName, address, location, prepMinutes, deliveryMode, pickupEnabled, null);
+        this(branchName, address, location, prepMinutes, deliveryMode, pickupEnabled, null, null);
+    }
+
+    public UpdateBranch(String branchName, Address address, GeoPoint location, int prepMinutes, DeliveryMode deliveryMode,
+            boolean pickupEnabled, String timezone) {
+        this(branchName, address, location, prepMinutes, deliveryMode, pickupEnabled, timezone, null);
     }
 }

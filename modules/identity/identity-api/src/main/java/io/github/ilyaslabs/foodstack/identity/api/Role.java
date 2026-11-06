@@ -19,9 +19,15 @@ public enum Role {
     CUSTOMER,
 
     /**
-     * Owner or manager of one or more branches ({@code storeIds} claim). In M1 every brand has one
-     * branch, so the owner also gets the brand in the {@code brandIds} claim and edits its menu; the
-     * separate {@code BRAND_OWNER} role arrives with multi-branch screens (PRD 4.2.1, M4).
+     * Owner of one or more brands ({@code brandIds} claim, PRD BB-5): the brand, its menu and prices,
+     * and every branch of it.
+     */
+    BRAND_OWNER,
+
+    /**
+     * Owner or manager of one or more branches ({@code storeIds} claim), for example a franchisee
+     * (PRD BB-5, BB-6): hours, the temporary-close switch, sold-out marks, orders, riders, delivery
+     * and the branch's payouts. Never the brand menu or prices.
      */
     STORE_OWNER,
 

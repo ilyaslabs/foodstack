@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import io.github.ilyaslabs.foodstack.store.core.application.Commission;
+import io.github.ilyaslabs.foodstack.store.core.application.CommissionChange;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
@@ -43,6 +44,12 @@ public class BrandDocument {
 
     /** Default commission of every branch. */
     private Commission commission = new Commission(0, 0);
+
+    /** Dated changes of the brand's commission (PRD FI-2). */
+    private List<CommissionChange> commissionChanges = new ArrayList<>();
+
+    /** Whether branch managers may create promotions for their own branch (PRD BB-11). */
+    private boolean branchPromotionsAllowed;
 
     private int branchCount;
 
@@ -184,5 +191,21 @@ public class BrandDocument {
 
     public void setVersion(Long version) {
         this.version = version;
+    }
+
+    public List<CommissionChange> getCommissionChanges() {
+        return this.commissionChanges;
+    }
+
+    public void setCommissionChanges(List<CommissionChange> commissionChanges) {
+        this.commissionChanges = commissionChanges;
+    }
+
+    public boolean isBranchPromotionsAllowed() {
+        return this.branchPromotionsAllowed;
+    }
+
+    public void setBranchPromotionsAllowed(boolean branchPromotionsAllowed) {
+        this.branchPromotionsAllowed = branchPromotionsAllowed;
     }
 }

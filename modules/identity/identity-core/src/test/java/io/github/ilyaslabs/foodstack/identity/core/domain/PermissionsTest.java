@@ -17,6 +17,7 @@ class PermissionsTest {
                 "identity:users:manage", "identity:users:read", "media:upload", "order:manage", "payment:manage",
                 "promotion:manage", "rider:manage", "search:manage", "settings:manage", "store:manage");
         assertThat(Permissions.of(EnumSet.of(Role.STORE_OWNER))).containsExactly("media:upload", "store:portal");
+        assertThat(Permissions.of(EnumSet.of(Role.BRAND_OWNER))).containsExactly("media:upload", "store:portal");
         assertThat(Permissions.of(EnumSet.of(Role.STORE_STAFF))).containsExactly("store:portal");
         assertThat(Permissions.of(EnumSet.of(Role.CUSTOMER))).isEmpty();
         assertThat(Permissions.of(EnumSet.of(Role.FINANCE))).containsExactly("identity:users:read", "payment:manage");

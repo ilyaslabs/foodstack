@@ -14,7 +14,9 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
+import io.github.ilyaslabs.foodstack.platform.security.BranchBrands;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
+import io.github.ilyaslabs.foodstack.store.core.application.BranchAccessBackfill;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuCache;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuService;
 import io.github.ilyaslabs.foodstack.store.core.application.OrderValidationService;
@@ -28,8 +30,8 @@ import io.github.ilyaslabs.foodstack.store.core.persistence.MenuItemRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuSectionRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugRepository;
-import tools.jackson.databind.json.JsonMapper;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -39,6 +41,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaAdmin;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Everything the store module runs on: database {@code foodstack_store} with its shard keys,
@@ -107,10 +110,20 @@ public class StoreConfiguration {
 
     @Bean
     StoreService storeService(BrandRepository brandRepository, StoreRepository storeRepository,
-            StoreSlugRepository storeSlugRepository, MenuItemRepository menuItemRepository, SettingsApi settingsApi, MediaApi mediaApi, IdentityApi identityApi,
-            GeoApi geoApi, OutboxWriter storeOutbox, ModuleMongo storeMongo, Clock clock) {
-        return new StoreService(brandRepository, storeRepository, storeSlugRepository, menuItemRepository, settingsApi, mediaApi, identityApi,
-                geoApi, storeOutbox, storeMongo.transactionTemplate(), clock, new BranchTimeZones());
+            StoreSlugRepository storeSlugRepository, MenuItemRepository menuItemRepository, SettingsApi settingsApi,
+            MediaApi mediaApi, IdentityApi identityApi, GeoApi geoApi, OutboxWriter storeOutbox, ModuleMongo storeMongo,
+            Clock clock, ObjectProvider<BranchBrands> branchBrands) {
+        StoreService service = new StoreService(brandRepository, storeRepository, storeSlugRepository, menuItemRepository,
+                settingsApi, mediaApi, identityApi, geoApi, storeOutbox, storeMongo.transactionTemplate(), clock,
+                new BranchTimeZones());
+        service.setBranchBrands(branchBrands.getIfAvailable());
+        return service;
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    BranchAccessBackfill storeBranchAccessBackfill(StoreService storeService) {
+        return new BranchAccessBackfill(storeService);
     }
 
     @Bean

@@ -7,9 +7,13 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.foodstack.geo.api.CityView;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
+import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
+import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
+import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.store.api.StoreStatus;
 import io.github.ilyaslabs.foodstack.store.api.TimeRange;
 import io.github.ilyaslabs.foodstack.store.api.events.BrandChanged;
@@ -21,20 +25,20 @@ import io.github.ilyaslabs.foodstack.store.core.application.MenuItemInput;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuService;
 import io.github.ilyaslabs.foodstack.store.core.application.ModifierGroup;
 import io.github.ilyaslabs.foodstack.store.core.application.ModifierOption;
+import io.github.ilyaslabs.foodstack.store.core.application.NewBranch;
 import io.github.ilyaslabs.foodstack.store.core.application.NewOwner;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreService;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreRepository;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.bson.Document;
-
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
-import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
@@ -71,8 +75,11 @@ class StoreSeeder {
 
     private final ServiceCalls serviceCalls;
 
+    private final GeoApi geo;
+
     StoreSeeder(BrandRepository brands, StoreRepository stores, MenuService menus, StoreService storeService,
-            OutboxWriter storeOutbox, ModuleMongo storeMongo, ServiceCalls serviceCalls) {
+            OutboxWriter storeOutbox, ModuleMongo storeMongo, ServiceCalls serviceCalls, GeoApi geoApi) {
+        this.geo = geoApi;
         this.serviceCalls = serviceCalls;
         this.brands = brands;
         this.stores = stores;
@@ -95,8 +102,15 @@ class StoreSeeder {
         this.serviceCalls.run(() -> {
             spiceRoute();
             napoli();
-            // Owners go through the identity module like the Owners tab does, so they sign in to the back office.
-            this.storeService.addOwner(DemoStores.SPICE_ROUTE_GULBERG,
+            // A second Spice Route branch, still a draft, so the brand shows how branches share one menu
+            this.storeService.addBranch(DemoStores.SPICE_ROUTE_BRAND,
+                    new NewBranch("DHA Phase 5", "Spice Route (Pvt) Ltd", null,
+                            new Address("24 Khayaban-e-Iqbal", "DHA Phase 5", "Lahore", null), new GeoPoint(31.4625, 74.4085),
+                            null, 25, true),
+                    SEED);
+            // Owners go through the identity module like the Owners tabs do, so they sign in to the back office:
+            // Spice Route's owner runs the whole brand, Napoli's manager runs one branch
+            this.storeService.addBrandOwner(DemoStores.SPICE_ROUTE_BRAND,
                     new NewOwner("spiceroute@demo.foodstack.local", "Spice Route Owner", OWNER_PASSWORD), SEED);
             this.storeService.addOwner(DemoStores.NAPOLI_DHA,
                     new NewOwner("napoli@demo.foodstack.local", "Napoli Slice Owner", OWNER_PASSWORD), SEED);
@@ -170,6 +184,9 @@ class StoreSeeder {
         store.setLegalName(brandName + " (Pvt) Ltd");
         store.setAddress(address);
         store.setLocation(new GeoJsonPoint(lng, lat));
+        // the geo seeder runs first and adds the demo cities
+        CityView city = this.geo.nearestCity(new GeoPoint(lat, lng));
+        store.setCityId((city != null) ? city.id() : null);
         Map<DayOfWeek, List<TimeRange>> hours = new EnumMap<>(DayOfWeek.class);
         for (DayOfWeek day : DayOfWeek.values()) {
             hours.put(day, List.of(new TimeRange("00:00", "23:59")));

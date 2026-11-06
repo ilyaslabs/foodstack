@@ -23,10 +23,20 @@ import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
  *        deployment's PII key, or {@code null}
  * @param riderPayBasisMinor the normal delivery charge, before a free-delivery threshold or coupon, that operator rider
  *        pay is a share of
+ * @param cityId the branch's city, where operator riders are looked for; {@code null} for any
  */
 public record OrderDelivery(DeliveryMode mode, String storeRiderId, GeoPoint pickup, String pickupAddress, GeoPoint dropoff,
         String dropoffAddress, String instructions, String customerName, String contactPhoneCipher, long deliveryChargeMinor,
-        long tipMinor, long cashToCollectMinor, String currency, String deliveryCodeCipher, long riderPayBasisMinor) {
+        long tipMinor, long cashToCollectMinor, String currency, String deliveryCodeCipher, long riderPayBasisMinor,
+        String cityId) {
+
+    public OrderDelivery(DeliveryMode mode, String storeRiderId, GeoPoint pickup, String pickupAddress, GeoPoint dropoff,
+            String dropoffAddress, String instructions, String customerName, String contactPhoneCipher,
+            long deliveryChargeMinor, long tipMinor, long cashToCollectMinor, String currency, String deliveryCodeCipher,
+            long riderPayBasisMinor) {
+        this(mode, storeRiderId, pickup, pickupAddress, dropoff, dropoffAddress, instructions, customerName, contactPhoneCipher,
+                deliveryChargeMinor, tipMinor, cashToCollectMinor, currency, deliveryCodeCipher, riderPayBasisMinor, null);
+    }
 
     @Override
     public String toString() {

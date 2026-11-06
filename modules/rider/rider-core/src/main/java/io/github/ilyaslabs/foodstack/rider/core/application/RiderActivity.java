@@ -233,6 +233,9 @@ public class RiderActivity {
                 this.presence.unmatchable(near.riderId());
                 continue;
             }
+            if (search.cityId() != null && rider.cityId() != null && !search.cityId().equals(rider.cityId())) {
+                continue;
+            }
             // the last ping in Redis is current; the copy in MongoDB is sampled
             RiderPresence.Position position = this.presence.position(rider.id());
             if (position == null || position.at() < fresh.getEpochSecond()) {
@@ -322,7 +325,7 @@ public class RiderActivity {
     public Earnings earningsOf(String riderId, int days, String timeZone) {
         RiderDocument rider = this.riders.require(riderId);
         if (!CurrentUser.hasAuthority(RiderService.MANAGE)
-                && !(rider.storeId() != null && CurrentUser.storeIds().contains(rider.storeId()))) {
+                && !(rider.storeId() != null && CurrentUser.managesStore(rider.storeId()))) {
             throw new ModuleException.NotFound("No such rider", "RIDER_NOT_FOUND");
         }
         return earnings(riderId, days, timeZone);
@@ -381,7 +384,7 @@ public class RiderActivity {
         AssignmentDocument assignment = this.mongo.findById(orderId, AssignmentDocument.class);
         String me = CurrentUser.id();
         if (assignment != null && ((me != null && (me.equals(assignment.customerId()) || me.equals(assignment.riderId())))
-                || CurrentUser.storeIds().contains(assignment.storeId()) || CurrentUser.hasAuthority(RiderService.DISPATCH)
+                || CurrentUser.managesStore(assignment.storeId()) || CurrentUser.hasAuthority(RiderService.DISPATCH)
                 || CurrentUser.hasAuthority(RiderService.MANAGE))) {
             return assignment;
         }
