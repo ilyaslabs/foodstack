@@ -108,9 +108,23 @@ export class Shell {
       permission: 'store:manage',
     },
     {
+      path: '/price-approvals',
+      label: 'Price approvals',
+      icon: 'check_circle',
+      exact: true,
+      permission: 'store:manage',
+    },
+    {
       path: '/delivery-pricing',
       label: 'Delivery pricing',
       icon: 'delivery',
+      exact: false,
+      permission: 'geo:manage',
+    },
+    {
+      path: '/cities',
+      label: 'Cities',
+      icon: 'location_city',
       exact: false,
       permission: 'geo:manage',
     },
@@ -177,9 +191,12 @@ export class Shell {
     );
     if (!permissions.has('store:manage') && permissions.has('store:portal')) {
       const storeIds = this.me()?.storeIds ?? [];
+      // a brand owner runs every branch of the brand; a branch manager usually one branch
+      const brandOwner = (this.me()?.brandIds ?? []).length > 0;
+      const single = !brandOwner && storeIds.length === 1;
       items.splice(1, 0, {
-        path: storeIds.length === 1 ? `/stores/${storeIds[0]}` : '/stores',
-        label: storeIds.length === 1 ? 'My store' : 'My stores',
+        path: single ? `/stores/${storeIds[0]}` : '/stores',
+        label: brandOwner ? 'Branches' : single ? 'My store' : 'My stores',
         icon: 'storefront',
         exact: false,
       });

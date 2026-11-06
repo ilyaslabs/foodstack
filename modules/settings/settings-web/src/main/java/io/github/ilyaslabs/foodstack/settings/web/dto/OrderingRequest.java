@@ -12,5 +12,5 @@ package io.github.ilyaslabs.foodstack.settings.web.dto;
  * @param acceptTimeoutSeconds time a store has to accept, 60 to 1800
  */
 public record OrderingRequest(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
-        int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds) {
+        int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, boolean priceApprovalRequired) {
 }

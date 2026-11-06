@@ -142,11 +142,20 @@ class BrandsController {
 
     // ---- Menu editor ----------------------------------------------------------------------
 
+    /**
+     * The brand menu for editing. With {@code storeId}, only the items that branch sells, and a
+     * branch manager may read it too (to mark items sold out and set the branch's own prices).
+     */
     @GetMapping("/{brandId}/menu")
     @PreAuthorize("isAuthenticated()")
-    MenuDtos.EditorMenuResponse menu(@PathVariable String brandId) {
-        CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
-        return StoreMapper.editorMenu(this.menuService.editorMenu(brandId));
+    MenuDtos.EditorMenuResponse menu(@PathVariable String brandId,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String storeId) {
+        if (storeId == null) {
+            CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
+            return StoreMapper.editorMenu(this.menuService.editorMenu(brandId));
+        }
+        CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
+        return StoreMapper.editorMenu(this.menuService.branchEditorMenu(brandId, storeId));
     }
 
     @PostMapping("/{brandId}/menu/sections")

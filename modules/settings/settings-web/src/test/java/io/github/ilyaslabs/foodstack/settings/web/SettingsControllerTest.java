@@ -157,12 +157,12 @@ class SettingsControllerTest {
     @Test
     @DisplayName("GET ordering is public; PUT needs settings:manage and If-Match")
     void ordering() throws Exception {
-        given(this.orderingService.get()).willReturn(new OrderingDetails(true, false, 0, 0, 0, true, 180, 0, null));
-        given(this.orderingService.update(eq(new UpdateOrdering(true, true, 4900, 250, 1600, false, 300)), eq(0L), eq("admin-1")))
-            .willReturn(new OrderingDetails(true, true, 4900, 250, 1600, false, 300, 1, null));
+        given(this.orderingService.get()).willReturn(new OrderingDetails(true, false, 0, 0, 0, true, 180, 0, null, false));
+        given(this.orderingService.update(eq(new UpdateOrdering(true, true, 4900, 250, 1600, false, 300, true)), eq(0L), eq("admin-1")))
+            .willReturn(new OrderingDetails(true, true, 4900, 250, 1600, false, 300, 1, null, true));
         String body = """
                 {"cashEnabled":true,"cardEnabled":true,"serviceFeeMinor":4900,"serviceFeeBasisPoints":250,
-                 "taxBasisPoints":1600,"tipsEnabled":false,"acceptTimeoutSeconds":300}""";
+                 "taxBasisPoints":1600,"tipsEnabled":false,"acceptTimeoutSeconds":300,"priceApprovalRequired":true}""";
 
         this.mvc.perform(get("/api/v1/settings/ordering"))
             .andExpect(status().isOk())

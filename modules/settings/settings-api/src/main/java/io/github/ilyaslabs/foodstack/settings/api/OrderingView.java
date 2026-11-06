@@ -12,7 +12,15 @@ package io.github.ilyaslabs.foodstack.settings.api;
  * @param tipsEnabled customers may add a tip for the rider at checkout
  * @param acceptTimeoutSeconds time a store has to accept a paid order before it is rejected and refunded
  * @param version increases with every change
+ * @param priceApprovalRequired store owners' price changes wait for operator approval (PRD ST-6, BB-4)
  */
 public record OrderingView(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
-        int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version) {
+        int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version, boolean priceApprovalRequired) {
+
+    /** Rules without price approval. */
+    public OrderingView(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
+            int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version) {
+        this(cashEnabled, cardEnabled, serviceFeeMinor, serviceFeeBasisPoints, taxBasisPoints, tipsEnabled,
+                acceptTimeoutSeconds, version, false);
+    }
 }

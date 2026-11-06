@@ -113,7 +113,7 @@ class StoreSeeder {
             this.storeService.addBrandOwner(DemoStores.SPICE_ROUTE_BRAND,
                     new NewOwner("spiceroute@demo.foodstack.local", "Spice Route Owner", OWNER_PASSWORD), SEED);
             this.storeService.addOwner(DemoStores.NAPOLI_DHA,
-                    new NewOwner("napoli@demo.foodstack.local", "Napoli Slice Owner", OWNER_PASSWORD), SEED);
+                    new NewOwner("napoli@demo.foodstack.local", "Napoli Slice Manager", OWNER_PASSWORD), SEED);
         });
         logger.info("Seeded demo restaurants Spice Route (Gulberg) and Napoli Slice (DHA), owners "
                 + "spiceroute@demo.foodstack.local and napoli@demo.foodstack.local (password '" + OWNER_PASSWORD + "')");

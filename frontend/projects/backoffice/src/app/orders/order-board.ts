@@ -89,6 +89,8 @@ export class OrderBoard implements OnInit {
   protected readonly busy = signal<string | null>(null);
   protected readonly soundOn = signal(false);
   protected readonly printing = signal<Order | null>(null);
+  /** The branch's ticket paper width (PRD ST-9), read with the branch. */
+  protected readonly paperMm = signal<80 | 58>(80);
   protected readonly now = signal(Date.now());
   protected readonly statusLabels = STATUS_LABELS;
   protected readonly actionLabels = ACTION_LABELS;
@@ -132,7 +134,10 @@ export class OrderBoard implements OnInit {
     });
     effect(() => {
       const id = this.storeId();
-      untracked(() => this.open(id));
+      untracked(() => {
+        this.open(id);
+        void this.loadPaper(id);
+      });
     });
     effect(() => {
       const count = this.fresh().length;
@@ -153,6 +158,16 @@ export class OrderBoard implements OnInit {
       this.storeList.set([]);
     }
     if (!this.storeId()) this.loading.set(false);
+  }
+
+  private async loadPaper(storeId: string | null): Promise<void> {
+    if (!storeId) return;
+    try {
+      const { value } = await firstValueFrom(this.stores.details(storeId));
+      if (storeId === this.storeId()) this.paperMm.set(value.ticketPaperMm === 58 ? 58 : 80);
+    } catch {
+      // the ticket prints on 80 mm paper by default
+    }
   }
 
   protected pickStore(id: string): void {

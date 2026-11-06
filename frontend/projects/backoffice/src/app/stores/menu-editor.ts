@@ -8,11 +8,15 @@ import { MatSlideToggle, MatSlideToggleModule } from '@angular/material/slide-to
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import {
+  BranchPrice,
   BrandClient,
   EditorItem,
   EditorMenu,
   EditorSection,
+  OrderingSettingsClient,
+  PriceChange,
   StoreClient,
+  StoreSummary,
   Translated,
 } from '@foodstack/api-client';
 import { Icon, LocaleStore } from '@foodstack/ui';
@@ -20,6 +24,8 @@ import { Icon, LocaleStore } from '@foodstack/ui';
 import { confirmAction } from '../shared/confirm-dialog';
 import { describeError } from '../shared/errors';
 import { TranslatedField, cleanTranslated, hasDefault } from '../shared/translated-field';
+import { Session } from '../shared/session';
+import { BranchPriceData, BranchPriceDialog, BranchPriceResult } from './branch-price-dialog';
 import { DIETARY_LABELS, ItemDialog, ItemDialogData } from './item-dialog';
 import { StoreContext } from './store-context';
 
@@ -45,12 +51,30 @@ import { StoreContext } from './store-context';
         <p class="lead">
           {{ itemCount() }} {{ itemCount() === 1 ? 'dish' : 'dishes' }} in
           {{ menu.sections.length }} {{ menu.sections.length === 1 ? 'section' : 'sections' }}.
-          Sold-out switches apply to this branch only.
+          Sold-out switches and branch prices apply to this branch only.
+          @if (!canEditBrand()) {
+            The brand's owners edit the dishes themselves.
+          }
         </p>
-        <button mat-flat-button type="button" (click)="startSection()">
-          <fs-icon name="add" /> Add section
-        </button>
+        @if (canEditBrand()) {
+          <button mat-flat-button type="button" (click)="startSection()">
+            <fs-icon name="add" /> Add section
+          </button>
+        }
       </div>
+      @if (pending().length) {
+        <div class="pending" role="status">
+          <fs-icon name="schedule" />
+          <div>
+            <strong
+              >{{ pending().length }}
+              {{ pending().length === 1 ? 'price change waits' : 'price changes wait' }} for
+              approval.</strong
+            >
+            Customers see the current prices until the platform approves.
+          </div>
+        </div>
+      }
 
       @if (newSection() !== null) {
         <div class="card section-form">
@@ -101,6 +125,7 @@ import { StoreContext } from './store-context';
                   {{ section.items.length === 1 ? 'dish' : 'dishes' }}</span
                 >
               </div>
+              @if (canEditBrand()) {
               <div class="section-actions">
                 <button mat-button type="button" (click)="openItem(section, null)">
                   <fs-icon name="add" /> Add dish
@@ -131,6 +156,7 @@ import { StoreContext } from './store-context';
                   </button>
                 </mat-menu>
               </div>
+              }
             }
           </header>
 
@@ -163,9 +189,24 @@ import { StoreContext } from './store-context';
                     @if (missing(item.name).length) {
                       <span class="tag warn">No {{ missing(item.name).join(', ') }}</span>
                     }
+                    @if (item.branchIds?.length) {
+                      <span class="tag">{{
+                        item.branchIds!.includes(storeId()) ? 'Some branches' : 'Not at this branch'
+                      }}</span>
+                    }
+                    @if (pendingFor(item.id)) {
+                      <span class="tag warn">Price waiting for approval</span>
+                    }
                   </span>
                 </div>
-                <span class="price">{{ money(item.priceMinor) }}</span>
+                <span class="price">
+                  @if (ownPrice(item.id); as own) {
+                    {{ money(own.priceMinor) }}
+                    <span class="brand-price">Brand {{ money(item.priceMinor) }}</span>
+                  } @else {
+                    {{ money(item.priceMinor) }}
+                  }
+                </span>
                 <mat-slide-toggle
                   class="stock"
                   [checked]="!soldOut().has(item.id)"
@@ -185,10 +226,17 @@ import { StoreContext } from './store-context';
                   <fs-icon name="more_vert" />
                 </button>
                 <mat-menu #itemMenu="matMenu">
-                  <button mat-menu-item type="button" (click)="openItem(section, item)">
-                    Edit
+                  @if (canEditBrand()) {
+                    <button mat-menu-item type="button" (click)="openItem(section, item)">
+                      Edit
+                    </button>
+                  }
+                  <button mat-menu-item type="button" (click)="openPrices(item)">
+                    Prices at this branch
                   </button>
-                  <button mat-menu-item type="button" (click)="deleteItem(item)">Delete</button>
+                  @if (canEditBrand()) {
+                    <button mat-menu-item type="button" (click)="deleteItem(item)">Delete</button>
+                  }
                 </mat-menu>
               </li>
             }
@@ -199,10 +247,14 @@ import { StoreContext } from './store-context';
           <div class="card empty">
             <fs-icon name="restaurant" />
             <h2>Start the menu</h2>
-            <p>Make a section such as "Starters" or "Biryani", then add dishes to it.</p>
-            <button mat-flat-button type="button" (click)="startSection()">
-              <fs-icon name="add" /> Add section
-            </button>
+            @if (canEditBrand()) {
+              <p>Make a section such as "Starters" or "Biryani", then add dishes to it.</p>
+              <button mat-flat-button type="button" (click)="startSection()">
+                <fs-icon name="add" /> Add section
+              </button>
+            } @else {
+              <p>The brand's owners have not added dishes yet.</p>
+            }
           </div>
         }
       }
@@ -222,6 +274,22 @@ import { StoreContext } from './store-context';
       flex-direction: column;
       gap: 16px;
       padding-block: 16px;
+    }
+    .pending {
+      display: flex;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: var(--mat-sys-tertiary-container);
+      color: var(--mat-sys-on-tertiary-container);
+      font: var(--mat-sys-body-medium);
+    }
+    .brand-price {
+      display: block;
+      font: var(--mat-sys-body-small);
+      color: var(--mat-sys-on-surface-variant);
+      text-decoration: line-through;
+      text-align: end;
     }
     .toolbar {
       display: flex;
@@ -402,6 +470,8 @@ import { StoreContext } from './store-context';
 })
 export class MenuEditor {
   protected readonly locale = inject(LocaleStore);
+  private readonly session = inject(Session);
+  private readonly ordering = inject(OrderingSettingsClient);
   private readonly context = inject(StoreContext);
   private readonly brands = inject(BrandClient);
   private readonly stores = inject(StoreClient);
@@ -411,6 +481,16 @@ export class MenuEditor {
   protected readonly dietaryLabels = DIETARY_LABELS;
   protected readonly menu = signal<EditorMenu | null>(null);
   protected readonly soldOut = signal<Set<string>>(new Set());
+  protected readonly prices = signal<BranchPrice[]>([]);
+  protected readonly pending = signal<PriceChange[]>([]);
+  private readonly branches = signal<StoreSummary[]>([]);
+  private approval = false;
+
+  /** Operator staff and the brand's owners edit the dishes; branch managers set sold out and branch prices. */
+  protected readonly canEditBrand = computed(
+    () => this.session.operator() || this.session.ownsBrand(this.context.store()?.brand.id),
+  );
+  protected readonly storeId = computed(() => this.context.store()?.id ?? '');
   protected readonly loadError = signal(false);
   protected readonly busy = signal(false);
   protected readonly newSection = signal<true | null>(null);
@@ -437,11 +517,26 @@ export class MenuEditor {
   private async load(): Promise<void> {
     const store = this.context.store()!;
     try {
-      const [menu, branchMenu] = await Promise.all([
-        firstValueFrom(this.brands.menu(store.brand.id)),
+      const editor = this.canEditBrand();
+      const [menu, branchMenu, prices, brandPending, branches, ordering] = await Promise.all([
+        firstValueFrom(this.brands.menu(store.brand.id, editor ? undefined : store.id)),
         firstValueFrom(this.stores.menu(store.id)).catch(() => null),
+        firstValueFrom(this.stores.branchPrices(store.id)).catch(() => null),
+        editor
+          ? firstValueFrom(this.brands.priceChanges(store.brand.id)).catch(() => [])
+          : Promise.resolve([] as PriceChange[]),
+        editor
+          ? firstValueFrom(this.brands.branches(store.brand.id)).catch(() => [])
+          : Promise.resolve([] as StoreSummary[]),
+        firstValueFrom(this.ordering.get()).catch(() => null),
       ]);
       this.menu.set(menu);
+      this.prices.set(prices?.prices ?? []);
+      const own = (prices?.pending ?? []).filter((c) => c.storeId === store.id);
+      const brandWide = brandPending.filter((c) => c.storeId === null);
+      this.pending.set([...brandWide, ...own]);
+      this.branches.set(branches);
+      this.approval = !!ordering?.value.priceApprovalRequired && !this.session.operator();
       const soldOut = new Set<string>();
       for (const section of branchMenu?.sections ?? []) {
         for (const item of section.items) if (item.soldOut) soldOut.add(item.id);
@@ -451,6 +546,44 @@ export class MenuEditor {
     } catch {
       this.loadError.set(true);
     }
+  }
+
+  protected ownPrice(itemId: string): BranchPrice | undefined {
+    return this.prices().find((p) => p.itemId === itemId && p.optionId === null);
+  }
+
+  protected pendingFor(itemId: string): boolean {
+    return this.pending().some((c) => c.itemId === itemId);
+  }
+
+  protected async openPrices(item: EditorItem): Promise<void> {
+    const store = this.context.store()!;
+    const data: BranchPriceData = {
+      storeId: store.id,
+      branchName: store.branchName ?? store.displayName,
+      currency: this.menu()!.currency,
+      item,
+      prices: this.prices().filter((p) => p.itemId === item.id),
+      approval: this.approval,
+    };
+    const result = await firstValueFrom(
+      this.dialog
+        .open<BranchPriceDialog, BranchPriceData, BranchPriceResult>(BranchPriceDialog, {
+          data,
+          width: '520px',
+          maxWidth: '96vw',
+        })
+        .afterClosed(),
+    );
+    if (!result || result.applied + result.pending === 0) return;
+    this.snackBar.open(
+      result.pending
+        ? 'Sent for approval. Customers see the new price once the platform approves.'
+        : 'Branch prices saved.',
+      undefined,
+      { duration: 5000 },
+    );
+    await this.load();
   }
 
   protected money(minor: number): string {
@@ -559,6 +692,7 @@ export class MenuEditor {
       sections: menu.sections,
       sectionId: section.id,
       item,
+      branches: this.branches().map((b) => ({ id: b.id, name: b.branchName ?? b.brandName })),
     };
     const saved = await firstValueFrom(
       this.dialog

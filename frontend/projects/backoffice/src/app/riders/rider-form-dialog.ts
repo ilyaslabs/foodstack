@@ -7,7 +7,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 
-import { Rider, RiderInput, Vehicle } from '@foodstack/api-client';
+import { City, CityClient, Rider, RiderInput, Vehicle } from '@foodstack/api-client';
+import { LocaleStore } from '@foodstack/ui';
 
 import { describeError } from '../shared/errors';
 
@@ -79,10 +80,25 @@ export interface RiderFormData {
           <mat-label>Number plate</mat-label>
           <input matInput name="plate" maxlength="20" [(ngModel)]="plate" />
         </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>City</mat-label>
-          <input matInput name="city" maxlength="60" [(ngModel)]="city" />
-        </mat-form-field>
+        @if (cities().length) {
+          <mat-form-field appearance="outline">
+            <mat-label>City</mat-label>
+            <mat-select name="cityId" [(ngModel)]="cityId">
+              <mat-option value="">Any city</mat-option>
+              @for (c of cities(); track c.id) {
+                <mat-option [value]="c.id" [disabled]="!c.active && c.id !== cityId">{{
+                  locale.pick(c.name)
+                }}</mat-option>
+              }
+            </mat-select>
+            <mat-hint>Platform jobs come only from branches in this city</mat-hint>
+          </mat-form-field>
+        } @else {
+          <mat-form-field appearance="outline">
+            <mat-label>City</mat-label>
+            <input matInput name="city" maxlength="60" [(ngModel)]="city" />
+          </mat-form-field>
+        }
       </form>
       @if (error()) {
         <div class="error" role="alert">{{ error() }}</div>
@@ -135,6 +151,16 @@ export class RiderFormDialog {
   protected vehicle: Vehicle = this.data.rider?.vehicle ?? 'MOTORBIKE';
   protected plate = this.data.rider?.plate ?? '';
   protected city = this.data.rider?.city ?? '';
+  protected cityId = this.data.rider?.cityId ?? '';
+  protected readonly locale = inject(LocaleStore);
+  protected readonly cities = signal<City[]>([]);
+
+  constructor() {
+    firstValueFrom(inject(CityClient).list()).then(
+      (cities) => this.cities.set(cities),
+      () => this.cities.set([]),
+    );
+  }
   protected readonly saving = signal(false);
   protected readonly error = signal('');
 
@@ -154,7 +180,8 @@ export class RiderFormDialog {
           phone: this.phone.trim(),
           vehicle: this.vehicle,
           plate: this.plate.trim() || null,
-          city: this.city.trim() || null,
+          city: this.cities().length ? null : this.city.trim() || null,
+          cityId: this.cities().length ? this.cityId || null : null,
           version: this.data.rider?.version ?? null,
         }),
       );

@@ -119,7 +119,7 @@ class SettingsController {
             @Valid @RequestBody OrderingRequest request) {
         OrderingDetails updated = this.orderingService.update(new UpdateOrdering(request.cashEnabled(), request.cardEnabled(),
                 request.serviceFeeMinor(), request.serviceFeeBasisPoints(), request.taxBasisPoints(), request.tipsEnabled(),
-                request.acceptTimeoutSeconds()), requireIfMatch("ordering", ifMatch), CurrentUser.id());
+                request.acceptTimeoutSeconds(), request.priceApprovalRequired()), requireIfMatch("ordering", ifMatch), CurrentUser.id());
         return ResponseEntity.ok().eTag(ETags.of("ordering", updated.version())).body(toResponse(updated));
     }
 
@@ -167,7 +167,8 @@ class SettingsController {
 
     private static OrderingResponse toResponse(OrderingDetails o) {
         return new OrderingResponse(o.cashEnabled(), o.cardEnabled(), o.serviceFeeMinor(), o.serviceFeeBasisPoints(),
-                o.taxBasisPoints(), o.tipsEnabled(), o.acceptTimeoutSeconds(), o.version(), EpochSeconds.of(o.updatedAt()));
+                o.taxBasisPoints(), o.tipsEnabled(), o.acceptTimeoutSeconds(), o.version(), EpochSeconds.of(o.updatedAt()),
+                o.priceApprovalRequired());
     }
 
     private static DeliveryResponse toResponse(DeliveryDetails d) {

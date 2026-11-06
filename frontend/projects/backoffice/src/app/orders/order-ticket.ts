@@ -11,7 +11,7 @@ import { clock } from './order-labels';
   selector: 'app-order-ticket',
   template: `
     @if (order(); as o) {
-      <article class="ticket">
+      <article class="ticket" [class.narrow]="paperMm() === 58">
         <h1>#{{ o.number }}</h1>
         <p class="meta">
           {{ o.fulfilment === 'PICKUP' ? 'PICKUP' : 'DELIVERY' }} ·
@@ -85,11 +85,22 @@ import { clock } from './order-labels';
       .note {
         font-weight: 700;
       }
+      /* A 58 mm roll prints about 48 mm wide, so the text is smaller to keep a dish on one line. */
+      .ticket.narrow {
+        inline-size: 48mm;
+        padding: 1mm 2mm;
+        font-size: 10pt;
+      }
+      .ticket.narrow h1 {
+        font-size: 20pt;
+      }
     }
   `,
 })
 export class OrderTicket implements OnDestroy {
   readonly order = input<Order | null>(null);
+  /** Paper roll width in mm: 80 or 58 (the branch's setting). */
+  readonly paperMm = input<80 | 58>(80);
   protected readonly locale = inject(LocaleStore);
   protected readonly clock = clock;
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;

@@ -61,7 +61,7 @@ class SettingsApiImplTest {
     @Test
     @DisplayName("maps ordering rules to the API record")
     void ordering() {
-        given(this.ordering.get()).willReturn(new OrderingDetails(true, false, 100, 250, 1600, true, 180, 4, null));
+        given(this.ordering.get()).willReturn(new OrderingDetails(true, false, 100, 250, 1600, true, 180, 4, null, false));
 
         assertThat(this.api.getOrdering()).isEqualTo(new OrderingView(true, false, 100, 250, 1600, true, 180, 4));
     }

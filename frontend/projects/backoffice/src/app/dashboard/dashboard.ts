@@ -179,7 +179,8 @@ export class Dashboard {
   protected readonly me = this.session.me;
   protected readonly storeLink = computed(() => {
     const storeIds = this.me()?.storeIds ?? [];
-    return storeIds.length === 1 ? ['/stores', storeIds[0]] : ['/stores'];
+    const brandOwner = (this.me()?.brandIds ?? []).length > 0;
+    return !brandOwner && storeIds.length === 1 ? ['/stores', storeIds[0]] : ['/stores'];
   });
   protected readonly brandingDone = computed(() => this.branding.branding().version > 0);
   protected readonly canManageSettings = computed(

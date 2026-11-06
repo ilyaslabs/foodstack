@@ -16,6 +16,7 @@ import { describeError } from '../shared/errors';
 import { Session } from '../shared/session';
 import { MenuEditor } from './menu-editor';
 import { READINESS_LABELS, STATUS_LABELS } from './store-status';
+import { StoreBrand } from './store-brand';
 import { StoreContext } from './store-context';
 import { StoreHours } from './store-hours';
 import { StoreOwners } from './store-owners';
@@ -37,6 +38,7 @@ import { StoreZones } from './store-zones';
     MatTabsModule,
     Icon,
     MenuEditor,
+    StoreBrand,
     StoreHours,
     StoreOwners,
     StoreRiders,
@@ -44,8 +46,10 @@ import { StoreZones } from './store-zones';
     StoreZones,
   ],
   template: `
-    @if (session.operator()) {
-      <a mat-button routerLink="/stores" class="back"><fs-icon name="arrow_back" /> Stores</a>
+    @if (session.operator() || (session.me()?.brandIds ?? []).length > 0) {
+      <a mat-button routerLink="/stores" class="back"
+        ><fs-icon name="arrow_back" /> {{ session.operator() ? 'Stores' : 'Branches' }}</a
+      >
     }
     @if (context.store(); as store) {
       <header class="head">
@@ -167,9 +171,12 @@ import { StoreZones } from './store-zones';
         <mat-tab label="Riders"
           ><ng-template matTabContent><app-store-riders /></ng-template
         ></mat-tab>
-        @if (session.operator()) {
-          <mat-tab label="Owners"
+        @if (session.operator() || session.ownsBrand(store.brand.id)) {
+          <mat-tab label="Managers"
             ><ng-template matTabContent><app-store-owners /></ng-template
+          ></mat-tab>
+          <mat-tab label="Brand"
+            ><ng-template matTabContent><app-store-brand /></ng-template
           ></mat-tab>
         }
       </mat-tab-group>

@@ -69,9 +69,21 @@ public class MenuService {
 
     private final Clock clock;
 
+    private final MenuPrices prices;
+
     public MenuService(MenuSectionRepository sections, MenuItemRepository items, ItemOverrideRepository overrides,
             StoreRepository stores, BrandRepository brands, SettingsApi settings, MediaApi media, MenuCache cache,
             OutboxWriter outbox, TransactionTemplate transaction, Clock clock) {
+        this(sections, items, overrides, stores, brands, settings, media, cache, outbox, transaction, clock, null);
+    }
+
+    /**
+     * @param prices price approval (PRD ST-6); {@code null} applies every price change at once
+     */
+    public MenuService(MenuSectionRepository sections, MenuItemRepository items, ItemOverrideRepository overrides,
+            StoreRepository stores, BrandRepository brands, SettingsApi settings, MediaApi media, MenuCache cache,
+            OutboxWriter outbox, TransactionTemplate transaction, Clock clock, MenuPrices prices) {
+        this.prices = prices;
         this.sections = sections;
         this.items = items;
         this.overrides = overrides;
@@ -100,6 +112,22 @@ public class MenuService {
                     StoreService.version(s.getVersion()), bySection.getOrDefault(s.getId(), List.of())))
             .toList();
         return new MenuDetails(brandId, locale.currency(), locale.languages(), result);
+    }
+
+    /** The brand menu with only the items one branch of it sells. */
+    public MenuDetails branchEditorMenu(String brandId, String storeId) {
+        StoreDocument store = this.stores.findById(storeId)
+            .filter((s) -> s.getBrandId().equals(brandId))
+            .orElseThrow(() -> new ModuleException.NotFound("Branch " + storeId + " not found", "STORE_NOT_FOUND"));
+        MenuDetails menu = editorMenu(brandId);
+        List<MenuDetails.Section> sections = menu.sections()
+            .stream()
+            .map((s) -> new MenuDetails.Section(s.id(), s.name(), s.sortOrder(), s.version(), s.items()
+                .stream()
+                .filter((i) -> i.branchIds() == null || i.branchIds().contains(store.getId()))
+                .toList()))
+            .toList();
+        return new MenuDetails(menu.brandId(), menu.currency(), menu.languages(), sections);
     }
 
     public MenuDetails.Section createSection(String brandId, Map<String, String> name, String userId) {
@@ -179,8 +207,16 @@ public class MenuService {
         MenuItemDocument item = findItem(brandId, itemId);
         StoreService.requireVersion("item", item.getVersion(), expectedVersion, "MENU_VERSION_CONFLICT");
         String oldImage = item.getImageMediaId();
-        apply(item, input, oldImage, userId, this.clock.instant());
-        MenuItemDocument saved = inMenuTransaction(brandId, userId, () -> this.items.save(item));
+        // with price approval on, changed prices wait for operator staff and the rest applies now
+        MenuPrices.Held held = (this.prices != null) ? this.prices.hold(item, input, userId)
+                : new MenuPrices.Held(input, List.of());
+        apply(item, held.input(), oldImage, userId, this.clock.instant());
+        MenuItemDocument saved = inMenuTransaction(brandId, userId, () -> {
+            if (this.prices != null) {
+                this.prices.saveRequests(held.requests());
+            }
+            return this.items.save(item);
+        });
         if (oldImage != null && !oldImage.equals(saved.getImageMediaId())) {
             this.media.release(oldImage, owner(itemId));
         }
@@ -255,7 +291,9 @@ public class MenuService {
                     .stream()
                     .map((o) -> {
                         ItemOverrideDocument optionOverride = byId.get(storeId + ":" + item.getId() + ":" + o.id());
-                        return new EffectiveMenu.Option(o.id(), o.name(), o.priceDeltaMinor(),
+                        long delta = (optionOverride != null && optionOverride.getPriceOverrideMinor() != null)
+                                ? optionOverride.getPriceOverrideMinor() : o.priceDeltaMinor();
+                        return new EffectiveMenu.Option(o.id(), o.name(), delta,
                                 optionOverride != null && optionOverride.isSoldOut());
                     })
                     .toList()))

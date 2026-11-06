@@ -54,6 +54,11 @@ export const routes: Routes = [
         loadComponent: () => import('./stores/onboard-page').then((m) => m.OnboardPage),
       },
       {
+        path: 'price-approvals',
+        loadComponent: () =>
+          import('./stores/price-approvals-page').then((m) => m.PriceApprovalsPage),
+      },
+      {
         path: 'stores/:id',
         loadComponent: () => import('./stores/store-page').then((m) => m.StorePage),
       },
@@ -81,6 +86,10 @@ export const routes: Routes = [
         path: 'delivery-pricing',
         loadComponent: () =>
           import('./delivery/delivery-pricing-page').then((m) => m.DeliveryPricingPage),
+      },
+      {
+        path: 'cities',
+        loadComponent: () => import('./delivery/cities-page').then((m) => m.CitiesPage),
       },
       {
         path: 'users',

@@ -330,6 +330,8 @@ export interface OrderingSettings {
   taxBasisPoints: number;
   tipsEnabled: boolean;
   acceptTimeoutSeconds: number;
+  /** Store owners' price changes wait for operator approval (PRD ST-6, BB-4). Off by default. */
+  priceApprovalRequired?: boolean;
 }
 
 export type PromotionType = 'PERCENT' | 'FIXED' | 'FREE_DELIVERY';

@@ -24,7 +24,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Document("settings_settings")
 public record OrderingDocument(@Id String id, boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor,
         int serviceFeeBasisPoints, int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, Instant updatedAt,
-        String updatedBy, @Version Long version) {
+        String updatedBy, @Version Long version, Boolean priceApprovalRequired) {
+
+    /** Off unless set: documents saved before M4 have no value. */
+    public boolean approvalRequired() {
+        return Boolean.TRUE.equals(this.priceApprovalRequired);
+    }
 
     public static final String ID = "ordering";
 }

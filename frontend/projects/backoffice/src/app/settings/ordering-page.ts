@@ -102,6 +102,17 @@ import { toMajor, toMinor } from '../shared/money';
               </mat-form-field>
             </div>
           </div>
+          <div class="card-section">
+            <h2>Menu prices</h2>
+            <mat-slide-toggle name="priceApproval" [(ngModel)]="priceApprovalRequired"
+              >Store owners' price changes need your approval</mat-slide-toggle
+            >
+            <p class="section-hint">
+              Covers brand menu prices and each branch's own prices. Until you approve a change on
+              the Price approvals page, customers keep seeing the old price. New dishes start with
+              the price they are added with.
+            </p>
+          </div>
           @if (error()) {
             <div class="banner error" role="alert">{{ error() }}</div>
           }
@@ -150,6 +161,7 @@ export class OrderingPage implements OnInit {
   protected serviceFeePercent = '';
   protected taxPercent = '';
   protected acceptMinutes = 5;
+  protected priceApprovalRequired = false;
   private etag = '';
 
   async ngOnInit(): Promise<void> {
@@ -167,6 +179,7 @@ export class OrderingPage implements OnInit {
       this.serviceFeePercent = percent(value.serviceFeeBasisPoints);
       this.taxPercent = percent(value.taxBasisPoints);
       this.acceptMinutes = Math.round(value.acceptTimeoutSeconds / 60);
+      this.priceApprovalRequired = value.priceApprovalRequired ?? false;
       this.loaded.set(true);
     } catch {
       this.loadError.set(true);
@@ -202,6 +215,7 @@ export class OrderingPage implements OnInit {
             taxBasisPoints: taxBp,
             tipsEnabled: this.tipsEnabled,
             acceptTimeoutSeconds: Math.round(this.acceptMinutes) * 60,
+            priceApprovalRequired: this.priceApprovalRequired,
           },
           this.etag,
         ),

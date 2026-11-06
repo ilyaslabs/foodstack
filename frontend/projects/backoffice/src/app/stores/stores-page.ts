@@ -31,7 +31,7 @@ import { STATUS_LABELS } from './store-status';
   template: `
     <header class="fs-page-header with-action">
       <div>
-        <h1>{{ session.operator() ? 'Stores' : 'My store' }}</h1>
+        <h1>{{ session.operator() ? 'Stores' : (stores()?.length ?? 0) > 1 ? 'Branches' : 'My store' }}</h1>
         <p>
           @if (session.operator()) {
             Onboard restaurants, check what keeps a draft from going live, and help owners.
@@ -98,6 +98,9 @@ import { STATUS_LABELS } from './store-status';
                   <span class="meta">
                     {{ store.city }} ·
                     {{ store.deliveryMode === 'SELF' ? 'Own delivery' : 'Platform riders' }}
+                    @if (store.branchCount > 1) {
+                      · {{ store.branchCount }} branches in the brand
+                    }
                     @if (store.createdAt) {
                       · Added {{ store.createdAt * 1000 | date: 'mediumDate' }}
                     }

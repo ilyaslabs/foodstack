@@ -18,6 +18,7 @@ import io.github.ilyaslabs.foodstack.platform.security.BranchBrands;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.store.core.application.BranchAccessBackfill;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuCache;
+import io.github.ilyaslabs.foodstack.store.core.application.MenuPrices;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuService;
 import io.github.ilyaslabs.foodstack.store.core.application.OrderValidationService;
 import io.github.ilyaslabs.foodstack.store.core.application.SlugBackfill;
@@ -28,6 +29,7 @@ import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.ItemOverrideRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuItemRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuSectionRepository;
+import io.github.ilyaslabs.foodstack.store.core.persistence.PriceChangeRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugRepository;
 
@@ -62,7 +64,8 @@ public class StoreConfiguration {
             .hashed("store_slugs", "_id")
             .hashed("store_menu_sections", "brandId")
             .hashed("store_menu_items", "brandId")
-            .hashed("store_item_overrides", "storeId");
+            .hashed("store_item_overrides", "storeId")
+            .hashed("store_price_changes", "brandId");
     }
 
     @Bean
@@ -136,9 +139,18 @@ public class StoreConfiguration {
     MenuService storeMenuService(MenuSectionRepository menuSectionRepository, MenuItemRepository menuItemRepository,
             ItemOverrideRepository itemOverrideRepository, StoreRepository storeRepository, BrandRepository brandRepository,
             SettingsApi settingsApi, MediaApi mediaApi, MenuCache storeMenuCache, OutboxWriter storeOutbox,
-            ModuleMongo storeMongo, Clock clock) {
+            ModuleMongo storeMongo, Clock clock, MenuPrices storeMenuPrices) {
         return new MenuService(menuSectionRepository, menuItemRepository, itemOverrideRepository, storeRepository,
-                brandRepository, settingsApi, mediaApi, storeMenuCache, storeOutbox, storeMongo.transactionTemplate(), clock);
+                brandRepository, settingsApi, mediaApi, storeMenuCache, storeOutbox, storeMongo.transactionTemplate(), clock,
+                storeMenuPrices);
+    }
+
+    @Bean
+    MenuPrices storeMenuPrices(MenuItemRepository menuItemRepository, ItemOverrideRepository itemOverrideRepository,
+            PriceChangeRepository priceChangeRepository, StoreRepository storeRepository, BrandRepository brandRepository,
+            SettingsApi settingsApi, MenuCache storeMenuCache, OutboxWriter storeOutbox, ModuleMongo storeMongo, Clock clock) {
+        return new MenuPrices(menuItemRepository, itemOverrideRepository, priceChangeRepository, storeRepository,
+                brandRepository, settingsApi, storeMenuCache, storeOutbox, storeMongo.transactionTemplate(), clock);
     }
 
     @Bean

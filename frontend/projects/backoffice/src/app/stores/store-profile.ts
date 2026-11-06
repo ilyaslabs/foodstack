@@ -1,4 +1,4 @@
-import { Component, effect, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
@@ -14,6 +14,8 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import {
   Brand,
   BrandClient,
+  City,
+  CityClient,
   DeliveryMode,
   MediaClient,
   StoreClient,
@@ -24,7 +26,6 @@ import { Icon, LocaleStore } from '@foodstack/ui';
 import { describeError } from '../shared/errors';
 import { Session } from '../shared/session';
 import { TranslatedField, cleanTranslated } from '../shared/translated-field';
-import { toMajor, toMinor } from '../shared/money';
 import { StoreContext } from './store-context';
 
 /** Brand (name, story, images) and branch (address, location, delivery) details. */
@@ -45,6 +46,7 @@ import { StoreContext } from './store-context';
   ],
   template: `
     <div class="stack">
+      @if (canEditBrand()) {
       <mat-card appearance="outlined">
         <form [formGroup]="brandForm" (ngSubmit)="saveBrand()">
           <section class="card-section">
@@ -119,6 +121,7 @@ import { StoreContext } from './store-context';
           </div>
         </form>
       </mat-card>
+      }
 
       <mat-card appearance="outlined">
         <form [formGroup]="branchForm" (ngSubmit)="saveBranch()">
@@ -195,6 +198,20 @@ import { StoreContext } from './store-context';
               >Customers can collect orders</mat-slide-toggle
             >
           </section>
+          <section class="card-section">
+            <h2>Order tickets</h2>
+            <p class="section-hint">The width of the paper in the branch's receipt printer.</p>
+            <mat-radio-group formControlName="ticketPaperMm" class="radios">
+              <mat-radio-button [value]="80">
+                <span class="radio-title">80 mm</span>
+                <span class="radio-hint">Most kitchen and counter printers.</span>
+              </mat-radio-button>
+              <mat-radio-button [value]="58">
+                <span class="radio-title">58 mm</span>
+                <span class="radio-hint">Small and handheld printers.</span>
+              </mat-radio-button>
+            </mat-radio-group>
+          </section>
           <div class="actions">
             <button mat-flat-button type="submit" [disabled]="savingBranch()">
               {{ savingBranch() ? 'Saving…' : 'Save branch' }}
@@ -228,18 +245,19 @@ import { StoreContext } from './store-context';
                   >
                   <mat-error>Use 3 to 60 lower-case letters, digits and single hyphens</mat-error>
                 </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Commission</mat-label>
-                  <input matInput formControlName="commissionPercent" inputmode="decimal" />
-                  <span matTextSuffix>%</span>
-                  <mat-hint>For every branch of the brand.</mat-hint>
-                </mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Fixed fee per order</mat-label>
-                  <input matInput formControlName="commissionFixed" inputmode="decimal" />
-                  <span matTextSuffix>{{ locale.currency() }}</span>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>City</mat-label>
+                  <mat-select formControlName="cityId">
+                    @for (city of cities(); track city.id) {
+                      <mat-option [value]="city.id" [disabled]="!city.active">{{
+                        locale.pick(city.name)
+                      }}</mat-option>
+                    }
+                  </mat-select>
+                  <mat-hint>Platform riders of this city deliver for the branch.</mat-hint>
                 </mat-form-field>
               </div>
+              <p class="section-hint">Commission is on the Brand tab, with the date it starts.</p>
               <mat-slide-toggle formControlName="operatorDeliveryAllowed">
                 Branch may use platform riders
               </mat-slide-toggle>
@@ -336,9 +354,15 @@ import { StoreContext } from './store-context';
 export class StoreProfile {
   protected readonly context = inject(StoreContext);
   protected readonly session = inject(Session);
+
+  /** Operator staff and the brand's owners edit the brand; a branch manager edits the branch only. */
+  protected readonly canEditBrand = computed(
+    () => this.session.operator() || this.session.ownsBrand(this.context.store()?.brand.id),
+  );
   protected readonly locale = inject(LocaleStore);
   private readonly stores = inject(StoreClient);
   private readonly brands = inject(BrandClient);
+  private readonly cityClient = inject(CityClient);
   private readonly media = inject(MediaClient);
   private readonly snackBar = inject(MatSnackBar);
   private readonly fb = inject(NonNullableFormBuilder);
@@ -377,7 +401,11 @@ export class StoreProfile {
     deliveryMode: ['SELF' as DeliveryMode],
     pickupEnabled: [false],
     timezone: [''],
+    ticketPaperMm: [80 as 80 | 58],
   });
+
+  /** The operator's cities, for the city select (operator only). */
+  protected readonly cities = signal<City[]>([]);
 
   /** Every zone the browser knows, with the branch's own first if the browser lacks it. */
   protected readonly zones = signal<string[]>(knownZones());
@@ -394,18 +422,23 @@ export class StoreProfile {
         Validators.pattern(/^[a-z0-9]+(-[a-z0-9]+)*$/),
       ],
     ],
-    commissionPercent: [''],
-    commissionFixed: [''],
+    cityId: [''],
     operatorDeliveryAllowed: [false],
   });
 
   constructor() {
+    if (this.session.operator()) {
+      firstValueFrom(this.cityClient.list()).then(
+        (cities) => this.cities.set(cities),
+        () => this.cities.set([]),
+      );
+    }
     let loadedFor = '';
     effect(() => {
       const store = this.context.store();
       if (!store) return;
       this.fillBranch();
-      if (loadedFor !== store.brand.id) {
+      if (loadedFor !== store.brand.id && this.canEditBrand()) {
         loadedFor = store.brand.id;
         void this.loadBrand(store.brand.id);
       }
@@ -435,10 +468,6 @@ export class StoreProfile {
           }
         : null,
     });
-    this.adminForm.patchValue({
-      commissionPercent: String(brand.commission.percentBasisPoints / 100),
-      commissionFixed: toMajor(brand.commission.fixedMinor, this.locale.currency()),
-    });
   }
 
   private fillBranch(): void {
@@ -454,6 +483,7 @@ export class StoreProfile {
       deliveryMode: s.deliveryMode,
       pickupEnabled: s.pickupEnabled,
       timezone: s.timezone,
+      ticketPaperMm: s.ticketPaperMm ?? 80,
     });
     if (s.timezone && !this.zones().includes(s.timezone))
       this.zones.update((z) => [s.timezone, ...z]);
@@ -462,6 +492,7 @@ export class StoreProfile {
       taxId: s.taxId ?? '',
       slug: s.slug ?? '',
       operatorDeliveryAllowed: s.operatorDeliveryAllowed,
+      cityId: s.cityId ?? '',
     });
   }
 
@@ -553,6 +584,7 @@ export class StoreProfile {
               deliveryMode: v.deliveryMode,
               pickupEnabled: v.pickupEnabled,
               timezone: v.timezone || null,
+              ticketPaperMm: v.ticketPaperMm,
             },
             this.context.etag(),
           ),
@@ -571,24 +603,17 @@ export class StoreProfile {
   protected async saveAdmin(): Promise<void> {
     const store = this.context.store()!;
     const v = this.adminForm.getRawValue();
-    const percent = Number(v.commissionPercent);
     if (this.adminForm.controls.slug.invalid) {
       this.adminForm.controls.slug.markAsTouched();
       this.snackBar.open('Check the web address.', 'Dismiss', { duration: 6000 });
       return;
     }
-    if (this.adminForm.invalid || !Number.isFinite(percent) || percent < 0 || percent > 100) {
-      this.snackBar.open('Enter a commission from 0 to 100 %.', 'Dismiss', { duration: 6000 });
+    if (this.adminForm.invalid) {
+      this.adminForm.markAllAsTouched();
       return;
     }
     this.savingAdmin.set(true);
     try {
-      await firstValueFrom(
-        this.brands.updateCommission(store.brand.id, {
-          percentBasisPoints: Math.round(percent * 100),
-          fixedMinor: toMinor(v.commissionFixed, this.locale.currency()) ?? 0,
-        }),
-      );
       this.context.set(
         await firstValueFrom(
           this.stores.updateAdmin(
@@ -597,6 +622,7 @@ export class StoreProfile {
               legalName: v.legalName.trim(),
               taxId: v.taxId.trim() || null,
               operatorDeliveryAllowed: v.operatorDeliveryAllowed,
+              cityId: v.cityId || null,
             },
             this.context.etag(),
           ),
@@ -608,7 +634,6 @@ export class StoreProfile {
           await firstValueFrom(this.stores.updateSlug(store.id, slug, this.context.etag())),
         );
       }
-      await this.loadBrand(store.brand.id);
       this.snackBar.open('Platform settings saved.', undefined, { duration: 3000 });
     } catch (error) {
       this.snackBar.open(describeError(error, 'The settings could not be saved.'), 'Dismiss', {

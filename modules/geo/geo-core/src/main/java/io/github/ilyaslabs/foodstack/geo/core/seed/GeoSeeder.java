@@ -12,10 +12,10 @@ import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricingService
 import io.github.ilyaslabs.foodstack.geo.core.application.UpdateOperatorPricing;
 import io.github.ilyaslabs.foodstack.geo.core.application.ZoneInput;
 import io.github.ilyaslabs.foodstack.geo.core.application.ZoneService;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.bson.Document;
-
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;

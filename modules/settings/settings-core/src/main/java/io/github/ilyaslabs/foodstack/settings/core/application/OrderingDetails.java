@@ -16,5 +16,6 @@ import java.time.Instant;
  * @param updatedAt last change, or {@code null}
  */
 public record OrderingDetails(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
-        int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version, Instant updatedAt) {
+        int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version, Instant updatedAt,
+        boolean priceApprovalRequired) {
 }
