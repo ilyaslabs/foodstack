@@ -123,7 +123,7 @@ describe('Home', () => {
 
     // when
     const further = [...element.querySelectorAll<HTMLButtonElement>('.further button')][0];
-    expect(further.textContent).toContain('Show restaurants further away (up to 15 km)');
+    expect(further.textContent).toContain('Show restaurants up to 15 km');
     further.click();
     await fixture.whenStable();
 

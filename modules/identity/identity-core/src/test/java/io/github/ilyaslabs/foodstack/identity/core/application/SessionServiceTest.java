@@ -35,10 +35,12 @@ import org.springframework.test.context.DynamicPropertySource;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 /** Refresh token rotation against a real two-shard MongoDB (lowest layer, TDD 15.3). */
@@ -78,7 +80,7 @@ class SessionServiceTest {
     }
 
     @Test
-    @DisplayName("signs in with a password, keeps only a hash of the refresh token, and checks the try limit")
+    @DisplayName("signs in with a password, keeps only a hash of the refresh token, and counts only wrong tries")
     void password() {
         given(this.users.checkPassword("a@example.com", "correct horse")).willReturn(Optional.of("u1"));
 
@@ -94,10 +96,12 @@ class SessionServiceTest {
         assertThat(session.accessToken()).isEqualTo("at:" + stored.familyId());
         assertThat(this.identityMongo.template().count(Query.query(Criteria.where("_id").is(session.refreshToken())),
                 RefreshTokenDocument.class)).isZero();
-        verify(this.rateLimiter).check(eq("identity"), eq("password"), eq("bi:a@example.com"), eq(10), any());
+        verify(this.rateLimiter).refuseIfReached(eq("identity"), eq("password"), eq("bi:a@example.com"), eq(10), any());
+        verify(this.rateLimiter, never()).check(any(), any(), any(), anyInt(), any());
 
         assertThatThrownBy(() -> this.sessions.signInWithPassword("a@example.com", "wrong", Client.WEB))
             .isInstanceOfSatisfying(ModuleException.Unauthorized.class, (ex) -> assertThat(ex.code()).isEqualTo("LOGIN_FAILED"));
+        verify(this.rateLimiter).check(eq("identity"), eq("password"), eq("bi:a@example.com"), eq(10), any());
     }
 
     @Test

@@ -52,4 +52,20 @@ class RateLimiterTest {
         new RateLimiter(this.redis, namespace, Clock.fixed(start.plus(Duration.ofMinutes(10)), ZoneOffset.UTC))
             .check("order", "place", "c1", 3, Duration.ofMinutes(10));
     }
+
+    @Test
+    @DisplayName("refuses once the limit is counted, without counting a use itself")
+    void refusesWithoutCounting() {
+        String namespace = FoodstackContainers.uniqueName();
+        RateLimiter limiter = new RateLimiter(this.redis, namespace,
+                Clock.fixed(Instant.parse("2026-11-01T12:00:00Z"), ZoneOffset.UTC));
+        for (int i = 0; i < 5; i++) {
+            limiter.refuseIfReached("identity", "password", "e1", 2, Duration.ofMinutes(15));
+        }
+        limiter.check("identity", "password", "e1", 2, Duration.ofMinutes(15));
+        limiter.refuseIfReached("identity", "password", "e1", 2, Duration.ofMinutes(15));
+        limiter.check("identity", "password", "e1", 2, Duration.ofMinutes(15));
+        assertThatThrownBy(() -> limiter.refuseIfReached("identity", "password", "e1", 2, Duration.ofMinutes(15)))
+            .isInstanceOf(TooManyRequestsException.class);
+    }
 }

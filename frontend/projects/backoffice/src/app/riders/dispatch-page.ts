@@ -374,7 +374,8 @@ type Filter = 'all' | 'attention' | 'moving';
         grid-template-columns: minmax(0, 1fr);
       }
       .map-card {
-        position: static;
+        position: relative;
+        top: auto;
       }
       .map {
         block-size: 52vh;
