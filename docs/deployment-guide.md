@@ -259,6 +259,8 @@ The install runs migrations in a pre-install job first. Then follow the first-lo
 
 ### 4.6 Scaling and topologies
 
+How the load is split between machines, and the stages of growth, are drawn in [architecture 8](architecture/08-scaling.md). Step-by-step runbooks for each step are planned for milestone M6 (Operator handbook).
+
 | Goal | Change |
 |---|---|
 | More capacity, same shape | Raise `server.deployments.<name>.autoscaling.max` (or `replicas`) |
