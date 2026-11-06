@@ -22,8 +22,9 @@ public class BranchAccessBackfill {
         this.stores = stores;
     }
 
+    // after the store seed (30) and before the rider seed (40), which reads each branch's brand
     @EventListener(ApplicationReadyEvent.class)
-    @Order(41)
+    @Order(35)
     public void run() {
         try {
             int moved = this.stores.backfillBranchAccess();

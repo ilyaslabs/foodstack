@@ -15,6 +15,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param id the rider's user id
  * @param kind {@code OPERATOR} or {@code STORE}
  * @param storeId the store a store rider rides for, else {@code null}
+ * @param brandId the brand of that store: a store rider rides for every branch of the brand (PRD
+ *        BB-12); {@code null} for operator riders
  * @param name display name
  * @param phoneCipher phone, encrypted with the deployment's PII key
  * @param vehicle {@code BICYCLE}, {@code MOTORBIKE}, {@code SCOOTER} or {@code CAR}
@@ -36,7 +38,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param version optimistic lock of the profile
  */
 @Document("rider_riders")
-public record RiderDocument(@Id String id, String kind, String storeId, String name, String phoneCipher, String vehicle,
+public record RiderDocument(@Id String id, String kind, String storeId, String brandId, String name, String phoneCipher, String vehicle,
         String plate, String city, String cityId, String status, boolean online, Instant idleSince, Double lat, Double lng,
         Instant lastSeenAt, List<String> activeOrderIds, long offers, long accepted, long deliveries, Instant createdAt,
         Instant updatedAt, @Version Long version) {

@@ -55,6 +55,7 @@ These are fixed so every developer and tester uses the same ones. They exist onl
 | `LocalFoodstackApplication` | `rider@demo.foodstack.local` | `foodstack-demo` | Operator rider (Bilal Ahmed, motorbike) |
 | `LocalFoodstackApplication` | `rider2@demo.foodstack.local` | `foodstack-demo` | Operator rider (Ayesha Noor, scooter) |
 | `LocalFoodstackApplication` | `napoli.rider@demo.foodstack.local` | `foodstack-demo` | Napoli Slice's own rider (Usman Tariq) |
+| `LocalFoodstackApplication` | `spiceroute.rider@demo.foodstack.local` | `foodstack-demo` | Spice Route's rider (Hamza Iqbal), home branch Gulberg, also rides for DHA Phase 5 |
 | `LocalFoodstackApplication` | `admin@local.foodstack.local` | `foodstack-local` | Administrator (first-start account) |
 | `./install.sh <folder> --local` | `admin@foodstack.localhost` | `foodstack-local` | Administrator |
 

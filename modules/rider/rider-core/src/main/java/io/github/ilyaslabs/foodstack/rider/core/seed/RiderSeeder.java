@@ -33,6 +33,9 @@ class RiderSeeder {
     /** Napoli Slice (DHA) in the store module's demo data. */
     static final String NAPOLI_DHA = "0195f0a0-0000-7000-8000-000000000201";
 
+    /** Spice Route (Gulberg): its rider also rides for the brand's DHA branch (PRD BB-12). */
+    static final String SPICE_ROUTE_GULBERG = "0195f0a0-0000-7000-8000-000000000101";
+
     private static final Log logger = LogFactory.getLog(RiderSeeder.class);
 
     private final RiderService riders;
@@ -63,8 +66,10 @@ class RiderSeeder {
                     Vehicle.SCOOTER, "LEC-0915", "Lahore", null));
             this.riders.addStoreRider(NAPOLI_DHA, new RiderInput("napoli.rider@demo.foodstack.local", PASSWORD, "Usman Tariq",
                     "+923001234503", Vehicle.MOTORBIKE, "LED-3380", "Lahore", null));
+            this.riders.addStoreRider(SPICE_ROUTE_GULBERG, new RiderInput("spiceroute.rider@demo.foodstack.local", PASSWORD,
+                    "Hamza Iqbal", "+923001234504", Vehicle.MOTORBIKE, "LEE-5120", "Lahore", null));
         });
         logger.info("Seeded demo riders rider@demo.foodstack.local, rider2@demo.foodstack.local (operator) and "
-                + "napoli.rider@demo.foodstack.local (Napoli Slice), password '" + PASSWORD + "'");
+                + "napoli.rider@demo.foodstack.local (Napoli Slice), spiceroute.rider@demo.foodstack.local (Spice Route), password '" + PASSWORD + "'");
     }
 }

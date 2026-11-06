@@ -86,6 +86,12 @@ class BranchBrandsTest {
         assertThat(CurrentUser.managesStore("s1")).isTrue();
         assertThat(CurrentUser.managesStore("s2")).isFalse();
         assertThat(CurrentUser.ownsBrandOf("s1")).isFalse();
+        // a branch manager sees the brand's other branches only for shared things such as riders (BB-12)
+        assertThat(CurrentUser.managesBrandOf("s2")).isTrue();
+        assertThat(CurrentUser.managesBrandOf("s3")).isFalse();
+        assertThat(CurrentUser.sameBrand("s1", "s2")).isTrue();
+        assertThat(CurrentUser.sameBrand("s1", "s3")).isFalse();
+        assertThat(CurrentUser.sameBrand("s1", "unknown")).isFalse();
     }
 
     private static void signIn(String subject, List<String> brandIds, List<String> storeIds) {

@@ -325,7 +325,7 @@ public class RiderActivity {
     public Earnings earningsOf(String riderId, int days, String timeZone) {
         RiderDocument rider = this.riders.require(riderId);
         if (!CurrentUser.hasAuthority(RiderService.MANAGE)
-                && !(rider.storeId() != null && CurrentUser.managesStore(rider.storeId()))) {
+                && !(rider.storeId() != null && CurrentUser.managesBrandOf(rider.storeId()))) {
             throw new ModuleException.NotFound("No such rider", "RIDER_NOT_FOUND");
         }
         return earnings(riderId, days, timeZone);

@@ -28,6 +28,8 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
+import io.github.ilyaslabs.foodstack.platform.security.BranchBrands;
+import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.security.FoodstackJwtAuthenticationConverter;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.RateLimiter;
@@ -43,14 +45,13 @@ import io.github.ilyaslabs.foodstack.rider.api.Vehicle;
 import io.github.ilyaslabs.foodstack.settings.api.DeliveryView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import tools.jackson.databind.json.JsonMapper;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -63,6 +64,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -156,6 +158,8 @@ class DispatchStorageTest {
         given(this.riders.getRider("r2")).willReturn(rider("r2", "Bilal", RiderKind.OPERATOR, null));
         given(this.riders.getRider("sr1")).willReturn(rider("sr1", "Hamza", RiderKind.STORE, "s1"));
         given(this.riders.getRider("sr2")).willReturn(rider("sr2", "Usman", RiderKind.STORE, "s1"));
+        given(this.riders.getRider("sr3")).willReturn(rider("sr3", "Bilal", RiderKind.STORE, "s1-dha"));
+        given(this.riders.getRider("sr4")).willReturn(rider("sr4", "Kamran", RiderKind.STORE, "s9"));
         OutboxWriter outbox = new OutboxWriter(this.dispatchMongo, JsonMapper.builder().build(), clock);
         this.dispatch = new DispatchService(this.dispatchMongo.template(), this.dispatchMongo.transactionTemplate(), outbox,
                 new DispatchLive(this.redis, this.liveChannels, namespace), this.riders, this.settings, this.geo,
@@ -165,6 +169,7 @@ class DispatchStorageTest {
     @AfterEach
     void signOut() {
         SecurityContextHolder.clearContext();
+        CurrentUser.useBranchBrands(null);
     }
 
     @Test
@@ -284,6 +289,16 @@ class DispatchStorageTest {
         signIn("owner-1", "s1");
         assertThatThrownBy(() -> this.dispatch.assignStoreRider(id, "r1"))
             .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("STORE_RIDER_INVALID"));
+        // riders of the brand's other branches ride for this one too (PRD BB-12); other brands' do not
+        BranchBrands brands = new BranchBrands(this.redis, "t" + System.nanoTime(), 10);
+        brands.remember("s1", "brand-1");
+        brands.remember("s1-dha", "brand-1");
+        brands.remember("s9", "brand-9");
+        CurrentUser.useBranchBrands(brands);
+        assertThatThrownBy(() -> this.dispatch.assignStoreRider(id, "sr4"))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("STORE_RIDER_INVALID"));
+        assertThat(this.dispatch.assignStoreRider(id, "sr3").riderId()).isEqualTo("sr3");
+        assertThat(job(id).storeId()).isEqualTo("s1");
         assertThat(this.dispatch.assignStoreRider(id, "sr2").riderId()).isEqualTo("sr2");
 
         signIn("sr2", null, "rider:portal");
@@ -292,7 +307,8 @@ class DispatchStorageTest {
         assertThat(done.status()).isEqualTo(DeliveryStatus.DELIVERED);
         assertThat(lastEventData(id)).contains("\"proof\":\"PHOTO\"").contains("\"cashCollectedMinor\":170000")
             .contains("\"earningMinor\":0");
-        assertThat(events(id)).containsExactly("RiderAssigned", "RiderUnassigned", "RiderAssigned", "DeliveryPickedUp",
+        assertThat(events(id)).containsExactly("RiderAssigned", "RiderUnassigned", "RiderAssigned", "RiderUnassigned",
+                "RiderAssigned", "DeliveryPickedUp",
                 "DeliveryCompleted");
 
         String other = order();

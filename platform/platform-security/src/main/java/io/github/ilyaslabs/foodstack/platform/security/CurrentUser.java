@@ -87,6 +87,41 @@ public final class CurrentUser {
         return !brands.isEmpty() && resolver != null && resolver.brandOf(storeId).filter(brands::contains).isPresent();
     }
 
+    /** The brand of a branch, from the shared branch-to-brand map; empty when unknown. */
+    public static java.util.Optional<String> brandOf(String storeId) {
+        BranchBrands resolver = branchBrands;
+        return (resolver != null) ? resolver.brandOf(storeId) : java.util.Optional.empty();
+    }
+
+    /** Whether the user runs any branch of the brand that {@code storeId} belongs to (PRD BB-12). */
+    public static boolean managesBrandOf(String storeId) {
+        if (managesStore(storeId)) {
+            return true;
+        }
+        java.util.Optional<String> brand = brandOf(storeId);
+        if (brand.isEmpty()) {
+            return false;
+        }
+        for (String own : storeIds()) {
+            if (brand.equals(brandOf(own))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether two branches belong to the same brand. */
+    public static boolean sameBrand(String storeA, String storeB) {
+        if (storeA == null || storeB == null) {
+            return false;
+        }
+        if (storeA.equals(storeB)) {
+            return true;
+        }
+        java.util.Optional<String> brand = brandOf(storeA);
+        return brand.isPresent() && brand.equals(brandOf(storeB));
+    }
+
     /** Whether the user owns the branch's brand ({@code brandIds}); branch managers do not. */
     public static boolean ownsBrandOf(String storeId) {
         java.util.Set<String> brands = brandIds();

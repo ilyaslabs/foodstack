@@ -164,10 +164,16 @@ public class RiderService {
 
     // ---- store ---------------------------------------------------------------------------------
 
-    /** A store's own riders, for its people and operator staff. */
+    /**
+     * The riders who can deliver a branch's orders, for its people and operator staff: its own
+     * riders and those of the brand's other branches (PRD BB-12).
+     */
     public List<RiderDetails> storeRiders(String storeId) {
         CurrentUser.requireStoreAccess(storeId, MANAGE);
-        return this.mongo.find(Query.query(Criteria.where("kind").is(RiderKind.STORE.name()).and("storeId").is(storeId))
+        Criteria whose = CurrentUser.brandOf(storeId)
+            .map((brandId) -> new Criteria().orOperator(Criteria.where("storeId").is(storeId), Criteria.where("brandId").is(brandId)))
+            .orElse(Criteria.where("storeId").is(storeId));
+        return this.mongo.find(Query.query(new Criteria().andOperator(Criteria.where("kind").is(RiderKind.STORE.name()), whose))
             .with(Sort.by("name")), RiderDocument.class).stream().map(this::details).toList();
     }
 
@@ -250,7 +256,8 @@ public class RiderService {
             throw new ModuleException.Conflict("This person is a rider already", "RIDER_EXISTS");
         }
         Instant now = this.clock.instant();
-        RiderDocument rider = new RiderDocument(user.id(), kind.name(), storeId, clean.name(), this.pii.encrypt(clean.phone()),
+        String brandId = (storeId != null) ? CurrentUser.brandOf(storeId).orElse(null) : null;
+        RiderDocument rider = new RiderDocument(user.id(), kind.name(), storeId, brandId, clean.name(), this.pii.encrypt(clean.phone()),
                 clean.vehicle().name(), clean.plate(), clean.city(), clean.cityId(), RiderStatus.ACTIVE.name(), false, now, null, null, null,
                 new ArrayList<>(), 0, 0, 0, now, now, null);
         RiderDocument saved = this.transaction.execute((tx) -> {
@@ -313,7 +320,8 @@ public class RiderService {
         if (rider.id().equals(me) || CurrentUser.hasAuthority(MANAGE) || CurrentUser.hasAuthority(DISPATCH)) {
             return;
         }
-        if (rider.storeId() != null && CurrentUser.managesStore(rider.storeId())) {
+        // a store rider rides for every branch of the brand, so each branch's people see them
+        if (rider.storeId() != null && CurrentUser.managesBrandOf(rider.storeId())) {
             return;
         }
         throw notFound();

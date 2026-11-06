@@ -476,7 +476,9 @@ public class DispatchService {
             throw new ModuleException.Conflict("The operator's riders deliver this order", "OPERATOR_DELIVERY");
         }
         RiderView rider = this.serviceCalls.call(() -> this.riders.getRider(riderId));
-        if (rider.kind() != RiderKind.STORE || !job.storeId().equals(rider.storeId()) || rider.status() != RiderStatus.ACTIVE) {
+        // a store rider rides for every branch of the brand (PRD BB-12); the job stays the branch's
+        if (rider.kind() != RiderKind.STORE || !CurrentUser.sameBrand(job.storeId(), rider.storeId())
+                || rider.status() != RiderStatus.ACTIVE) {
             throw new ModuleException.BadRequest("Choose one of this branch's active riders", "STORE_RIDER_INVALID");
         }
         if (riderId.equals(job.riderId())) {
@@ -527,7 +529,7 @@ public class DispatchService {
         }
         RiderView rider = this.serviceCalls.call(() -> this.riders.getRider(riderId));
         boolean fits = DeliveryMode.OPERATOR.name().equals(job.mode()) ? rider.kind() == RiderKind.OPERATOR
-                : rider.kind() == RiderKind.STORE && job.storeId().equals(rider.storeId());
+                : rider.kind() == RiderKind.STORE && CurrentUser.sameBrand(job.storeId(), rider.storeId());
         if (!fits || rider.status() != RiderStatus.ACTIVE) {
             throw new ModuleException.BadRequest("This rider cannot take this delivery", "RIDER_NOT_SUITABLE");
         }

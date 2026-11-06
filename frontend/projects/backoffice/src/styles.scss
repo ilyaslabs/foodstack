@@ -55,13 +55,13 @@ mat-card[appearance='outlined'] {
   --mat-card-outlined-container-shape: 16px;
 }
 
-// Icons inside Material buttons sit on the text's centre line.
-.mat-mdc-button-base > .mdc-button__label > fs-icon,
 // Links inside running text follow the theme instead of the browser's default blue.
 a:not([class*='mat-']):not(.mdc-list-item) {
   color: var(--mat-sys-primary);
 }
 
+// Icons inside Material buttons sit on the text's centre line.
+.mat-mdc-button-base > .mdc-button__label > fs-icon,
 .mat-mdc-button-base > fs-icon {
   --fs-icon-size: 20px;
   vertical-align: middle;
