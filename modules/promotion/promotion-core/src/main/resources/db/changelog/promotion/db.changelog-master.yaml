@@ -36,3 +36,10 @@ databaseChangeLog:
             collectionName: promotion_redemptions
             keys: '{ "promotionId": 1, "status": 1 }'
             options: '{ "name": "promotion_status" }'
+  - changeSet:
+      id: promotion-4
+      author: foodstack
+      comment: "promotion_brand_rules ({ _id: hashed }): whether each brand lets branch managers create promotions (PRD BB-11)"
+      changes:
+        - createCollection:
+            collectionName: promotion_brand_rules

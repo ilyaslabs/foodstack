@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 
 import {
+  City,
   PaymentMethod,
   Promotion,
   PromotionClient,
@@ -23,9 +24,22 @@ import { describeError } from '../shared/errors';
 import { toMajor, toMinor } from '../shared/money';
 import { TranslatedField } from '../shared/translated-field';
 
+/** A branch a brand's coupon can be limited to. */
+export interface PromotionBranch {
+  id: string;
+  brandId: string;
+  name: string;
+}
+
 export interface PromotionDialogData {
   /** Brands the user may make coupons for. */
   brands: { id: string; name: string }[];
+  /** The branches the user can see, for limiting a brand's coupon (PRD BB-11). */
+  branches: PromotionBranch[];
+  /** Whether the user may only make coupons for their own branches of this brand. */
+  ownBranchesOnly: (brandId: string) => boolean;
+  /** The operator's cities, for limiting a platform coupon. */
+  cities: City[];
   /** Operator staff may make platform-wide coupons and set payment rules. */
   operator: boolean;
   /** The coupon to edit, with its ETag, or null for a new one. */
@@ -68,9 +82,15 @@ export interface PromotionDialogData {
           </mat-form-field>
           <mat-form-field appearance="outline">
             <mat-label>Who offers it</mat-label>
-            <mat-select name="brand" [disabled]="!!data.editing" [(ngModel)]="brandId">
+            <mat-select
+              name="brand"
+              [disabled]="!!data.editing"
+              [ngModel]="brandId ?? ''"
+              (ngModelChange)="brandChanged($event)"
+            >
               @if (data.operator) {
-                <mat-option [value]="null">The platform (you pay the discount)</mat-option>
+                <!-- mat-select shows null as no choice, so the platform is the empty string here -->
+                <mat-option value="">The platform (you pay the discount)</mat-option>
               }
               @for (brand of data.brands; track brand.id) {
                 <mat-option [value]="brand.id">{{ brand.name }} (the store pays)</mat-option>
@@ -78,6 +98,36 @@ export interface PromotionDialogData {
             </mat-select>
           </mat-form-field>
         </div>
+        @if (brandId !== null) {
+          <mat-form-field appearance="outline">
+            <mat-label>Branches</mat-label>
+            <mat-select name="storeIds" multiple [(ngModel)]="storeIds" [required]="branchOnly()">
+              @for (branch of branchesOf(brandId); track branch.id) {
+                <mat-option [value]="branch.id">{{ branch.name }}</mat-option>
+              }
+            </mat-select>
+            <mat-hint>
+              {{
+                branchOnly()
+                  ? 'Your own branches. The brand owner makes coupons for the others.'
+                  : 'Empty for every branch of the brand'
+              }}
+            </mat-hint>
+          </mat-form-field>
+        } @else if (data.cities.length) {
+          <mat-form-field appearance="outline">
+            <mat-label>Cities</mat-label>
+            <mat-select name="cities" multiple [(ngModel)]="cities">
+              @for (city of data.cities; track city.id) {
+                <mat-option [value]="city.id">{{ locale.pick(city.name) }}</mat-option>
+              }
+              @for (name of legacyCities; track name) {
+                <mat-option [value]="name">{{ name }}</mat-option>
+              }
+            </mat-select>
+            <mat-hint>Empty for every city</mat-hint>
+          </mat-form-field>
+        }
         <app-translated-field label="What customers see" [required]="true" [(value)]="title" />
 
         <mat-button-toggle-group
@@ -188,7 +238,8 @@ export class PromotionDialog {
   protected readonly data = inject<PromotionDialogData>(MAT_DIALOG_DATA);
   private readonly client = inject(PromotionClient);
   private readonly ref = inject(MatDialogRef<PromotionDialog, boolean>);
-  protected readonly currency = inject(LocaleStore).currency();
+  protected readonly locale = inject(LocaleStore);
+  protected readonly currency = this.locale.currency();
 
   protected readonly saving = signal(false);
   protected readonly error = signal('');
@@ -214,11 +265,43 @@ export class PromotionDialog {
   protected perCustomerLimit: number | null = this.existing?.perCustomerLimit ?? null;
   protected firstOrderOnly = this.existing?.firstOrderOnly ?? false;
   protected paymentMethods: PaymentMethod[] = [...(this.existing?.paymentMethods ?? [])];
+  protected storeIds: string[] = this.existing
+    ? [...this.existing.storeIds]
+    : this.defaultBranches(this.brandId);
+  protected cities: string[] = [...(this.existing?.cities ?? [])];
+  /** City names on coupons made before cities had ids (M3), kept so an edit does not drop them. */
+  protected readonly legacyCities = this.cities.filter(
+    (c) => !this.data.cities.some((city) => city.id === c),
+  );
+
+  protected branchesOf(brandId: string): PromotionBranch[] {
+    return this.data.branches.filter((b) => b.brandId === brandId);
+  }
+
+  protected branchOnly(): boolean {
+    return this.brandId !== null && this.data.ownBranchesOnly(this.brandId);
+  }
+
+  protected brandChanged(value: string): void {
+    this.brandId = value || null;
+    this.storeIds = this.defaultBranches(this.brandId);
+  }
+
+  /** A branch manager's coupon starts on their own branches; a brand owner's on every branch. */
+  private defaultBranches(brandId: string | null): string[] {
+    return brandId !== null && this.data.ownBranchesOnly(brandId)
+      ? this.branchesOf(brandId).map((b) => b.id)
+      : [];
+  }
 
   protected async save(): Promise<void> {
     const percent = this.type === 'PERCENT' ? Number(this.percent) : null;
     if (this.type === 'PERCENT' && !(percent! > 0 && percent! <= 100)) {
       this.error.set('Percent off must be more than 0 and at most 100.');
+      return;
+    }
+    if (this.branchOnly() && this.storeIds.length === 0) {
+      this.error.set('Choose the branches the coupon works at.');
       return;
     }
     const amount = this.type === 'FIXED' ? toMinor(this.amount, this.currency) : null;
@@ -240,8 +323,8 @@ export class PromotionDialog {
       totalLimit: this.totalLimit || null,
       perCustomerLimit: this.perCustomerLimit || null,
       firstOrderOnly: this.firstOrderOnly,
-      storeIds: this.existing?.storeIds ?? [],
-      cities: this.existing?.cities ?? [],
+      storeIds: this.brandId !== null ? this.storeIds : (this.existing?.storeIds ?? []),
+      cities: this.brandId === null ? this.cities : [],
       paymentMethods: this.brandId === null ? this.paymentMethods : [],
     };
     this.error.set('');

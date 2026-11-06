@@ -103,8 +103,37 @@ public class PromotionService {
 
     /** Promotions newest first: the operator's and every store's ({@code brandIds == null}), or those of these brands. */
     public List<PromotionDetails> list(List<String> brandIds, int limit) {
-        Query query = (brandIds == null) ? new Query()
-                : Query.query(Criteria.where("owner").is(PromotionDocument.STORE).and("brandId").in(brandIds));
+        return listIn((brandIds == null) ? null : new PromotionAccess.Scope(brandIds, List.of()), limit);
+    }
+
+    /**
+     * Promotions newest first within a scope ({@code null}: all): every promotion of the scope's
+     * brands, and the promotions of its branches' brands that reach those branches (PRD BB-11).
+     */
+    public List<PromotionDetails> listIn(PromotionAccess.Scope scope, int limit) {
+        Query query;
+        if (scope == null) {
+            query = new Query();
+        }
+        else {
+            List<Criteria> reach = new java.util.ArrayList<>();
+            if (!scope.brandIds().isEmpty()) {
+                reach.add(Criteria.where("brandId").in(scope.brandIds()));
+            }
+            java.util.Set<String> branchBrands = new java.util.LinkedHashSet<>();
+            for (String storeId : scope.branchIds()) {
+                io.github.ilyaslabs.foodstack.platform.security.CurrentUser.brandOf(storeId).ifPresent(branchBrands::add);
+            }
+            if (!branchBrands.isEmpty()) {
+                reach.add(new Criteria().andOperator(Criteria.where("brandId").in(branchBrands),
+                        new Criteria().orOperator(Criteria.where("storeIds").size(0), Criteria.where("storeIds").in(scope.branchIds()))));
+            }
+            if (reach.isEmpty()) {
+                return List.of();
+            }
+            query = Query.query(new Criteria().andOperator(Criteria.where("owner").is(PromotionDocument.STORE),
+                    new Criteria().orOperator(reach.toArray(Criteria[]::new))));
+        }
         query.with(Sort.by(Sort.Direction.DESC, "_id")).limit(Math.clamp(limit, 1, 500));
         List<PromotionDocument> found = this.mongo.find(query, PromotionDocument.class);
         Map<String, Long> unlimitedUses = activeUses(found.stream()

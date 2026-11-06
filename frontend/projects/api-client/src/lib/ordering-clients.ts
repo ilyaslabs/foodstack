@@ -272,4 +272,11 @@ export class PromotionClient {
   setActive(id: string, active: boolean): Observable<Promotion> {
     return this.http.post<Promotion>(this.url(`/${id}/active`), { active });
   }
+
+  /** Whether the brand lets its branch managers create promotions for their branch (PRD BB-11). */
+  brandRules(brandId: string): Observable<{ branchPromotionsAllowed: boolean }> {
+    return this.http.get<{ branchPromotionsAllowed: boolean }>(
+      this.url(`/brands/${encodeURIComponent(brandId)}/rules`),
+    );
+  }
 }

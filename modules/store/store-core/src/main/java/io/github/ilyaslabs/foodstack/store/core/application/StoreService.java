@@ -40,6 +40,7 @@ import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.store.api.StoreStatus;
 import io.github.ilyaslabs.foodstack.store.api.TimeRange;
+import io.github.ilyaslabs.foodstack.store.api.events.BranchPromotionsChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.BrandChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreAvailabilityChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreChanged;
@@ -591,6 +592,7 @@ public class StoreService {
         BrandDocument saved = this.transaction.execute((status) -> {
             BrandDocument result = this.brands.save(brand);
             this.outbox.append(new BrandChanged(brandId, version(result.getVersion()), userId));
+            this.outbox.append(new BranchPromotionsChanged(brandId, allowed, version(result.getVersion()), userId));
             return result;
         });
         return brandDetails(saved);

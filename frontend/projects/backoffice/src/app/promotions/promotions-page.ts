@@ -7,12 +7,12 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
-import { Promotion, PromotionClient, StoreClient } from '@foodstack/api-client';
+import { City, CityClient, Promotion, PromotionClient, StoreClient } from '@foodstack/api-client';
 import { Icon, LocaleStore } from '@foodstack/ui';
 
 import { describeError } from '../shared/errors';
 import { Session } from '../shared/session';
-import { PromotionDialog, PromotionDialogData } from './promotion-dialog';
+import { PromotionBranch, PromotionDialog, PromotionDialogData } from './promotion-dialog';
 
 /** Coupons: the platform's own and each brand's (PRD PR-1..PR-4). */
 @Component({
@@ -34,9 +34,11 @@ import { PromotionDialog, PromotionDialogData } from './promotion-dialog';
           keep their discount.
         </p>
       </div>
-      <button mat-flat-button type="button" (click)="edit(null)">
-        <fs-icon name="add" /> New coupon
-      </button>
+      @if (canCreate()) {
+        <button mat-flat-button type="button" (click)="edit(null)">
+          <fs-icon name="add" /> New coupon
+        </button>
+      }
     </header>
 
     @if (loading()) {
@@ -55,23 +57,29 @@ import { PromotionDialog, PromotionDialogData } from './promotion-dialog';
               <div class="code">{{ promotion.code }}</div>
               <div class="title">{{ locale.pick(promotion.title) }}</div>
               <div class="muted">
-                {{ describe(promotion) }} · {{ owner(promotion) }} · used {{ promotion.used
-                }}{{ promotion.totalLimit ? ' of ' + promotion.totalLimit : '' }}
+                {{ describe(promotion) }} · {{ owner(promotion) }}{{ reach(promotion) }} · used
+                {{ promotion.used }}{{ promotion.totalLimit ? ' of ' + promotion.totalLimit : '' }}
               </div>
             </div>
             <mat-slide-toggle
               [checked]="promotion.active"
+              [disabled]="!canEdit(promotion)"
               (change)="setActive(promotion, $event.checked)"
               [attr.aria-label]="(promotion.active ? 'Switch off ' : 'Switch on ') + promotion.code"
             />
-            <button mat-button type="button" (click)="edit(promotion)">
-              <fs-icon name="edit" /> Edit
-            </button>
+            @if (canEdit(promotion)) {
+              <button mat-button type="button" (click)="edit(promotion)">
+                <fs-icon name="edit" /> Edit
+              </button>
+            } @else {
+              <span class="chip">From the brand</span>
+            }
           </mat-card>
         }
       </div>
     }
   `,
+  styleUrls: ['../shared/page.scss'],
   styles: `
     .with-action {
       display: flex;
@@ -148,8 +156,20 @@ export class PromotionsPage implements OnInit {
 
   protected readonly promotions = signal<Promotion[]>([]);
   protected readonly loading = signal(true);
+  private readonly cityClient = inject(CityClient);
   private readonly brands = signal<{ id: string; name: string }[]>([]);
+  private readonly branches = signal<PromotionBranch[]>([]);
+  private readonly cities = signal<City[]>([]);
+  /** Brands whose owner lets this branch manager make promotions for their branch (PRD BB-11). */
+  private readonly allowed = signal<ReadonlySet<string>>(new Set());
   protected readonly operator = computed(() => this.session.can('promotion:manage'));
+  /** Brands the user may make coupons for: owned, or allowed for their branch. */
+  private readonly creatable = computed(() =>
+    this.operator()
+      ? this.brands()
+      : this.brands().filter((b) => this.session.ownsBrand(b.id) || this.allowed().has(b.id)),
+  );
+  protected readonly canCreate = computed(() => this.operator() || this.creatable().length > 0);
 
   async ngOnInit(): Promise<void> {
     await firstValueFrom(this.session.me$).catch(() => null);
@@ -157,10 +177,49 @@ export class PromotionsPage implements OnInit {
       const stores = await firstValueFrom(this.stores.list());
       const brands = new Map(stores.map((s) => [s.brandId, s.brandName]));
       this.brands.set([...brands].map(([id, name]) => ({ id, name })));
+      this.branches.set(
+        stores.map((s) => ({ id: s.id, brandId: s.brandId, name: s.branchName || s.brandName })),
+      );
+      const managed = [...brands.keys()].filter(
+        (id) => !this.operator() && !this.session.ownsBrand(id),
+      );
+      const rules = await Promise.all(
+        managed.map((id) =>
+          firstValueFrom(this.client.brandRules(id))
+            .then((r) => (r.branchPromotionsAllowed ? id : null))
+            .catch(() => null),
+        ),
+      );
+      this.allowed.set(new Set(rules.filter((id): id is string => id !== null)));
     } catch {
       this.brands.set([]);
     }
+    if (this.operator()) {
+      this.cities.set(await firstValueFrom(this.cityClient.list()).catch(() => []));
+    }
     await this.load();
+  }
+
+  /** Whether the user may change the coupon: a branch manager only their own branch's. */
+  protected canEdit(p: Promotion): boolean {
+    if (this.operator()) return true;
+    if (!p.brandId) return false;
+    if (this.session.ownsBrand(p.brandId)) return true;
+    const own = this.session.me()?.storeIds ?? [];
+    return (
+      this.allowed().has(p.brandId) &&
+      p.storeIds.length > 0 &&
+      p.storeIds.every((id) => own.includes(id))
+    );
+  }
+
+  /** Which branches a brand's coupon reaches, when not all of them. */
+  protected reach(p: Promotion): string {
+    if (!p.brandId || p.storeIds.length === 0) return '';
+    const names = p.storeIds.map(
+      (id) => this.branches().find((b) => b.id === id)?.name ?? 'a branch',
+    );
+    return ` (${names.join(', ')})`;
   }
 
   private async load(): Promise<void> {
@@ -199,7 +258,15 @@ export class PromotionsPage implements OnInit {
     const saved = await firstValueFrom(
       this.dialog
         .open<PromotionDialog, PromotionDialogData, boolean>(PromotionDialog, {
-          data: { brands: this.brands(), operator: this.operator(), editing },
+          data: {
+            brands: this.creatable(),
+            operator: this.operator(),
+            editing,
+            branches: this.branches(),
+            ownBranchesOnly: (brandId: string) =>
+              !this.operator() && !this.session.ownsBrand(brandId),
+            cities: this.cities(),
+          },
           width: '720px',
           maxWidth: 'calc(100vw - 32px)',
         })

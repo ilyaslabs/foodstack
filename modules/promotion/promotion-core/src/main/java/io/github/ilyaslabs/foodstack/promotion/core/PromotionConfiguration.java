@@ -11,9 +11,12 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
+import io.github.ilyaslabs.foodstack.promotion.core.application.BrandRules;
 import io.github.ilyaslabs.foodstack.promotion.core.application.CouponService;
+import io.github.ilyaslabs.foodstack.promotion.core.application.PromotionAccess;
 import io.github.ilyaslabs.foodstack.promotion.core.application.PromotionService;
 import io.github.ilyaslabs.foodstack.promotion.core.events.OrderEventsListener;
+import io.github.ilyaslabs.foodstack.promotion.core.events.StoreEventsListener;
 import io.github.ilyaslabs.foodstack.promotion.core.persistence.PromotionRepository;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -27,7 +30,7 @@ import org.springframework.kafka.core.KafkaAdmin;
 
 /**
  * Everything the promotion module runs on: database {@code foodstack_promotion} with its shard keys,
- * migrations, outbox, relay and inbox, and the order events listener.
+ * migrations, outbox, relay and inbox, and the order and store events listeners.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableMongoRepositories(basePackageClasses = PromotionRepository.class, mongoTemplateRef = "promotionMongoTemplate")
@@ -42,7 +45,8 @@ public class PromotionConfiguration {
             .hashed("promotion_codes", "_id")
             .hashed("promotion_redemptions", "_id")
             .hashed("promotion_customer_usage", "_id")
-            .hashed("promotion_customers", "_id");
+            .hashed("promotion_customers", "_id")
+            .hashed("promotion_brand_rules", "_id");
     }
 
     @Bean
@@ -102,5 +106,21 @@ public class PromotionConfiguration {
     OrderEventsListener promotionOrderEventsListener(CouponService promotionCouponService, InboxGuard promotionInbox,
             JsonMapper jsonMapper) {
         return new OrderEventsListener(promotionCouponService, promotionInbox, jsonMapper);
+    }
+
+    @Bean
+    BrandRules promotionBrandRules(ModuleMongo promotionMongo) {
+        return new BrandRules(promotionMongo.template());
+    }
+
+    @Bean
+    PromotionAccess promotionAccess(BrandRules promotionBrandRules) {
+        return new PromotionAccess(promotionBrandRules);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    StoreEventsListener promotionStoreEventsListener(BrandRules promotionBrandRules, JsonMapper jsonMapper) {
+        return new StoreEventsListener(promotionBrandRules, jsonMapper);
     }
 }

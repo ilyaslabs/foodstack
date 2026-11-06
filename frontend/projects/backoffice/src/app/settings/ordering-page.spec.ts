@@ -70,6 +70,9 @@ describe('OrderingPage', () => {
     await fixture.whenStable();
 
     // then
-    expect(update).toHaveBeenCalledWith({ ...SETTINGS, taxBasisPoints: 1750 }, '"ordering-2"');
+    expect(update).toHaveBeenCalledWith(
+      { ...SETTINGS, taxBasisPoints: 1750, priceApprovalRequired: false },
+      '"ordering-2"',
+    );
   });
 });
