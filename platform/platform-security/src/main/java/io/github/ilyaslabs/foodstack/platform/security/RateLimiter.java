@@ -40,7 +40,7 @@ public class RateLimiter {
         long windowMillis = window.toMillis();
         long now = this.clock.millis();
         long index = now / windowMillis;
-        String key = this.namespace + ":" + module + ":rl:" + scope + ":" + id + ":" + index;
+        String key = key(module, scope, id, index);
         Long count;
         try {
             count = this.redis.opsForValue().increment(key);
@@ -56,5 +56,32 @@ public class RateLimiter {
             long retryAfter = Math.max(1, ((index + 1) * windowMillis - now) / 1000);
             throw new TooManyRequestsException("Too many attempts; try again in a few minutes", retryAfter);
         }
+    }
+
+    /**
+     * Throws {@link TooManyRequestsException} when {@code limit} uses are already counted in this
+     * {@code window}, without counting one. With {@link #check} on failures only, this limits wrong tries
+     * and leaves right ones free.
+     */
+    public void refuseIfReached(String module, String scope, String id, int limit, Duration window) {
+        long windowMillis = window.toMillis();
+        long now = this.clock.millis();
+        long index = now / windowMillis;
+        String count;
+        try {
+            count = this.redis.opsForValue().get(key(module, scope, id, index));
+        }
+        catch (DataAccessException ex) {
+            log.warn("Rate limit {} skipped: Redis is not answering", scope);
+            return;
+        }
+        if (count != null && Long.parseLong(count) >= limit) {
+            long retryAfter = Math.max(1, ((index + 1) * windowMillis - now) / 1000);
+            throw new TooManyRequestsException("Too many attempts; try again in a few minutes", retryAfter);
+        }
+    }
+
+    private String key(String module, String scope, String id, long index) {
+        return this.namespace + ":" + module + ":rl:" + scope + ":" + id + ":" + index;
     }
 }

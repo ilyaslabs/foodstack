@@ -37,7 +37,7 @@ sequenceDiagram
     Sv->>Sv: move open branches before closed ones (within this page)
     Sv-->>Ct: StoreSearchPage(cards, cuisines, total, hasMore,<br/>radiusMeters, widerRadiusMeters)
     Ct-->>Wb: 200 JSON
-    Wb-->>Cu: store cards with distance, open/closed, cuisine chips,<br/>"within 8 km" and "Show restaurants further away (up to 15 km)"
+    Wb-->>Cu: store cards with distance, open/closed, cuisine chips,<br/>"within 8 km" and "Show restaurants up to 15 km"
     Cu->>Wb: Show further away
     Wb->>Cd: same search with radius=15000
 

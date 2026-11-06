@@ -39,7 +39,7 @@ const EN = {
   clearSearch: 'Clear search',
   loadMore: 'Show more',
   withinDistance: 'within {distance}',
-  showFurther: 'Show restaurants further away (up to {distance})',
+  showFurther: 'Show restaurants up to {distance}',
   searchFailed: 'Search is not available right now. Try again in a moment.',
   retry: 'Try again',
   pickLocationTitle: 'Pick a location to see stores',

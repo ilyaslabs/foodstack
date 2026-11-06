@@ -147,14 +147,14 @@ import { StoreContext } from './store-context';
                 <mat-label>City</mat-label>
                 <input matInput formControlName="city" maxlength="80" required />
               </mat-form-field>
-              <mat-form-field appearance="outline">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Time zone</mat-label>
                 <mat-select formControlName="timezone">
                   @for (zone of zones(); track zone) {
                     <mat-option [value]="zone">{{ zone.replaceAll('_', ' ') }}</mat-option>
                   }
                 </mat-select>
-                <mat-hint>Set from the location. Opening hours and tickets use it.</mat-hint>
+                <mat-hint>Set from the location. Used for hours and tickets.</mat-hint>
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Latitude</mat-label>
