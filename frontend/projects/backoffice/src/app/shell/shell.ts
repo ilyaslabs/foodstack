@@ -177,6 +177,13 @@ export class Shell {
       exact: false,
       permission: ['settings:manage', 'order:manage'],
     },
+    {
+      path: '/audit',
+      label: 'Audit log',
+      icon: 'history',
+      exact: false,
+      permission: 'identity:audit:read',
+    },
   ];
 
   /** Operators see everything they may manage; store owners see their own store. */

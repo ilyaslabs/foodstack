@@ -8,6 +8,7 @@ export * from './lib/settings-client';
 export * from './lib/media-client';
 export * from './lib/me-client';
 export * from './lib/users-client';
+export * from './lib/audit-client';
 export * from './lib/load-runtime-config';
 export * from './lib/catalogue-models';
 export * from './lib/catalogue-clients';

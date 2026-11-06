@@ -102,8 +102,17 @@ public class SessionService {
 
     private final Clock clock;
 
+    private final AuditLog audit;
+
     public SessionService(MongoTemplate mongo, UserService users, EmailCodeService codes, AccessTokens accessTokens,
             RateLimiter rateLimiter, PiiCipher pii, Clock clock) {
+        this(mongo, users, codes, accessTokens, rateLimiter, pii, clock, null);
+    }
+
+    /** As above, recording back-office sign-ins in the audit log (PRD ID-8). */
+    public SessionService(MongoTemplate mongo, UserService users, EmailCodeService codes, AccessTokens accessTokens,
+            RateLimiter rateLimiter, PiiCipher pii, Clock clock, AuditLog audit) {
+        this.audit = audit;
         this.mongo = mongo;
         this.users = users;
         this.codes = codes;
@@ -124,16 +133,20 @@ public class SessionService {
             if (tries != null) {
                 this.rateLimiter.check("identity", "password", tries, PASSWORD_TRIES, PASSWORD_WINDOW);
             }
+            auditFailure(email, "password");
             throw new ModuleException.Unauthorized("The email or password is not correct", "LOGIN_FAILED");
         }
-        return start(userId.get(), client);
+        return signedIn(userId.get(), client, "password");
     }
 
     /** Signs in with a code emailed by {@code POST /auth/code}. */
     public Session signInWithCode(String email, String code, Client client) {
-        String userId = this.codes.verify(email, EmailCodeIssued.LOGIN, code)
-            .orElseThrow(() -> new ModuleException.Unauthorized("The code is not correct or has expired", "CODE_INVALID"));
-        return start(userId, client);
+        Optional<String> verified = this.codes.verify(email, EmailCodeIssued.LOGIN, code);
+        if (verified.isEmpty()) {
+            auditFailure(email, "email code");
+            throw new ModuleException.Unauthorized("The code is not correct or has expired", "CODE_INVALID");
+        }
+        return signedIn(verified.get(), client, "email code");
     }
 
     /** Sets a new password with an emailed reset code and signs in; every older sign-in ends. */
@@ -142,7 +155,40 @@ public class SessionService {
         String userId = this.codes.verify(email, EmailCodeIssued.PASSWORD_RESET, code)
             .orElseThrow(() -> new ModuleException.Unauthorized("The code is not correct or has expired", "CODE_INVALID"));
         this.users.resetPassword(userId, newPassword);
-        return start(userId, client);
+        return signedIn(userId, client, "password reset");
+    }
+
+    private Session signedIn(String userId, Client client, String how) {
+        Session session = start(userId, client);
+        if (this.audit != null) {
+            try {
+                UserAccount user = this.users.get(userId);
+                this.audit.signedIn(userId, user.displayName(), user.roles(), how, clientAddress());
+            }
+            catch (RuntimeException ex) {
+                // the sign-in stands; the audit line is best effort
+            }
+        }
+        return session;
+    }
+
+    private void auditFailure(String email, String how) {
+        if (this.audit == null) {
+            return;
+        }
+        try {
+            this.users.findByEmail(email).ifPresent((user) -> this.audit.signInFailed(user.getId(), user.getDisplayName(),
+                    user.getRoles(), how, clientAddress()));
+        }
+        catch (RuntimeException ex) {
+            // the refusal stands; the audit line is best effort
+        }
+    }
+
+    private static String clientAddress() {
+        return (org.springframework.web.context.request.RequestContextHolder
+            .getRequestAttributes() instanceof org.springframework.web.context.request.ServletRequestAttributes attributes)
+                ? attributes.getRequest().getRemoteAddr() : null;
     }
 
     /** Starts a sign-in for an account that proved who it is. */

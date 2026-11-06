@@ -3,29 +3,31 @@ package io.github.ilyaslabs.foodstack.identity.core;
 import java.time.Clock;
 
 import io.github.ilyaslabs.foodstack.identity.core.application.AddressBook;
+import io.github.ilyaslabs.foodstack.identity.core.application.AuditLog;
 import io.github.ilyaslabs.foodstack.identity.core.application.BootstrapAdmin;
 import io.github.ilyaslabs.foodstack.identity.core.application.EmailCodeService;
+import io.github.ilyaslabs.foodstack.identity.core.application.SessionService;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserDirectory;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
+import io.github.ilyaslabs.foodstack.identity.core.events.AuditListener;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.LoginKeyRepository;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.UserRepository;
+import io.github.ilyaslabs.foodstack.identity.core.security.AccessTokens;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
-import io.github.ilyaslabs.foodstack.platform.security.FoodstackSecurityProperties;
-import io.github.ilyaslabs.foodstack.identity.core.application.SessionService;
-import io.github.ilyaslabs.foodstack.identity.core.security.AccessTokens;
-import com.nimbusds.jose.jwk.source.JWKSource;
-import com.nimbusds.jose.proc.SecurityContext;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
+import io.github.ilyaslabs.foodstack.platform.security.FoodstackSecurityProperties;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.RateLimiter;
 import io.github.ilyaslabs.foodstack.platform.security.TokenRevocations;
 
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.proc.SecurityContext;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -37,6 +39,7 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaAdmin;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Everything the identity module runs on: database {@code foodstack_identity}, migrations, outbox
@@ -56,7 +59,8 @@ public class IdentityConfiguration {
             .hashed("identity_users", "_id")
             .ranged("identity_login_keys", "loginKey")
             .hashed("identity_addresses", "userId")
-            .hashed("identity_refresh_tokens", "_id");
+            .hashed("identity_refresh_tokens", "_id")
+            .hashed("identity_audit_log", "_id");
     }
 
     @Bean
@@ -98,6 +102,17 @@ public class IdentityConfiguration {
     }
 
     @Bean
+    AuditLog identityAuditLog(ModuleMongo identityMongo, UserService identityUserService, Clock clock) {
+        return new AuditLog(identityMongo.template(), identityUserService, clock);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    AuditListener identityAuditListener(AuditLog identityAuditLog, JsonMapper jsonMapper) {
+        return new AuditListener(identityAuditLog, jsonMapper);
+    }
+
+    @Bean
     UserService identityUserService(UserRepository users, LoginKeyRepository loginKeys, PiiCipher piiCipher,
             PasswordEncoder identityPasswordEncoder, OutboxWriter identityOutbox, ModuleMongo identityMongo,
             TokenRevocations tokenRevocations, Clock clock) {
@@ -122,9 +137,9 @@ public class IdentityConfiguration {
     @Bean
     SessionService identitySessionService(ModuleMongo identityMongo, UserService identityUserService,
             EmailCodeService identityEmailCodeService, AccessTokens identityAccessTokens, RateLimiter rateLimiter,
-            PiiCipher piiCipher, Clock clock) {
+            PiiCipher piiCipher, Clock clock, AuditLog identityAuditLog) {
         return new SessionService(identityMongo.template(), identityUserService, identityEmailCodeService,
-                identityAccessTokens, rateLimiter, piiCipher, clock);
+                identityAccessTokens, rateLimiter, piiCipher, clock, identityAuditLog);
     }
 
     @Bean

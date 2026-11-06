@@ -14,7 +14,8 @@ class PermissionsTest {
     @DisplayName("gives administrators every permission, store owners the store area and customers none")
     void byRole() {
         assertThat(Permissions.of(EnumSet.of(Role.ADMIN))).containsExactly("dispatch:manage", "geo:manage",
-                "identity:users:manage", "identity:users:read", "media:upload", "order:manage", "payment:manage",
+                "identity:audit:read", "identity:users:manage", "identity:users:read", "media:upload", "order:manage",
+                "payment:manage",
                 "promotion:manage", "rider:manage", "search:manage", "settings:manage", "store:manage");
         assertThat(Permissions.of(EnumSet.of(Role.STORE_OWNER))).containsExactly("media:upload", "store:portal");
         assertThat(Permissions.of(EnumSet.of(Role.BRAND_OWNER))).containsExactly("media:upload", "store:portal");

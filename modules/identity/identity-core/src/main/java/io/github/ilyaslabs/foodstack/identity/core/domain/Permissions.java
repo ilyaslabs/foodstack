@@ -55,11 +55,14 @@ public final class Permissions {
     /** Work in the rider area of the back office: go online, take jobs, see earnings. */
     public static final String RIDER_PORTAL = "rider:portal";
 
+    /** Read the audit log of back-office writes and sign-ins (PRD AD-3, ID-8). */
+    public static final String AUDIT_READ = "identity:audit:read";
+
     private static final Map<Role, Set<String>> BY_ROLE = new EnumMap<>(Role.class);
 
     static {
         BY_ROLE.put(Role.ADMIN, Set.of(SETTINGS_MANAGE, MEDIA_UPLOAD, USERS_READ, USERS_MANAGE, STORE_MANAGE,
-                GEO_MANAGE, SEARCH_MANAGE, PROMOTION_MANAGE, ORDER_MANAGE, PAYMENT_MANAGE, RIDER_MANAGE, DISPATCH_MANAGE));
+                GEO_MANAGE, SEARCH_MANAGE, PROMOTION_MANAGE, ORDER_MANAGE, PAYMENT_MANAGE, RIDER_MANAGE, DISPATCH_MANAGE, AUDIT_READ));
         BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ, PAYMENT_MANAGE));
         BY_ROLE.put(Role.SUPPORT, Set.of(USERS_READ, ORDER_MANAGE, DISPATCH_MANAGE));
         BY_ROLE.put(Role.BRAND_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD));

@@ -10,21 +10,22 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.github.ilyaslabs.foodstack.identity.api.Role;
-import io.github.ilyaslabs.foodstack.identity.core.IdentityPersistenceTestApplication;
 import io.github.ilyaslabs.foodstack.identity.api.events.EmailCodeIssued;
+import io.github.ilyaslabs.foodstack.identity.core.IdentityPersistenceTestApplication;
 import io.github.ilyaslabs.foodstack.identity.core.application.SessionService.Client;
 import io.github.ilyaslabs.foodstack.identity.core.application.SessionService.Session;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.RefreshTokenDocument;
+import io.github.ilyaslabs.foodstack.identity.core.persistence.UserDocument;
 import io.github.ilyaslabs.foodstack.identity.core.security.AccessTokens;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.RateLimiter;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -207,6 +208,29 @@ class SessionServiceTest {
 
         verify(this.users).resetPassword("u1", "a new long password");
         assertThat(session.userId()).isEqualTo("u1");
+    }
+
+    @Test
+    @DisplayName("records back-office sign-ins and refused tries in the audit log (PRD ID-8)")
+    void audited() {
+        AuditLog audit = mock(AuditLog.class);
+        SessionService audited = new SessionService(this.identityMongo.template(), this.users, this.codes, this.accessTokens,
+                this.rateLimiter, mock(PiiCipher.class), new MovingClock(this.now), audit);
+        given(this.users.checkPassword("admin@example.com", "right")).willReturn(Optional.of("u1"));
+        given(this.users.get("u1")).willReturn(new UserAccount("u1", "admin@example.com", "Demo Admin", Set.of(Role.ADMIN),
+                Set.of(), null, null, Set.of(), Set.of()));
+        UserDocument admin = mock(UserDocument.class);
+        given(admin.getId()).willReturn("u1");
+        given(admin.getDisplayName()).willReturn("Demo Admin");
+        given(admin.getRoles()).willReturn(Set.of(Role.ADMIN));
+        given(this.users.findByEmail("admin@example.com")).willReturn(Optional.of(admin));
+
+        audited.signInWithPassword("admin@example.com", "right", Client.WEB);
+        assertThatThrownBy(() -> audited.signInWithPassword("admin@example.com", "wrong", Client.WEB))
+            .isInstanceOf(ModuleException.Unauthorized.class);
+
+        verify(audit).signedIn(eq("u1"), eq("Demo Admin"), eq(Set.of(Role.ADMIN)), eq("password"), any());
+        verify(audit).signInFailed(eq("u1"), eq("Demo Admin"), eq(Set.of(Role.ADMIN)), eq("password"), any());
     }
 
     private void claims(String userId, long tokenVersion) {

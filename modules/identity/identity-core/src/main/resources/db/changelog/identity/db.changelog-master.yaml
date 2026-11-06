@@ -105,3 +105,18 @@ databaseChangeLog:
                                    { "$filter": { "input": "$roles", "cond": { "$ne": [ "$$this", "STORE_OWNER" ] } } },
                                    [ "BRAND_OWNER" ] ] } } } ],
                                "multi": true } ] }
+  - changeSet:
+      id: identity-8
+      author: foodstack
+      comment: "identity_audit_log ({ _id: hashed }; ids are time-ordered): back-office writes and sign-ins, newest first, by user and by resource (PRD AD-3, ID-8)"
+      changes:
+        - createCollection:
+            collectionName: identity_audit_log
+        - createIndex:
+            collectionName: identity_audit_log
+            keys: '{ "actorId": 1, "_id": -1 }'
+            options: '{ "name": "actor_newest" }'
+        - createIndex:
+            collectionName: identity_audit_log
+            keys: '{ "resource": 1, "at": -1 }'
+            options: '{ "name": "resource_newest" }'
