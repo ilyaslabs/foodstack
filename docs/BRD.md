@@ -57,7 +57,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | BO-4 | Scale without rewrite | Moving from one server to Kubernetes, splitting any module into its own deployment, and growing to national scale (more replicas, database shards, cache and broker nodes) needs configuration and machines only, never code; proven in CI by installing the `monolith`, `split` and `microservices` topologies on every release and by testing every collection on a sharded database |
 | BO-5 | Trust and safety | No critical or high open security findings at release; all service-to-service traffic encrypted (mTLS) |
 | BO-6 | Money is traceable | Every order produces balanced ledger entries; payout reports reconcile to the cent |
-| BO-7 | Community adoption | Public docs, quick start, contribution guide; first external operator pilot after v1 |
+| BO-7 | Community adoption | Public docs, quick start, an operator handbook a non-expert can follow (setup and scaling, PRD M6), contribution guide; first external operator pilot after v1 |
 
 ## 7. Scope
 
