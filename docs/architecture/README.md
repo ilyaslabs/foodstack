@@ -17,6 +17,7 @@ All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHu
 | [5. Code vs design](05-code-vs-design.md) | Every place where today's code differs from the TDD, and what is not built yet |
 | [6. Ordering flows](06-ordering-flows.md) | The order's life, cart and checkout, placing a cash order, card payment on the hosted page, the store's live board, no answer, cancel and refunds, coupons, notifications and emails, sign-in by email code and password reset |
 | [7. Delivery flows](07-delivery-flows.md) | The delivery job's life, how dispatch finds and offers a rider, the rider accepting, live position and tracking, pickup and handover with the code, support reassigning or handing back, stores that deliver themselves, push devices, saved addresses |
+| [8. How FoodStack scales out](08-scaling.md) | The scaled-out picture, how requests, events, background work, live updates, data, cache and search are split between machines, what happens when a replica joins or dies, the growth stages and what each one changes, and the limits more machines do not lift |
 
 ## Quick answer: which store does each action touch?
 

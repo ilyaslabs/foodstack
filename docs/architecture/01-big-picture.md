@@ -47,6 +47,7 @@ flowchart LR
 - The browser apps call the API on the same origin, so there is no CORS between the apps and the server.
 - Images are served straight from object storage through Caddy, never through the Java server.
 - The server's internal Module-Switch port is not used in this topology: every module is `local` in one JVM.
+- The same code runs on many machines: see [8. How FoodStack scales out](08-scaling.md) for the scaled-out picture and the growth stages.
 
 ## 1.2 Modules, their data, and who calls whom
 

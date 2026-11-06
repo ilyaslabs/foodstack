@@ -56,6 +56,7 @@ Listed so nobody looks for them in the code. Milestones are from the [PRD releas
 | Cities (dispatch by city, per-city pricing and fees) | 5.6, PRD DR-1b | M4 (ilyas, 2026-11-03; TDD 24) |
 | Batching two orders to one rider | PRD DR-9 | Later ("Could") |
 | Social login, TOTP | 9.1 | M5 (email codes are built) |
+| Operator handbook: step-by-step setup and scaling runbooks for non-experts | Deployment guide | M6 |
 | Generated OpenAPI and Angular client | 8.1 | Recorded in TDD 21 |
 | Observability chart (Collector, Tempo, Grafana) | 18.5 | M5 (tracing itself is built, see G7) |
 | Dead-letter screen and replay | 7.1 | M5 (see G1) |
