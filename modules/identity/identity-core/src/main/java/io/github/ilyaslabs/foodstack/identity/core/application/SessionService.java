@@ -115,13 +115,18 @@ public class SessionService {
 
     /** Signs in with email and password. Ten wrong tries per email in 15 minutes answer 429. */
     public Session signInWithPassword(String email, String password, Client client) {
-        if (email != null && !email.isBlank()) {
-            this.rateLimiter.check("identity", "password", this.pii.blindIndex(email.trim()), PASSWORD_TRIES,
-                    PASSWORD_WINDOW);
+        String tries = (email != null && !email.isBlank()) ? this.pii.blindIndex(email.trim()) : null;
+        if (tries != null) {
+            this.rateLimiter.refuseIfReached("identity", "password", tries, PASSWORD_TRIES, PASSWORD_WINDOW);
         }
-        String userId = this.users.checkPassword(email, password).orElseThrow(() -> new ModuleException.Unauthorized(
-                "The email or password is not correct", "LOGIN_FAILED"));
-        return start(userId, client);
+        Optional<String> userId = this.users.checkPassword(email, password);
+        if (userId.isEmpty()) {
+            if (tries != null) {
+                this.rateLimiter.check("identity", "password", tries, PASSWORD_TRIES, PASSWORD_WINDOW);
+            }
+            throw new ModuleException.Unauthorized("The email or password is not correct", "LOGIN_FAILED");
+        }
+        return start(userId.get(), client);
     }
 
     /** Signs in with a code emailed by {@code POST /auth/code}. */
