@@ -55,12 +55,13 @@ class Board:
                         for i, (e, l) in enumerate(targets)],
         }, w, h)
 
-    def stat(self, title, expr, unit="short", w=6, h=4, thresholds=None, description=""):
+    def stat(self, title, expr, unit="short", w=6, h=4, thresholds=None, description="", no_value="0"):
         steps = [{"color": "green", "value": None}] + [
             {"color": c, "value": v} for v, c in (thresholds or [])]
         self._add({
             "type": "stat", "title": title, "description": description,
-            "fieldConfig": {"defaults": {"unit": unit, "thresholds": {"mode": "absolute", "steps": steps},
+            "fieldConfig": {"defaults": {"unit": unit, "noValue": no_value,
+                                         "thresholds": {"mode": "absolute", "steps": steps},
                                          "color": {"mode": "thresholds"}}, "overrides": []},
             "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "colorMode": "background",
                         "graphMode": "area", "textMode": "value"},
@@ -90,10 +91,10 @@ b.row("Now")
 b.stat("Requests per second", f"sum(rate(http_server_requests_seconds_count{{{API}}}[5m]))", "reqps")
 b.stat("Server errors", f"sum(rate(http_server_requests_seconds_count{{{API}, status=~\"5..\"}}[5m])) / "
        f"sum(rate(http_server_requests_seconds_count{{{API}}}[5m]))", "percentunit",
-       thresholds=[(0.01, "orange"), (0.02, "red")])
+       thresholds=[(0.01, "orange"), (0.02, "red")], no_value="No traffic")
 b.stat("95 % of requests within", "histogram_quantile(0.95, sum by (le) "
        f"(rate(http_server_requests_seconds_bucket{{{API}}}[5m])))", "s",
-       thresholds=[(0.5, "orange"), (1, "red")])
+       thresholds=[(0.5, "orange"), (1, "red")], no_value="No traffic")
 b.stat("Pods up", f"sum(up{{{SEL}}})", thresholds=None,
        description="FoodStack server pods Prometheus can read.")
 b.row("Traffic by pod group")
@@ -139,7 +140,7 @@ b.stat("Cancelled or rejected", f"sum(increase(foodstack_orders_total{{{SEL}, st
        thresholds=[(0.05, "orange"), (0.1, "red")])
 b.stat("Rider found within (95 %)", "histogram_quantile(0.95, sum by (le) "
        f"(rate(foodstack_dispatch_assign_time_seconds_bucket{{{SEL}}}[24h])))", "s",
-       thresholds=[(300, "orange"), (600, "red")])
+       thresholds=[(300, "orange"), (600, "red")], no_value="No deliveries")
 b.row("Orders")
 b.series("Orders by status, per hour", [(
     f"sum by (status) (increase(foodstack_orders_total{{{SEL}}}[1h]))", "{{status}}")], w=24,
@@ -168,7 +169,7 @@ b.stat("Events waiting for Kafka", f"sum(max by (module) (foodstack_outbox_pendi
 b.stat("Oldest waiting event", f"max(foodstack_outbox_oldest_age_seconds{{{SEL}}})", "s",
        thresholds=[(30, "orange"), (120, "red")])
 b.stat("Largest consumer lag", f"max(kafka_consumer_fetch_manager_records_lag_max{{{SEL}}})",
-       thresholds=[(1000, "orange"), (10000, "red")])
+       thresholds=[(1000, "orange"), (10000, "red")], description="Records the slowest consumer is behind.")
 b.stat("Failed events, 24 h", f"sum(increase(foodstack_dead_letters_total{{{SEL}}}[24h]))",
        thresholds=[(1, "red")], description="Replay or dismiss them in the back office: Settings, Failed events.")
 b.row("Outbox")
