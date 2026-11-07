@@ -14,9 +14,13 @@ import io.github.ilyaslabs.foodstack.identity.core.application.SavedAddress;
 import io.github.ilyaslabs.foodstack.identity.core.application.SessionService;
 import io.github.ilyaslabs.foodstack.identity.core.application.SessionService.Client;
 import io.github.ilyaslabs.foodstack.identity.core.application.SessionService.Session;
+import io.github.ilyaslabs.foodstack.identity.core.application.SignInSettingsService;
+import io.github.ilyaslabs.foodstack.identity.core.application.TwoFactorService;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserAccount;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserDirectory;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
+import io.github.ilyaslabs.foodstack.identity.core.persistence.SignInSettingsDocument;
+import io.github.ilyaslabs.foodstack.identity.core.security.ChallengeTokens;
 import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
@@ -45,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = { AuthController.class, MeController.class, UsersController.class },
+@WebMvcTest(controllers = { AuthController.class, MeController.class, UsersController.class, TwoStepController.class },
         properties = "module-switch.modules.identity.mode=local")
 @Import({ ApiSecurityConfiguration.class, ProblemDetailsAdvice.class, IdentityWebConfiguration.class })
 class IdentityControllersTest {
@@ -74,6 +78,12 @@ class IdentityControllersTest {
 
     @MockitoBean
     AccountDeletion accountDeletion;
+
+    @MockitoBean
+    SignInSettingsService signInSettings;
+
+    @MockitoBean
+    TwoFactorService twoFactor;
 
     @Autowired
     MockMvc mvc;
@@ -229,6 +239,48 @@ class IdentityControllersTest {
             .andExpect(cookie().secure("fs_refresh", true))
             .andExpect(cookie().sameSite("fs_refresh", "Strict"))
             .andExpect(cookie().path("fs_refresh", "/api/v1/auth/refresh"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/login: an account with two-step sign-in gets a challenge and no tokens")
+    void loginSecondStep() throws Exception {
+        given(this.sessions.signInWithPassword("a@example.com", "correct horse", Client.WEB))
+            .willThrow(new SessionService.SecondStepRequired(ChallengeTokens.Step.TOTP, "challenge-1"));
+        given(this.sessions.completeTwoStep("challenge-1", "123456")).willReturn(session(Client.WEB));
+
+        this.mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"client\":\"web\",\"email\":\"a@example.com\",\"password\":\"correct horse\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.next").value("TOTP"))
+            .andExpect(jsonPath("$.challenge").value("challenge-1"))
+            .andExpect(jsonPath("$.expiresIn").value(300))
+            .andExpect(jsonPath("$.accessToken").doesNotExist())
+            .andExpect(cookie().doesNotExist("fs_refresh"));
+        this.mvc.perform(post("/api/v1/auth/two-step").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"challenge\":\"challenge-1\",\"code\":\"123456\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").value("access"))
+            .andExpect(cookie().value("fs_refresh", "refresh"));
+    }
+
+    @Test
+    @DisplayName("social sign-in: the buttons are public, switching them is for settings managers")
+    void providers() throws Exception {
+        given(this.signInSettings.get()).willReturn(new SignInSettingsDocument("sign-in", List.of("g.apps"), List.of(), null, null));
+        given(this.sessions.signInWithSocial("google", "id-token", null, Client.MOBILE)).willReturn(session(Client.MOBILE));
+
+        this.mvc.perform(get("/api/v1/auth/providers"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.googleClientIds[0]").value("g.apps"))
+            .andExpect(jsonPath("$.appleClientIds").isEmpty());
+        this.mvc.perform(post("/api/v1/auth/social").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"client\":\"mobile\",\"provider\":\"google\",\"idToken\":\"id-token\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.refreshToken").value("refresh"));
+        this.mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/auth/providers")
+            .contentType(MediaType.APPLICATION_JSON).content("{\"googleClientIds\":[\"x\"]}")
+            .with(jwt().jwt((t) -> t.subject("u2")).authorities(new SimpleGrantedAuthority("order:manage"))))
+            .andExpect(status().isForbidden());
     }
 
     @Test

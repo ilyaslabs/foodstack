@@ -129,3 +129,10 @@ databaseChangeLog:
             collectionName: identity_users
             keys: '{ "deleteAfter": 1 }'
             options: '{ "name": "delete_after", "partialFilterExpression": { "deleteAfter": { "$exists": true } } }'
+  - changeSet:
+      id: identity-10
+      author: foodstack
+      comment: "M5 sign-in options (PRD ID-2, SG-6): identity_settings holds one document, the social providers and their client ids; unsharded"
+      changes:
+        - createCollection:
+            collectionName: identity_settings

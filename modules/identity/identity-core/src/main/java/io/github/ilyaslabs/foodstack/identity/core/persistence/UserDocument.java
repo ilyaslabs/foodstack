@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.identity.core.persistence;
 
 import java.time.Instant;
 import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import io.github.ilyaslabs.foodstack.identity.api.Role;
@@ -60,6 +62,23 @@ public class UserDocument {
     private Instant deleteAfter;
 
     private Instant deletedAt;
+
+    /** The authenticator secret, encrypted (PRD ID-5); {@code null} until two-step sign-in is on. */
+    private String totpSecretCipher;
+
+    /** A secret being set up, encrypted; it replaces {@link #totpSecretCipher} once a code from it is confirmed. */
+    private String totpPendingCipher;
+
+    private Instant totpEnabledAt;
+
+    /** The time step of the last code used, so each code works once. */
+    private Long totpLastStep;
+
+    /** SHA-256 hashes of the unused recovery codes. */
+    private List<String> recoveryCodeHashes;
+
+    /** Social sign-ins linked to this account: provider to subject (PRD ID-2). */
+    private Map<String, String> socialLogins;
 
     private Instant createdAt;
 
@@ -138,6 +157,54 @@ public class UserDocument {
 
     public void setCreatedBy(String createdBy) {
         this.createdBy = createdBy;
+    }
+
+    public String getTotpSecretCipher() {
+        return this.totpSecretCipher;
+    }
+
+    public void setTotpSecretCipher(String totpSecretCipher) {
+        this.totpSecretCipher = totpSecretCipher;
+    }
+
+    public String getTotpPendingCipher() {
+        return this.totpPendingCipher;
+    }
+
+    public void setTotpPendingCipher(String totpPendingCipher) {
+        this.totpPendingCipher = totpPendingCipher;
+    }
+
+    public Instant getTotpEnabledAt() {
+        return this.totpEnabledAt;
+    }
+
+    public void setTotpEnabledAt(Instant totpEnabledAt) {
+        this.totpEnabledAt = totpEnabledAt;
+    }
+
+    public long getTotpLastStep() {
+        return (this.totpLastStep != null) ? this.totpLastStep : 0L;
+    }
+
+    public void setTotpLastStep(Long totpLastStep) {
+        this.totpLastStep = totpLastStep;
+    }
+
+    public List<String> getRecoveryCodeHashes() {
+        return (this.recoveryCodeHashes != null) ? this.recoveryCodeHashes : List.of();
+    }
+
+    public void setRecoveryCodeHashes(List<String> recoveryCodeHashes) {
+        this.recoveryCodeHashes = recoveryCodeHashes;
+    }
+
+    public Map<String, String> getSocialLogins() {
+        return (this.socialLogins != null) ? this.socialLogins : Map.of();
+    }
+
+    public void setSocialLogins(Map<String, String> socialLogins) {
+        this.socialLogins = socialLogins;
     }
 
     public Instant getCreatedAt() {

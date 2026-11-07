@@ -134,6 +134,8 @@ spec:
             - { name: xpack.security.enabled, value: "true" }
             - { name: xpack.security.http.ssl.enabled, value: "false" }
             - { name: node.store.allow_mmap, value: "false" }
+            # a trial node on a small or shared disk: never refuse writes for disk space
+            - { name: cluster.routing.allocation.disk.threshold_enabled, value: "false" }
             - { name: ES_JAVA_OPTS, value: "-Xms{{ $root.Values.dev.elasticsearch.heap }} -Xmx{{ $root.Values.dev.elasticsearch.heap }}" }
             - name: ELASTIC_PASSWORD
               valueFrom: { secretKeyRef: { name: {{ $ds }}, key: ELASTICSEARCH_PASSWORD } }

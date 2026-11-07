@@ -112,6 +112,70 @@ public class UserService {
         return toAccount(find(userId));
     }
 
+    /** The stored account (two-step and social sign-in read their fields). */
+    public UserDocument document(String userId) {
+        return find(userId);
+    }
+
+    /**
+     * The account a social sign-in belongs to (PRD ID-2): the one linked to this provider account,
+     * else the one with this (provider-verified) email, which gets linked; else a new customer
+     * account without a password. Blocked or deleted accounts are refused.
+     */
+    public String socialAccount(String provider, String subject, String email, String displayName) {
+        String socialKey = this.pii.blindIndex("social:" + provider + ":" + subject);
+        Optional<String> linked = this.loginKeys.findByLoginKey(socialKey).map(LoginKeyDocument::getUserId);
+        String userId = linked.orElseGet(() -> findByEmail(email).map(UserDocument::getId).orElse(null));
+        if (userId == null) {
+            String name = (displayName != null && !displayName.isBlank()) ? displayName.trim() : email.substring(0, email.indexOf('@'));
+            Instant now = this.clock.instant();
+            String id = Ids.newId();
+            UserDocument document = new UserDocument();
+            document.setId(id);
+            document.setEmailCipher(this.pii.encrypt(email.trim()));
+            document.setEmailIndex(this.pii.blindIndex(email));
+            document.setDisplayName(name.length() > 80 ? name.substring(0, 80) : name);
+            document.setRoles(EnumSet.of(Role.CUSTOMER));
+            document.setStatus(UserStatus.ACTIVE);
+            document.setTokenVersion(1);
+            document.setCreatedBy(id);
+            document.setSocialLogins(Map.of(provider, subject));
+            document.setCreatedAt(now);
+            document.setUpdatedAt(now);
+            try {
+                this.transaction.executeWithoutResult((status) -> {
+                    this.loginKeys.insert(new LoginKeyDocument(Ids.newId(), document.getEmailIndex(), id));
+                    this.loginKeys.insert(new LoginKeyDocument(Ids.newId(), socialKey, id));
+                    this.users.insert(document);
+                    this.outbox.append(new UserRegistered(id, Set.of(Role.CUSTOMER), id));
+                });
+                return id;
+            }
+            catch (DuplicateKeyException ex) {
+                // signed up at the same moment by another request: use that account
+                return socialAccount(provider, subject, email, displayName);
+            }
+        }
+        UserDocument user = find(userId);
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new ModuleException.Unauthorized("This account cannot sign in", "LOGIN_FAILED");
+        }
+        if (linked.isEmpty()) {
+            try {
+                this.loginKeys.insert(new LoginKeyDocument(Ids.newId(), socialKey, userId));
+            }
+            catch (DuplicateKeyException ex) {
+                // linked meanwhile by a parallel sign-in
+            }
+            java.util.Map<String, String> logins = new java.util.TreeMap<>(user.getSocialLogins());
+            logins.put(provider, subject);
+            user.setSocialLogins(logins);
+            user.setUpdatedAt(this.clock.instant());
+            this.users.save(user);
+        }
+        return userId;
+    }
+
     /** The user that logs in with {@code email}, if any. */
     public Optional<UserDocument> findByEmail(String email) {
         if (email == null || email.isBlank()) {

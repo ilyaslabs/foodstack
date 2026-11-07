@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -16,6 +17,8 @@ import java.util.Optional;
 import io.github.ilyaslabs.foodstack.identity.api.events.EmailCodeIssued;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.RefreshTokenDocument;
 import io.github.ilyaslabs.foodstack.identity.core.security.AccessTokens;
+import io.github.ilyaslabs.foodstack.identity.core.security.ChallengeTokens;
+import io.github.ilyaslabs.foodstack.identity.core.security.SocialTokens;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.RateLimiter;
@@ -104,6 +107,14 @@ public class SessionService {
 
     private final AuditLog audit;
 
+    private TwoFactorService twoFactor;
+
+    private ChallengeTokens challenges;
+
+    private SocialTokens social;
+
+    private SignInSettingsService signInSettings;
+
     public SessionService(MongoTemplate mongo, UserService users, EmailCodeService codes, AccessTokens accessTokens,
             RateLimiter rateLimiter, PiiCipher pii, Clock clock) {
         this(mongo, users, codes, accessTokens, rateLimiter, pii, clock, null);
@@ -120,6 +131,105 @@ public class SessionService {
         this.rateLimiter = rateLimiter;
         this.pii = pii;
         this.clock = clock;
+    }
+
+    /**
+     * Turns on the second step (PRD ID-5) and social sign-in (PRD ID-2). Without it every sign-in
+     * is one step, as before.
+     */
+    public void enableTwoStep(TwoFactorService twoFactor, ChallengeTokens challenges) {
+        this.twoFactor = twoFactor;
+        this.challenges = challenges;
+    }
+
+    public void enableSocial(SocialTokens social, SignInSettingsService signInSettings) {
+        this.social = social;
+        this.signInSettings = signInSettings;
+    }
+
+    /**
+     * The first step proved who the user is, and the account needs a second one: answered with a
+     * signed challenge instead of tokens (TDD 9.1).
+     */
+    public static final class SecondStepRequired extends RuntimeException {
+
+        private final transient ChallengeTokens.Step step;
+
+        private final String challenge;
+
+        public SecondStepRequired(ChallengeTokens.Step step, String challenge) {
+            super("A second sign-in step is required", null, false, false);
+            this.step = step;
+            this.challenge = challenge;
+        }
+
+        public ChallengeTokens.Step step() {
+            return this.step;
+        }
+
+        public String challenge() {
+            return this.challenge;
+        }
+    }
+
+    /** Recovery codes shown once, with the tokens, after an authenticator app was set up. */
+    public record EnrolledSession(Session session, List<String> recoveryCodes) {
+    }
+
+    /**
+     * Signs in with a Google or Apple ID token the app got from the provider (PRD ID-2), when the
+     * operator switched that provider on. The account is found by the provider account, then by
+     * the verified email, else a customer account is created.
+     */
+    public Session signInWithSocial(String provider, String idToken, String displayName, Client client) {
+        if (this.social == null || !this.social.knows(provider)) {
+            throw new ModuleException.BadRequest("Unknown sign-in provider", "SOCIAL_PROVIDER_UNKNOWN");
+        }
+        List<String> clientIds = this.signInSettings.clientIds(provider);
+        if (clientIds.isEmpty()) {
+            throw new ModuleException.Forbidden("Sign-in with " + provider + " is switched off", "SOCIAL_PROVIDER_OFF");
+        }
+        SocialTokens.Identity identity = this.social.verify(provider, idToken, clientIds)
+            .orElseThrow(() -> new ModuleException.Unauthorized("The sign-in with " + provider + " could not be checked",
+                    "SOCIAL_TOKEN_INVALID"));
+        String name = (displayName != null && !displayName.isBlank()) ? displayName : identity.name();
+        String userId = this.users.socialAccount(identity.provider(), identity.subject(), identity.email(), name);
+        return signedIn(userId, client, identity.provider());
+    }
+
+    /** The second step: a code from the authenticator app, or a recovery code. */
+    public Session completeTwoStep(String challenge, String code) {
+        ChallengeTokens.Challenge verified = challenge(challenge, ChallengeTokens.Step.TOTP);
+        this.twoFactor.verify(verified.userId(), code);
+        return finish(verified);
+    }
+
+    /** For a required second step not set up yet: a new authenticator secret for the QR code. */
+    public TwoFactorService.Enrollment startTwoStepEnrollment(String challenge) {
+        ChallengeTokens.Challenge verified = challenge(challenge, ChallengeTokens.Step.TOTP_ENROLL);
+        return this.twoFactor.startEnrollment(verified.userId());
+    }
+
+    /** Confirms the new authenticator app with a code from it and signs in. */
+    public EnrolledSession confirmTwoStepEnrollment(String challenge, String code) {
+        ChallengeTokens.Challenge verified = challenge(challenge, ChallengeTokens.Step.TOTP_ENROLL);
+        List<String> recovery = this.twoFactor.confirmEnrollment(verified.userId(), code);
+        return new EnrolledSession(finish(verified), recovery);
+    }
+
+    private ChallengeTokens.Challenge challenge(String token, ChallengeTokens.Step step) {
+        if (this.challenges == null) {
+            throw new ModuleException.BadRequest("Two-step sign-in is not available", "TOTP_UNAVAILABLE");
+        }
+        return this.challenges.verify(token, step)
+            .orElseThrow(() -> new ModuleException.Unauthorized("The sign-in took too long or is not valid; start again",
+                    "CHALLENGE_INVALID"));
+    }
+
+    private Session finish(ChallengeTokens.Challenge challenge) {
+        Session session = start(challenge.userId(), Client.parse(challenge.client()));
+        audit(challenge.userId(), challenge.how() + " + authenticator");
+        return session;
     }
 
     /** Signs in with email and password. Ten wrong tries per email in 15 minutes answer 429. */
@@ -159,7 +269,18 @@ public class SessionService {
     }
 
     private Session signedIn(String userId, Client client, String how) {
+        if (this.twoFactor != null) {
+            Optional<ChallengeTokens.Step> step = this.twoFactor.secondStep(userId);
+            if (step.isPresent()) {
+                throw new SecondStepRequired(step.get(), this.challenges.issue(userId, step.get(), client.name(), how));
+            }
+        }
         Session session = start(userId, client);
+        audit(userId, how);
+        return session;
+    }
+
+    private void audit(String userId, String how) {
         if (this.audit != null) {
             try {
                 UserAccount user = this.users.get(userId);
@@ -169,7 +290,6 @@ public class SessionService {
                 // the sign-in stands; the audit line is best effort
             }
         }
-        return session;
     }
 
     private void auditFailure(String email, String how) {
