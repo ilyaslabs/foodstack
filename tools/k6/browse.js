@@ -1,7 +1,7 @@
 // Customer browsing load test, run before each release (testing strategy): search near a point,
-// open a store, read its menu and a delivery quote, like the customer app does. Read-only, so it is safe against a live site, but
-// it does count against the site's rate limits: run it from an address the limits allow, or
-// against a staging copy.
+// open a store, read its menu and a delivery quote, like the customer app does. Read-only, so it
+// is safe against a live site, but it counts against the site's rate limits: run it from an
+// address the limits allow, or against a staging copy.
 //
 //   docker run --rm -i -e BASE_URL=https://food.example.com -e LAT=31.52 -e LNG=74.34 \
 //     grafana/k6:1.8.1 run - < tools/k6/browse.js
