@@ -37,3 +37,25 @@ jobs:
       tags: ${{ needs.version.outputs.version }} ${{ needs.version.outputs.minor }} latest
       attach-to-release: ${{ github.event.release.tag_name }}
     secrets: inherit
+
+  # Both Helm charts, versioned with the release, at oci://ghcr.io/ilyaslabs/charts (TDD 18.1):
+  #   helm install foodstack oci://ghcr.io/ilyaslabs/charts/foodstack --version X.Y.Z
+  charts:
+    needs: [version, images]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+      - name: Package and push
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for chart in foodstack foodstack-observability; do
+            helm package "k8s/helm/$chart" --version "$VERSION" --app-version "$VERSION" -d dist
+            helm push "dist/$chart-$VERSION.tgz" oci://ghcr.io/ilyaslabs/charts
+          done
