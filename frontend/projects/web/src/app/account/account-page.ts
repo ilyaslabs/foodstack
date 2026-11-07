@@ -12,7 +12,9 @@ import {
   MeClient,
   NotificationClient,
   NotificationPreferences,
+  PaymentClient,
   SavedAddress,
+  SavedCard,
 } from '@foodstack/api-client';
 import { AuthService } from '@foodstack/auth';
 import { Icon } from '@foodstack/ui';
@@ -22,9 +24,10 @@ import { AddressEditor } from '../addresses/address-editor';
 import { Ui, UiKey } from '../i18n';
 import { LocationStore } from '../location-store';
 import { DeleteAccountDialog } from './delete-account-dialog';
+import { cardBrand } from '../pay/card-brand';
 
 /**
- * Saved addresses (PRD ID-6), email choices (PRD NO-3), password (TDD 9.1), and the customer's
+ * Saved addresses (PRD ID-6), saved cards (PRD CO-5a), email choices (PRD NO-3), password (TDD 9.1), and the customer's
  * data export and account deletion (PRD ID-7).
  */
 @Component({
@@ -91,6 +94,40 @@ import { DeleteAccountDialog } from './delete-account-dialog';
           <p class="status error" role="alert">{{ ui.t(key) }}</p>
         }
       </section>
+
+      @if (cardsShown()) {
+        <section class="card" id="cards">
+          <h2>{{ ui.t('savedCards') }}</h2>
+          @for (card of cards(); track card.id) {
+            <div class="address">
+              <span class="address-icon"><fs-icon name="credit_card" /></span>
+              <div class="address-text">
+                <strong>{{
+                  ui.t('cardEnding', { brand: brand(card.brand), last4: card.last4 })
+                }}</strong>
+                <span class="muted">{{
+                  ui.t('cardExpires', { date: expiry(card.expMonth, card.expYear) })
+                }}</span>
+              </div>
+              <div class="address-actions">
+                <button
+                  mat-icon-button
+                  type="button"
+                  (click)="removeCard(card)"
+                  [attr.aria-label]="ui.t('removeCard') + ': ' + card.last4"
+                >
+                  <fs-icon name="delete" />
+                </button>
+              </div>
+            </div>
+          } @empty {
+            <p class="muted">{{ ui.t('noSavedCards') }}</p>
+          }
+          @if (cardMessage(); as key) {
+            <p class="status error" role="alert">{{ ui.t(key) }}</p>
+          }
+        </section>
+      }
 
       <section class="card">
         <h2>{{ ui.t('emailChoices') }}</h2>
@@ -360,6 +397,10 @@ export class AccountPage {
   protected readonly downloading = signal(false);
   protected readonly downloadFailed = signal(false);
   protected readonly graceDays = signal(14);
+  private readonly payments = inject(PaymentClient);
+  protected readonly cardsShown = signal(false);
+  protected readonly cards = signal<SavedCard[]>([]);
+  protected readonly cardMessage = signal<UiKey | null>(null);
 
   constructor() {
     afterNextRender(async () => {
@@ -368,8 +409,38 @@ export class AccountPage {
         next: (policy) => this.graceDays.set(policy.graceDays),
         error: () => undefined,
       });
+      this.payments.options().subscribe({
+        next: (options) => {
+          if (options.savedCards) {
+            this.cardsShown.set(true);
+            this.payments.cards().subscribe({
+              next: (cards) => this.cards.set(cards),
+              error: () => this.cardMessage.set('cardsFailed'),
+            });
+          }
+        },
+        error: () => undefined,
+      });
       this.preferences.set(await firstValueFrom(this.notifications.preferences()));
     });
+  }
+
+  protected brand(brand: string): string {
+    return cardBrand(brand);
+  }
+
+  protected expiry(month: number, year: number): string {
+    return `${String(month).padStart(2, '0')}/${String(year % 100).padStart(2, '0')}`;
+  }
+
+  protected async removeCard(card: SavedCard): Promise<void> {
+    this.cardMessage.set(null);
+    try {
+      await firstValueFrom(this.payments.removeCard(card.id));
+      this.cards.update((list) => list.filter((c) => c.id !== card.id));
+    } catch {
+      this.cardMessage.set('cardsFailed');
+    }
   }
 
   protected title(address: SavedAddress): string {

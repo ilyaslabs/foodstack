@@ -6,6 +6,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatRadioModule } from '@angular/material/radio';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
@@ -25,6 +26,7 @@ import { toMajor, toMinor } from '../shared/money';
     MatFormFieldModule,
     MatInputModule,
     MatProgressBarModule,
+    MatRadioModule,
     MatSlideToggleModule,
     MatSnackBarModule,
   ],
@@ -45,9 +47,47 @@ import { toMajor, toMinor } from '../shared/money';
             <mat-slide-toggle name="cash" [(ngModel)]="cashEnabled"
               >Cash when the order arrives or is collected</mat-slide-toggle
             >
-            <mat-slide-toggle name="card" [(ngModel)]="cardEnabled"
-              >Card, on the payment gateway's page</mat-slide-toggle
-            >
+            <mat-slide-toggle name="card" [(ngModel)]="cardEnabled">Card</mat-slide-toggle>
+            @if (cardEnabled) {
+              <div class="card-options">
+                <span class="field-label" id="card-style-label"
+                  >Where customers type their card</span
+                >
+                <mat-radio-group
+                  name="cardStyle"
+                  [(ngModel)]="cardStyle"
+                  aria-labelledby="card-style-label"
+                  class="radio-column"
+                >
+                  <mat-radio-button value="HOSTED_PAGE"
+                    >On the payment gateway's own page</mat-radio-button
+                  >
+                  <mat-radio-button value="EMBEDDED"
+                    >In card fields inside the app, without leaving it</mat-radio-button
+                  >
+                </mat-radio-group>
+                <mat-slide-toggle name="savedCards" [(ngModel)]="savedCardsEnabled"
+                  >Customers can save a card for next time</mat-slide-toggle
+                >
+                <p class="section-hint">
+                  Cards are kept by the payment gateway, never by FoodStack. Customers see only the
+                  brand and last four digits, and can remove a card from their account page. Card
+                  fields in the app and saved cards apply to payments into your own merchant
+                  account; branches that collect their own card payments always use the gateway's
+                  page.
+                </p>
+                @if (
+                  cardStyle === 'EMBEDDED' &&
+                  gateway()?.gateway === 'stripe' &&
+                  gateway()?.cardStyle !== 'EMBEDDED'
+                ) {
+                  <div class="banner warn" role="status">
+                    Card fields in the app need STRIPE_PUBLISHABLE_KEY on the server. Until it is
+                    set, customers are sent to the gateway's page.
+                  </div>
+                }
+              </div>
+            }
             @if (cardEnabled && gateway() && !gateway()!.card) {
               <div class="banner warn" role="status">
                 No card gateway is set up on the server (PAYMENT_GATEWAY), so customers will not see
@@ -159,6 +199,28 @@ import { toMajor, toMinor } from '../shared/money';
       background: var(--mat-sys-tertiary-container);
       color: var(--mat-sys-on-tertiary-container);
     }
+    .card-options {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-inline-start: 52px;
+      padding-inline-start: 16px;
+      border-inline-start: 2px solid var(--mat-sys-outline-variant);
+    }
+    @media (max-width: 599.98px) {
+      .card-options {
+        margin-inline-start: 0;
+      }
+    }
+    .field-label {
+      font: var(--mat-sys-title-small);
+      color: var(--mat-sys-on-surface);
+    }
+    .radio-column {
+      display: flex;
+      flex-direction: column;
+      margin-inline-start: -10px;
+    }
   `,
 })
 export class OrderingPage implements OnInit {
@@ -184,6 +246,8 @@ export class OrderingPage implements OnInit {
   protected priceApprovalRequired = false;
   protected directCollectionEnabled = false;
   protected creditLimit = '';
+  protected cardStyle: 'HOSTED_PAGE' | 'EMBEDDED' = 'HOSTED_PAGE';
+  protected savedCardsEnabled = false;
   private etag = '';
 
   async ngOnInit(): Promise<void> {
@@ -204,6 +268,8 @@ export class OrderingPage implements OnInit {
       this.priceApprovalRequired = value.priceApprovalRequired ?? false;
       this.directCollectionEnabled = value.directCollectionEnabled ?? false;
       this.creditLimit = toMajor(value.creditLimitMinor ?? 5_000_000, this.currency());
+      this.cardStyle = value.cardStyle ?? 'HOSTED_PAGE';
+      this.savedCardsEnabled = value.savedCardsEnabled ?? false;
       this.loaded.set(true);
     } catch {
       this.loadError.set(true);
@@ -247,6 +313,8 @@ export class OrderingPage implements OnInit {
             priceApprovalRequired: this.priceApprovalRequired,
             directCollectionEnabled: this.directCollectionEnabled,
             creditLimitMinor: limit,
+            cardStyle: this.cardStyle,
+            savedCardsEnabled: this.savedCardsEnabled,
           },
           this.etag,
         ),

@@ -293,6 +293,35 @@ export interface PaymentOptions {
   cash: boolean;
   card: boolean;
   gateway: string | null;
+  /** HOSTED_PAGE (the gateway's own page) or EMBEDDED (card fields inside the app, PRD CO-5). */
+  cardStyle?: 'HOSTED_PAGE' | 'EMBEDDED';
+  /** Whether customers may keep a card for next time (PRD CO-5a). */
+  savedCards?: boolean;
+}
+
+/** A card the gateway keeps for the customer; the app only ever sees brand and last four digits. */
+export interface SavedCard {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+/** What the app's own payment page needs for one order (PRD CO-5). */
+export interface CardCheckout {
+  orderId: string;
+  status: string;
+  amountMinor: number;
+  currency: string;
+  gateway: string;
+  publishableKey: string | null;
+  clientSecret: string | null;
+  returnUrl: string;
+  cancelUrl: string;
+  expiresAt: number;
+  canSaveCard: boolean;
+  savedCards: SavedCard[];
 }
 
 export interface InboxItem {
@@ -336,6 +365,10 @@ export interface OrderingSettings {
   directCollectionEnabled?: boolean;
   /** What a direct-collecting branch may owe before it is suspended, unless it has its own limit. */
   creditLimitMinor?: number;
+  /** Where customers type their card: the gateway's page or fields in the app (PRD CO-5). */
+  cardStyle?: 'HOSTED_PAGE' | 'EMBEDDED';
+  /** Customers may keep a card at the gateway for next time (PRD CO-5a). Off by default. */
+  savedCardsEnabled?: boolean;
 }
 
 /** A brand's or branch's merchant account, without its keys. */

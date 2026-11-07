@@ -73,7 +73,13 @@ describe('OrderingPage', () => {
 
     // then
     expect(update).toHaveBeenCalledWith(
-      { ...SETTINGS, taxBasisPoints: 1750, priceApprovalRequired: false },
+      {
+        ...SETTINGS,
+        taxBasisPoints: 1750,
+        priceApprovalRequired: false,
+        cardStyle: 'HOSTED_PAGE',
+        savedCardsEnabled: false,
+      },
       '"ordering-2"',
     );
   });

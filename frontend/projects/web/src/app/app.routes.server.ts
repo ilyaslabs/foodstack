@@ -8,6 +8,7 @@ export const serverRoutes: ServerRoute[] = [
   { path: 'orders', renderMode: RenderMode.Client },
   { path: 'orders/:id', renderMode: RenderMode.Client },
   { path: 'account', renderMode: RenderMode.Client },
+  { path: 'pay/:orderId', renderMode: RenderMode.Client },
   // Rendered per request: branding and content change at runtime, so nothing is prerendered.
   { path: '**', renderMode: RenderMode.Server },
 ];

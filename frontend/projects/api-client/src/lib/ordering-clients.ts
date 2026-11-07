@@ -20,7 +20,9 @@ import {
   OrderPage,
   OrderStatus,
   OrderingSettings,
+  CardCheckout,
   PaymentOptions,
+  SavedCard,
   PlaceOrder,
   PlacedOrder,
   Promotion,
@@ -164,6 +166,35 @@ export class PaymentClient {
 
   options(): Observable<PaymentOptions> {
     return this.http.get<PaymentOptions>(`${this.config.apiUrl}/api/v1/payments/options`);
+  }
+
+  /** The signed-in customer's order payment, for the app's embedded card fields. */
+  checkout(orderId: string): Observable<CardCheckout> {
+    return this.http.get<CardCheckout>(
+      `${this.config.apiUrl}/api/v1/payments/${encodeURIComponent(orderId)}/checkout`,
+    );
+  }
+
+  /** The sandbox's pretend card fields: pays with a typed number or a saved card. */
+  sandboxPay(
+    orderId: string,
+    body: { clientSecret: string; cardNumber?: string; savedCardId?: string; saveCard: boolean },
+  ): Observable<{ next: string }> {
+    return this.http.post<{ next: string }>(
+      `${this.config.apiUrl}/api/v1/payments/sandbox/${encodeURIComponent(orderId)}/card`,
+      body,
+    );
+  }
+
+  /** The signed-in customer's saved cards. */
+  cards(): Observable<SavedCard[]> {
+    return this.http.get<SavedCard[]>(`${this.config.apiUrl}/api/v1/payments/cards`);
+  }
+
+  removeCard(id: string): Observable<void> {
+    return this.http.delete<void>(
+      `${this.config.apiUrl}/api/v1/payments/cards/${encodeURIComponent(id)}`,
+    );
   }
 
   /** Where a branch's card payments go, with its brand's and its own merchant accounts. */
