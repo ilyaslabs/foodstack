@@ -67,16 +67,22 @@ public final class Permissions {
     /** See the balances and payouts of one's own branches, or brand (PRD FI-7, BB-8). */
     public static final String LEDGER_STORE = "ledger:store";
 
+    /** Allow or stop a branch collecting card payments itself and set its credit limit (PRD DP-2, DP-7). */
+    public static final String STORE_COLLECTION_MANAGE = "store:payment-collection:manage";
+
+    /** Connect the merchant account of one's own brand or branch (PRD DP-3, BB-9). */
+    public static final String PAYMENT_ACCOUNT = "payment:account";
+
     private static final Map<Role, Set<String>> BY_ROLE = new EnumMap<>(Role.class);
 
     static {
         BY_ROLE.put(Role.ADMIN, Set.of(SETTINGS_MANAGE, MEDIA_UPLOAD, USERS_READ, USERS_MANAGE, STORE_MANAGE,
                 GEO_MANAGE, SEARCH_MANAGE, PROMOTION_MANAGE, ORDER_MANAGE, PAYMENT_MANAGE, RIDER_MANAGE, DISPATCH_MANAGE, AUDIT_READ,
-                LEDGER_READ, LEDGER_SETTLE));
-        BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ, PAYMENT_MANAGE, LEDGER_READ, LEDGER_SETTLE));
+                LEDGER_READ, LEDGER_SETTLE, STORE_COLLECTION_MANAGE));
+        BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ, PAYMENT_MANAGE, LEDGER_READ, LEDGER_SETTLE, STORE_COLLECTION_MANAGE));
         BY_ROLE.put(Role.SUPPORT, Set.of(USERS_READ, ORDER_MANAGE, DISPATCH_MANAGE));
-        BY_ROLE.put(Role.BRAND_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD, LEDGER_STORE));
-        BY_ROLE.put(Role.STORE_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD, LEDGER_STORE));
+        BY_ROLE.put(Role.BRAND_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD, LEDGER_STORE, PAYMENT_ACCOUNT));
+        BY_ROLE.put(Role.STORE_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD, LEDGER_STORE, PAYMENT_ACCOUNT));
         BY_ROLE.put(Role.STORE_STAFF, Set.of(STORE_PORTAL));
         BY_ROLE.put(Role.RIDER, Set.of(RIDER_PORTAL, MEDIA_UPLOAD));
         BY_ROLE.put(Role.STORE_RIDER, Set.of(RIDER_PORTAL, MEDIA_UPLOAD));

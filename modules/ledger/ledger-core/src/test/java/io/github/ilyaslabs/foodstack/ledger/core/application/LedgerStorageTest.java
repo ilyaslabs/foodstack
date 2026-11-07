@@ -18,6 +18,7 @@ import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.ledger.core.LedgerConfiguration;
 import io.github.ilyaslabs.foodstack.ledger.core.domain.Accounts;
 import io.github.ilyaslabs.foodstack.ledger.core.domain.Kinds;
+import io.github.ilyaslabs.foodstack.ledger.core.persistence.CreditDocument;
 import io.github.ilyaslabs.foodstack.ledger.core.persistence.TransactionDocument;
 import io.github.ilyaslabs.foodstack.order.api.OrderMoney;
 import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
@@ -36,12 +37,13 @@ import io.github.ilyaslabs.foodstack.platform.security.FoodstackJwtAuthenticatio
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
 import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
+import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.bson.Document;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -356,7 +358,49 @@ class LedgerStorageTest {
             .isEqualTo(100_000 + 5_000 + 15_000 + 3_000 - 10_500);
     }
 
+    @Test
+    @DisplayName("a direct-collecting branch over its credit limit is announced once, and again once back within it")
+    void creditLimit() {
+        given(this.settings.getOrdering())
+            .willReturn(new OrderingView(true, true, 0, 0, 0, true, 180, 1, false, true, 1_000_000L));
+        CreditLimits limits = new CreditLimits(this.ledgerMongo.template(), this.ledgerMongo.transactionTemplate(), this.outbox,
+                this.settings, Clock.fixed(START, ZoneOffset.UTC));
+        limits.collectionChanged(this.s1, this.b1, "Napoli", Set.of("owner-1"), "DIRECT", 10_000L);
+        assertThat(creditEvents(this.s1)).isEmpty();
+
+        String o1 = "o1-" + this.s1;
+        OrderMoney money = new OrderMoney(this.b1, DeliveryMode.OPERATOR, OrderMoney.STORE, 100_000, 0, 15_000, 0, 2_000, 5_000,
+                3_000, 0, 1_000, 500);
+        OrderSummary direct = new OrderSummary(o1, "N-1", "c1", this.s1, "Napoli", Set.of(), OrderStatus.DELIVERED,
+                Fulfilment.DELIVERY, PaymentMethod.CARD, 2, money.totalMinor(), "PKR", null, "en", START.getEpochSecond(), money);
+        this.posting.orderPlaced(direct);
+        this.posting.orderDone(direct, START);
+        long owed = -this.reports.storeBalance(this.s1).balanceMinor();
+        assertThat(owed).isGreaterThan(10_000);
+
+        limits.check(this.s1);
+        limits.check(this.s1);
+        assertThat(creditEvents(this.s1)).containsExactly("foodstack.ledger.StoreCreditLimitExceeded.v1");
+        assertThat(this.ledgerMongo.template().findById(this.s1, CreditDocument.class).owedMinor()).isEqualTo(owed);
+
+        limits.collectionChanged(this.s1, this.b1, "Napoli", Set.of("owner-1"), "DIRECT", null);
+        assertThat(creditEvents(this.s1)).containsExactly("foodstack.ledger.StoreCreditLimitExceeded.v1",
+                "foodstack.ledger.StoreCreditRestored.v1");
+
+        limits.collectionChanged(this.s2, this.b1, "Napoli 2", Set.of(), "OPERATOR", 0L);
+        limits.check(this.s2);
+        assertThat(creditEvents(this.s2)).isEmpty();
+    }
+
     // ---- helpers ------------------------------------------------------------------------------
+
+    private List<String> creditEvents(String storeId) {
+        return events().stream()
+            .filter((d) -> storeId.equals(d.getString("subject")) && d.getString("type").contains("Credit"))
+            .sorted(java.util.Comparator.comparing((Document d) -> String.valueOf(d.get("_id"))))
+            .map((d) -> d.getString("type"))
+            .toList();
+    }
 
     private static OrderSummary summary(String orderId, String storeId, String brandId, OrderStatus status,
             PaymentMethod method, DeliveryMode mode) {

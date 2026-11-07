@@ -22,6 +22,7 @@ import io.github.ilyaslabs.foodstack.order.core.OrderConfiguration;
 import io.github.ilyaslabs.foodstack.order.core.persistence.ActiveOrderDocument;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument;
 import io.github.ilyaslabs.foodstack.payment.api.CardSessionView;
+import io.github.ilyaslabs.foodstack.payment.api.MerchantView;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
@@ -40,13 +41,12 @@ import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.store.api.OrderValidationView;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.json.JsonMapper;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -58,6 +58,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -160,6 +161,7 @@ class OrderStorageTest {
         this.placement = new OrderPlacementService(this.orderMongo.template(), this.orderMongo.transactionTemplate(), outbox,
                 this.carts, this.promotions, this.payments, this.identity, this.lifecycle, this.live, this.pii, null,
                 "http://shop/", clock);
+        given(this.payments.resolveMerchant(any())).willReturn(MerchantView.BY_OPERATOR);
         this.orders = new OrderService(this.orderMongo.template(), this.lifecycle, this.pii);
         this.projections = new OrderProjections(this.orderMongo.template());
     }
@@ -256,6 +258,20 @@ class OrderStorageTest {
         this.lifecycle.refundSucceeded(id, 170_000);
         assertThat(this.orders.get(id).refundedMinor()).isEqualTo(170_000);
         assertThat(events(id)).containsExactly("OrderPlaced", "OrderConfirmed", "OrderCancelled");
+    }
+
+    @Test
+    @DisplayName("a card order at a branch that collects itself keeps the branch's account for the payment and the ledger")
+    void directCollection() {
+        given(this.carts.checkout(any())).willReturn(checkout(Fulfilment.PICKUP, PaymentMethod.CARD, null));
+        given(this.payments.resolveMerchant(STORE)).willReturn(new MerchantView("acc-1", MerchantView.STORE));
+        given(this.payments.startCard(any())).willReturn(new CardSessionView("x", "https://pay/2", 0));
+
+        String id = this.placement.place(this.customer, "k-direct", pickup(PaymentMethod.CARD, 170_000L)).orderId();
+
+        verify(this.payments).startCard(org.mockito.ArgumentMatchers.argThat((r) -> "acc-1".equals(r.merchantAccountId())));
+        assertThat(this.orderMongo.template().findById(id, OrderDocument.class).merchantAccountId()).isEqualTo("acc-1");
+        assertThat(lastEvent(id).get("data", String.class)).contains("\"collectedBy\":\"STORE\"");
     }
 
     @Test

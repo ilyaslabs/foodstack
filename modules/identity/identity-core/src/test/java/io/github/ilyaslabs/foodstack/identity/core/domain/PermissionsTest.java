@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.identity.core.domain;
 import java.util.EnumSet;
 
 import io.github.ilyaslabs.foodstack.identity.api.Role;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -16,13 +17,16 @@ class PermissionsTest {
         assertThat(Permissions.of(EnumSet.of(Role.ADMIN))).containsExactly("dispatch:manage", "geo:manage",
                 "identity:audit:read", "identity:users:manage", "identity:users:read", "ledger:read", "ledger:settle",
                 "media:upload", "order:manage", "payment:manage",
-                "promotion:manage", "rider:manage", "search:manage", "settings:manage", "store:manage");
-        assertThat(Permissions.of(EnumSet.of(Role.STORE_OWNER))).containsExactly("ledger:store", "media:upload", "store:portal");
-        assertThat(Permissions.of(EnumSet.of(Role.BRAND_OWNER))).containsExactly("ledger:store", "media:upload", "store:portal");
+                "promotion:manage", "rider:manage", "search:manage", "settings:manage", "store:manage",
+                "store:payment-collection:manage");
+        assertThat(Permissions.of(EnumSet.of(Role.STORE_OWNER))).containsExactly("ledger:store", "media:upload", "payment:account",
+                "store:portal");
+        assertThat(Permissions.of(EnumSet.of(Role.BRAND_OWNER))).containsExactly("ledger:store", "media:upload",
+                "payment:account", "store:portal");
         assertThat(Permissions.of(EnumSet.of(Role.STORE_STAFF))).containsExactly("store:portal");
         assertThat(Permissions.of(EnumSet.of(Role.CUSTOMER))).isEmpty();
         assertThat(Permissions.of(EnumSet.of(Role.FINANCE))).containsExactly("identity:users:read", "ledger:read", "ledger:settle",
-                "payment:manage");
+                "payment:manage", "store:payment-collection:manage");
         assertThat(Permissions.of(EnumSet.of(Role.SUPPORT))).containsExactly("dispatch:manage", "identity:users:read",
                 "order:manage");
         assertThat(Permissions.of(EnumSet.of(Role.RIDER))).containsExactly("media:upload", "rider:portal");

@@ -48,4 +48,21 @@ class PaymentsController {
         this.payments.handleWebhook(gateway, body, headers);
         return ResponseEntity.ok().build();
     }
+
+    /** Webhooks of a brand's ({@code brands}) or branch's ({@code stores}) own merchant account (TDD 5.4). */
+    @PostMapping("/api/v1/payment-webhooks/{gateway}/{scope}/{ownerId}")
+    ResponseEntity<Void> ownerWebhook(@PathVariable String gateway, @PathVariable String scope, @PathVariable String ownerId,
+            @RequestBody byte[] body, HttpServletRequest request) {
+        String owner = switch (scope) {
+            case "brands" -> "BRAND";
+            case "stores" -> "STORE";
+            default -> throw new io.github.ilyaslabs.moduleswitch.ModuleException.NotFound("No such webhook address",
+                    "GATEWAY_NOT_FOUND");
+        };
+        Map<String, String> headers = new LinkedHashMap<>();
+        request.getHeaderNames().asIterator()
+            .forEachRemaining((name) -> headers.put(name.toLowerCase(Locale.ROOT), request.getHeader(name)));
+        this.payments.handleOwnerWebhook(gateway, owner, ownerId, body, headers);
+        return ResponseEntity.ok().build();
+    }
 }

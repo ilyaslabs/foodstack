@@ -35,6 +35,7 @@ import io.github.ilyaslabs.foodstack.store.api.TimeRange;
 import io.github.ilyaslabs.foodstack.store.api.events.BrandChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreAvailabilityChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreChanged;
+import io.github.ilyaslabs.foodstack.store.api.events.StorePaymentCollectionChanged;
 import io.github.ilyaslabs.foodstack.store.core.domain.BranchTimeZones;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
@@ -44,10 +45,10 @@ import io.github.ilyaslabs.foodstack.store.core.persistence.StoreRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugRepository;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
@@ -292,6 +293,28 @@ class StoreServiceTest {
         assertThat(updated.deliveryMode()).isEqualTo(DeliveryMode.SELF);
         assertThat(updated.taxId()).isNull();
         assertThat(updated.operatorDeliveryAllowed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("finance lets a branch collect card payments with a reason and a limit; the change is announced")
+    @SuppressWarnings("unchecked")
+    void paymentCollection() {
+        given(this.stores.findById("s1")).willReturn(Optional.of(store(StoreStatus.LIVE)));
+        given(this.brands.findById("b1")).willReturn(Optional.of(brand()));
+
+        assertThatThrownBy(() -> this.service.setPaymentCollection("s1", "SPLIT", -1L, " ", "fin-1"))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat((Map<String, String>) ex.details().get("errors"))
+                .containsKeys("mode", "creditLimitMinor", "reason"));
+
+        StoreDetails updated = this.service.setPaymentCollection("s1", "DIRECT", 900_000L, " Signed agreement ", "fin-1");
+
+        assertThat(updated.paymentCollection().mode()).isEqualTo(PaymentCollection.DIRECT);
+        assertThat(updated.paymentCollection().creditLimitMinor()).isEqualTo(900_000L);
+        assertThat(updated.paymentCollection().reason()).isEqualTo("Signed agreement");
+        assertThat(updated.paymentCollection().changedBy()).isEqualTo("fin-1");
+        verify(this.outbox).append(org.mockito.ArgumentMatchers.argThat((e) -> e instanceof StorePaymentCollectionChanged c
+                && c.mode().equals("DIRECT") && c.creditLimitMinor() == 900_000L && c.reason().equals("Signed agreement")
+                && c.brandId().equals("b1") && c.storeName() != null));
     }
 
     @Test

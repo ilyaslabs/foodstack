@@ -11,7 +11,15 @@ package io.github.ilyaslabs.foodstack.payment.api;
  * @param description what the customer sees on the payment page, such as the store name
  * @param returnUrl where the gateway sends the customer after paying
  * @param cancelUrl where the gateway sends the customer when they go back
+ * @param merchantAccountId the account chosen at placement ({@link PaymentApi#resolveMerchant}), or {@code null}
+ *        for the operator's
  */
 public record StartCardRequest(String orderId, String orderNumber, String customerId, long amountMinor, String currency,
-        String description, String returnUrl, String cancelUrl) {
+        String description, String returnUrl, String cancelUrl, String merchantAccountId) {
+
+    /** A payment into the operator's account. */
+    public StartCardRequest(String orderId, String orderNumber, String customerId, long amountMinor, String currency,
+            String description, String returnUrl, String cancelUrl) {
+        this(orderId, orderNumber, customerId, amountMinor, currency, description, returnUrl, cancelUrl, null);
+    }
 }

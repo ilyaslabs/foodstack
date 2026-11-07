@@ -28,7 +28,7 @@ public class OrderingSettingsService {
     static final int MAX_ACCEPT_SECONDS = 1800;
 
     private static final OrderingDocument DEFAULTS = new OrderingDocument(OrderingDocument.ID, true, false, 0, 0, 0, true,
-            180, null, null, null, false);
+            180, null, null, null, false, false, null);
 
     private final OrderingRepository repository;
 
@@ -64,7 +64,8 @@ public class OrderingSettingsService {
         }
         OrderingDocument changed = new OrderingDocument(OrderingDocument.ID, update.cashEnabled(), update.cardEnabled(),
                 update.serviceFeeMinor(), update.serviceFeeBasisPoints(), update.taxBasisPoints(), update.tipsEnabled(),
-                update.acceptTimeoutSeconds(), this.clock.instant(), userId, current.version(), update.priceApprovalRequired());
+                update.acceptTimeoutSeconds(), this.clock.instant(), userId, current.version(), update.priceApprovalRequired(),
+                update.directCollectionEnabled(), update.creditLimitMinor());
         OrderingDocument saved = this.transaction.execute((status) -> {
             OrderingDocument result = this.repository.save(changed);
             this.outbox.append(new SettingsChanged(SettingsChanged.ORDERING, result.version(), userId));
@@ -77,13 +78,16 @@ public class OrderingSettingsService {
     private static OrderingDetails details(OrderingDocument d) {
         return new OrderingDetails(d.cashEnabled(), d.cardEnabled(), d.serviceFeeMinor(), d.serviceFeeBasisPoints(),
                 d.taxBasisPoints(), d.tipsEnabled(), d.acceptTimeoutSeconds(), (d.version() != null) ? d.version() : 0L,
-                d.updatedAt(), d.approvalRequired());
+                d.updatedAt(), d.approvalRequired(), d.directCollection(), d.creditLimit());
     }
 
     private static void validate(UpdateOrdering update) {
         Map<String, String> errors = new LinkedHashMap<>();
         if (!update.cashEnabled() && !update.cardEnabled()) {
             errors.put("cashEnabled", "keep at least one payment method on");
+        }
+        if (update.creditLimitMinor() < 0) {
+            errors.put("creditLimitMinor", "must be 0 or more");
         }
         if (update.serviceFeeMinor() < 0) {
             errors.put("serviceFeeMinor", "must be 0 or more");

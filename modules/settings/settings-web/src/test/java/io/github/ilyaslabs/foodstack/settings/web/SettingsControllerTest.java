@@ -7,19 +7,19 @@ import java.util.Map;
 import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
-import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.DeliveryDetails;
-import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.DeliverySettingsService;
+import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateBranding;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateDelivery;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateOrdering;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -157,9 +157,9 @@ class SettingsControllerTest {
     @Test
     @DisplayName("GET ordering is public; PUT needs settings:manage and If-Match")
     void ordering() throws Exception {
-        given(this.orderingService.get()).willReturn(new OrderingDetails(true, false, 0, 0, 0, true, 180, 0, null, false));
+        given(this.orderingService.get()).willReturn(new OrderingDetails(true, false, 0, 0, 0, true, 180, 0, null, false, false, 5_000_000L));
         given(this.orderingService.update(eq(new UpdateOrdering(true, true, 4900, 250, 1600, false, 300, true)), eq(0L), eq("admin-1")))
-            .willReturn(new OrderingDetails(true, true, 4900, 250, 1600, false, 300, 1, null, true));
+            .willReturn(new OrderingDetails(true, true, 4900, 250, 1600, false, 300, 1, null, true, true, 900L));
         String body = """
                 {"cashEnabled":true,"cardEnabled":true,"serviceFeeMinor":4900,"serviceFeeBasisPoints":250,
                  "taxBasisPoints":1600,"tipsEnabled":false,"acceptTimeoutSeconds":300,"priceApprovalRequired":true}""";

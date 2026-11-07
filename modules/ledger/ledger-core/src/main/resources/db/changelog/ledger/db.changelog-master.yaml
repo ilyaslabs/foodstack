@@ -56,3 +56,14 @@ databaseChangeLog:
             collectionName: ledger_settlements
             keys: '{ "settledAt": -1 }'
             options: '{ "name": "newest" }'
+  - changeSet:
+      id: ledger-4
+      author: foodstack
+      comment: "ledger_credit ({ _id: hashed }): direct-collecting branches, their credit limit and whether they are over it (PRD DP-7)"
+      changes:
+        - createCollection:
+            collectionName: ledger_credit
+        - createIndex:
+            collectionName: ledger_credit
+            keys: '{ "mode": 1 }'
+            options: '{ "name": "mode" }'

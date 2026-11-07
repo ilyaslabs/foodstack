@@ -16,7 +16,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param status {@code CREATED}, {@code PENDING}, {@code SUCCEEDED}, {@code FAILED} or {@code EXPIRED}
  * @param amountMinor amount to charge
  * @param currency ISO 4217 code
- * @param merchantAccount whose account collects: {@code operator} in M2 (store accounts come in M4)
+ * @param merchantAccount whose account collects: {@code operator}, or a brand's or branch's merchant account id
  * @param gateway gateway id
  * @param sessionReference the gateway's id of the hosted page
  * @param paymentReference the gateway's id of the payment, for refunds

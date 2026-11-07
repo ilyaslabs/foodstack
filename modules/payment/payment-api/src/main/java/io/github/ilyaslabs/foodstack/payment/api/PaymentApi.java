@@ -19,6 +19,14 @@ public interface PaymentApi {
      */
     CardSessionView startCard(@Param("request") StartCardRequest request);
 
+    /**
+     * Whose merchant account a card payment for the branch goes into now (PRD DP-4, DP-7, BB-9, TDD
+     * 5.4): the branch's own, else its brand's, when direct collection is on for the deployment and
+     * the branch, the account is verified and the branch is within its credit limit; otherwise the
+     * operator's. The order keeps the answer, so refunds go back through the same account.
+     */
+    MerchantView resolveMerchant(@Param("storeId") String storeId);
+
     /** The payment of an order, or {@code null} when it has none (cash). */
     PaymentView get(@Param("orderId") String orderId);
 }

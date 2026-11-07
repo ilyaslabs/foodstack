@@ -22,6 +22,12 @@ public interface CardGateway {
      */
     WebhookEvent parseWebhook(byte[] body, Map<String, String> headers);
 
+    /**
+     * Checks that the credentials work with a harmless call, before a store's merchant account is
+     * used (PRD DP-4). Throws {@link GatewayException} with the gateway's reason when they do not.
+     */
+    void verify();
+
     /** Gives money back. {@code idempotencyKey} makes a retried call safe. */
     String refund(String paymentReference, long amountMinor, String currency, String idempotencyKey);
 
@@ -69,6 +75,17 @@ public interface CardGateway {
         public static final String FAILED = "FAILED";
 
         public static final String EXPIRED = "EXPIRED";
+    }
+
+    /** Opens the same gateway on a store's own merchant account (PRD DP-3), with its credentials. */
+    @FunctionalInterface
+    interface AccountGateways {
+
+        /**
+         * @param secretKey the account's secret API key
+         * @param webhookSecret the signing secret of the account's webhook endpoint
+         */
+        CardGateway open(String secretKey, String webhookSecret);
     }
 
     /** A gateway call failed. {@code retryable} when trying again later may work. */

@@ -32,8 +32,8 @@ import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
-import org.bson.Document;
 
+import org.bson.Document;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -78,14 +78,23 @@ public class LedgerReports {
 
     private final Clock clock;
 
+    private final CreditLimits creditLimits;
+
     public LedgerReports(MongoTemplate mongo, TransactionTemplate transactions, OutboxWriter outbox, LedgerPosting posting,
             SettingsApi settings, Clock clock) {
+        this(mongo, transactions, outbox, posting, settings, clock, null);
+    }
+
+    /** @param creditLimits checks a branch's credit limit after it is settled, or {@code null} */
+    public LedgerReports(MongoTemplate mongo, TransactionTemplate transactions, OutboxWriter outbox, LedgerPosting posting,
+            SettingsApi settings, Clock clock, CreditLimits creditLimits) {
         this.mongo = mongo;
         this.transactions = transactions;
         this.outbox = outbox;
         this.posting = posting;
         this.settings = settings;
         this.clock = clock;
+        this.creditLimits = creditLimits;
     }
 
     // ---- payout reports -----------------------------------------------------------------------
@@ -264,21 +273,7 @@ public class LedgerReports {
 
     /** An account's balance now: its roll-ups plus what is not rolled up yet. */
     public long balance(String accountId) {
-        List<Document> daily = List.of(new Document("$match", new Document("accountId", accountId)),
-                new Document("$group", new Document("_id", null).append("m", new Document("$sum", "$amountMinor"))));
-        long sum = 0;
-        for (Document row : this.mongo.getCollection(this.mongo.getCollectionName(DailyDocument.class)).aggregate(daily)) {
-            sum += Rollups.number(row.get("m"));
-        }
-        List<Document> fresh = List.of(
-                new Document("$match", new Document("legs.accountId", accountId).append("rolled", false)),
-                new Document("$unwind", "$legs"), new Document("$match", new Document("legs.accountId", accountId)),
-                new Document("$group", new Document("_id", null).append("m", new Document("$sum", "$legs.amountMinor"))));
-        for (Document row : this.mongo.getCollection(this.mongo.getCollectionName(TransactionDocument.class))
-            .aggregate(fresh)) {
-            sum += Rollups.number(row.get("m"));
-        }
-        return sum;
+        return Rollups.balance(this.mongo, accountId);
     }
 
     // ---- settlement ---------------------------------------------------------------------------
@@ -345,6 +340,9 @@ public class LedgerReports {
         }
         catch (DuplicateKeyException ex) {
             throw new ModuleException.Conflict("Someone settled this balance just now", "SETTLEMENT_CHANGED");
+        }
+        if (Accounts.STORE.equals(type) && this.creditLimits != null) {
+            this.creditLimits.check(partyId);
         }
         return view(settlement, account);
     }

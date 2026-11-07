@@ -9,8 +9,8 @@ import java.util.Set;
 import io.github.ilyaslabs.foodstack.ledger.core.domain.Accounts;
 import io.github.ilyaslabs.foodstack.ledger.core.persistence.DailyDocument;
 import io.github.ilyaslabs.foodstack.ledger.core.persistence.TransactionDocument;
-import org.bson.Document;
 
+import org.bson.Document;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -90,6 +90,24 @@ public class Rollups {
                         .set("currency", row.getString("currency")),
                     DailyDocument.class);
         }
+    }
+
+    /** An account's balance now: its roll-ups plus what is not rolled up yet. */
+    public static long balance(MongoTemplate mongo, String accountId) {
+        List<Document> daily = List.of(new Document("$match", new Document("accountId", accountId)),
+                new Document("$group", new Document("_id", null).append("m", new Document("$sum", "$amountMinor"))));
+        long sum = 0;
+        for (Document row : mongo.getCollection(mongo.getCollectionName(DailyDocument.class)).aggregate(daily)) {
+            sum += number(row.get("m"));
+        }
+        List<Document> fresh = List.of(
+                new Document("$match", new Document("legs.accountId", accountId).append("rolled", false)),
+                new Document("$unwind", "$legs"), new Document("$match", new Document("legs.accountId", accountId)),
+                new Document("$group", new Document("_id", null).append("m", new Document("$sum", "$legs.amountMinor"))));
+        for (Document row : mongo.getCollection(mongo.getCollectionName(TransactionDocument.class)).aggregate(fresh)) {
+            sum += number(row.get("m"));
+        }
+        return sum;
     }
 
     static long number(Object value) {

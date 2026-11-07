@@ -135,7 +135,21 @@ public final class StoreDtos {
             String closedReason, int prepMinutes, String deliveryMode, boolean operatorDeliveryAllowed, boolean pickupEnabled,
             CommissionDto commission, String status, String timezone, boolean openNow, long version, Long createdAt,
             Long updatedAt, String cityId, int ticketPaperMm, List<CommissionChangeResponse> commissionChanges,
-            Set<String> brandOwnerUserIds) {
+            Set<String> brandOwnerUserIds, PaymentCollectionResponse paymentCollection) {
+    }
+
+    /**
+     * {@code PUT /api/v1/stores/{id}/payment-collection} (finance, PRD DP-2, DP-7).
+     *
+     * @param mode {@code OPERATOR} or {@code DIRECT}
+     * @param creditLimitMinor the branch's own credit limit, or {@code null} for the operator's default
+     * @param reason why, kept in the audit log
+     */
+    public record PaymentCollectionRequest(String mode, Long creditLimitMinor, String reason) {
+    }
+
+    /** Who collects card payments; {@code changedAt} in epoch seconds. */
+    public record PaymentCollectionResponse(String mode, Long creditLimitMinor, String reason, String changedBy, Long changedAt) {
     }
 
     /** A branch in a back-office list. */

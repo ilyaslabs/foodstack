@@ -20,8 +20,8 @@ import io.github.ilyaslabs.foodstack.store.web.dto.StoreDtos;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 import jakarta.validation.Valid;
 
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -202,6 +202,16 @@ class StoresController {
         StoreDetails updated = this.storeService.updateBranchCommission(storeId, StoreMapper.commission(request.commission()),
                 (request.effectiveFrom() != null) ? java.time.Instant.ofEpochSecond(request.effectiveFrom()) : null,
                 CurrentUser.id());
+        return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
+    }
+
+    /** Lets a branch collect card payments itself, or stops it, with its credit limit (finance, PRD DP-2, DP-7). */
+    @PutMapping("/{storeId}/payment-collection")
+    @PreAuthorize("hasAuthority('store:payment-collection:manage')")
+    ResponseEntity<StoreDtos.StoreResponse> paymentCollection(@PathVariable String storeId,
+            @RequestBody StoreDtos.PaymentCollectionRequest request) {
+        StoreDetails updated = this.storeService.setPaymentCollection(storeId, request.mode(), request.creditLimitMinor(),
+                request.reason(), CurrentUser.id());
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }
 

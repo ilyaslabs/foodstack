@@ -28,6 +28,14 @@
         </dependency>
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-store-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-ledger-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
             <artifactId>foodstack-platform-security</artifactId>
         </dependency>
         <dependency>

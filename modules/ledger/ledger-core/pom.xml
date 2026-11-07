@@ -35,6 +35,10 @@
             <artifactId>foodstack-settings-api</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-store-api</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
         </dependency>

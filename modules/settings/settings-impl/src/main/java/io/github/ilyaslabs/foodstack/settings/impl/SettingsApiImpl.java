@@ -2,14 +2,14 @@ package io.github.ilyaslabs.foodstack.settings.impl;
 
 import io.github.ilyaslabs.foodstack.platform.core.EpochSeconds;
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
-import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
 import io.github.ilyaslabs.foodstack.settings.api.DeliveryView;
+import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
 import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
-import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.DeliveryDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.DeliverySettingsService;
+import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
@@ -54,7 +54,7 @@ class SettingsApiImpl implements SettingsApi {
         OrderingDetails o = this.orderingService.get();
         return new OrderingView(o.cashEnabled(), o.cardEnabled(), o.serviceFeeMinor(), o.serviceFeeBasisPoints(),
                 o.taxBasisPoints(), o.tipsEnabled(), o.acceptTimeoutSeconds(), o.version(),
-                o.priceApprovalRequired());
+                o.priceApprovalRequired(), o.directCollectionEnabled(), o.creditLimitMinor());
     }
 
     @Override

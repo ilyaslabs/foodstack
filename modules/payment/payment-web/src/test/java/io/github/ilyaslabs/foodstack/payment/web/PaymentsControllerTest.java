@@ -4,14 +4,15 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.payment.api.PaymentOptionsView;
+import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts;
 import io.github.ilyaslabs.foodstack.payment.core.application.PaymentService;
 import io.github.ilyaslabs.foodstack.payment.core.application.SandboxCheckout;
 import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -30,14 +31,16 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = { PaymentsController.class, SandboxPageController.class },
+@WebMvcTest(controllers = { PaymentsController.class, SandboxPageController.class, MerchantAccountsController.class },
         properties = "module-switch.modules.payment.mode=local")
 @Import({ ApiSecurityConfiguration.class, ProblemDetailsAdvice.class, PaymentWebConfiguration.class })
 class PaymentsControllerTest {
@@ -51,6 +54,9 @@ class PaymentsControllerTest {
 
     @MockitoBean
     SandboxCheckout sandbox;
+
+    @MockitoBean
+    MerchantAccounts accounts;
 
     @MockitoBean
     JwtDecoder jwtDecoder;
@@ -87,6 +93,43 @@ class PaymentsControllerTest {
         this.mvc.perform(post("/api/v1/payment-webhooks/sandbox").content("{}"))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.code").value("WEBHOOK_INVALID"));
+    }
+
+    @Test
+    @DisplayName("store accounts' webhooks arrive at the owner's address; unknown kinds of owner are 404")
+    void ownerWebhooks() throws Exception {
+        this.mvc.perform(post("/api/v1/payment-webhooks/stripe/stores/s1").content("{}")).andExpect(status().isOk());
+        verify(this.payments).handleOwnerWebhook(eq("stripe"), eq("STORE"), eq("s1"), any(), any());
+        this.mvc.perform(post("/api/v1/payment-webhooks/stripe/brands/b1").content("{}")).andExpect(status().isOk());
+        verify(this.payments).handleOwnerWebhook(eq("stripe"), eq("BRAND"), eq("b1"), any(), any());
+        this.mvc.perform(post("/api/v1/payment-webhooks/stripe/riders/r1").content("{}")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("owners connect and disconnect accounts with their keys; the keys are never sent back")
+    void merchantAccounts() throws Exception {
+        given(this.accounts.connect("BRAND", "b1", "sk_live_1234", "whsec_1")).willReturn(new MerchantAccounts.AccountView("a1",
+                "BRAND", "b1", "stripe", "1234", "ACTIVE", null, java.time.Instant.ofEpochSecond(100), "u1"));
+        given(this.accounts.view("s1")).willReturn(new MerchantAccounts.CollectionView("s1", "b1", true, "stripe", "DIRECT",
+                false, null, null, "OPERATOR", null, "https://api/stores/s1", "https://api/brands/b1", false, true));
+        var owner = jwt().authorities(List.of(new SimpleGrantedAuthority("payment:account")));
+
+        this.mvc.perform(put("/api/v1/payments/merchant-accounts/brands/b1").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"secretKey\":\"sk_live_1234\",\"webhookSecret\":\"whsec_1\"}")).andExpect(status().isUnauthorized());
+        this.mvc.perform(put("/api/v1/payments/merchant-accounts/brands/b1").with(jwt()).contentType(MediaType.APPLICATION_JSON)
+            .content("{}")).andExpect(status().isForbidden());
+        this.mvc.perform(put("/api/v1/payments/merchant-accounts/brands/b1").with(owner).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"secretKey\":\"sk_live_1234\",\"webhookSecret\":\"whsec_1\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.keyHint").value("1234"))
+            .andExpect(jsonPath("$.verifiedAt").value(100))
+            .andExpect(jsonPath("$.secretKey").doesNotExist());
+        this.mvc.perform(delete("/api/v1/payments/merchant-accounts/stores/s1").with(owner)).andExpect(status().isNoContent());
+        verify(this.accounts).disconnect("STORE", "s1");
+        this.mvc.perform(get("/api/v1/payments/merchant-accounts").param("storeId", "s1").with(owner))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.mode").value("DIRECT"))
+            .andExpect(jsonPath("$.brandWebhookUrl").value("https://api/brands/b1"));
     }
 
     @Test

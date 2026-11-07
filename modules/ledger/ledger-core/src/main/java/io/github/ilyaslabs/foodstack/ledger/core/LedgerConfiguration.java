@@ -3,12 +3,14 @@ package io.github.ilyaslabs.foodstack.ledger.core;
 import java.time.Clock;
 import java.time.Duration;
 
+import io.github.ilyaslabs.foodstack.ledger.core.application.CreditLimits;
 import io.github.ilyaslabs.foodstack.ledger.core.application.LedgerPosting;
 import io.github.ilyaslabs.foodstack.ledger.core.application.LedgerReports;
 import io.github.ilyaslabs.foodstack.ledger.core.application.Rollups;
 import io.github.ilyaslabs.foodstack.ledger.core.events.DispatchEventsListener;
 import io.github.ilyaslabs.foodstack.ledger.core.events.OrderEventsListener;
 import io.github.ilyaslabs.foodstack.ledger.core.events.PaymentEventsListener;
+import io.github.ilyaslabs.foodstack.ledger.core.events.StoreEventsListener;
 import io.github.ilyaslabs.foodstack.platform.kafka.BucketLeases;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
@@ -20,7 +22,6 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
-import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -30,6 +31,7 @@ import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaAdmin;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Everything the ledger module runs on: database {@code foodstack_ledger} with its shard keys,
@@ -47,7 +49,8 @@ public class LedgerConfiguration {
             .hashed("ledger_daily", "accountId")
             .hashed("ledger_accounts", "_id")
             .hashed("ledger_orders", "_id")
-            .hashed("ledger_settlements", "accountId");
+            .hashed("ledger_settlements", "accountId")
+            .hashed("ledger_credit", "_id");
     }
 
     @Bean
@@ -98,16 +101,28 @@ public class LedgerConfiguration {
     }
 
     @Bean
+    CreditLimits ledgerCreditLimits(ModuleMongo ledgerMongo, OutboxWriter ledgerOutbox, SettingsApi settingsApi, Clock clock) {
+        return new CreditLimits(ledgerMongo.template(), ledgerMongo.transactionTemplate(), ledgerOutbox, settingsApi, clock);
+    }
+
+    @Bean
     LedgerReports ledgerReports(ModuleMongo ledgerMongo, OutboxWriter ledgerOutbox, LedgerPosting ledgerPosting,
-            SettingsApi settingsApi, Clock clock) {
+            SettingsApi settingsApi, Clock clock, CreditLimits ledgerCreditLimits) {
         return new LedgerReports(ledgerMongo.template(), ledgerMongo.transactionTemplate(), ledgerOutbox, ledgerPosting,
-                settingsApi, clock);
+                settingsApi, clock, ledgerCreditLimits);
     }
 
     @Bean
     @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
-    OrderEventsListener ledgerOrderEventsListener(LedgerPosting ledgerPosting, JsonMapper jsonMapper, Clock clock) {
-        return new OrderEventsListener(ledgerPosting, jsonMapper, clock);
+    OrderEventsListener ledgerOrderEventsListener(LedgerPosting ledgerPosting, JsonMapper jsonMapper, Clock clock,
+            CreditLimits ledgerCreditLimits) {
+        return new OrderEventsListener(ledgerPosting, jsonMapper, clock, ledgerCreditLimits);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    StoreEventsListener ledgerStoreEventsListener(CreditLimits ledgerCreditLimits, JsonMapper jsonMapper) {
+        return new StoreEventsListener(ledgerCreditLimits, jsonMapper);
     }
 
     @Bean

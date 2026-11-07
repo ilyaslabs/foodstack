@@ -6,12 +6,14 @@ import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.cart.api.CheckoutRequest;
 import io.github.ilyaslabs.foodstack.cart.api.CheckoutView;
-import io.github.ilyaslabs.foodstack.cart.core.persistence.CartDocument.CartLine;
 import io.github.ilyaslabs.foodstack.cart.core.persistence.CartDocument;
+import io.github.ilyaslabs.foodstack.cart.core.persistence.CartDocument.CartLine;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryQuoteView;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
+import io.github.ilyaslabs.foodstack.payment.api.MerchantView;
+import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponEvaluation;
@@ -19,6 +21,7 @@ import io.github.ilyaslabs.foodstack.promotion.api.CouponRequest;
 import io.github.ilyaslabs.foodstack.promotion.api.PromotionApi;
 import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,7 +46,10 @@ class CheckoutServiceTest {
 
     private final SettingsApi settings = mock(SettingsApi.class);
 
-    private final CheckoutService service = new CheckoutService(this.carts, this.geo, this.promotions, this.settings);
+    private final PaymentApi payments = mock(PaymentApi.class);
+
+    private final CheckoutService service = new CheckoutService(this.carts, this.geo, this.promotions, this.settings,
+            this.payments);
 
     private final CartDocument cart = new CartDocument("c1", "s1", List.of(new CartLine("l1", "i1", 1, List.of(), null),
             new CartLine("l2", "i2", 1, List.of(), null)), Instant.now(), 7L);
@@ -53,6 +59,7 @@ class CheckoutServiceTest {
         // 2.5% + 20.00 service fee, 16% tax, tips on, cash and card
         given(this.settings.getOrdering()).willReturn(new OrderingView(true, true, 2_000, 250, 1600, true, 180, 1));
         given(this.carts.find("c1")).willReturn(this.cart);
+        given(this.payments.resolveMerchant(any())).willReturn(MerchantView.BY_OPERATOR);
         given(this.carts.price(this.cart)).willReturn(CartFixtures.priced("s1", 60_000, 40_000));
         given(this.geo.quote(any())).willReturn(new DeliveryQuoteView(true, null, 15_000, 50_000, 300_000L, 5_000, "z1",
                 DeliveryMode.SELF));
@@ -83,6 +90,21 @@ class CheckoutServiceTest {
         assertThat(coupon.getValue().code()).isEqualTo("welcome");
         assertThat(coupon.getValue().deliveryChargeMinor()).isEqualTo(15_000);
         assertThat(coupon.getValue().city()).isEqualTo("Lahore");
+        assertThat(coupon.getValue().operatorMerchant()).isTrue();
+    }
+
+    @Test
+    @DisplayName("a card payment into the branch's own account is not on the operator's merchant account (PRD PR-3a)")
+    void directCollection() {
+        given(this.promotions.evaluate(any())).willReturn(CouponEvaluation.rejected("OPONLY", "p9", "MERCHANT", Map.of()));
+        given(this.payments.resolveMerchant("s1")).willReturn(new MerchantView("acc-1", MerchantView.STORE));
+
+        this.service.checkout(new CheckoutRequest("c1", Fulfilment.PICKUP, null, "OPONLY", 0, PaymentMethod.CARD));
+        this.service.checkout(new CheckoutRequest("c1", Fulfilment.PICKUP, null, "OPONLY", 0, PaymentMethod.CASH));
+
+        ArgumentCaptor<CouponRequest> coupon = ArgumentCaptor.forClass(CouponRequest.class);
+        verify(this.promotions, org.mockito.Mockito.times(2)).evaluate(coupon.capture());
+        assertThat(coupon.getAllValues()).extracting(CouponRequest::operatorMerchant).containsExactly(false, true);
     }
 
     @Test

@@ -13,9 +13,23 @@ package io.github.ilyaslabs.foodstack.settings.api;
  * @param acceptTimeoutSeconds time a store has to accept a paid order before it is rejected and refunded
  * @param version increases with every change
  * @param priceApprovalRequired store owners' price changes wait for operator approval (PRD ST-6, BB-4)
+ * @param directCollectionEnabled branches may be allowed to collect card payments themselves (PRD DP-1, off by default)
+ * @param creditLimitMinor what a direct-collecting branch may owe before collection is suspended, unless it has its own
+ *        limit (PRD DP-7)
  */
 public record OrderingView(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
-        int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version, boolean priceApprovalRequired) {
+        int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version, boolean priceApprovalRequired,
+        boolean directCollectionEnabled, long creditLimitMinor) {
+
+    /** The default credit limit: 50,000 in a two-decimal currency. */
+    public static final long DEFAULT_CREDIT_LIMIT_MINOR = 5_000_000L;
+
+    /** Rules without direct collection. */
+    public OrderingView(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
+            int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version, boolean priceApprovalRequired) {
+        this(cashEnabled, cardEnabled, serviceFeeMinor, serviceFeeBasisPoints, taxBasisPoints, tipsEnabled,
+                acceptTimeoutSeconds, version, priceApprovalRequired, false, DEFAULT_CREDIT_LIMIT_MINOR);
+    }
 
     /** Rules without price approval. */
     public OrderingView(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,

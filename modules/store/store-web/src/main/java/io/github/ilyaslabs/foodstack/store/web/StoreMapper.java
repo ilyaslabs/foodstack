@@ -27,6 +27,7 @@ import io.github.ilyaslabs.foodstack.store.core.application.MenuItemInput;
 import io.github.ilyaslabs.foodstack.store.core.application.ModifierGroup;
 import io.github.ilyaslabs.foodstack.store.core.application.ModifierOption;
 import io.github.ilyaslabs.foodstack.store.core.application.OwnerDetails;
+import io.github.ilyaslabs.foodstack.store.core.application.PaymentCollection;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreDetails;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreSummary;
 import io.github.ilyaslabs.foodstack.store.web.dto.MenuDtos;
@@ -174,7 +175,12 @@ final class StoreMapper {
                 s.temporarilyClosed(), s.closedReason(), s.prepMinutes(), s.deliveryMode().name(),
                 s.operatorDeliveryAllowed(), s.pickupEnabled(), commission(s.commission()), s.status().name(), s.timezone(),
                 s.openNow(), s.version(), EpochSeconds.of(s.createdAt()), EpochSeconds.of(s.updatedAt()), s.cityId(),
-                s.ticketPaperMm(), changes(s.commissionChanges()), s.brandOwnerUserIds());
+                s.ticketPaperMm(), changes(s.commissionChanges()), s.brandOwnerUserIds(), collection(s.paymentCollection()));
+    }
+
+    static StoreDtos.PaymentCollectionResponse collection(PaymentCollection c) {
+        return new StoreDtos.PaymentCollectionResponse(c.mode(), c.creditLimitMinor(), c.reason(), c.changedBy(),
+                EpochSeconds.of(c.changedAt()));
     }
 
     static StoreDtos.StorePageResponse page(StoreDetails s) {

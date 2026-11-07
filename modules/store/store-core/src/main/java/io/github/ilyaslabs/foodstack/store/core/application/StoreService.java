@@ -44,6 +44,7 @@ import io.github.ilyaslabs.foodstack.store.api.events.BranchPromotionsChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.BrandChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreAvailabilityChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreChanged;
+import io.github.ilyaslabs.foodstack.store.api.events.StorePaymentCollectionChanged;
 import io.github.ilyaslabs.foodstack.store.core.domain.BranchTimeZones;
 import io.github.ilyaslabs.foodstack.store.core.domain.CommissionSchedule;
 import io.github.ilyaslabs.foodstack.store.core.domain.OpeningHours;
@@ -583,6 +584,40 @@ public class StoreService {
         return saveBranch(store, userId);
     }
 
+    /**
+     * Lets a branch collect card payments into its own or its brand's merchant account, or stops it,
+     * and sets its credit limit (finance only, PRD DP-2, DP-7). The reason is kept and audit-logged.
+     *
+     * @param creditLimitMinor the branch's own limit, or {@code null} for the operator's default
+     */
+    public StoreDetails setPaymentCollection(String storeId, String mode, Long creditLimitMinor, String reason, String userId) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (!PaymentCollection.OPERATOR.equals(mode) && !PaymentCollection.DIRECT.equals(mode)) {
+            errors.put("mode", "must be OPERATOR or DIRECT");
+        }
+        if (creditLimitMinor != null && creditLimitMinor < 0) {
+            errors.put("creditLimitMinor", "must be 0 or more");
+        }
+        String why = (reason != null) ? reason.strip() : "";
+        if (why.isEmpty()) {
+            errors.put("reason", "say why, for the audit log");
+        }
+        else if (why.length() > 500) {
+            errors.put("reason", "must be at most 500 characters");
+        }
+        failIfAny(errors, "PAYMENT_COLLECTION_INVALID");
+        StoreDocument store = findStore(storeId);
+        store.setPaymentCollection(mode);
+        store.setCollection(new PaymentCollection(mode, creditLimitMinor, why, userId, this.clock.instant()));
+        BrandDocument brand = findBrand(store.getBrandId());
+        java.util.Set<String> owners = new java.util.TreeSet<>(store.getOwnerUserIds());
+        owners.addAll(brand.getOwnerUserIds());
+        String name = (store.getBranchName() == null || store.getBranchName().isBlank()) ? brand.getName()
+                : brand.getName() + " · " + store.getBranchName();
+        return saveBranch(store, () -> this.outbox.append(new StorePaymentCollectionChanged(storeId, store.getBrandId(), name,
+                java.util.Set.copyOf(owners), mode, creditLimitMinor, why, userId)), userId);
+    }
+
     /** Whether branch managers may create promotions for their own branch (PRD BB-11); brand owners decide. */
     public BrandDetails setBranchPromotionsAllowed(String brandId, boolean allowed, String userId) {
         BrandDocument brand = findBrand(brandId);
@@ -945,7 +980,8 @@ public class StoreService {
                 store.isTemporarilyClosed(), store.getClosedReason(), store.getPrepMinutes(), store.getDeliveryMode(),
                 store.isOperatorDeliveryAllowed(), store.isPickupEnabled(), commission, store.getStatus(), zone.getId(), open,
                 version(store.getVersion()), store.getCreatedAt(), store.getUpdatedAt(), store.getCityId(),
-                ticketPaper(store), branchCommission(store), Set.copyOf(brand.getOwnerUserIds()));
+                ticketPaper(store), branchCommission(store), Set.copyOf(brand.getOwnerUserIds()),
+                (store.getCollection() != null) ? store.getCollection() : PaymentCollection.BY_OPERATOR);
     }
 
     /** The branch's own commission changes, oldest first; empty when it always used the brand's. */

@@ -15,17 +15,18 @@ import io.github.ilyaslabs.foodstack.payment.api.events.PaymentFailed;
 import io.github.ilyaslabs.foodstack.payment.api.events.PaymentSucceeded;
 import io.github.ilyaslabs.foodstack.payment.api.events.RefundFailed;
 import io.github.ilyaslabs.foodstack.payment.api.events.RefundSucceeded;
+import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.GatewayException;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.WebhookEvent;
-import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway;
+import io.github.ilyaslabs.foodstack.payment.core.persistence.MerchantAccountDocument;
 import io.github.ilyaslabs.foodstack.payment.core.persistence.PaymentDocument;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
@@ -36,7 +37,7 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Card payments on the operator's merchant account (TDD 5.4; store accounts come in M4). One payment
+ * Card payments on the operator's merchant account or a brand's or branch's own (TDD 5.4). One payment
  * per order. Every status change is a conditional update plus its event in one transaction, so a
  * webhook delivered twice, or a webhook racing the expiry sweep, changes the payment once. A
  * payment that succeeds after its page expired still counts: the order then refunds it.
@@ -56,15 +57,29 @@ public class PaymentService {
 
     private final SettingsApi settings;
 
+    /** {@code merchantAccount} of a payment into the operator's own account. */
+    public static final String OPERATOR_ACCOUNT = "operator";
+
     private final CardGateway gateway;
 
     private final Duration sessionTtl;
 
     private final Clock clock;
 
+    private final MerchantAccounts accounts;
+
     /** @param gateway the configured card gateway, or {@code null} for none */
     public PaymentService(MongoTemplate mongo, TransactionTemplate transaction, OutboxWriter outbox, SettingsApi settings,
             CardGateway gateway, Duration sessionTtl, Clock clock) {
+        this(mongo, transaction, outbox, settings, gateway, sessionTtl, clock, null);
+    }
+
+    /**
+     * @param gateway the configured card gateway, or {@code null} for none
+     * @param accounts store and brand merchant accounts, or {@code null} for the operator's only
+     */
+    public PaymentService(MongoTemplate mongo, TransactionTemplate transaction, OutboxWriter outbox, SettingsApi settings,
+            CardGateway gateway, Duration sessionTtl, Clock clock, MerchantAccounts accounts) {
         this.mongo = mongo;
         this.transaction = transaction;
         this.outbox = outbox;
@@ -72,6 +87,19 @@ public class PaymentService {
         this.gateway = gateway;
         this.sessionTtl = sessionTtl;
         this.clock = clock;
+        this.accounts = accounts;
+    }
+
+    /** The gateway on a payment's merchant account. */
+    private CardGateway gatewayFor(String merchantAccount) {
+        if (this.accounts == null || merchantAccount == null || OPERATOR_ACCOUNT.equals(merchantAccount)) {
+            return this.gateway;
+        }
+        return this.accounts.gateway(merchantAccount);
+    }
+
+    private static String account(String merchantAccountId) {
+        return (merchantAccountId != null && !merchantAccountId.isBlank()) ? merchantAccountId : OPERATOR_ACCOUNT;
     }
 
     public PaymentOptionsView options() {
@@ -95,7 +123,8 @@ public class PaymentService {
         if (existing == null) {
             try {
                 this.mongo.insert(new PaymentDocument(request.orderId(), request.customerId(), PaymentDocument.CREATED,
-                        request.amountMinor(), request.currency(), "operator", this.gateway.id(), null, null, null, request.returnUrl(),
+                        request.amountMinor(), request.currency(), account(request.merchantAccountId()), this.gateway.id(), null,
+                        null, null, request.returnUrl(),
                         request.cancelUrl(), null, 0,
                         List.of(), null, now, now));
             }
@@ -112,14 +141,18 @@ public class PaymentService {
                         "PAYMENT_CLOSED", Map.of("status", existing.status()));
             }
         }
+        String merchantAccount = (existing != null) ? existing.merchantAccount() : account(request.merchantAccountId());
         CardGateway.HostedSession session;
         try {
-            session = this.gateway.createSession(new CardGateway.SessionRequest(request.orderId(), request.orderNumber(),
+            session = gatewayFor(merchantAccount).createSession(new CardGateway.SessionRequest(request.orderId(), request.orderNumber(),
                     request.amountMinor(), request.currency(), request.description(), request.returnUrl(),
                     request.cancelUrl(), now.plus(this.sessionTtl)));
         }
         catch (GatewayException ex) {
             log.warn("Could not open a payment page for order {}: {}", request.orderId(), ex.getMessage());
+            if (!ex.isRetryable() && this.accounts != null) {
+                this.accounts.markFailed(merchantAccount, ex.getMessage());
+            }
             throw new ModuleException.Unavailable("The card payment service is not answering; try again or pay cash",
                     "PAYMENT_GATEWAY_UNAVAILABLE");
         }
@@ -148,7 +181,7 @@ public class PaymentService {
         return (p != null) ? p.customerId() : null;
     }
 
-    /** A gateway's webhook: verified, then applied once. */
+    /** A webhook from the operator's own account: verified, then applied once. */
     public void handleWebhook(String gatewayId, byte[] body, Map<String, String> headers) {
         if (this.gateway == null || !this.gateway.id().equals(gatewayId)) {
             throw new ModuleException.NotFound("No gateway " + gatewayId + " is set up", "GATEWAY_NOT_FOUND");
@@ -160,11 +193,51 @@ public class PaymentService {
         catch (GatewayException ex) {
             throw new ModuleException.BadRequest(ex.getMessage(), "WEBHOOK_INVALID");
         }
+        apply(gatewayId, OPERATOR_ACCOUNT, event);
+    }
+
+    /**
+     * A webhook from a brand's or branch's own account (TDD 5.4), sent to the owner's address. It is
+     * verified with the owner's current account, else one it had before (payments keep the account
+     * they were taken on), and applied only to payments taken on that account.
+     */
+    public void handleOwnerWebhook(String gatewayId, String scope, String ownerId, byte[] body, Map<String, String> headers) {
+        if (this.gateway == null || !this.gateway.id().equals(gatewayId) || this.accounts == null) {
+            throw new ModuleException.NotFound("No gateway " + gatewayId + " is set up", "GATEWAY_NOT_FOUND");
+        }
+        for (MerchantAccountDocument account : this.accounts.webhookAccounts(scope, ownerId)) {
+            WebhookEvent event;
+            try {
+                event = this.accounts.gateway(account.id()).parseWebhook(body, headers);
+            }
+            catch (GatewayException ex) {
+                continue;
+            }
+            apply(gatewayId, account.id(), event);
+            return;
+        }
+        throw new ModuleException.BadRequest("Webhook signature does not match this account", "WEBHOOK_INVALID");
+    }
+
+    /** The sandbox page's outcome, signed like a webhook, for a payment on any account. */
+    void handleSandbox(PaymentDocument payment, byte[] body, Map<String, String> headers) {
+        WebhookEvent event;
+        try {
+            event = gatewayFor(payment.merchantAccount()).parseWebhook(body, headers);
+        }
+        catch (GatewayException ex) {
+            throw new ModuleException.BadRequest(ex.getMessage(), "WEBHOOK_INVALID");
+        }
+        apply(payment.gateway(), payment.merchantAccount(), event);
+    }
+
+    private void apply(String gatewayId, String merchantAccount, WebhookEvent event) {
         if (event == null) {
             return;
         }
         PaymentDocument payment = find(event.orderId());
-        if (payment == null || !Objects.equals(payment.sessionReference(), event.sessionReference())) {
+        if (payment == null || !Objects.equals(payment.sessionReference(), event.sessionReference())
+                || !merchantAccount.equals(account(payment.merchantAccount()))) {
             log.warn("Ignoring a {} webhook for an unknown payment (order {})", gatewayId, event.orderId());
             return;
         }
@@ -234,7 +307,8 @@ public class PaymentService {
         }
         String reference;
         try {
-            reference = this.gateway.refund(payment.paymentReference(), amount, payment.currency(), refundId);
+            reference = gatewayFor(payment.merchantAccount()).refund(payment.paymentReference(), amount, payment.currency(),
+                    refundId);
         }
         catch (GatewayException ex) {
             if (ex.isRetryable()) {

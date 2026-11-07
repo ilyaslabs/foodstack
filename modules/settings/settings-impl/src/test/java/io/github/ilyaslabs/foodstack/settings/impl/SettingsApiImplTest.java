@@ -8,12 +8,13 @@ import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
 import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
 import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
-import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
-import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.DeliveryDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.DeliverySettingsService;
+import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
+import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -61,7 +62,7 @@ class SettingsApiImplTest {
     @Test
     @DisplayName("maps ordering rules to the API record")
     void ordering() {
-        given(this.ordering.get()).willReturn(new OrderingDetails(true, false, 100, 250, 1600, true, 180, 4, null, false));
+        given(this.ordering.get()).willReturn(new OrderingDetails(true, false, 100, 250, 1600, true, 180, 4, null, false, false, 5_000_000L));
 
         assertThat(this.api.getOrdering()).isEqualTo(new OrderingView(true, false, 100, 250, 1600, true, 180, 4));
     }

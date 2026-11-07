@@ -11,6 +11,7 @@ import io.github.ilyaslabs.foodstack.dispatch.api.DeliverySummary;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryCompleted;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
+import io.github.ilyaslabs.foodstack.ledger.core.application.CreditLimits;
 import io.github.ilyaslabs.foodstack.ledger.core.application.LedgerPosting;
 import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
 import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
@@ -23,10 +24,10 @@ import io.github.ilyaslabs.foodstack.payment.api.events.PaymentSucceeded;
 import io.github.ilyaslabs.foodstack.payment.api.events.RefundSucceeded;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
-import tools.jackson.databind.json.JsonMapper;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -52,7 +53,8 @@ class LedgerListenersTest {
     @DisplayName("order events: placed, delivered, collected, refunded and closed reach the posting rules")
     void orders() {
         LedgerPosting posting = mock(LedgerPosting.class);
-        OrderEventsListener listener = new OrderEventsListener(posting, this.json, this.clock);
+        CreditLimits limits = mock(CreditLimits.class);
+        OrderEventsListener listener = new OrderEventsListener(posting, this.json, this.clock, limits);
         listener.onEvent(envelope("foodstack.order.OrderPlaced.v1", new OrderPlaced(order(OrderStatus.PLACED), "c1")));
         listener.onEvent(envelope("foodstack.order.OrderDelivered.v1", new OrderDelivered(order(OrderStatus.DELIVERED), "r")));
         listener.onEvent(envelope("foodstack.order.OrderCollected.v1", new OrderCollected(order(OrderStatus.COLLECTED), "s")));
@@ -64,6 +66,7 @@ class LedgerListenersTest {
         verify(posting, org.mockito.Mockito.times(2)).orderDone(any(), eq(AT));
         verify(posting).orderRefunded(eq("e1"), any(), eq(AT));
         verify(posting).orderClosed("o1");
+        verify(limits, org.mockito.Mockito.times(3)).check("s1");
 
         LedgerPosting other = mock(LedgerPosting.class);
         new OrderEventsListener(other, this.json, this.clock).onEvent(envelope("foodstack.order.OrderAccepted.v1",

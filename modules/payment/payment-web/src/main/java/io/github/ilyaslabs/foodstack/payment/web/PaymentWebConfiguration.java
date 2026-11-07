@@ -17,6 +17,7 @@ class PaymentWebConfiguration {
 
     @Bean
     PublicEndpoints paymentPublicPosts() {
-        return PublicEndpoints.of(HttpMethod.POST, "/api/v1/payment-webhooks/*", "/api/v1/payments/sandbox/*");
+        return PublicEndpoints.of(HttpMethod.POST, "/api/v1/payment-webhooks/*", "/api/v1/payment-webhooks/*/*/*",
+                "/api/v1/payments/sandbox/*");
     }
 }

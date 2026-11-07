@@ -12,15 +12,15 @@ import javax.crypto.spec.SecretKeySpec;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.GatewayException;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.SessionRequest;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.WebhookEvent;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.json.JsonMapper;
-
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -67,6 +67,25 @@ class StripeGatewayTest {
         assertThat(session.sessionReference()).isEqualTo("cs_1");
         assertThat(session.redirectUrl()).isEqualTo("https://checkout.stripe.test/cs_1");
         assertThat(session.expiresAt()).isEqualTo(NOW.plusSeconds(1860));
+        this.server.verify();
+    }
+
+    @Test
+    @DisplayName("verifies a store's keys by reading its balance; a wrong key is refused with Stripe's reason")
+    void verify() {
+        this.server.expect(requestTo("https://api.stripe.test/v1/balance"))
+            .andExpect(method(HttpMethod.GET))
+            .andExpect(header("Authorization", "Bearer sk_test"))
+            .andRespond(withSuccess("{\"object\":\"balance\"}", MediaType.APPLICATION_JSON));
+        this.server.expect(requestTo("https://api.stripe.test/v1/balance"))
+            .andRespond(withStatus(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON)
+                .body("{\"error\":{\"message\":\"Invalid API Key provided\"}}"));
+
+        this.gateway.verify();
+        assertThatThrownBy(this.gateway::verify).isInstanceOfSatisfying(GatewayException.class, (ex) -> {
+            assertThat(ex.getMessage()).isEqualTo("Stripe: Invalid API Key provided");
+            assertThat(ex.isRetryable()).isFalse();
+        });
         this.server.verify();
     }
 

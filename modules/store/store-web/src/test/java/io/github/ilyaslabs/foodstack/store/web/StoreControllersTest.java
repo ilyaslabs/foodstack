@@ -21,13 +21,14 @@ import io.github.ilyaslabs.foodstack.store.core.application.MenuDetails;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuItemInput;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuService;
 import io.github.ilyaslabs.foodstack.store.core.application.NewStore;
+import io.github.ilyaslabs.foodstack.store.core.application.PaymentCollection;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreDetails;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreService;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreSummary;
 import io.github.ilyaslabs.foodstack.store.core.application.UpdateBrand;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -237,6 +238,30 @@ class StoreControllersTest {
             .content("{\"percentBasisPoints\":0,\"fixedMinor\":0}"))
             .andExpect(status().isForbidden());
         verify(this.storeService, never()).updateCommission(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("only finance lets a branch collect card payments itself, and the answer shows it")
+    void paymentCollection() throws Exception {
+        StoreDetails s = store(StoreStatus.LIVE);
+        StoreDetails direct = new StoreDetails(s.id(), s.slug(), s.brand(), s.branchName(), s.legalName(), s.taxId(),
+                s.ownerUserIds(), s.address(), s.location(), s.openingHours(), s.closures(), s.temporarilyClosed(),
+                s.closedReason(), s.prepMinutes(), s.deliveryMode(), s.operatorDeliveryAllowed(), s.pickupEnabled(),
+                s.commission(), s.status(), s.timezone(), s.openNow(), s.version(), s.createdAt(), s.updatedAt(), null, 80,
+                List.of(), Set.of(), new PaymentCollection("DIRECT", 900L, "Signed", "fin-1", Instant.ofEpochSecond(1_800_000_000L)));
+        given(this.storeService.setPaymentCollection("s1", "DIRECT", 900L, "Signed", "fin-1")).willReturn(direct);
+        String body = "{\"mode\":\"DIRECT\",\"creditLimitMinor\":900,\"reason\":\"Signed\"}";
+
+        this.mvc.perform(put("/api/v1/stores/s1/payment-collection").with(admin()).contentType(MediaType.APPLICATION_JSON)
+            .content(body)).andExpect(status().isForbidden());
+        this.mvc.perform(put("/api/v1/stores/s1/payment-collection")
+            .with(jwt().jwt((token) -> token.subject("fin-1"))
+                .authorities(List.of(new SimpleGrantedAuthority("store:payment-collection:manage"))))
+            .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.paymentCollection.mode").value("DIRECT"))
+            .andExpect(jsonPath("$.paymentCollection.creditLimitMinor").value(900))
+            .andExpect(jsonPath("$.paymentCollection.changedAt").value(1_800_000_000L));
     }
 
     private static BrandDetails brand() {

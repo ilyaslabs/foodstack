@@ -11,9 +11,6 @@ import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
-
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.util.LinkedMultiValueMap;
@@ -21,6 +18,8 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Stripe Checkout in its hosted mode (TDD 5.4, the first card gateway): a Checkout Session per
@@ -47,7 +46,7 @@ public class StripeGateway implements CardGateway {
 
     public StripeGateway(RestClient.Builder builder, String apiUrl, String secretKey, String webhookSecret, JsonMapper jsonMapper,
             Clock clock) {
-        this.http = builder.baseUrl(apiUrl).defaultHeaders((h) -> h.setBearerAuth(secretKey)).build();
+        this.http = builder.clone().baseUrl(apiUrl).defaultHeaders((h) -> h.setBearerAuth(secretKey)).build();
         this.webhookSecret = webhookSecret.getBytes(StandardCharsets.UTF_8);
         this.jsonMapper = jsonMapper;
         this.clock = clock;
@@ -99,6 +98,28 @@ public class StripeGateway implements CardGateway {
         return new WebhookEvent(outcome, session.path("client_reference_id").asString(), session.path("id").asString(),
                 session.path("payment_intent").asString(null), session.path("amount_total").asLong(),
                 WebhookEvent.FAILED.equals(outcome) ? "DECLINED" : null);
+    }
+
+    /** Reads the account's balance: allowed for every working secret key, and changes nothing. */
+    @Override
+    public void verify() {
+        try {
+            this.http.get().uri("/v1/balance").retrieve().body(String.class);
+        }
+        catch (RestClientResponseException ex) {
+            HttpStatusCode status = ex.getStatusCode();
+            String message = status.toString();
+            try {
+                message = this.jsonMapper.readTree(ex.getResponseBodyAsString()).path("error").path("message").asString(message);
+            }
+            catch (RuntimeException unreadable) {
+                // keep the status as the message
+            }
+            throw new GatewayException("Stripe: " + message, status.is5xxServerError() || status.value() == 429, ex);
+        }
+        catch (ResourceAccessException ex) {
+            throw new GatewayException("Stripe cannot be reached", true, ex);
+        }
     }
 
     @Override

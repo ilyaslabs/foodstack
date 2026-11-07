@@ -6,6 +6,7 @@ import java.time.Duration;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.notification.core.application.AccountMessages;
 import io.github.ilyaslabs.foodstack.notification.core.application.DispatchMessages;
+import io.github.ilyaslabs.foodstack.notification.core.application.FinanceMessages;
 import io.github.ilyaslabs.foodstack.notification.core.application.InboxService;
 import io.github.ilyaslabs.foodstack.notification.core.application.NotificationService;
 import io.github.ilyaslabs.foodstack.notification.core.application.OrderMessages;
@@ -15,9 +16,10 @@ import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport;
 import io.github.ilyaslabs.foodstack.notification.core.channel.SmtpMailTransport;
 import io.github.ilyaslabs.foodstack.notification.core.events.DispatchNotificationsListener;
 import io.github.ilyaslabs.foodstack.notification.core.events.IdentityNotificationsListener;
+import io.github.ilyaslabs.foodstack.notification.core.events.LedgerNotificationsListener;
 import io.github.ilyaslabs.foodstack.notification.core.events.OrderNotificationsListener;
-import io.github.ilyaslabs.foodstack.order.api.OrderApi;
 import io.github.ilyaslabs.foodstack.notification.core.push.FcmPushTransport;
+import io.github.ilyaslabs.foodstack.order.api.OrderApi;
 import io.github.ilyaslabs.foodstack.platform.core.PeriodicTask;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.InboxGuard;
@@ -28,7 +30,6 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
-import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +40,7 @@ import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Wiring of the notification module (TDD 5.2): its database, the message texts, email over SMTP
@@ -142,6 +144,18 @@ public class NotificationConfiguration {
     DispatchNotificationsListener notificationDispatchListener(DispatchMessages notificationDispatchMessages,
             InboxGuard notificationInbox, JsonMapper jsonMapper) {
         return new DispatchNotificationsListener(notificationDispatchMessages, notificationInbox, jsonMapper);
+    }
+
+    @Bean
+    FinanceMessages notificationFinanceMessages(NotificationService notificationService, SettingsApi settingsApi,
+            IdentityApi identityApi, ServiceCalls serviceCalls) {
+        return new FinanceMessages(notificationService, settingsApi, identityApi, serviceCalls);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    LedgerNotificationsListener notificationLedgerListener(FinanceMessages notificationFinanceMessages, JsonMapper jsonMapper) {
+        return new LedgerNotificationsListener(notificationFinanceMessages, jsonMapper);
     }
 
     @Bean

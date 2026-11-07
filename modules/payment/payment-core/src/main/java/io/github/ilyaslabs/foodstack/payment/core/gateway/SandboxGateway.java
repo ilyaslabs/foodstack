@@ -8,6 +8,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
+
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -29,10 +30,34 @@ public class SandboxGateway implements CardGateway {
 
     private final JsonMapper jsonMapper;
 
+    /** A store account's key, or {@code null} for the operator's own sandbox. */
+    private final String accountKey;
+
     public SandboxGateway(String publicUrl, String secret, JsonMapper jsonMapper) {
+        this(publicUrl, secret.getBytes(StandardCharsets.UTF_8), jsonMapper, null);
+    }
+
+    private SandboxGateway(String publicUrl, byte[] secret, JsonMapper jsonMapper, String accountKey) {
         this.publicUrl = publicUrl.replaceAll("/+$", "");
-        this.secret = secret.getBytes(StandardCharsets.UTF_8);
+        this.secret = secret;
         this.jsonMapper = jsonMapper;
+        this.accountKey = accountKey;
+    }
+
+    /**
+     * The sandbox on a store's own account. Its pages and webhooks are signed like the operator's,
+     * so the same page serves both; only {@link #verify()} looks at the key: keys starting with
+     * {@code sbx_} work, anything else is refused, so a failed connection can be tried out.
+     */
+    public SandboxGateway forAccount(String secretKey) {
+        return new SandboxGateway(this.publicUrl, this.secret, this.jsonMapper, (secretKey != null) ? secretKey : "");
+    }
+
+    @Override
+    public void verify() {
+        if (this.accountKey != null && !this.accountKey.startsWith("sbx_")) {
+            throw new GatewayException("Sandbox: this key is not valid (sandbox keys start with sbx_)", false, null);
+        }
     }
 
     @Override

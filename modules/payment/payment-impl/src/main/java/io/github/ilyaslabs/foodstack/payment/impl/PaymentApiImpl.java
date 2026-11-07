@@ -1,10 +1,12 @@
 package io.github.ilyaslabs.foodstack.payment.impl;
 
 import io.github.ilyaslabs.foodstack.payment.api.CardSessionView;
+import io.github.ilyaslabs.foodstack.payment.api.MerchantView;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentOptionsView;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentView;
 import io.github.ilyaslabs.foodstack.payment.api.StartCardRequest;
+import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts;
 import io.github.ilyaslabs.foodstack.payment.core.application.PaymentService;
 import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
 
@@ -20,8 +22,17 @@ class PaymentApiImpl implements PaymentApi {
 
     private final PaymentService payments;
 
-    PaymentApiImpl(PaymentService payments) {
+    private final MerchantAccounts accounts;
+
+    PaymentApiImpl(PaymentService payments, MerchantAccounts accounts) {
         this.payments = payments;
+        this.accounts = accounts;
+    }
+
+    @Override
+    public MerchantView resolveMerchant(String storeId) {
+        ModuleAccess.requireAuthenticated();
+        return this.accounts.resolve(storeId);
     }
 
     @Override

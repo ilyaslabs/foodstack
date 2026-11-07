@@ -50,7 +50,7 @@ public class SandboxCheckout {
         PaymentDocument payment = require(orderId, token);
         Map.Entry<byte[], Map<String, String>> webhook = this.gateway.webhook(
                 pay ? WebhookEvent.SUCCEEDED : WebhookEvent.FAILED, orderId, payment.sessionReference(), payment.amountMinor());
-        this.payments.handleWebhook(SandboxGateway.ID, webhook.getKey(), webhook.getValue());
+        this.payments.handleSandbox(payment, webhook.getKey(), webhook.getValue());
         return pay ? payment.returnUrl() : payment.cancelUrl();
     }
 

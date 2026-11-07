@@ -6,9 +6,9 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -72,13 +72,15 @@ class SettingsRepositoriesTest {
         assertThat(ordering.acceptTimeoutSeconds()).isEqualTo(180);
 
         OrderingDocument saved = this.orderingRepository.save(new OrderingDocument(OrderingDocument.ID, true, true, 50, 250,
-                1600, false, 300, null, "u1", ordering.version(), true));
+                1600, false, 300, null, "u1", ordering.version(), true, true, 100L));
         assertThat(saved.version()).isEqualTo(ordering.version() + 1);
         assertThat(this.orderingRepository.findById(OrderingDocument.ID).orElseThrow().taxBasisPoints()).isEqualTo(1600);
+        assertThat(this.orderingRepository.findById(OrderingDocument.ID).orElseThrow().directCollection()).isTrue();
+        assertThat(this.orderingRepository.findById(OrderingDocument.ID).orElseThrow().creditLimit()).isEqualTo(100L);
         assertThatExceptionOfType(OptimisticLockingFailureException.class).isThrownBy(() -> this.orderingRepository
-            .save(new OrderingDocument(OrderingDocument.ID, true, true, 0, 0, 0, true, 180, null, "u2", ordering.version(), false)));
+            .save(new OrderingDocument(OrderingDocument.ID, true, true, 0, 0, 0, true, 180, null, "u2", ordering.version(), false, null, null)));
         this.orderingRepository.save(new OrderingDocument(OrderingDocument.ID, true, false, 0, 0, 0, true, 180, null, null,
-                saved.version(), false));
+                saved.version(), false, null, null));
     }
 
     @Test

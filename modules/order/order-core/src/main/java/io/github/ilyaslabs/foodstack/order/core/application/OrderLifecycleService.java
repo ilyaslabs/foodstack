@@ -12,8 +12,8 @@ import java.util.function.Function;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.order.api.OrderDelivery;
-import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
 import io.github.ilyaslabs.foodstack.order.api.OrderMoney;
+import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
 import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderAccepted;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCancelled;
@@ -27,17 +27,17 @@ import io.github.ilyaslabs.foodstack.order.api.events.OrderReady;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderRefunded;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderRejected;
 import io.github.ilyaslabs.foodstack.order.core.persistence.ActiveOrderDocument;
-import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument.TimelineEntry;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument;
+import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument.TimelineEntry;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
 import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -437,7 +437,7 @@ public class OrderLifecycleService {
         OrderDocument.Totals t = o.totals();
         OrderDocument.Commission c = o.commission();
         return new OrderMoney(o.store().brandId(), (o.fulfilment() == Fulfilment.DELIVERY) ? o.deliveryMode() : null,
-                OrderMoney.OPERATOR, t.subtotalMinor(), t.itemsDiscountMinor(), t.deliveryChargeMinor(),
+                o.collectedBy(), t.subtotalMinor(), t.itemsDiscountMinor(), t.deliveryChargeMinor(),
                 t.deliveryDiscountMinor(), t.serviceFeeMinor(), t.taxMinor(), t.tipMinor(),
                 (o.coupon() != null) ? o.coupon().operatorShareMinor() : 0, (c != null) ? c.basisPoints() : 0,
                 (c != null) ? c.fixedMinor() : 0);
