@@ -1,0 +1,79 @@
+{{- $n := include "obs.name" . }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $n }}-prometheus
+  labels: {{- include "obs.labels" . | nindent 4 }}
+---
+# Read-only pod discovery in every namespace: FoodStack pods carry prometheus.io/* annotations.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Release.Namespace }}-{{ $n }}-prometheus
+  labels: {{- include "obs.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods, services, endpoints, nodes]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Namespace }}-{{ $n }}-prometheus
+  labels: {{- include "obs.labels" . | nindent 4 }}
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: {{ .Release.Namespace }}-{{ $n }}-prometheus }
+subjects:
+  - { kind: ServiceAccount, name: {{ $n }}-prometheus, namespace: {{ .Release.Namespace }} }
+---
+{{ include "obs.pvc" (list . "prometheus" .Values.prometheus.storage) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $n }}-prometheus
+  labels: {{- include "obs.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "obs.selector" (list . "prometheus") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "obs.selector" (list . "prometheus") | nindent 8 }}
+        {{- if .Values.ambient }}
+        istio.io/dataplane-mode: ambient
+        {{- end }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/prometheus-config.yaml") . | sha256sum | trunc 16 }}
+    spec:
+      serviceAccountName: {{ $n }}-prometheus
+      {{- include "obs.podSecurity" . | nindent 6 }}
+      containers:
+        - name: prometheus
+          image: {{ .Values.prometheus.image }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retention }}
+            - --web.enable-lifecycle
+          ports: [{ name: http, containerPort: 9090 }]
+          readinessProbe: { httpGet: { path: /-/ready, port: http } }
+          livenessProbe: { httpGet: { path: /-/healthy, port: http }, initialDelaySeconds: 30 }
+          resources: {{- toYaml .Values.prometheus.resources | nindent 12 }}
+          {{- include "obs.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/prometheus }
+            - { name: data, mountPath: /prometheus }
+      volumes:
+        - { name: config, configMap: { name: {{ $n }}-prometheus } }
+        - { name: data, persistentVolumeClaim: { claimName: {{ $n }}-prometheus } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $n }}-prometheus
+  labels: {{- include "obs.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "obs.selector" (list . "prometheus") | nindent 4 }}
+  ports: [{ name: http, port: 9090, targetPort: http }]

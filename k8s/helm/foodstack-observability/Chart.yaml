@@ -1,0 +1,13 @@
+apiVersion: v2
+name: foodstack-observability
+description: Metrics, logs, traces, dashboards and alerts for FoodStack on Kubernetes (TDD 18.5). Prometheus, Grafana, Loki, Tempo and an OpenTelemetry Collector, each as one small pod.
+type: application
+version: 0.1.0
+appVersion: "0.1.0-SNAPSHOT"
+kubeVersion: ">=1.31.0-0"
+home: https://github.com/ilyaslabs/foodstack
+sources:
+  - https://github.com/ilyaslabs/foodstack
+keywords: [foodstack, prometheus, grafana, loki, tempo, opentelemetry]
+annotations:
+  licenses: Fair Revenue License v1 (https://ilyaslabs.github.io/docs/licenses/fair-revenue-v1)

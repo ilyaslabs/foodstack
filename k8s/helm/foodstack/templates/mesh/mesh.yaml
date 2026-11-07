@@ -3,7 +3,8 @@
   encrypts and authenticates every connection with the pod's service account. Port 8081
   (module-to-module) only from FoodStack server service accounts; public ports only from the
   gateways and the web app; datastores only from the server. The management port (health,
-  metrics) also takes plain connections, so a Prometheus outside the mesh can scrape it.
+  metrics) is open to any workload in the mesh: ztunnel only takes mutual TLS, so Prometheus joins
+  the mesh to scrape it (the observability chart's `ambient` value).
 */ -}}
 {{- if .Values.mesh.enabled }}
 {{- $root := . }}
@@ -24,18 +25,6 @@ spec:
   selector:
     matchLabels: { app.kubernetes.io/instance: {{ .Release.Name }} }
   mtls: { mode: {{ .Values.mesh.mtls }} }
----
-apiVersion: security.istio.io/v1
-kind: PeerAuthentication
-metadata:
-  name: {{ $fn }}-server-management
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
-spec:
-  selector:
-    matchLabels: { app.kubernetes.io/name: foodstack-server, app.kubernetes.io/instance: {{ .Release.Name }} }
-  mtls: { mode: {{ .Values.mesh.mtls }} }
-  portLevelMtls:
-    8082: { mode: PERMISSIVE }
 ---
 # L4, enforced by ztunnel on the server pods.
 apiVersion: security.istio.io/v1

@@ -1,0 +1,85 @@
+{{- $n := include "obs.name" . }}
+{{- $config := printf `auth_enabled: false
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9095
+  log_level: warn
+common:
+  path_prefix: /loki
+  replication_factor: 1
+  ring: { kvstore: { store: inmemory } }
+  storage:
+    filesystem: { chunks_directory: /loki/chunks, rules_directory: /loki/rules }
+schema_config:
+  configs:
+    - from: "2026-01-01"
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index: { prefix: index_, period: 24h }
+limits_config:
+  retention_period: %s
+  allow_structured_metadata: true
+  volume_enabled: true
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
+analytics:
+  reporting_enabled: false
+` .Values.loki.retention }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $n }}-loki
+  labels: {{- include "obs.labels" . | nindent 4 }}
+data:
+  loki.yaml: {{- $config | toYaml | indent 1 }}
+---
+{{ include "obs.pvc" (list . "loki" .Values.loki.storage) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $n }}-loki
+  labels: {{- include "obs.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "obs.selector" (list . "loki") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "obs.selector" (list . "loki") | nindent 8 }}
+      annotations:
+        checksum/config: {{ $config | sha256sum | trunc 16 }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3100"
+    spec:
+      {{- include "obs.podSecurity" . | nindent 6 }}
+      containers:
+        - name: loki
+          image: {{ .Values.loki.image }}
+          args: [-config.file=/etc/loki/loki.yaml, -target=all]
+          ports:
+            - { name: http, containerPort: 3100 }
+          readinessProbe: { httpGet: { path: /ready, port: http }, initialDelaySeconds: 10 }
+          resources: {{- toYaml .Values.loki.resources | nindent 12 }}
+          {{- include "obs.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/loki }
+            - { name: data, mountPath: /loki }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: config, configMap: { name: {{ $n }}-loki } }
+        - { name: data, persistentVolumeClaim: { claimName: {{ $n }}-loki } }
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $n }}-loki
+  labels: {{- include "obs.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "obs.selector" (list . "loki") | nindent 4 }}
+  ports: [{ name: http, port: 3100, targetPort: http }]
