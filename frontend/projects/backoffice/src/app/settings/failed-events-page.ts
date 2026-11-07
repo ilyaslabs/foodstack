@@ -205,7 +205,12 @@ function title(module: string): string {
         padding: 14px 16px;
       }
       .actions {
-        margin-inline-start: 52px;
+        inline-size: 100%;
+        margin-inline-start: 0;
+        justify-content: flex-end;
+      }
+      .actions > button:first-child {
+        margin-inline-end: auto;
       }
     }
   `,
