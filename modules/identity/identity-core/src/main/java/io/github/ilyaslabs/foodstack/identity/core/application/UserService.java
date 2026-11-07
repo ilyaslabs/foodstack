@@ -140,6 +140,7 @@ public class UserService {
             document.setTokenVersion(1);
             document.setCreatedBy(id);
             document.setSocialLogins(Map.of(provider, subject));
+            document.setEmailVerifiedAt(now);
             document.setCreatedAt(now);
             document.setUpdatedAt(now);
             try {
@@ -170,10 +171,33 @@ public class UserService {
             java.util.Map<String, String> logins = new java.util.TreeMap<>(user.getSocialLogins());
             logins.put(provider, subject);
             user.setSocialLogins(logins);
+            // Sign-up does not prove the address, so anyone could have made this account with a
+            // password for someone else's email. The provider has now proved who owns it: a
+            // password nobody proved the address for stops working, and so do its sign-ins.
+            boolean unproven = user.getEmailVerifiedAt() == null && user.getPasswordHash() != null;
+            if (unproven) {
+                user.setPasswordHash(null);
+            }
+            if (user.getEmailVerifiedAt() == null) {
+                user.setEmailVerifiedAt(this.clock.instant());
+            }
+            user.setUpdatedAt(this.clock.instant());
+            this.users.save(user);
+            if (unproven) {
+                revokeTokens(userId, "SOCIAL_LINKED");
+            }
+        }
+        return userId;
+    }
+
+    /** Records that the user read a code sent to their address (an emailed sign-in code). */
+    public void markEmailVerified(String userId) {
+        UserDocument user = find(userId);
+        if (user.getEmailVerifiedAt() == null) {
+            user.setEmailVerifiedAt(this.clock.instant());
             user.setUpdatedAt(this.clock.instant());
             this.users.save(user);
         }
-        return userId;
     }
 
     /** The user that logs in with {@code email}, if any. */
@@ -233,6 +257,9 @@ public class UserService {
         UserDocument user = find(userId);
         requirePassword(newPassword);
         user.setPasswordHash(this.passwordEncoder.encode(newPassword));
+        if (user.getEmailVerifiedAt() == null) {
+            user.setEmailVerifiedAt(this.clock.instant());
+        }
         user.setUpdatedAt(this.clock.instant());
         this.users.save(user);
         revokeTokens(userId, "PASSWORD_RESET");
