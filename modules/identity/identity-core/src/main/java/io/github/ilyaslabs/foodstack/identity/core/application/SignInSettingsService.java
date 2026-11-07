@@ -29,13 +29,18 @@ public class SignInSettingsService {
         this.clock = clock;
     }
 
-    public SignInSettingsDocument get() {
+    public SignInProviders get() {
+        SignInSettingsDocument settings = read();
+        return new SignInProviders(settings.googleClientIds(), settings.appleClientIds());
+    }
+
+    private SignInSettingsDocument read() {
         SignInSettingsDocument found = this.mongo.findById(SignInSettingsDocument.ID, SignInSettingsDocument.class);
         return (found != null) ? found : new SignInSettingsDocument(SignInSettingsDocument.ID, List.of(), List.of(), null, null);
     }
 
     public List<String> clientIds(String provider) {
-        SignInSettingsDocument settings = get();
+        SignInProviders settings = get();
         return switch (provider.toLowerCase(Locale.ROOT)) {
             case "google" -> settings.googleClientIds();
             case "apple" -> settings.appleClientIds();
@@ -43,10 +48,11 @@ public class SignInSettingsService {
         };
     }
 
-    public SignInSettingsDocument update(Collection<String> googleClientIds, Collection<String> appleClientIds, String by) {
+    public SignInProviders update(Collection<String> googleClientIds, Collection<String> appleClientIds, String by) {
         List<String> google = clean("googleClientIds", googleClientIds);
         List<String> apple = clean("appleClientIds", appleClientIds);
-        return this.mongo.save(new SignInSettingsDocument(SignInSettingsDocument.ID, google, apple, by, this.clock.instant()));
+        this.mongo.save(new SignInSettingsDocument(SignInSettingsDocument.ID, google, apple, by, this.clock.instant()));
+        return new SignInProviders(google, apple);
     }
 
     private static List<String> clean(String field, Collection<String> ids) {

@@ -88,6 +88,10 @@ public final class FoodstackPlatform {
         Map<String, String> shared = sharedProperties(namespace);
         Map<String, String> moduleUrls = new LinkedHashMap<>();
         List<ConfigurableApplicationContext> contexts = new ArrayList<>();
+        // Like an install: the migrate-only run first (Helm hook Job, install.sh), then the servers
+        Map<String, String> migrate = new LinkedHashMap<>(shared);
+        migrate.put("foodstack.migrate-only", "true");
+        run("migrate", migrate).close();
         if (topology == Topology.MONOLITH) {
             int port = freePort();
             String url = "http://localhost:" + port;

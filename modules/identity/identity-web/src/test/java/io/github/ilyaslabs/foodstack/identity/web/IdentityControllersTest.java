@@ -19,7 +19,7 @@ import io.github.ilyaslabs.foodstack.identity.core.application.TwoFactorService;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserAccount;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserDirectory;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
-import io.github.ilyaslabs.foodstack.identity.core.persistence.SignInSettingsDocument;
+import io.github.ilyaslabs.foodstack.identity.core.application.SignInProviders;
 import io.github.ilyaslabs.foodstack.identity.core.security.ChallengeTokens;
 import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
@@ -266,7 +266,7 @@ class IdentityControllersTest {
     @Test
     @DisplayName("social sign-in: the buttons are public, switching them is for settings managers")
     void providers() throws Exception {
-        given(this.signInSettings.get()).willReturn(new SignInSettingsDocument("sign-in", List.of("g.apps"), List.of(), null, null));
+        given(this.signInSettings.get()).willReturn(new SignInProviders(List.of("g.apps"), List.of()));
         given(this.sessions.signInWithSocial("google", "id-token", null, Client.MOBILE)).willReturn(session(Client.MOBILE));
 
         this.mvc.perform(get("/api/v1/auth/providers"))
