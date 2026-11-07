@@ -55,6 +55,7 @@ import { STATUS_LABELS } from './store-status';
     MatFormFieldModule,
     MatInputModule,
     MatProgressBarModule,
+    MatSelectModule,
     MatSlideToggleModule,
     Icon,
     StoreOwners,
@@ -126,6 +127,30 @@ import { STATUS_LABELS } from './store-status';
             </p>
           </section>
         </mat-card>
+
+        @if (session.operator() && boost() !== null) {
+          <mat-card appearance="outlined">
+            <section class="card-section">
+              <h2>Search placement</h2>
+              <p class="section-hint">
+                Customers see stores ranked by distance and rating. A higher placement moves every
+                branch of this brand up the list; open stores still come before closed ones.
+              </p>
+              <mat-form-field appearance="outline" class="boost">
+                <mat-label>Placement</mat-label>
+                <mat-select
+                  [value]="boost()"
+                  (selectionChange)="setBoost($event.value)"
+                  [disabled]="saving()"
+                >
+                  @for (option of boostLevels; track option.level) {
+                    <mat-option [value]="option.level">{{ option.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            </section>
+          </mat-card>
+        }
 
         <mat-card appearance="outlined">
           <section class="card-section">
@@ -338,6 +363,9 @@ import { STATUS_LABELS } from './store-status';
     .history tr.planned td {
       color: var(--mat-sys-primary);
     }
+    .boost {
+      max-inline-size: 280px;
+    }
     .inline-actions {
       display: flex;
       justify-content: flex-end;
@@ -367,6 +395,13 @@ export class StoreBrand {
   protected readonly branches = signal<StoreSummary[] | null>(null);
   protected readonly cities = signal<City[]>([]);
   protected readonly saving = signal(false);
+  protected readonly boost = signal<number | null>(null);
+  protected readonly boostLevels = [
+    { level: 0, label: 'Normal' },
+    { level: 1, label: 'Higher' },
+    { level: 2, label: 'Much higher' },
+    { level: 3, label: 'Top' },
+  ];
   protected readonly nowMillis = Date.now();
   protected readonly today = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
     .toISOString()
@@ -419,6 +454,12 @@ export class StoreBrand {
       ]);
       this.fill(brand.value);
       this.branches.set(branches);
+      if (this.session.operator()) {
+        firstValueFrom(this.brands.searchBoost(store.brand.id)).then(
+          (boost) => this.boost.set(boost.level),
+          () => this.boost.set(null),
+        );
+      }
     } catch (error) {
       this.branches.set([]);
       this.snackBar.open(describeError(error, 'The brand could not be loaded.'), 'Dismiss', {
@@ -456,6 +497,26 @@ export class StoreBrand {
         { duration: 3000 },
       );
     } catch (error) {
+      this.snackBar.open(describeError(error, 'That did not work. Try again.'), 'Dismiss', {
+        duration: 8000,
+      });
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async setBoost(level: number): Promise<void> {
+    const brand = this.brand()!;
+    const before = this.boost();
+    this.boost.set(level);
+    this.saving.set(true);
+    try {
+      this.boost.set((await firstValueFrom(this.brands.updateSearchBoost(brand.id, level))).level);
+      this.snackBar.open('Saved. Search shows the new placement shortly.', undefined, {
+        duration: 3000,
+      });
+    } catch (error) {
+      this.boost.set(before);
       this.snackBar.open(describeError(error, 'That did not work. Try again.'), 'Dismiss', {
         duration: 8000,
       });

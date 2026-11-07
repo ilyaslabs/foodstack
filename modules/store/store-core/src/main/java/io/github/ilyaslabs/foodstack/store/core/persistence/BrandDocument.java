@@ -51,6 +51,9 @@ public class BrandDocument {
     /** Whether branch managers may create promotions for their own branch (PRD BB-11). */
     private boolean branchPromotionsAllowed;
 
+    /** The operator's search boost, 0 (none) to 3 (PRD SE-3, TDD 11). */
+    private int searchBoost;
+
     private int branchCount;
 
     private Instant createdAt;
@@ -207,5 +210,13 @@ public class BrandDocument {
 
     public void setBranchPromotionsAllowed(boolean branchPromotionsAllowed) {
         this.branchPromotionsAllowed = branchPromotionsAllowed;
+    }
+
+    public int getSearchBoost() {
+        return this.searchBoost;
+    }
+
+    public void setSearchBoost(int searchBoost) {
+        this.searchBoost = searchBoost;
     }
 }

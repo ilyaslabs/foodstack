@@ -206,6 +206,13 @@ export class Shell {
       permission: ['settings:manage', 'order:manage'],
     },
     {
+      path: '/settings/failed-events',
+      label: 'Failed events',
+      icon: 'warning',
+      exact: false,
+      permission: 'settings:manage',
+    },
+    {
       path: '/audit',
       label: 'Audit log',
       icon: 'history',

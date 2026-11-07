@@ -121,6 +121,11 @@ export const routes: Routes = [
           import('./settings/sign-in-settings-page').then((m) => m.SignInSettingsPage),
       },
       {
+        path: 'settings/failed-events',
+        loadComponent: () =>
+          import('./settings/failed-events-page').then((m) => m.FailedEventsPage),
+      },
+      {
         path: 'account/security',
         loadComponent: () => import('./account/security-page').then((m) => m.SecurityPage),
       },
