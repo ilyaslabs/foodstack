@@ -33,6 +33,7 @@
     "express": "^5.1.0",
     "firebase": "13.0.0",
     "maplibre-gl": "6.14.0",
+    "qrcode-generator": "1.4.4",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },

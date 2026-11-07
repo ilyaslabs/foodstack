@@ -31,6 +31,10 @@
     </div>
     <mat-divider />
   }
+  <a mat-menu-item routerLink="/account/security">
+    <fs-icon matMenuItemIcon name="lock" />
+    <span>Two-step sign-in</span>
+  </a>
   <button mat-menu-item type="button" (click)="signOut()">
     <fs-icon matMenuItemIcon name="logout" />
     <span>Sign out</span>

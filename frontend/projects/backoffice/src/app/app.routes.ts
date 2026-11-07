@@ -116,6 +116,15 @@ export const routes: Routes = [
         loadComponent: () => import('./settings/locale-page').then((m) => m.LocalePage),
       },
       {
+        path: 'settings/sign-in',
+        loadComponent: () =>
+          import('./settings/sign-in-settings-page').then((m) => m.SignInSettingsPage),
+      },
+      {
+        path: 'account/security',
+        loadComponent: () => import('./account/security-page').then((m) => m.SecurityPage),
+      },
+      {
         path: 'settings/branding',
         loadComponent: () => import('./settings/branding-page').then((m) => m.BrandingPage),
       },

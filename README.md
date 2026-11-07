@@ -59,6 +59,11 @@ These are fixed so every developer and tester uses the same ones. They exist onl
 | `LocalFoodstackApplication` | `admin@local.foodstack.local` | `foodstack-local` | Administrator (first-start account) |
 | `./install.sh <folder> --local` | `admin@foodstack.localhost` | `foodstack-local` | Administrator |
 
+Real installs, including `--local` trial installs, ask administrator and finance accounts to set up
+an authenticator app at their first sign-in (two-step sign-in, PRD ID-5); keep the recovery codes it
+shows. `LocalFoodstackApplication` leaves two-step sign-in optional, so the shared accounts above keep
+working for everyone; try it from the account menu.
+
 In a local run, emails (order updates, sign-in codes, password resets) go to Mailpit, whose web page
 is printed at start-up ("Emails sent by this run: http://localhost:<port>"); open it to read a sign-in
 code. Card payments use the sandbox page, which charges nothing: switch card on in the back office

@@ -14,7 +14,14 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
-import { Role, UserAccount, UserPage, UserStatus, UsersClient } from '@foodstack/api-client';
+import {
+  Role,
+  TwoStepClient,
+  UserAccount,
+  UserPage,
+  UserStatus,
+  UsersClient,
+} from '@foodstack/api-client';
 import { Icon } from '@foodstack/ui';
 
 import { confirmAction } from '../shared/confirm-dialog';
@@ -154,6 +161,12 @@ interface Filters {
                         <span>Block</span>
                       </button>
                     }
+                    @if (staff(user)) {
+                      <button mat-menu-item type="button" (click)="resetTwoStep(user)">
+                        <fs-icon matMenuItemIcon name="key" />
+                        <span>Reset two-step sign-in</span>
+                      </button>
+                    }
                   </mat-menu>
                 }
               </li>
@@ -271,6 +284,7 @@ interface Filters {
 export class UsersPage {
   protected readonly session = inject(Session);
   private readonly client = inject(UsersClient);
+  private readonly twoStep = inject(TwoStepClient);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
 
@@ -377,6 +391,35 @@ export class UsersPage {
       this.snackBar.open(`${user.displayName} is blocked`, undefined, { duration: 4000 });
     } catch (error) {
       this.snackBar.open(describeError(error, 'The account could not be blocked.'), 'Close', {
+        duration: 6000,
+      });
+    }
+  }
+
+  /** Back-office accounts can have two-step sign-in; customers sign in without it. */
+  protected staff(user: UserAccount): boolean {
+    return user.roles.some((role) => role !== 'CUSTOMER');
+  }
+
+  /** For a lost phone and lost recovery codes: removes the authenticator app from the account. */
+  protected async resetTwoStep(user: UserAccount): Promise<void> {
+    const confirmed = await confirmAction(this.dialog, {
+      title: `Reset two-step sign-in for ${user.displayName}?`,
+      message:
+        'Their authenticator app and recovery codes stop working and they are signed out everywhere. Check who is asking first. If their role requires two-step sign-in, they set up a new app at their next sign-in.',
+      confirm: 'Reset',
+      danger: true,
+    });
+    if (confirmed === null) {
+      return;
+    }
+    try {
+      await firstValueFrom(this.twoStep.reset(user.id));
+      this.snackBar.open(`Two-step sign-in is reset for ${user.displayName}`, undefined, {
+        duration: 4000,
+      });
+    } catch (error) {
+      this.snackBar.open(describeError(error, 'Two-step sign-in could not be reset.'), 'Close', {
         duration: 6000,
       });
     }

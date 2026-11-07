@@ -11,7 +11,7 @@ import { SIGN_IN_TRANSLATIONS } from './sign-in-texts';
   imports: [SignIn],
   template: `
     <div class="page">
-      <fs-sign-in [allowSignUp]="true" [texts]="texts()" />
+      <fs-sign-in [allowSignUp]="true" [social]="true" [texts]="texts()" />
     </div>
   `,
   styles: `
