@@ -36,6 +36,34 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+  # Both Helm charts lint and render valid Kubernetes objects in every topology, for the trial
+  # values and a production-shaped install (TDD 18.1).
+  charts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.19.0
+      - name: Lint
+        run: |
+          helm lint k8s/helm/foodstack -f k8s/helm/foodstack/values-dev.yaml
+          helm lint k8s/helm/foodstack -f k8s/helm/foodstack/ci/production-values.yaml
+          helm lint k8s/helm/foodstack-observability
+      - name: Validate the rendered objects
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          check() {
+            ./kubeconform -strict -summary -kubernetes-version 1.31.0 -ignore-missing-schemas \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          }
+          for topology in monolith split microservices; do
+            helm template fs k8s/helm/foodstack -n foodstack -f k8s/helm/foodstack/values-dev.yaml --set topology=$topology | check
+          done
+          helm template fs k8s/helm/foodstack -n foodstack -f k8s/helm/foodstack/ci/production-values.yaml --set topology=split | check
+          helm template obs k8s/helm/foodstack-observability -n foodstack-observability --set alertmanager.enabled=true | check
+
   # The release artefacts still build: the unit deployer zip and the images (not pushed).
   package:
     runs-on: ubuntu-latest
