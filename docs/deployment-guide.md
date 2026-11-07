@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Draft v1, written with the design ([TDD](TDD.md) sections 16 to 19). Commands and file names are the planned interface; they become runnable from milestone M0 (single server) and M5 (Kubernetes) |
+| Status | v1. Single server since M0; Kubernetes (Helm) since M5, checked on a test cluster in every topology ([TDD](TDD.md) sections 17, 18 and 27) |
 | Audience | The operator's DevOps or whoever installs and runs FoodStack |
 
 ## 1. Choose your path
@@ -155,7 +155,7 @@ Migrations are always backward compatible with the previous release, so a rollba
 
 - [ ] Only ports 22, 80 and 443 open; SSH by key only, from known IPs.
 - [ ] OS security updates automatic (`unattended-upgrades` or equivalent).
-- [ ] Two-factor login for every admin and finance user.
+- [ ] Two-step sign-in for every back-office account that can change money or settings (required for ADMIN and FINANCE; others turn it on under **Two-step sign-in** in the account menu).
 - [ ] Daily off-server backups, and one test restore done.
 - [ ] Real SMTP, maps and payment credentials set; demo map services not used.
 - [ ] `FOODSTACK_ENVIRONMENT=production` (blocks the `test-seed` demo data).
@@ -169,12 +169,29 @@ Migrations are always backward compatible with the previous release, so a rollba
 | Component | Version | Notes |
 |---|---|---|
 | Kubernetes | 1.31+ | Any CNCF-conformant distribution or managed service |
-| Gateway API CRDs | v1.2+ | Standard channel |
-| Istio | Ambient mode | Recommended: mTLS between all pods and per-request load balancing. The chart also works without it (`mesh.enabled=false`) |
+| Gateway API CRDs | v1.3+ | Standard channel |
+| Istio | 1.30+, ambient mode | mTLS between all pods and per-request load balancing. istiod **must** run with `PILOT_JWT_ENABLE_REMOTE_JWKS=envoy` (below). The chart also works without Istio (`mesh.enabled=false`, any Gateway API implementation) |
 | cert-manager | 1.16+ | Issues TLS certificates (for example with Let's Encrypt) |
 | Metrics Server | | Needed for autoscaling |
-| External Secrets Operator | Optional | If secrets live in a cloud secret manager or Vault |
 | Nodes | 3+ across 2+ zones | Reference: 3 × 4 vCPU / 16 GB for `monolith` with managed datastores |
+
+Install the Gateway API CRDs and Istio in ambient mode:
+
+```bash
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.3.0/standard-install.yaml
+
+helm repo add istio https://istio-release.storage.googleapis.com/charts && helm repo update
+helm install istio-base istio/base -n istio-system --create-namespace --wait
+# The gateway fetches the token keys itself and keeps retrying. Without this setting istiod
+# fetches them once; if FoodStack is still starting at that moment, every signed-in request is
+# refused ("Jwt verification fails") for up to 20 minutes.
+helm install istiod istio/istiod -n istio-system --set profile=ambient \
+  --set pilot.env.PILOT_JWT_ENABLE_REMOTE_JWKS=envoy --wait
+helm install istio-cni istio/cni -n istio-system --set profile=ambient --wait
+helm install ztunnel istio/ztunnel -n istio-system --wait
+```
+
+On k3s add `--set global.platform=k3s` to the istiod, istio-cni and ztunnel installs.
 
 ### 4.2 Datastores
 
@@ -184,79 +201,90 @@ Use managed services or operator-run clusters in production. Minimums for a refe
 |---|---|---|
 | MongoDB | 3-member replica set, 7.0+ | Transactions require a replica set. FoodStack creates one database per module (`foodstack_<module>`) |
 | Kafka | 3 brokers, 3.7+ (KRaft) | Topics are created by FoodStack with 24 partitions and replication factor 3 |
-| Redis | Primary with a replica, or Redis Cluster, 7+ | Cache and coordination only |
+| Redis | Primary with a replica, or Redis Cluster, 7+ | Cache, coordination and the gateway's rate-limit counters |
 | Elasticsearch | 3 nodes, 9.x | Search indices rebuildable from data |
 | Object storage | S3 or compatible | Two buckets: `foodstack-public`, `foodstack-private` |
 
-For trials, `-f values-dev.yaml` runs all of them inside the cluster with small sizes. Do not use it for production.
+### 4.3 Try it first: a trial cluster
 
-### 4.3 Create secrets
+`values-dev.yaml` runs every datastore inside the cluster with small sizes, sends emails to Mailpit and serves plain HTTP on `foodstack.localhost` names. Not for real data: no backups, no high availability.
 
 ```bash
-kubectl create namespace foodstack
-kubectl label namespace foodstack istio.io/dataplane-mode=ambient
-
-kubectl -n foodstack create secret generic foodstack-datastores \
-  --from-literal=MONGODB_URI='mongodb+srv://…' \
-  --from-literal=KAFKA_BOOTSTRAP='kafka-1:9092,kafka-2:9092,kafka-3:9092' \
-  --from-literal=REDIS_URL='rediss://…' \
-  --from-literal=ELASTICSEARCH_URL='https://…' \
-  --from-literal=S3_ACCESS_KEY='…' --from-literal=S3_SECRET_KEY='…'
-
-kubectl -n foodstack create secret generic foodstack-keys \
-  --from-file=jwt-private.pem --from-file=jwt-public.pem \
-  --from-literal=PII_KEY="$(openssl rand -base64 32)"
-
-kubectl -n foodstack create secret generic foodstack-providers \
-  --from-literal=SMTP_PASSWORD='…' --from-file=fcm.json \
-  --from-literal=PAYMENT_GATEWAY_SECRET='…'
+helm install foodstack oci://ghcr.io/ilyaslabs/charts/foodstack --version 1.0.0 \
+  -n foodstack --create-namespace -f https://raw.githubusercontent.com/ilyaslabs/foodstack/v1.0.0/k8s/helm/foodstack/values-dev.yaml
 ```
 
-The internal Module-Switch token is generated by the chart. With External Secrets Operator, set `secrets.externalSecrets.enabled=true` and map the same keys instead.
+The notes printed at the end give the gateway address, the first administrator's password and the Mailpit command. Point `foodstack.localhost` and `admin.foodstack.localhost` at the gateway address in your hosts file, then open `http://admin.foodstack.localhost/admin/`.
 
-### 4.4 Minimal values
+### 4.4 Values for a real install
+
+The chart generates the token signing key, the personal-data key, the internal Module-Switch token and the first administrator's password into the Secret `foodstack-secrets` on the first install, and keeps them on every upgrade. **Back that Secret up**: without it the stored personal data cannot be read. To bring your own (for example from a secret manager, or the keys of a single server you are moving from), create a Secret with the same keys and name it in `secrets.existingSecret`.
 
 ```yaml
 # my-values.yaml
-global:
-  domains:
-    web: example.com
-    backoffice: admin.example.com
-    api: api.example.com
-  tls:
-    clusterIssuer: letsencrypt-prod
-
 topology: monolith            # monolith | split | microservices | custom
 
+hosts:
+  web: example.com
+  admin: admin.example.com
+  api: api.example.com
+
+gateway:
+  tls:
+    certManager: { issuer: letsencrypt }   # a ClusterIssuer; or secretName: an existing TLS Secret
+
 secrets:
-  datastores: foodstack-datastores
-  keys: foodstack-keys
-  providers: foodstack-providers
+  adminEmail: you@example.com
 
-storage:
-  endpoint: ""                # empty = AWS S3
-  region: eu-central-1
-
-mesh:
-  enabled: true               # Istio ambient
+# Either the connection details here (the chart keeps them in a Secret)...
+datastores:
+  mongodb: { uri: "mongodb+srv://…", sharding: false }
+  redis: { url: "rediss://:…@redis.example.com:6380" }
+  kafka: { bootstrap: "kafka-1:9092,kafka-2:9092,kafka-3:9092", replicationFactor: 3 }
+  elasticsearch: { uris: "https://es.example.com:9200", password: "…" }
+  s3: { accessKey: "…", secretKey: "…", publicEndpoint: "https://cdn.example.com" }
+# ...or the credentials in an existing Secret (keys MONGODB_URI, REDIS_URL,
+# ELASTICSEARCH_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY), with kafka.bootstrap and
+# elasticsearch.uris still given above:
+#   datastores: { existingSecret: foodstack-datastores, … }
 
 server:
-  resources:
-    requests: { cpu: "1", memory: 2Gi }
-    limits:   { memory: 3Gi }
+  env:
+    PAYMENT_GATEWAY: stripe
+    GEOCODING_PROVIDER: nominatim
+  # Secrets loaded whole into every server pod: the settings of section 3.3 (SMTP_*, STRIPE_*, FCM_*, maps)
+  envFromSecrets: [foodstack-providers]
+```
+
+```bash
+kubectl create namespace foodstack
+kubectl -n foodstack create secret generic foodstack-providers \
+  --from-literal=SMTP_HOST=smtp.example.com --from-literal=SMTP_USERNAME=… --from-literal=SMTP_PASSWORD=… \
+  --from-literal=SMTP_AUTH=true --from-literal=SMTP_STARTTLS=true --from-literal=SMTP_FROM=orders@example.com \
+  --from-literal=STRIPE_SECRET_KEY=… --from-literal=STRIPE_WEBHOOK_SECRET=… \
+  --from-file=FCM_SERVICE_ACCOUNT=fcm.json   # the key file's JSON itself; a path works on one server only
 ```
 
 ### 4.5 Install and verify
 
 ```bash
-helm install foodstack oci://ghcr.io/ilyaslabs/charts/foodstack \
-  --version 1.0.0 -n foodstack -f my-values.yaml
+helm install foodstack oci://ghcr.io/ilyaslabs/charts/foodstack --version 1.0.0 \
+  -n foodstack -f my-values.yaml
 
-kubectl -n foodstack get pods,httproute,hpa
-kubectl -n foodstack logs deploy/foodstack-core | grep "Module-Switch modules"
+kubectl -n foodstack get pods,gateway,httproute,hpa
+kubectl -n foodstack get gateway foodstack -o jsonpath='{.status.addresses[0].value}'   # point DNS here
 ```
 
-The install runs migrations in a pre-install job first. Then follow the first-login checklist in section 3.4.
+The install runs migrations in a hook Job first, then starts the pods. Sign in at `https://admin.example.com/admin/` with the email in `secrets.adminEmail` and the password from the notes. The back office asks the administrator to set up an authenticator app on the first sign-in (two-step sign-in is required for the ADMIN and FINANCE roles). Then follow the first-login checklist in section 3.4.
+
+Load test before you open to customers, from an address the rate limits allow (`tools/k6/browse.js` in the repository; it reads only):
+
+```bash
+docker run --rm -i -e BASE_URL=https://api.example.com -e LAT=31.52 -e LNG=74.34 \
+  grafana/k6:1.8.1 run - < tools/k6/browse.js
+```
+
+It searches, opens stores and reads menus and delivery quotes with 50 users at the peak, and fails if more than 1 % of requests fail or a step's 95th percentile passes 300 ms.
 
 ### 4.6 Scaling and topologies
 
@@ -308,10 +336,29 @@ Only when the shared cluster is the bottleneck or you need isolation.
 
 ```bash
 helm install foodstack-observability oci://ghcr.io/ilyaslabs/charts/foodstack-observability \
-  -n monitoring --create-namespace
+  --version 1.0.0 -n foodstack-observability --create-namespace
+helm upgrade foodstack oci://ghcr.io/ilyaslabs/charts/foodstack --version 1.0.0 -n foodstack \
+  --reuse-values --set server.tracing.enabled=true
 ```
 
-Installs the OpenTelemetry Collector, Prometheus, Grafana (FoodStack dashboards), Tempo and Loki with alert rules for error rate, latency, outbox lag, Kafka consumer lag, dead-letter growth and certificate expiry. To use an existing stack instead, point `observability.otlpEndpoint` at your collector. Either way the server exports traces when `FOODSTACK_TRACING_EXPORT=true` (endpoint `FOODSTACK_OTLP_ENDPOINT`, sampling `FOODSTACK_TRACING_SAMPLING`).
+The observability chart runs one small pod each of Prometheus, Grafana, Loki, Tempo and Alertmanager (off unless `alertmanager.enabled=true`), and an OpenTelemetry Collector on every node that ships the FoodStack pods' logs to Loki and takes their traces. Install it in the `foodstack-observability` namespace, so the FoodStack chart's default tracing endpoint finds it. Prometheus joins the Istio mesh to read the server's metrics (`ambient: true`, the default; set it to false on a cluster without Istio).
+
+Grafana is not published on the internet: `kubectl -n foodstack-observability port-forward svc/foodstack-grafana 3000:3000`, then sign in as `admin` with the password in the Secret `foodstack-grafana`. The **FoodStack** folder has three dashboards: overview (traffic, errors and latency per Deployment, heap, database and Redis time), orders and delivery (the order funnel, time to find a rider, pickup to delivery) and events (outbox backlog and age, consumer lag, handler failures, failed events). Logs are under Explore, Loki; a log line's trace id opens the trace in Tempo.
+
+Alerts, with thresholds under `prometheus.alerts`:
+
+| Alert | Fires when |
+|---|---|
+| FoodStackPodDown | A server pod has not answered for 5 minutes |
+| FoodStackErrors | More than 2 % of a Deployment's requests end in a server error for 10 minutes |
+| FoodStackSlow | A Deployment's API requests take over 1 s at the 95th percentile for 10 minutes |
+| FoodStackOutboxStuck | A module's oldest unpublished event is over 2 minutes old |
+| FoodStackDeadLetters | Any event failed for good in the last 15 minutes (replay it on the **Failed events** page) |
+| FoodStackConsumerLag | A consumer group is over 10,000 events behind for 10 minutes |
+| FoodStackMemory | A pod's heap is over 90 % full after garbage collection for 10 minutes |
+| CertificateExpiring | A cert-manager certificate expires within 14 days |
+
+To send them by email or chat, set `alertmanager.enabled=true` and its `alertmanager.config` (route and receivers). To use your own monitoring instead, scrape pods annotated `prometheus.io/scrape` (port 8082, `/actuator/prometheus`; from inside the mesh) and set `server.tracing.endpoint` to your collector.
 
 ### 4.10 Upgrades and rollback
 
@@ -332,14 +379,16 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 
 ### 4.12 Security checklist
 
-- [ ] Namespace in Istio ambient mode; `PeerAuthentication` STRICT (default in the chart).
-- [ ] Gateway JWT validation enabled (`security.edgeJwt.enabled=true`, default).
-- [ ] Edge rate limiting enabled (`gateway.rateLimits.enabled=true`, default) and limits reviewed for your traffic (`gateway.rateLimits.*`).
-- [ ] NetworkPolicies enabled (default deny).
+- [ ] Pods in Istio ambient mode with `mesh.mtls: STRICT` (the chart's default).
+- [ ] istiod runs with `PILOT_JWT_ENABLE_REMOTE_JWKS=envoy` (section 4.1).
+- [ ] Gateway token check on (`gateway.jwt.enabled=true`, the default).
+- [ ] Edge rate limiting on (`gateway.rateLimit.enabled=true`, the default) and the per-address limits in `gateway.rateLimit.limits` reviewed for your traffic.
+- [ ] NetworkPolicies on (`networkPolicies.enabled=true`, the default).
+- [ ] The Secret `foodstack-secrets` backed up outside the cluster.
 - [ ] Datastores reachable only from the cluster, with TLS and authentication.
 - [ ] Secrets from a secret manager, not committed values files.
 - [ ] Image signatures verified (cosign) by your admission controller, if you run one.
-- [ ] Two-factor login for every admin and finance user.
+- [ ] Two-step sign-in for every back-office account that can change money or settings (required for ADMIN and FINANCE; others turn it on under **Two-step sign-in** in the account menu).
 
 ## 5. Moving from a single server to Kubernetes
 
@@ -360,7 +409,10 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 | Login emails not arriving | SMTP settings; the **Email log** page shows each email with its error, and **Send again** retries it |
 | Card orders stuck in "Waiting for payment" | Payment webhooks not reaching `api.<domain>/api/v1/payment-webhooks/stripe`; check the webhook's deliveries in the Stripe dashboard and the proxy logs. Unpaid pages expire after 30 minutes and the order fails |
 | Orders rejected with "did not answer in time" | Nobody accepted within the time set on the **Ordering** page; keep the store's **Live orders** page open with sound on |
-| Notifications or ledger lagging | Kafka consumer lag dashboard; outbox lag metric; dead-letter topics in the admin panel |
+| Notifications or ledger lagging | The **FoodStack events** dashboard (outbox age, consumer lag); events that failed for good wait on **Settings, Failed events** in the back office: fix the cause, then **Replay** |
+| Kubernetes: every signed-in request answers 401 "Jwt verification fails" | istiod could not fetch the token keys while FoodStack was starting. Run istiod with `PILOT_JWT_ENABLE_REMOTE_JWKS=envoy` (section 4.1); until then, restarting istiod fetches them again |
+| Kubernetes: 503 "remote connection failure" after a node restarted | Pods that started before Istio's CNI agent was ready are not in the mesh: `kubectl -n foodstack rollout restart deploy,statefulset` |
+| Kubernetes: Prometheus shows the server pods down ("EOF") | Prometheus is outside the mesh, and the mesh only takes mutual TLS. Keep the observability chart's `ambient: true`, or label your Prometheus pod `istio.io/dataplane-mode: ambient` |
 | Search results stale or empty | Only live branches with a delivery area (or pickup) appear. To rebuild the index, call `POST /api/v1/search/reindex` as an admin (a button arrives with the maintenance screen), or restart the server: it rebuilds on start |
 | Elasticsearch will not start on a single server | `logs elasticsearch`; usually too little memory for `ES_HEAP`; rerun `install.sh --check` |
 | Disk full | `status.sh` shows usage; prune old backups and logs, then extend the disk |
