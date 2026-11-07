@@ -6,10 +6,12 @@ The backend is a Spring Boot 4 / Java 25 modular monolith built on [Module-Switc
 
 ## Status
 
-Milestone M0 (foundation): the build, the `identity`, `settings` and `media` modules, the server, the
-customer web app and back office, the integration journeys in both topologies, Docker images, CI,
-and the single-server unit deployer. See [TDD section 21](docs/TDD.md#21-m0-implementation-notes)
-for what M0 does differently from the design and what follows.
+Milestones M0 to M5 are built: ordering, payments, delivery, money and trust, and production
+hardening. That last step added the Kubernetes chart for every topology, two-step and Google or
+Apple sign-in, failed-event replay, search ranking, and the observability chart. M6 (the
+operator handbook) and the v1.0 release are next. What each milestone does differently from the
+design is in [TDD sections 21 to 27](docs/TDD.md#27-m5-implementation-notes); how the code works
+today is drawn in [docs/architecture](docs/architecture/README.md).
 
 ## Repository
 
@@ -21,6 +23,9 @@ for what M0 does differently from the design and what follows.
 | `integration-tests/` | Business journeys through the REST API, each run as a monolith and as one service per module |
 | `frontend/` | Angular workspace: `web` (SSR customer app), `backoffice`, shared libraries |
 | `deploy/unit-deployer/` | Docker Compose, Caddy and scripts for one server, packaged as `unit-deployer-<version>.zip` |
+| `k8s/helm/foodstack` | Helm chart: any topology, Gateway API, Istio ambient, edge rate limits ([deployment guide 4](docs/deployment-guide.md#4-kubernetes-helm)) |
+| `k8s/helm/foodstack-observability` | Prometheus, Grafana dashboards and alerts, Loki, Tempo, OpenTelemetry Collector |
+| `tools/k6/` | Load test of customer browsing |
 
 ## Build and run
 
