@@ -35,3 +35,16 @@ databaseChangeLog:
             collectionName: payment_store_collection
             keys: '{ "brandId": 1, "mode": 1 }'
             options: '{ "name": "brand_mode" }'
+  - changeSet:
+      id: payment-3
+      author: foodstack
+      comment: "M4 saved cards (PRD CO-5a): payment_customers ({ _id: hashed }, _id = user id) holds only the gateway's customer reference; payment_sandbox_cards (unsharded, development only) stands in for a gateway's card vault"
+      changes:
+        - createCollection:
+            collectionName: payment_customers
+        - createCollection:
+            collectionName: payment_sandbox_cards
+        - createIndex:
+            collectionName: payment_sandbox_cards
+            keys: '{ "customer": 1, "createdAt": 1 }'
+            options: '{ "name": "customer_oldest" }'

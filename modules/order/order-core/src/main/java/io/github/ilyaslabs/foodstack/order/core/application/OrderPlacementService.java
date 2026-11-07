@@ -202,7 +202,8 @@ public class OrderPlacementService {
         try {
             session = this.payments.startCard(new StartCardRequest(orderId, confirmed.number(), customerId,
                     checkout.totalMinor(), checkout.currency(), store.brandName(), this.webUrl + "/orders/" + orderId,
-                    this.webUrl + "/orders/" + orderId + "?payment=cancelled", confirmed.merchantAccountId()));
+                    this.webUrl + "/orders/" + orderId + "?payment=cancelled", confirmed.merchantAccountId(),
+                    this.webUrl + "/pay/" + orderId));
         }
         catch (ModuleException ex) {
             this.lifecycle.paymentFailed(orderId, "UNAVAILABLE");

@@ -52,7 +52,8 @@ class OrderingSettingsServiceTest {
             OrderingDocument d = invocation.getArgument(0);
             return new OrderingDocument(d.id(), d.cashEnabled(), d.cardEnabled(), d.serviceFeeMinor(), d.serviceFeeBasisPoints(),
                     d.taxBasisPoints(), d.tipsEnabled(), d.acceptTimeoutSeconds(), d.updatedAt(), d.updatedBy(),
-                    (d.version() == null) ? 0L : d.version() + 1, d.priceApprovalRequired(), d.directCollectionEnabled(), d.creditLimitMinor());
+                    (d.version() == null) ? 0L : d.version() + 1, d.priceApprovalRequired(), d.directCollectionEnabled(), d.creditLimitMinor(), d.cardStyle(),
+                    d.savedCardsEnabled());
         });
         this.service = new OrderingSettingsService(this.repository, this.outbox, this.transaction, this.cache,
                 Clock.fixed(NOW, ZoneOffset.UTC));
@@ -107,6 +108,6 @@ class OrderingSettingsServiceTest {
     }
 
     private static OrderingDocument document(long version) {
-        return new OrderingDocument(OrderingDocument.ID, true, false, 0, 0, 0, true, 180, null, null, version, false, null, null);
+        return new OrderingDocument(OrderingDocument.ID, true, false, 0, 0, 0, true, 180, null, null, version, false, null, null, null, null);
     }
 }

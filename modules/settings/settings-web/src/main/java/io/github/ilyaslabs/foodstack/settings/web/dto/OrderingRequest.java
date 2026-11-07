@@ -16,12 +16,20 @@ package io.github.ilyaslabs.foodstack.settings.web.dto;
  */
 public record OrderingRequest(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
         int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, boolean priceApprovalRequired,
-        Boolean directCollectionEnabled, Long creditLimitMinor) {
+        Boolean directCollectionEnabled, Long creditLimitMinor, String cardStyle, Boolean savedCardsEnabled) {
+
+    /** A request from a client that does not know card style and saved cards: both stay as they are. */
+    public OrderingRequest(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
+            int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, boolean priceApprovalRequired,
+            Boolean directCollectionEnabled, Long creditLimitMinor) {
+        this(cashEnabled, cardEnabled, serviceFeeMinor, serviceFeeBasisPoints, taxBasisPoints, tipsEnabled,
+                acceptTimeoutSeconds, priceApprovalRequired, directCollectionEnabled, creditLimitMinor, null, null);
+    }
 
     /** A request from a client that does not know direct collection: both stay as they are. */
     public OrderingRequest(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
             int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, boolean priceApprovalRequired) {
         this(cashEnabled, cardEnabled, serviceFeeMinor, serviceFeeBasisPoints, taxBasisPoints, tipsEnabled,
-                acceptTimeoutSeconds, priceApprovalRequired, null, null);
+                acceptTimeoutSeconds, priceApprovalRequired, null, null, null, null);
     }
 }

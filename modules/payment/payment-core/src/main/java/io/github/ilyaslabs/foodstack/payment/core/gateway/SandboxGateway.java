@@ -15,8 +15,9 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * A pretend gateway for development, tests and demos: its "hosted page" is served by the payment
  * module itself ({@code /api/v1/payments/sandbox/{orderId}}) with Pay and Decline buttons, and the
- * outcome travels through the same signed-webhook path a real gateway uses. Never enabled in
- * production.
+ * outcome travels through the same signed-webhook path a real gateway uses. In the embedded style
+ * the app shows pretend card fields itself and sends the outcome the same way. Saved cards are kept
+ * in {@link SandboxCards} when it is given. Never enabled in production.
  */
 public class SandboxGateway implements CardGateway {
 
@@ -33,15 +34,65 @@ public class SandboxGateway implements CardGateway {
     /** A store account's key, or {@code null} for the operator's own sandbox. */
     private final String accountKey;
 
+    /** Saved cards, or {@code null} when the sandbox keeps none. */
+    private final SandboxCards cards;
+
     public SandboxGateway(String publicUrl, String secret, JsonMapper jsonMapper) {
-        this(publicUrl, secret.getBytes(StandardCharsets.UTF_8), jsonMapper, null);
+        this(publicUrl, secret, jsonMapper, null);
     }
 
-    private SandboxGateway(String publicUrl, byte[] secret, JsonMapper jsonMapper, String accountKey) {
+    public SandboxGateway(String publicUrl, String secret, JsonMapper jsonMapper, SandboxCards cards) {
+        this(publicUrl, secret.getBytes(StandardCharsets.UTF_8), jsonMapper, null, cards);
+    }
+
+    private SandboxGateway(String publicUrl, byte[] secret, JsonMapper jsonMapper, String accountKey, SandboxCards cards) {
         this.publicUrl = publicUrl.replaceAll("/+$", "");
         this.secret = secret;
         this.jsonMapper = jsonMapper;
         this.accountKey = accountKey;
+        this.cards = cards;
+    }
+
+    @Override
+    public boolean supportsEmbedded() {
+        return true;
+    }
+
+    @Override
+    public boolean supportsSavedCards() {
+        return this.cards != null && this.accountKey == null;
+    }
+
+    @Override
+    public String createCustomer(String userId) {
+        return "sbx_cus_" + sign(("customer:" + userId).getBytes(StandardCharsets.UTF_8)).substring(0, 24);
+    }
+
+    @Override
+    public java.util.List<SavedCard> cards(String customerReference) {
+        return (this.cards != null) ? this.cards.list(customerReference) : java.util.List.of();
+    }
+
+    @Override
+    public void removeCard(String customerReference, String cardId) {
+        if (this.cards != null) {
+            this.cards.remove(customerReference, cardId);
+        }
+    }
+
+    @Override
+    public void deleteCustomer(String customerReference) {
+        if (this.cards != null) {
+            this.cards.removeAll(customerReference);
+        }
+    }
+
+    /** Keeps the card a customer paid with, when they asked to save it. */
+    public SavedCard saveCard(String customerReference, String last4) {
+        if (this.cards == null || customerReference == null) {
+            return null;
+        }
+        return this.cards.save(customerReference, last4);
     }
 
     /**
@@ -50,7 +101,7 @@ public class SandboxGateway implements CardGateway {
      * {@code sbx_} work, anything else is refused, so a failed connection can be tried out.
      */
     public SandboxGateway forAccount(String secretKey) {
-        return new SandboxGateway(this.publicUrl, this.secret, this.jsonMapper, (secretKey != null) ? secretKey : "");
+        return new SandboxGateway(this.publicUrl, this.secret, this.jsonMapper, (secretKey != null) ? secretKey : "", this.cards);
     }
 
     @Override
@@ -68,6 +119,9 @@ public class SandboxGateway implements CardGateway {
     @Override
     public HostedSession createSession(SessionRequest request) {
         String session = "sbx_" + Ids.newId();
+        if (request.embedded()) {
+            return new HostedSession(session, null, request.expiresAt(), session + "_secret_" + pageToken(request.orderId()));
+        }
         String url = this.publicUrl + "/api/v1/payments/sandbox/" + request.orderId() + "?t=" + pageToken(request.orderId());
         return new HostedSession(session, url, request.expiresAt());
     }

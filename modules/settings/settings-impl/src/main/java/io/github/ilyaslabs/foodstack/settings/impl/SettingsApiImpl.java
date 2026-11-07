@@ -54,7 +54,8 @@ class SettingsApiImpl implements SettingsApi {
         OrderingDetails o = this.orderingService.get();
         return new OrderingView(o.cashEnabled(), o.cardEnabled(), o.serviceFeeMinor(), o.serviceFeeBasisPoints(),
                 o.taxBasisPoints(), o.tipsEnabled(), o.acceptTimeoutSeconds(), o.version(),
-                o.priceApprovalRequired(), o.directCollectionEnabled(), o.creditLimitMinor());
+                o.priceApprovalRequired(), o.directCollectionEnabled(), o.creditLimitMinor(), o.cardStyle(),
+                o.savedCardsEnabled());
     }
 
     @Override

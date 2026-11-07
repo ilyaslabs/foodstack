@@ -1,15 +1,19 @@
 package io.github.ilyaslabs.foodstack.payment.web;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.payment.api.PaymentOptionsView;
+import io.github.ilyaslabs.foodstack.payment.core.application.CheckoutView;
 import io.github.ilyaslabs.foodstack.payment.core.application.PaymentService;
+import io.github.ilyaslabs.foodstack.payment.core.application.SavedCardView;
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,6 +36,27 @@ class PaymentsController {
     @GetMapping("/api/v1/payments/options")
     PaymentOptionsView options() {
         return this.payments.options();
+    }
+
+    /** What the app's payment page needs for an embedded card payment (PRD CO-5). */
+    @GetMapping("/api/v1/payments/{orderId}/checkout")
+    @PreAuthorize("isAuthenticated()")
+    CheckoutView checkout(@PathVariable String orderId) {
+        return this.payments.checkout(orderId);
+    }
+
+    /** The signed-in customer's saved cards (PRD CO-5a). */
+    @GetMapping("/api/v1/payments/cards")
+    @PreAuthorize("isAuthenticated()")
+    List<SavedCardView> cards() {
+        return this.payments.cards();
+    }
+
+    @DeleteMapping("/api/v1/payments/cards/{cardId}")
+    @PreAuthorize("isAuthenticated()")
+    ResponseEntity<Void> removeCard(@PathVariable String cardId) {
+        this.payments.removeCard(cardId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/api/v1/payments/gateway")

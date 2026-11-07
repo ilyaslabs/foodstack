@@ -15,5 +15,6 @@ package io.github.ilyaslabs.foodstack.settings.web.dto;
  */
 public record OrderingResponse(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
         int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version, Long updatedAt,
-        boolean priceApprovalRequired, boolean directCollectionEnabled, long creditLimitMinor) {
+        boolean priceApprovalRequired, boolean directCollectionEnabled, long creditLimitMinor, String cardStyle,
+        boolean savedCardsEnabled) {
 }

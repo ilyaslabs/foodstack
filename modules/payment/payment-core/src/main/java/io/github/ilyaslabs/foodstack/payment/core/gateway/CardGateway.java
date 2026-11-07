@@ -4,8 +4,10 @@ import java.time.Instant;
 import java.util.Map;
 
 /**
- * A card gateway in the hosted-page style (TDD 5.4): the customer pays on the gateway's own page,
- * so card data never touches FoodStack. Adapters exist for a local sandbox and for Stripe Checkout;
+ * A card gateway (TDD 5.4). The customer types card details either on the gateway's own page
+ * (hosted) or into the gateway's fields inside the app's checkout (embedded); either way card data
+ * never touches FoodStack. Saved cards (PRD CO-5a) stay with the gateway too: FoodStack keeps only
+ * the gateway's customer reference. Adapters exist for a local sandbox and for Stripe Checkout;
  * others implement this interface.
  */
 public interface CardGateway {
@@ -31,6 +33,51 @@ public interface CardGateway {
     /** Gives money back. {@code idempotencyKey} makes a retried call safe. */
     String refund(String paymentReference, long amountMinor, String currency, String idempotencyKey);
 
+    /** Whether the gateway can show its card fields inside the app's checkout. */
+    default boolean supportsEmbedded() {
+        return false;
+    }
+
+    /** The key the browser uses to show embedded fields, or {@code null} when none is needed. */
+    default String publishableKey() {
+        return null;
+    }
+
+    /** Whether the gateway can keep cards for returning customers. */
+    default boolean supportsSavedCards() {
+        return false;
+    }
+
+    /** Makes the gateway's customer record for a user; its reference is all FoodStack keeps. */
+    default String createCustomer(String userId) {
+        throw new GatewayException("Saved cards are not supported by " + id(), false, null);
+    }
+
+    /** The cards the gateway keeps for a customer. */
+    default java.util.List<SavedCard> cards(String customerReference) {
+        return java.util.List.of();
+    }
+
+    /** Forgets one saved card of a customer. */
+    default void removeCard(String customerReference, String cardId) {
+    }
+
+    /** Forgets the customer and all their cards (account deletion, PRD ID-7). */
+    default void deleteCustomer(String customerReference) {
+    }
+
+    /**
+     * A card the gateway keeps for a customer: only what is printed on the card's face.
+     *
+     * @param id the gateway's id of the card
+     * @param brand such as {@code visa}
+     * @param last4 last four digits
+     * @param expMonth expiry month
+     * @param expYear expiry year
+     */
+    record SavedCard(String id, String brand, String last4, int expMonth, int expYear) {
+    }
+
     /**
      * A page to open.
      *
@@ -42,9 +89,17 @@ public interface CardGateway {
      * @param returnUrl where to go after paying
      * @param cancelUrl where to go when the customer goes back
      * @param expiresAt when the page should stop accepting payment
+     * @param embedded show the gateway's fields inside the app instead of its own page
+     * @param customerReference the gateway customer whose saved cards to offer and keep, or {@code null}
      */
     record SessionRequest(String orderId, String orderNumber, long amountMinor, String currency, String description,
-            String returnUrl, String cancelUrl, Instant expiresAt) {
+            String returnUrl, String cancelUrl, Instant expiresAt, boolean embedded, String customerReference) {
+
+        /** A hosted page without saved cards. */
+        public SessionRequest(String orderId, String orderNumber, long amountMinor, String currency, String description,
+                String returnUrl, String cancelUrl, Instant expiresAt) {
+            this(orderId, orderNumber, amountMinor, currency, description, returnUrl, cancelUrl, expiresAt, false, null);
+        }
     }
 
     /**
@@ -53,8 +108,14 @@ public interface CardGateway {
      * @param sessionReference the gateway's id of the page
      * @param redirectUrl where to send the customer
      * @param expiresAt when it stops accepting payment
+     * @param clientSecret what the browser needs to show embedded fields, or {@code null} for a hosted page
      */
-    record HostedSession(String sessionReference, String redirectUrl, Instant expiresAt) {
+    record HostedSession(String sessionReference, String redirectUrl, Instant expiresAt, String clientSecret) {
+
+        /** A hosted page. */
+        public HostedSession(String sessionReference, String redirectUrl, Instant expiresAt) {
+            this(sessionReference, redirectUrl, expiresAt, null);
+        }
     }
 
     /**

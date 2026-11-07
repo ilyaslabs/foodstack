@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.settings.core.application;
 
 import java.time.Clock;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
@@ -28,7 +29,7 @@ public class OrderingSettingsService {
     static final int MAX_ACCEPT_SECONDS = 1800;
 
     private static final OrderingDocument DEFAULTS = new OrderingDocument(OrderingDocument.ID, true, false, 0, 0, 0, true,
-            180, null, null, null, false, false, null);
+            180, null, null, null, false, false, null, null, null);
 
     private final OrderingRepository repository;
 
@@ -65,7 +66,7 @@ public class OrderingSettingsService {
         OrderingDocument changed = new OrderingDocument(OrderingDocument.ID, update.cashEnabled(), update.cardEnabled(),
                 update.serviceFeeMinor(), update.serviceFeeBasisPoints(), update.taxBasisPoints(), update.tipsEnabled(),
                 update.acceptTimeoutSeconds(), this.clock.instant(), userId, current.version(), update.priceApprovalRequired(),
-                update.directCollectionEnabled(), update.creditLimitMinor());
+                update.directCollectionEnabled(), update.creditLimitMinor(), update.cardStyle(), update.savedCardsEnabled());
         OrderingDocument saved = this.transaction.execute((status) -> {
             OrderingDocument result = this.repository.save(changed);
             this.outbox.append(new SettingsChanged(SettingsChanged.ORDERING, result.version(), userId));
@@ -78,13 +79,16 @@ public class OrderingSettingsService {
     private static OrderingDetails details(OrderingDocument d) {
         return new OrderingDetails(d.cashEnabled(), d.cardEnabled(), d.serviceFeeMinor(), d.serviceFeeBasisPoints(),
                 d.taxBasisPoints(), d.tipsEnabled(), d.acceptTimeoutSeconds(), (d.version() != null) ? d.version() : 0L,
-                d.updatedAt(), d.approvalRequired(), d.directCollection(), d.creditLimit());
+                d.updatedAt(), d.approvalRequired(), d.directCollection(), d.creditLimit(), d.cardStyleOrDefault(), d.savedCards());
     }
 
     private static void validate(UpdateOrdering update) {
         Map<String, String> errors = new LinkedHashMap<>();
         if (!update.cashEnabled() && !update.cardEnabled()) {
             errors.put("cashEnabled", "keep at least one payment method on");
+        }
+        if (update.cardStyle() == null || !List.of("HOSTED_PAGE", "EMBEDDED").contains(update.cardStyle())) {
+            errors.put("cardStyle", "must be HOSTED_PAGE or EMBEDDED");
         }
         if (update.creditLimitMinor() < 0) {
             errors.put("creditLimitMinor", "must be 0 or more");

@@ -122,7 +122,9 @@ class SettingsController {
                 request.serviceFeeMinor(), request.serviceFeeBasisPoints(), request.taxBasisPoints(), request.tipsEnabled(),
                 request.acceptTimeoutSeconds(), request.priceApprovalRequired(),
                 (request.directCollectionEnabled() != null) ? request.directCollectionEnabled() : current.directCollectionEnabled(),
-                (request.creditLimitMinor() != null) ? request.creditLimitMinor() : current.creditLimitMinor()),
+                (request.creditLimitMinor() != null) ? request.creditLimitMinor() : current.creditLimitMinor(),
+                (request.cardStyle() != null) ? request.cardStyle() : current.cardStyle(),
+                (request.savedCardsEnabled() != null) ? request.savedCardsEnabled() : current.savedCardsEnabled()),
                 requireIfMatch("ordering", ifMatch), CurrentUser.id());
         return ResponseEntity.ok().eTag(ETags.of("ordering", updated.version())).body(toResponse(updated));
     }
@@ -172,7 +174,8 @@ class SettingsController {
     private static OrderingResponse toResponse(OrderingDetails o) {
         return new OrderingResponse(o.cashEnabled(), o.cardEnabled(), o.serviceFeeMinor(), o.serviceFeeBasisPoints(),
                 o.taxBasisPoints(), o.tipsEnabled(), o.acceptTimeoutSeconds(), o.version(), EpochSeconds.of(o.updatedAt()),
-                o.priceApprovalRequired(), o.directCollectionEnabled(), o.creditLimitMinor());
+                o.priceApprovalRequired(), o.directCollectionEnabled(), o.creditLimitMinor(), o.cardStyle(),
+                o.savedCardsEnabled());
     }
 
     private static DeliveryResponse toResponse(DeliveryDetails d) {

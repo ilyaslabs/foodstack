@@ -28,7 +28,17 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public record OrderingDocument(@Id String id, boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor,
         int serviceFeeBasisPoints, int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, Instant updatedAt,
         String updatedBy, @Version Long version, Boolean priceApprovalRequired, Boolean directCollectionEnabled,
-        Long creditLimitMinor) {
+        Long creditLimitMinor, String cardStyle, Boolean savedCardsEnabled) {
+
+    /** The hosted payment page unless set (TDD 5.4). */
+    public String cardStyleOrDefault() {
+        return "EMBEDDED".equals(this.cardStyle) ? "EMBEDDED" : "HOSTED_PAGE";
+    }
+
+    /** Off unless set (PRD CO-5a). */
+    public boolean savedCards() {
+        return Boolean.TRUE.equals(this.savedCardsEnabled);
+    }
 
     /** Off unless set (PRD DP-1). */
     public boolean directCollection() {

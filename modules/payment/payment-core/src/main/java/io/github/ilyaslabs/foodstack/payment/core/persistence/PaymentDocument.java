@@ -28,13 +28,15 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param refunds refunds in the order they were asked for
  * @param failureReason why it failed, or {@code null}
  * @param createdAt created
+ * @param clientSecret what the browser needs to show the gateway's embedded fields, or {@code null} (hosted page)
+ * @param customerReference the gateway customer whose saved cards the page offers, or {@code null}
  * @param updatedAt last change
  */
 @Document("payment_intents")
 public record PaymentDocument(@Id String id, String customerId, String status, long amountMinor, String currency,
         String merchantAccount, String gateway, String sessionReference, String paymentReference, String redirectUrl,
         String returnUrl, String cancelUrl, Instant expiresAt, long refundedMinor, List<Refund> refunds, String failureReason,
-        Instant createdAt, Instant updatedAt) {
+        Instant createdAt, Instant updatedAt, String clientSecret, String customerReference) {
 
     public static final String CREATED = "CREATED";
 

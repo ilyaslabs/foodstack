@@ -21,10 +21,12 @@ import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.WebhookEve
 import io.github.ilyaslabs.foodstack.payment.core.persistence.MerchantAccountDocument;
 import io.github.ilyaslabs.foodstack.payment.core.persistence.PaymentDocument;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
+import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 
+import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -56,6 +58,10 @@ public class PaymentService {
     private final OutboxWriter outbox;
 
     private final SettingsApi settings;
+
+    static final String CUSTOMERS = "payment_customers";
+
+    private static final String SANDBOX = "sandbox";
 
     /** {@code merchantAccount} of a payment into the operator's own account. */
     public static final String OPERATOR_ACCOUNT = "operator";
@@ -104,7 +110,11 @@ public class PaymentService {
 
     public PaymentOptionsView options() {
         OrderingView ordering = this.settings.getOrdering();
-        return new PaymentOptionsView(ordering.cashEnabled(), ordering.cardEnabled() && this.gateway != null, gatewayId());
+        boolean card = ordering.cardEnabled() && this.gateway != null;
+        boolean embedded = card && ordering.embeddedCards() && this.gateway.supportsEmbedded();
+        boolean saved = card && ordering.savedCardsEnabled() && this.gateway.supportsSavedCards();
+        return new PaymentOptionsView(ordering.cashEnabled(), card, gatewayId(),
+                embedded ? OrderingView.EMBEDDED : OrderingView.HOSTED_PAGE, saved);
     }
 
     public String gatewayId() {
@@ -112,7 +122,8 @@ public class PaymentService {
     }
 
     public CardSessionView startCard(StartCardRequest request) {
-        if (!options().card()) {
+        PaymentOptionsView options = options();
+        if (!options.card()) {
             throw new ModuleException.BadRequest("Card payments are not available", "PAYMENT_UNAVAILABLE");
         }
         if (request.amountMinor() <= 0) {
@@ -126,7 +137,7 @@ public class PaymentService {
                         request.amountMinor(), request.currency(), account(request.merchantAccountId()), this.gateway.id(), null,
                         null, null, request.returnUrl(),
                         request.cancelUrl(), null, 0,
-                        List.of(), null, now, now));
+                        List.of(), null, now, now, null, null));
             }
             catch (DuplicateKeyException ex) {
                 existing = find(request.orderId());
@@ -142,11 +153,24 @@ public class PaymentService {
             }
         }
         String merchantAccount = (existing != null) ? existing.merchantAccount() : account(request.merchantAccountId());
+        // embedded fields and saved cards live on the operator's own account: a branch's account
+        // has no browser key, and a card saved there would not work anywhere else
+        boolean operator = OPERATOR_ACCOUNT.equals(merchantAccount);
+        boolean embedded = operator && OrderingView.EMBEDDED.equals(options.cardStyle()) && request.payUrl() != null;
+        String customer = null;
+        if (operator && options.savedCards()) {
+            try {
+                customer = customerReference(request.customerId(), true);
+            }
+            catch (GatewayException ex) {
+                log.warn("Could not set up saved cards for order {}: {}", request.orderId(), ex.getMessage());
+            }
+        }
         CardGateway.HostedSession session;
         try {
             session = gatewayFor(merchantAccount).createSession(new CardGateway.SessionRequest(request.orderId(), request.orderNumber(),
                     request.amountMinor(), request.currency(), request.description(), request.returnUrl(),
-                    request.cancelUrl(), now.plus(this.sessionTtl)));
+                    request.cancelUrl(), now.plus(this.sessionTtl), embedded, customer));
         }
         catch (GatewayException ex) {
             log.warn("Could not open a payment page for order {}: {}", request.orderId(), ex.getMessage());
@@ -159,7 +183,11 @@ public class PaymentService {
         PaymentDocument pending = this.mongo.findAndModify(
                 Query.query(Criteria.where("_id").is(request.orderId()).and("status").is(PaymentDocument.CREATED)),
                 new Update().set("status", PaymentDocument.PENDING).set("sessionReference", session.sessionReference())
-                    .set("redirectUrl", session.redirectUrl()).set("expiresAt", session.expiresAt()).set("updatedAt", now),
+                    .set("redirectUrl", embedded ? request.payUrl() : session.redirectUrl())
+                    .set("clientSecret", session.clientSecret())
+                    .set("customerReference", customer)
+                    .set("expiresAt", session.expiresAt())
+                    .set("updatedAt", now),
                 FindAndModifyOptions.options().returnNew(true), PaymentDocument.class);
         return session((pending != null) ? pending : find(request.orderId()));
     }
@@ -344,6 +372,103 @@ public class PaymentService {
             this.outbox.append(new PaymentFailed(orderId, reason));
             return true;
         }));
+    }
+
+    // ---- embedded fields and saved cards (PRD CO-5, CO-5a) -----------------------------------
+
+    /**
+     * What the app's payment page needs for the signed-in customer's own order. Anyone else gets
+     * {@code PAYMENT_NOT_FOUND}.
+     */
+    public CheckoutView checkout(String orderId) {
+        PaymentDocument p = find(orderId);
+        if (p == null || !CurrentUser.id().equals(p.customerId())) {
+            throw new ModuleException.NotFound("No such payment", "PAYMENT_NOT_FOUND");
+        }
+        boolean open = PaymentDocument.PENDING.equals(p.status());
+        CardGateway gateway = gatewayFor(p.merchantAccount());
+        List<SavedCardView> saved = List.of();
+        if (open && p.customerReference() != null && SANDBOX.equals(p.gateway())) {
+            saved = cardsOf(gateway, p.customerReference());
+        }
+        return new CheckoutView(p.id(), PaymentDocument.CREATED.equals(p.status()) ? PaymentDocument.PENDING : p.status(),
+                p.amountMinor(), p.currency(), p.gateway(), (gateway != null) ? gateway.publishableKey() : null,
+                open ? p.clientSecret() : null, p.returnUrl(), p.cancelUrl(),
+                (p.expiresAt() != null) ? p.expiresAt().getEpochSecond() : 0, p.customerReference() != null, saved);
+    }
+
+    /** The signed-in customer's saved cards, kept by the operator's gateway. */
+    public List<SavedCardView> cards() {
+        String reference = customerReference(CurrentUser.id(), false);
+        return (reference != null) ? cardsOf(this.gateway, reference) : List.of();
+    }
+
+    /** Forgets one of the signed-in customer's saved cards. */
+    public void removeCard(String cardId) {
+        String reference = customerReference(CurrentUser.id(), false);
+        if (reference == null || cardsOf(this.gateway, reference).stream().noneMatch((c) -> c.id().equals(cardId))) {
+            throw new ModuleException.NotFound("No such saved card", "CARD_NOT_FOUND");
+        }
+        try {
+            this.gateway.removeCard(reference, cardId);
+        }
+        catch (GatewayException ex) {
+            throw new ModuleException.Unavailable("The card payment service is not answering; try again later",
+                    "PAYMENT_GATEWAY_UNAVAILABLE");
+        }
+    }
+
+    /**
+     * A deleted customer's saved cards (PRD ID-7, on {@code UserDeleted}): the gateway forgets the
+     * customer, then the reference goes. Safe to run again.
+     */
+    public void eraseCustomer(String userId) {
+        Document customer = this.mongo.findById(userId, Document.class, CUSTOMERS);
+        if (customer == null) {
+            return;
+        }
+        if (this.gateway != null && this.gateway.id().equals(customer.getString("gateway"))) {
+            this.gateway.deleteCustomer(customer.getString("reference"));
+        }
+        this.mongo.remove(Query.query(Criteria.where("_id").is(userId)), CUSTOMERS);
+    }
+
+    private static List<SavedCardView> cardsOf(CardGateway gateway, String reference) {
+        if (gateway == null) {
+            return List.of();
+        }
+        try {
+            return gateway.cards(reference)
+                .stream()
+                .map((c) -> new SavedCardView(c.id(), c.brand(), c.last4(), c.expMonth(), c.expYear()))
+                .toList();
+        }
+        catch (GatewayException ex) {
+            throw new ModuleException.Unavailable("The card payment service is not answering; try again later",
+                    "PAYMENT_GATEWAY_UNAVAILABLE");
+        }
+    }
+
+    /**
+     * The gateway's customer for a user on the operator's account: made on first use when
+     * {@code create}, else {@code null} when there is none.
+     */
+    private String customerReference(String userId, boolean create) {
+        if (this.gateway == null || userId == null) {
+            return null;
+        }
+        Document existing = this.mongo.findById(userId, Document.class, CUSTOMERS);
+        if (existing != null && this.gateway.id().equals(existing.getString("gateway"))) {
+            return existing.getString("reference");
+        }
+        if (!create) {
+            return null;
+        }
+        String reference = this.gateway.createCustomer(userId);
+        this.mongo.save(new Document("_id", userId).append("gateway", this.gateway.id())
+            .append("reference", reference)
+            .append("createdAt", java.util.Date.from(this.clock.instant())), CUSTOMERS);
+        return reference;
     }
 
     private PaymentDocument find(String orderId) {

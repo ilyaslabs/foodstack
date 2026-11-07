@@ -21,15 +21,16 @@ public record PaymentProperties(String gateway, String publicUrl, Duration sessi
         gateway = (gateway == null || gateway.isBlank()) ? "none" : gateway.strip();
         publicUrl = (publicUrl == null || publicUrl.isBlank()) ? "http://localhost:8080" : publicUrl;
         sessionTtl = (sessionTtl != null) ? sessionTtl : Duration.ofMinutes(30);
-        stripe = (stripe != null) ? stripe : new Stripe(null, null, null);
+        stripe = (stripe != null) ? stripe : new Stripe(null, null, null, null);
     }
 
     /**
      * @param apiUrl API address (default {@code https://api.stripe.com})
      * @param secretKey secret API key ({@code sk_live_...} or {@code sk_test_...})
      * @param webhookSecret the webhook endpoint's signing secret ({@code whsec_...})
+     * @param publishableKey the browser key ({@code pk_...}), needed only for embedded card fields
      */
-    public record Stripe(String apiUrl, String secretKey, String webhookSecret) {
+    public record Stripe(String apiUrl, String secretKey, String webhookSecret, String publishableKey) {
 
         public Stripe {
             apiUrl = (apiUrl == null || apiUrl.isBlank()) ? "https://api.stripe.com" : apiUrl;

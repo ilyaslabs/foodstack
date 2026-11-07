@@ -8,8 +8,10 @@ import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts;
 import io.github.ilyaslabs.foodstack.payment.core.application.PaymentService;
 import io.github.ilyaslabs.foodstack.payment.core.application.SandboxCheckout;
 import io.github.ilyaslabs.foodstack.payment.core.events.CollectionEventsListener;
+import io.github.ilyaslabs.foodstack.payment.core.events.IdentityEventsListener;
 import io.github.ilyaslabs.foodstack.payment.core.events.OrderEventsListener;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway;
+import io.github.ilyaslabs.foodstack.payment.core.gateway.SandboxCards;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.SandboxGateway;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.StripeGateway;
 import io.github.ilyaslabs.foodstack.payment.core.persistence.PaymentRepository;
@@ -52,7 +54,10 @@ public class PaymentConfiguration {
 
     /** Shard keys of TDD 6.3, applied when sharding is switched on. */
     public static ShardKeys shardKeys() {
-        return ShardKeys.builder().hashed("payment_intents", "_id").hashed("payment_store_collection", "_id");
+        return ShardKeys.builder()
+            .hashed("payment_intents", "_id")
+            .hashed("payment_store_collection", "_id")
+            .hashed("payment_customers", "_id");
     }
 
     @Bean
@@ -92,13 +97,13 @@ public class PaymentConfiguration {
     }
 
     @Bean
-    PaymentGateways paymentGateways(PaymentProperties properties, JsonMapper jsonMapper, Clock clock,
+    PaymentGateways paymentGateways(PaymentProperties properties, JsonMapper jsonMapper, Clock clock, ModuleMongo paymentMongo,
             @Value("${foodstack.environment:development}") String environment) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(10));
         requestFactory.setReadTimeout(Duration.ofSeconds(30));
         return PaymentGateways.create(properties, RestClient.builder().requestFactory(requestFactory), jsonMapper, clock,
-                environment);
+                environment, new SandboxCards(paymentMongo.template(), clock));
     }
 
     @Bean
@@ -130,6 +135,12 @@ public class PaymentConfiguration {
 
     @Bean
     @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    IdentityEventsListener paymentIdentityEventsListener(PaymentService paymentService, JsonMapper jsonMapper) {
+        return new IdentityEventsListener(paymentService, jsonMapper);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
     OrderEventsListener paymentOrderEventsListener(PaymentService paymentService, JsonMapper jsonMapper) {
         return new OrderEventsListener(paymentService, jsonMapper);
     }
@@ -150,7 +161,7 @@ public class PaymentConfiguration {
     public record PaymentGateways(CardGateway active, SandboxGateway sandbox, CardGateway.AccountGateways accounts) {
 
         static PaymentGateways create(PaymentProperties properties, RestClient.Builder builder, JsonMapper jsonMapper, Clock clock,
-                String environment) {
+                String environment, SandboxCards sandboxCards) {
             return switch (properties.gateway()) {
                 case "none" -> new PaymentGateways(null, null, null);
                 case SandboxGateway.ID -> {
@@ -160,7 +171,7 @@ public class PaymentConfiguration {
                     }
                     String secret = (properties.sandboxSecret() != null && !properties.sandboxSecret().isBlank())
                             ? properties.sandboxSecret() : UUID.randomUUID().toString();
-                    SandboxGateway sandbox = new SandboxGateway(properties.publicUrl(), secret, jsonMapper);
+                    SandboxGateway sandbox = new SandboxGateway(properties.publicUrl(), secret, jsonMapper, sandboxCards);
                     yield new PaymentGateways(sandbox, sandbox, (secretKey, webhookSecret) -> sandbox.forAccount(secretKey));
                 }
                 case StripeGateway.ID -> {
@@ -169,7 +180,7 @@ public class PaymentConfiguration {
                         throw new IllegalStateException("PAYMENT_GATEWAY=stripe needs STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET");
                     }
                     yield new PaymentGateways(new StripeGateway(builder, stripe.apiUrl(), stripe.secretKey(),
-                            stripe.webhookSecret(), jsonMapper, clock), null,
+                            stripe.webhookSecret(), stripe.publishableKey(), jsonMapper, clock), null,
                             (secretKey, webhookSecret) -> new StripeGateway(builder, stripe.apiUrl(), secretKey, webhookSecret,
                                     jsonMapper, clock));
                 }

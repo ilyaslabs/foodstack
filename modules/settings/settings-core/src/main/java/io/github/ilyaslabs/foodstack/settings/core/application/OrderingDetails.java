@@ -20,5 +20,15 @@ import java.time.Instant;
  */
 public record OrderingDetails(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
         int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version, Instant updatedAt,
-        boolean priceApprovalRequired, boolean directCollectionEnabled, long creditLimitMinor) {
+        boolean priceApprovalRequired, boolean directCollectionEnabled, long creditLimitMinor, String cardStyle,
+        boolean savedCardsEnabled) {
+
+    /** Details without card style and saved cards: hosted page, no saved cards. */
+    public OrderingDetails(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
+            int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version, Instant updatedAt,
+            boolean priceApprovalRequired, boolean directCollectionEnabled, long creditLimitMinor) {
+        this(cashEnabled, cardEnabled, serviceFeeMinor, serviceFeeBasisPoints, taxBasisPoints, tipsEnabled,
+                acceptTimeoutSeconds, version, updatedAt, priceApprovalRequired, directCollectionEnabled, creditLimitMinor,
+                "HOSTED_PAGE", false);
+    }
 }

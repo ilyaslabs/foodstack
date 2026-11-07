@@ -72,15 +72,15 @@ class SettingsRepositoriesTest {
         assertThat(ordering.acceptTimeoutSeconds()).isEqualTo(180);
 
         OrderingDocument saved = this.orderingRepository.save(new OrderingDocument(OrderingDocument.ID, true, true, 50, 250,
-                1600, false, 300, null, "u1", ordering.version(), true, true, 100L));
+                1600, false, 300, null, "u1", ordering.version(), true, true, 100L, "EMBEDDED", true));
         assertThat(saved.version()).isEqualTo(ordering.version() + 1);
         assertThat(this.orderingRepository.findById(OrderingDocument.ID).orElseThrow().taxBasisPoints()).isEqualTo(1600);
         assertThat(this.orderingRepository.findById(OrderingDocument.ID).orElseThrow().directCollection()).isTrue();
         assertThat(this.orderingRepository.findById(OrderingDocument.ID).orElseThrow().creditLimit()).isEqualTo(100L);
         assertThatExceptionOfType(OptimisticLockingFailureException.class).isThrownBy(() -> this.orderingRepository
-            .save(new OrderingDocument(OrderingDocument.ID, true, true, 0, 0, 0, true, 180, null, "u2", ordering.version(), false, null, null)));
+            .save(new OrderingDocument(OrderingDocument.ID, true, true, 0, 0, 0, true, 180, null, "u2", ordering.version(), false, null, null, null, null)));
         this.orderingRepository.save(new OrderingDocument(OrderingDocument.ID, true, false, 0, 0, 0, true, 180, null, null,
-                saved.version(), false, null, null));
+                saved.version(), false, null, null, null, null));
     }
 
     @Test

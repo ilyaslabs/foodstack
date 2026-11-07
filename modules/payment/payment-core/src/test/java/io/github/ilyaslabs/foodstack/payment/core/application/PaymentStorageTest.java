@@ -16,6 +16,7 @@ import io.github.ilyaslabs.foodstack.payment.core.PaymentConfiguration;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.GatewayException;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.WebhookEvent;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway;
+import io.github.ilyaslabs.foodstack.payment.core.gateway.SandboxCards;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.SandboxGateway;
 import io.github.ilyaslabs.foodstack.payment.core.persistence.PaymentDocument;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
@@ -24,6 +25,7 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
+import io.github.ilyaslabs.foodstack.platform.security.FoodstackJwtAuthenticationConverter;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
@@ -41,6 +43,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -246,6 +250,94 @@ class PaymentStorageTest {
         assertThatThrownBy(() -> this.payments.startCard(request(order, 1_000))).isInstanceOf(ModuleException.Unavailable.class);
         org.mockito.Mockito.reset(this.gateway);
         assertThat(this.payments.startCard(request(order, 1_000)).redirectUrl()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("embedded fields and saved cards: the app's page gets a client secret, a paid card is kept, removed and erased")
+    void embeddedAndSavedCards() {
+        given(this.settings.getOrdering()).willReturn(new OrderingView(true, true, 0, 0, 0, true, 180, 4, false, false,
+                OrderingView.DEFAULT_CREDIT_LIMIT_MINOR, OrderingView.EMBEDDED, true));
+        JsonMapper json = JsonMapper.builder().build();
+        SandboxCards cards = new SandboxCards(this.paymentMongo.template(), Clock.systemUTC());
+        SandboxGateway gateway = new SandboxGateway("http://localhost:8080", "secret", json, cards);
+        PaymentService payments = new PaymentService(this.paymentMongo.template(), this.paymentMongo.transactionTemplate(),
+                new OutboxWriter(this.paymentMongo, json, Clock.systemUTC()), this.settings, gateway, Duration.ofMinutes(30),
+                Clock.systemUTC());
+        SandboxCheckout checkout = new SandboxCheckout(gateway, payments, this.paymentMongo.template());
+        assertThat(payments.options().cardStyle()).isEqualTo(OrderingView.EMBEDDED);
+        assertThat(payments.options().savedCards()).isTrue();
+
+        String customer = "cust-" + Ids.newId();
+        String order = Ids.newId();
+        CardSessionView session = payments.startCard(embedded(order, customer));
+        assertThat(session.redirectUrl()).isEqualTo("https://shop/pay/" + order);
+
+        signIn("someone-else");
+        assertThatThrownBy(() -> payments.checkout(order)).isInstanceOf(ModuleException.NotFound.class);
+        signIn(customer);
+        CheckoutView view = payments.checkout(order);
+        assertThat(view.clientSecret()).isNotBlank();
+        assertThat(view.canSaveCard()).isTrue();
+        assertThat(view.savedCards()).isEmpty();
+        assertThatThrownBy(() -> checkout.completeEmbedded(order, "wrong", "4242424242424242", null, true))
+            .isInstanceOf(ModuleException.NotFound.class);
+        assertThatThrownBy(() -> checkout.completeEmbedded(order, view.clientSecret(), "12", null, true))
+            .isInstanceOf(ModuleException.BadRequest.class);
+        assertThat(checkout.completeEmbedded(order, view.clientSecret(), "4000 0000 0000 1111", null, true))
+            .isEqualTo("https://shop/orders/" + order);
+        assertThat(payments.get(order).status()).isEqualTo(PaymentDocument.SUCCEEDED);
+        assertThat(payments.cards()).singleElement().satisfies((c) -> assertThat(c.last4()).isEqualTo("1111"));
+
+        String second = Ids.newId();
+        payments.startCard(embedded(second, customer));
+        CheckoutView next = payments.checkout(second);
+        assertThat(next.savedCards()).hasSize(1);
+        assertThat(checkout.completeEmbedded(second, next.clientSecret(), null, next.savedCards().get(0).id(), false))
+            .isEqualTo("https://shop/orders/" + second);
+        assertThat(payments.cards()).hasSize(1);
+
+        assertThatThrownBy(() -> payments.removeCard("not-mine")).isInstanceOf(ModuleException.NotFound.class);
+        payments.removeCard(next.savedCards().get(0).id());
+        assertThat(payments.cards()).isEmpty();
+
+        String third = Ids.newId();
+        payments.startCard(embedded(third, customer));
+        CheckoutView last = payments.checkout(third);
+        checkout.completeEmbedded(third, last.clientSecret(), "4242424242424242", null, true);
+        assertThat(payments.cards()).hasSize(1);
+        payments.eraseCustomer(customer);
+        payments.eraseCustomer(customer);
+        assertThat(payments.cards()).isEmpty();
+        assertThat(this.paymentMongo.template().count(Query.query(Criteria.where("_id").is(customer)), "payment_customers"))
+            .isZero();
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    @DisplayName("a declined embedded card fails the payment and keeps nothing")
+    void embeddedDecline() {
+        given(this.settings.getOrdering()).willReturn(new OrderingView(true, true, 0, 0, 0, true, 180, 5, false, false,
+                OrderingView.DEFAULT_CREDIT_LIMIT_MINOR, OrderingView.EMBEDDED, false));
+        String order = Ids.newId();
+        assertThat(this.payments.startCard(embedded(order, "c1")).redirectUrl()).isEqualTo("https://shop/pay/" + order);
+        signIn("c1");
+        CheckoutView view = this.payments.checkout(order);
+        assertThat(view.canSaveCard()).isFalse();
+        assertThat(this.checkout.completeEmbedded(order, view.clientSecret(), "4000000000000002", null, true))
+            .isEqualTo("https://shop/checkout");
+        assertThat(this.payments.get(order).status()).isEqualTo(PaymentDocument.FAILED);
+        assertThat(this.payments.checkout(order).clientSecret()).isNull();
+        SecurityContextHolder.clearContext();
+    }
+
+    private static StartCardRequest embedded(String order, String customer) {
+        return new StartCardRequest(order, "A-1", customer, 1_000, "PKR", "Spice Route", "https://shop/orders/" + order,
+                "https://shop/checkout", null, "https://shop/pay/" + order);
+    }
+
+    private static void signIn(String subject) {
+        Jwt jwt = Jwt.withTokenValue("t").header("alg", "ES256").subject(subject).claim("perms", List.of()).build();
+        SecurityContextHolder.getContext().setAuthentication(new FoodstackJwtAuthenticationConverter().convert(jwt));
     }
 
     private String paidOrder(long amount) {

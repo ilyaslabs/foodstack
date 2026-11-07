@@ -16,7 +16,15 @@ package io.github.ilyaslabs.foodstack.settings.core.application;
  */
 public record UpdateOrdering(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
         int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, boolean priceApprovalRequired,
-        boolean directCollectionEnabled, long creditLimitMinor) {
+        boolean directCollectionEnabled, long creditLimitMinor, String cardStyle, boolean savedCardsEnabled) {
+
+    /** Rules without card style and saved cards: hosted page, no saved cards. */
+    public UpdateOrdering(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
+            int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, boolean priceApprovalRequired,
+            boolean directCollectionEnabled, long creditLimitMinor) {
+        this(cashEnabled, cardEnabled, serviceFeeMinor, serviceFeeBasisPoints, taxBasisPoints, tipsEnabled,
+                acceptTimeoutSeconds, priceApprovalRequired, directCollectionEnabled, creditLimitMinor, "HOSTED_PAGE", false);
+    }
 
     /** Rules without direct collection. */
     public UpdateOrdering(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
