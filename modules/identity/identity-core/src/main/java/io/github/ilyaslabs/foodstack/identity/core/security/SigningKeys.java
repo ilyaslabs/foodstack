@@ -21,12 +21,19 @@ import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.KeyUse;
+import org.bouncycastle.asn1.ASN1Integer;
+import org.bouncycastle.asn1.ASN1Sequence;
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
+import org.bouncycastle.asn1.sec.SECObjectIdentifiers;
+import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
+import org.bouncycastle.asn1.x9.X9ObjectIdentifiers;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.spec.ECNamedCurveParameterSpec;
 
 /**
- * The ES256 keys that sign tokens (TDD 9.1). Keys come from configuration as EC P-256 PKCS#8
- * private keys; the public half is derived, and the key id is the JWK thumbprint, so the same key
+ * The ES256 keys that sign tokens (TDD 9.1). Keys come from configuration as EC P-256 private
+ * keys, PKCS#8 ({@code openssl pkcs8}, the unit deployer) or SEC1 ({@code BEGIN EC PRIVATE KEY},
+ * what the Helm chart generates), with or without the PEM lines; the public half is derived, and the key id is the JWK thumbprint, so the same key
  * always gets the same id on every replica.
  */
 public final class SigningKeys {
@@ -60,12 +67,28 @@ public final class SigningKeys {
     static ECPrivateKey parsePrivateKey(String encoded) {
         String base64 = encoded.replaceAll("-----(BEGIN|END) [A-Z ]+-----", "").replaceAll("\\s", "");
         try {
-            return (ECPrivateKey) KeyFactory.getInstance("EC")
-                .generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(base64)));
+            byte[] der = Base64.getDecoder().decode(base64);
+            return (ECPrivateKey) KeyFactory.getInstance("EC").generatePrivate(new PKCS8EncodedKeySpec(isSec1(der) ? toPkcs8(der) : der));
         }
-        catch (GeneralSecurityException | IllegalArgumentException | ClassCastException ex) {
-            throw new IllegalArgumentException("foodstack.identity.signing-keys must hold EC P-256 PKCS#8 private keys", ex);
+        catch (GeneralSecurityException | java.io.IOException | IllegalArgumentException | ClassCastException ex) {
+            throw new IllegalArgumentException("foodstack.identity.signing-keys must hold EC P-256 private keys (PKCS#8 or SEC1)", ex);
         }
+    }
+
+    /** SEC1 starts with version 1; PKCS#8 with version 0. */
+    private static boolean isSec1(byte[] der) {
+        try {
+            ASN1Sequence sequence = ASN1Sequence.getInstance(der);
+            return sequence.getObjectAt(0) instanceof ASN1Integer version && version.hasValue(1);
+        }
+        catch (IllegalArgumentException ex) {
+            return false;
+        }
+    }
+
+    private static byte[] toPkcs8(byte[] sec1) throws java.io.IOException {
+        AlgorithmIdentifier algorithm = new AlgorithmIdentifier(X9ObjectIdentifiers.id_ecPublicKey, SECObjectIdentifiers.secp256r1);
+        return new PrivateKeyInfo(algorithm, org.bouncycastle.asn1.sec.ECPrivateKey.getInstance(sec1)).getEncoded();
     }
 
     static ECKey toJwk(ECPrivateKey privateKey) {

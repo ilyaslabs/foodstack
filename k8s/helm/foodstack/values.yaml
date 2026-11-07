@@ -1,0 +1,223 @@
+# FoodStack on Kubernetes (TDD 18). Production defaults: one `core` Deployment running every module
+# (monolith), external managed datastores, Istio ambient mTLS and the Gateway API.
+# Examples: values-split.yaml, values-microservices.yaml; in-cluster datastores for trials: values-dev.yaml.
+
+# monolith | split | microservices | custom (custom reads server.deployments)
+topology: monolith
+
+# The three public hostnames. They may all be the same host. Every host serves every route
+# (the apps call the API on their own origin), as Caddy does on one server.
+hosts:
+  web: example.com          # customer app
+  admin: admin.example.com  # back office (/admin/); its root redirects to /admin/
+  api: api.example.com      # REST API and token keys; FOODSTACK_PUBLIC_URL, the token issuer
+
+# https for real installs; http only for a trial cluster without certificates.
+scheme: https
+
+image:
+  registry: docker.io
+  repository: ilyaslabs
+  # Defaults to the chart's appVersion.
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# ---------------------------------------------------------------------------------------------
+# Server: the same image in every Deployment; each Deployment runs a group of modules.
+# ---------------------------------------------------------------------------------------------
+server:
+  image: foodstack-server
+  # Settings every Deployment starts from. A Deployment may override any of them under
+  # server.overrides.<name> (any topology) or in its server.deployments entry (custom).
+  defaults:
+    replicas: 2
+    autoscaling:
+      enabled: true
+      min: 2
+      max: 6
+      targetCPU: 70
+    pdb:
+      minAvailable: 1
+    resources:
+      requests: { cpu: 500m, memory: 1536Mi }
+      limits: { memory: 1536Mi }
+    # Kafka listener threads per module (TDD 7.1). Lowered automatically so that
+    # (autoscaling max or replicas) x concurrency <= datastores.kafka.topicPartitions.
+    kafkaConcurrency: 3
+    env: {}
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+  # Only for topology: custom. Every module must appear exactly once.
+  deployments: {}
+  #  core:     { modules: [identity, settings, geo, media, store, cart, promotion, payment, rider, review, notification, ledger] }
+  #  order:    { modules: [order],    replicas: 3, autoscaling: { min: 3, max: 20 } }
+  #  dispatch: { modules: [dispatch], replicas: 2, autoscaling: { min: 2, max: 10 } }
+  #  search:   { modules: [search],   replicas: 2 }
+  # Per-Deployment settings for the presets, keyed by Deployment name (core, order, dispatch, ...).
+  overrides: {}
+  # A module moved to its own database cluster: the Secret (key MONGODB_URI) holding its URI.
+  moduleDatastores: {}
+  #  order: { mongodbUriSecret: order-mongodb }
+  # Extra environment for every server pod (plain values) and Secrets to load whole (SMTP_*,
+  # STRIPE_*, FCM_*: see the deployment guide).
+  env:
+    GEOCODING_PROVIDER: nominatim
+    ROUTING_PROVIDER: none
+    PAYMENT_GATEWAY: none
+  envFromSecrets: []
+  # JVM heap as a share of the container memory limit.
+  maxRamPercentage: 75
+  tracing:
+    # OTLP/HTTP endpoint for spans (the observability chart's collector, for example).
+    enabled: false
+    endpoint: http://foodstack-otel-collector.foodstack-observability.svc.cluster.local:4318/v1/traces
+    sampling: "0.1"
+
+# Migrations run once per install and upgrade in a hook Job, before the new pods start (TDD 6.4).
+migrations:
+  enabled: true
+  activeDeadlineSeconds: 900
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { memory: 1Gi }
+
+web:
+  image: foodstack-web
+  replicas: 2
+  autoscaling: { enabled: true, min: 2, max: 6, targetCPU: 70 }
+  pdb: { minAvailable: 1 }
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { memory: 512Mi }
+  env:
+    MAP_TILE_URL: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+    MAP_ATTRIBUTION: © OpenStreetMap contributors
+
+backoffice:
+  image: foodstack-backoffice
+  replicas: 2
+  autoscaling: { enabled: false, min: 2, max: 4, targetCPU: 70 }
+  pdb: { minAvailable: 1 }
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 128Mi }
+  env:
+    MAP_TILE_URL: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+    MAP_TILE_ORIGIN: https://tile.openstreetmap.org
+    MAP_ATTRIBUTION: © OpenStreetMap contributors
+
+# ---------------------------------------------------------------------------------------------
+# Secrets. Generated on first install and kept on upgrades (looked up in the cluster), unless an
+# existing Secret is named. Keys: FOODSTACK_SIGNING_KEYS, FOODSTACK_PII_KEY, FOODSTACK_INTERNAL_TOKEN,
+# FOODSTACK_SERVICE_CLIENT_SECRET, FOODSTACK_ADMIN_PASSWORD.
+# ---------------------------------------------------------------------------------------------
+secrets:
+  existingSecret: ""
+  # First administrator; the password is generated (kubectl get secret ... shows it, see NOTES).
+  adminEmail: admin@example.com
+
+# ---------------------------------------------------------------------------------------------
+# Datastores. Production uses managed or operator-run clusters; give their addresses here, or
+# put them in a Secret (datastores.existingSecret with keys MONGODB_URI, REDIS_URL,
+# ELASTICSEARCH_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY).
+# ---------------------------------------------------------------------------------------------
+datastores:
+  existingSecret: ""
+  mongodb:
+    uri: ""                      # mongodb+srv://user:pass@cluster/?retryWrites=true
+    sharding: false              # true on a sharded cluster: declared shard keys are applied
+  redis:
+    url: ""                      # redis://:pass@host:6379 or rediss://...
+  kafka:
+    bootstrap: ""                # broker1:9092,broker2:9092
+    topicPartitions: 24
+    replicationFactor: 3
+  elasticsearch:
+    uris: ""                     # https://es:9200
+    username: elastic
+    password: ""
+    replicas: 1
+  s3:
+    endpoint: ""                 # empty = AWS S3
+    publicEndpoint: ""           # where browsers load images: a CDN or the bucket URL
+    accessKey: ""
+    secretKey: ""
+    publicBucket: foodstack-public
+    privateBucket: foodstack-private
+    createBuckets: false
+
+# ---------------------------------------------------------------------------------------------
+# Gateway API: the public entry (TLS, path routing to the module that owns each prefix, edge JWT
+# check, edge rate limits) and an internal entry for the web app's server-side rendering.
+# ---------------------------------------------------------------------------------------------
+gateway:
+  enabled: true
+  className: istio
+  # Annotations on the public Gateway (Istio copies them to its Service: cloud load balancer settings).
+  annotations: {}
+  tls:
+    # Secret with tls.crt / tls.key for every host. With certManager.issuer set the chart asks
+    # cert-manager for it.
+    secretName: ""
+    certManager:
+      issuer: ""                 # name of a ClusterIssuer, e.g. letsencrypt
+  # Proxies in front of the gateway (a cloud load balancer adds one) so the client IP comes from
+  # X-Forwarded-For.
+  trustedProxies: 0
+  # Istio deploys the gateway; the chart scales it.
+  autoscaling: { min: 2, max: 10, targetCPU: 70 }
+  jwt:
+    # Reject forged or expired access tokens at the gateway (requests without a token pass; the
+    # server decides what needs a sign-in).
+    enabled: true
+    # Where istiod fetches the token keys. Defaults to the internal gateway's /oauth2/jwks.
+    jwksUri: ""
+  rateLimit:
+    # Envoy's global rate-limit service (TDD 18.3): per client IP, before any request reaches a pod.
+    enabled: true
+    image: docker.io/envoyproxy/ratelimit:3fb70258
+    replicas: 2
+    # Redis for the counters (keys foodstack:gateway:rl:*). Defaults to the address and password
+    # in datastores.redis.url (or the trial Redis). With datastores.existingSecret, give the
+    # address here and a Secret with key REDIS_AUTH (the password).
+    redis:
+      address: ""                # host:6379, or host1:6379,host2:6379 for a cluster
+      type: single               # single | cluster | sentinel
+      tls: false
+      existingSecret: ""
+    # Requests per client IP. unit: second | minute | hour | day
+    limits:
+      all:      { requests: 1200, unit: minute }  # every request through the public entry
+      api:      { requests: 600, unit: minute }   # /api/* (mobile carriers put many people behind one address)
+      signIn:   { requests: 30,  unit: minute }   # /api/v1/auth/login, /code, /register, /reset, /social
+      orders:   { requests: 30,  unit: minute }   # POST /api/v1/orders
+    retryAfterSeconds: 60
+
+# ---------------------------------------------------------------------------------------------
+# Istio ambient (TDD 18.3): ztunnel mTLS for every pod, L4 authorization, and a waypoint for L7
+# load balancing (least request) and module-port authorization.
+# ---------------------------------------------------------------------------------------------
+mesh:
+  enabled: true
+  mtls: STRICT
+  waypoint:
+    enabled: true
+
+# Plain Kubernetes NetworkPolicies, in addition to (or, without Istio, instead of) mesh policies.
+networkPolicies:
+  enabled: true
+
+# ---------------------------------------------------------------------------------------------
+# In-cluster datastores for trials and tests only (values-dev.yaml turns them on).
+# ---------------------------------------------------------------------------------------------
+dev:
+  enabled: false
+  storageClass: ""
+  mongodb: { image: docker.io/library/mongo:8.2, storage: 10Gi }
+  redis: { image: docker.io/library/redis:8.2-alpine, storage: 2Gi }
+  kafka: { image: docker.io/apache/kafka:4.1.1, storage: 10Gi }
+  elasticsearch: { image: docker.io/library/elasticsearch:9.4.0, storage: 10Gi, heap: 1g }
+  storage: { image: docker.io/rustfs/rustfs:1.0.4, storage: 10Gi }
+  mailpit: { image: docker.io/axllent/mailpit:v1.27 }

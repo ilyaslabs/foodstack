@@ -58,6 +58,9 @@ public class ApiSecurityConfiguration {
             .authorizeHttpRequests((authorize) -> authorize
                 .requestMatchers("/actuator/health", "/actuator/health/**", "/actuator/info", "/error")
                 .permitAll()
+                // metrics: exposed only on Kubernetes, on the management port the gateway never routes (TDD 18.5)
+                .requestMatchers("/actuator/prometheus")
+                .permitAll()
                 .anyRequest()
                 .denyAll());
         return http.build();

@@ -1,0 +1,105 @@
+{{- /* Path routing (TDD 9.1, 18.2): each module's public prefixes go to the Deployment that runs it.
+       The same routes hang on the public and the internal Gateway, on every host. */ -}}
+{{- if .Values.gateway.enabled }}
+{{- $root := . }}
+{{- $fn := include "foodstack.fullname" . }}
+{{- $https := eq .Values.scheme "https" }}
+{{- $deployments := include "foodstack.deployments" . | fromYaml }}
+{{- $prefixes := include "foodstack.prefixes" . | fromYaml }}
+{{- $hosts := fromJsonArray (include "foodstack.hostnames" .) }}
+
+{{- range $internal := list false true }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $fn }}-api{{ if $internal }}-internal{{ end }}
+  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+spec:
+  {{- if $internal }}
+  # server-side rendering in the web app; any Host
+  parentRefs:
+    - { name: {{ include "foodstack.internalGatewayName" $root }}, sectionName: http }
+  {{- else }}
+  parentRefs: {{- include "foodstack.parentRefs" (list $root) | nindent 4 }}
+  hostnames: {{- toYaml $hosts | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $name, $d := $deployments }}
+    - matches:
+        {{- range $module := $d.modules }}
+        {{- range get $prefixes $module }}
+        - path: { type: PathPrefix, value: {{ . }} }
+        {{- end }}
+        {{- end }}
+      filters: {{- include "foodstack.securityHeaders" $root | nindent 8 }}
+      backendRefs:
+        - name: {{ include "foodstack.serverName" (list $root $name) }}
+          port: 8080
+    {{- end }}
+{{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $fn }}-apps
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  parentRefs: {{- include "foodstack.parentRefs" (list .) | nindent 4 }}
+  hostnames: {{- toYaml $hosts | nindent 4 }}
+  rules:
+    {{- if .Values.dev.enabled }}
+    # trial object storage: presigned uploads and public images (the Host header is kept, so
+    # upload signatures made for this hostname stay valid)
+    - matches:
+        - path: { type: PathPrefix, value: /{{ .Values.datastores.s3.publicBucket }} }
+        - path: { type: PathPrefix, value: /{{ .Values.datastores.s3.privateBucket }} }
+      backendRefs:
+        - { name: {{ $fn }}-storage, port: 9000 }
+    {{- end }}
+    - matches:
+        - path: { type: PathPrefix, value: /admin }
+      filters: {{- include "foodstack.securityHeaders" $root | nindent 8 }}
+      backendRefs:
+        - { name: {{ $fn }}-backoffice, port: 8080 }
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      filters: {{- include "foodstack.securityHeaders" $root | nindent 8 }}
+      backendRefs:
+        - { name: {{ $fn }}-web, port: 4000 }
+{{- if ne .Values.hosts.admin .Values.hosts.web }}
+---
+# On its own hostname the back office opens at the root.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $fn }}-admin-root
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  parentRefs: {{- include "foodstack.parentRefs" (list .) | nindent 4 }}
+  hostnames: [{{ .Values.hosts.admin | quote }}]
+  rules:
+    - matches:
+        - path: { type: Exact, value: / }
+      filters:
+        - type: RequestRedirect
+          requestRedirect: { path: { type: ReplaceFullPath, replaceFullPath: /admin/ }, statusCode: 302 }
+{{- end }}
+{{- if $https }}
+---
+# Plain HTTP only redirects to HTTPS.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $fn }}-https-redirect
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - { name: {{ include "foodstack.gatewayName" . }}, sectionName: http }
+  hostnames: {{- toYaml $hosts | nindent 4 }}
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect: { scheme: https, statusCode: 301 }
+{{- end }}
+{{- end }}

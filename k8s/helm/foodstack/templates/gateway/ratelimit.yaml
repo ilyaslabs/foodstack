@@ -1,0 +1,240 @@
+{{- /*
+  Global edge rate limiting (TDD 18.3): Envoy's rate-limit service, counters in Redis, attached to
+  the public gateway only. Limits are per client IP; tighter for sign-in and order placement.
+  Over a limit the gateway answers 429 with Retry-After. If the service cannot be reached the
+  gateway lets requests through (fail open); the server's own limits still apply.
+*/ -}}
+{{- if and .Values.gateway.enabled .Values.gateway.rateLimit.enabled (eq .Values.gateway.className "istio") }}
+{{- $rl := .Values.gateway.rateLimit }}
+{{- $fn := include "foodstack.fullname" . }}
+{{- $name := printf "%s-ratelimit" $fn }}
+{{- $labels := dict "app.kubernetes.io/name" "foodstack-ratelimit" "app.kubernetes.io/instance" .Release.Name }}
+{{- /* Redis address and password */ -}}
+{{- $address := $rl.redis.address }}
+{{- $authSecret := $rl.redis.existingSecret }}
+{{- $authKey := "REDIS_AUTH" }}
+{{- $tls := $rl.redis.tls }}
+{{- if not $address }}
+{{- if .Values.dev.enabled }}
+{{- $address = printf "%s-redis:6379" $fn }}
+{{- $authSecret = include "foodstack.datastoreSecretName" . }}
+{{- $authKey = "REDIS_PASSWORD" }}
+{{- else if .Values.datastores.redis.url }}
+{{- $u := urlParse .Values.datastores.redis.url }}
+{{- $address = $u.host }}
+{{- $tls = eq $u.scheme "rediss" }}
+{{- else }}
+{{- fail "gateway.rateLimit.redis.address is needed when datastores.existingSecret holds the Redis URL" }}
+{{- end }}
+{{- end }}
+{{- if and (not $authSecret) (not .Values.dev.enabled) .Values.datastores.redis.url }}
+{{- $u := urlParse .Values.datastores.redis.url }}
+{{- $authSecret = printf "%s-ratelimit-redis" $fn }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $authSecret }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+type: Opaque
+data:
+  REDIS_AUTH: {{ $u.userinfo | trimPrefix ":" | splitList ":" | last | b64enc }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    domain: foodstack
+    descriptors:
+      - key: remote_address
+        rate_limit: { unit: {{ $rl.limits.all.unit }}, requests_per_unit: {{ $rl.limits.all.requests }} }
+      - key: route
+        value: api
+        descriptors:
+          - key: remote_address
+            rate_limit: { unit: {{ $rl.limits.api.unit }}, requests_per_unit: {{ $rl.limits.api.requests }} }
+      - key: route
+        value: sign-in
+        descriptors:
+          - key: remote_address
+            rate_limit: { unit: {{ $rl.limits.signIn.unit }}, requests_per_unit: {{ $rl.limits.signIn.requests }} }
+      - key: route
+        value: orders
+        descriptors:
+          - key: remote_address
+            rate_limit: { unit: {{ $rl.limits.orders.unit }}, requests_per_unit: {{ $rl.limits.orders.requests }} }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  selector: {{- toYaml $labels | nindent 4 }}
+  ports:
+    - { name: grpc, port: 8081, targetPort: grpc, appProtocol: grpc }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  replicas: {{ $rl.replicas }}
+  selector:
+    matchLabels: {{- toYaml $labels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml $labels | nindent 8 }}
+        {{- include "foodstack.podMeshLabels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ toYaml $rl.limits | sha256sum | trunc 16 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {{- toYaml $labels | nindent 14 }}
+      containers:
+        - name: ratelimit
+          image: {{ $rl.image }}
+          command: [/bin/ratelimit]
+          ports:
+            - { name: grpc, containerPort: 8081 }
+            - { name: http, containerPort: 8080 }
+          env:
+            - { name: LOG_LEVEL, value: warn }
+            - { name: LOG_FORMAT, value: json }
+            - { name: USE_STATSD, value: "false" }
+            - { name: RUNTIME_ROOT, value: /data }
+            - { name: RUNTIME_SUBDIRECTORY, value: ratelimit }
+            - { name: RUNTIME_WATCH_ROOT, value: "false" }
+            - { name: RUNTIME_IGNOREDOTFILES, value: "true" }
+            - { name: CACHE_KEY_PREFIX, value: "foodstack:gateway:rl:" }
+            - { name: REDIS_SOCKET_TYPE, value: tcp }
+            - { name: REDIS_TYPE, value: {{ $rl.redis.type | quote }} }
+            - { name: REDIS_URL, value: {{ $address | quote }} }
+            - { name: REDIS_TLS, value: {{ $tls | quote }} }
+            {{- if $authSecret }}
+            - name: REDIS_AUTH
+              valueFrom: { secretKeyRef: { name: {{ $authSecret }}, key: {{ $authKey }} } }
+            {{- end }}
+          volumeMounts:
+            - { name: config, mountPath: /data/ratelimit/config, readOnly: true }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          readinessProbe:
+            httpGet: { path: /healthcheck, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthcheck, port: http }
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap: { name: {{ $name }} }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {{- toYaml $labels | nindent 6 }}
+---
+# The rate-limit filter and the descriptors each request sends, on the public gateway only.
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: {{ $name }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  workloadSelector:
+    labels:
+      gateway.networking.k8s.io/gateway-name: {{ include "foodstack.gatewayName" . }}
+  configPatches:
+    - applyTo: HTTP_FILTER
+      match:
+        context: GATEWAY
+        listener:
+          filterChain:
+            filter:
+              name: envoy.filters.network.http_connection_manager
+              subFilter: { name: envoy.filters.http.router }
+      patch:
+        operation: INSERT_BEFORE
+        value:
+          name: envoy.filters.http.ratelimit
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
+            domain: foodstack
+            failure_mode_deny: false
+            timeout: 0.25s
+            enable_x_ratelimit_headers: DRAFT_VERSION_03
+            response_headers_to_add:
+              - header: { key: Retry-After, value: {{ $rl.retryAfterSeconds | quote }} }
+            rate_limit_service:
+              transport_api_version: V3
+              grpc_service:
+                envoy_grpc:
+                  cluster_name: outbound|8081||{{ $name }}.{{ .Release.Namespace }}.svc.cluster.local
+                  authority: {{ $name }}.{{ .Release.Namespace }}.svc.cluster.local
+    - applyTo: VIRTUAL_HOST
+      match:
+        context: GATEWAY
+      patch:
+        operation: MERGE
+        value:
+          rate_limits:
+            - actions:
+                - remote_address: {}
+            - actions:
+                - header_value_match:
+                    descriptor_key: route
+                    descriptor_value: api
+                    headers:
+                      - { name: ":path", string_match: { prefix: /api/ } }
+                - remote_address: {}
+            - actions:
+                - header_value_match:
+                    descriptor_key: route
+                    descriptor_value: sign-in
+                    headers:
+                      - name: ":path"
+                        string_match: { safe_regex: { regex: "^/api/v1/auth/(login|code|register|reset|social)(/.*)?(\\?.*)?$" } }
+                - remote_address: {}
+            - actions:
+                - header_value_match:
+                    descriptor_key: route
+                    descriptor_value: orders
+                    headers:
+                      - { name: ":method", string_match: { exact: POST } }
+                      - name: ":path"
+                        string_match: { safe_regex: { regex: "^/api/v1/orders/?(\\?.*)?$" } }
+                - remote_address: {}
+{{- end }}

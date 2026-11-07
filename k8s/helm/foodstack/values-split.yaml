@@ -1,0 +1,26 @@
+# topology=split (TDD 18.2): `core` runs every module except the three busiest, which get their own
+# Deployments and scale on their own. Combine with your production values:
+#   helm upgrade foodstack k8s/helm/foodstack -f my-values.yaml -f k8s/helm/foodstack/values-split.yaml
+topology: split
+server:
+  overrides:
+    core:
+      replicas: 3
+      autoscaling: { enabled: true, min: 3, max: 8 }
+    order:
+      replicas: 3
+      autoscaling: { enabled: true, min: 3, max: 20 }
+      pdb: { minAvailable: 2 }
+      resources:
+        requests: { cpu: 500m, memory: 1Gi }
+        limits: { memory: 1Gi }
+    dispatch:
+      autoscaling: { enabled: true, min: 2, max: 10 }
+      resources:
+        requests: { cpu: 500m, memory: 1Gi }
+        limits: { memory: 1Gi }
+    search:
+      autoscaling: { enabled: true, min: 2, max: 8 }
+      resources:
+        requests: { cpu: 250m, memory: 768Mi }
+        limits: { memory: 768Mi }

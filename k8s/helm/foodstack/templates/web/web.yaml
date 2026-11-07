@@ -1,0 +1,5 @@
+{{- /* The customer app's SSR server. Server-side rendering calls the API through the internal
+       gateway (same path routing as the public one, no edge rate limits). */ -}}
+{{- $internal := ternary (printf "http://%s-%s.%s.svc.cluster.local" (include "foodstack.internalGatewayName" .) .Values.gateway.className .Release.Namespace) (printf "http://%s:8080" (include "foodstack.serverHost" (list . "core"))) .Values.gateway.enabled -}}
+{{- $env := dict "PORT" "4000" "FOODSTACK_API_URL" "" "FOODSTACK_INTERNAL_API_URL" $internal "FOODSTACK_ALLOWED_HOSTS" (fromJsonArray (include "foodstack.hostnames" .) | join ",") -}}
+{{ include "foodstack.frontend" (list . "web" 4000 $env "/healthz" 1000) }}
