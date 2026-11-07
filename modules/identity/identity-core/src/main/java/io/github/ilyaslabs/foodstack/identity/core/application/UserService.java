@@ -229,7 +229,8 @@ public class UserService {
 
     /**
      * Cancels a requested account deletion (PRD ID-7): the customer signed in again during the
-     * grace period.
+     * grace period. Once the grace period is over the sign-in is refused ({@code ACCOUNT_DELETED},
+     * 401) even if the sweep has not erased the account yet.
      * @return whether a deletion was pending
      */
     public boolean cancelDeletion(String userId) {
@@ -238,6 +239,10 @@ public class UserService {
             return false;
         }
         UserDocument document = user.get();
+        if (!document.getDeleteAfter().isAfter(this.clock.instant())) {
+            // the grace period is over and the sweep is about to erase it: too late to come back
+            throw new ModuleException.Unauthorized("This account has been deleted", "ACCOUNT_DELETED");
+        }
         document.setDeleteAfter(null);
         document.setDeletionRequestedAt(null);
         document.setUpdatedAt(this.clock.instant());

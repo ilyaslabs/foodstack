@@ -2,7 +2,7 @@
 
 [Back to index](README.md)
 
-Found while tracing the flows on these pages against the [TDD](../TDD.md), first after M1, again after M2, after M3 and after the scale-out work (PR #7). Choices already recorded in TDD sections 21 to 25 are not repeated here unless the code still differs from what those sections say.
+Found while tracing the flows on these pages against the [TDD](../TDD.md), first after M1, again after M2, after M3, after the scale-out work (PR #7) and after M4. Choices already recorded in TDD sections 21 to 26 are not repeated here unless the code still differs from what those sections say.
 
 ## 5.1 Differences that change behaviour or reliability
 
@@ -20,8 +20,11 @@ Found while tracing the flows on these pages against the [TDD](../TDD.md), first
 | G10 | Dispatch score | 5.6: weights in settings | Fixed weights in `DispatchService.score` | Operators cannot tune ranking yet | `DispatchService` | By design for v1 (TDD 24) |
 | G11 | Delivery code in `OrderAccepted` | 9: PII encrypted in events | Was: the 4-digit code travelled in clear inside `OrderDelivery`. Now the order keeps it encrypted and events carry only the cipher | None left | `OrderPlacementService.encrypt`, `DispatchService.decrypt` | Fixed in the M3 follow-up |
 | G12 | Push delivery log | 5.2 notification: delivery log | Emails are logged with retries; push is sent once with no log entry | A lost push is not visible to support; the in-app message is always there | `PushService` | **Partly fixed in PR #7**: push is queued in `notification_deliveries` (channel `PUSH`) with two quick retries; the admin log still lists emails only |
-
 | G13 | Sign-in | 9.1 (before PR #7): hosted login page, Authorization Code + PKCE, server session | Stateless auth API (`/api/v1/auth/*`), in-app sign-in screens, rotating refresh tokens | Any replica answers any sign-in; no session to share | `AuthController`, `SessionService`, `auth` library | **Changed in PR #7** (ilyas, 2026-11-03); TDD 9.1 rewritten |
+| G14 | Merchant routing | 5.4: `order` calls `payment.resolveMerchant` | Same call (`MerchantAccounts.resolve`): branch account, else brand account, else the operator's, and only while finance allows the branch and the ledger has not suspended it | As designed; see [9.3](09-money-and-trust-flows.md#93-stores-that-collect-card-payments-themselves) | `MerchantAccounts`, `OrderPlacementService` | Built in M4 |
+| G15 | Embedded card fields and saved cards | 5.4: per gateway | Operator's merchant account only; a branch's own account always uses the hosted page | Card numbers never reach FoodStack (PCI SAQ A, ilyas 2026-11-07) | `PaymentService.checkout`, `pay-page.ts` | By design for M4 (TDD 26) |
+| G16 | Data export | PRD ID-7: one export | The browser joins four exports, one per module that holds customer data | No module reads another's data | `account-page.ts`, each module's `/mine/export` | By design (TDD 26) |
+| G17 | Deletion grace | PRD ID-7 | 14 days (`foodstack.identity.deletion-grace`), sweep every 30 min; a sign-in during the grace period cancels, a sign-in after it is refused | Erasure happens up to 30 min after the grace ends | `AccountDeletion`, `UserService.cancelDeletion` | Built in M4 |
 
 ## 5.2 Places where the TDD text is out of date (code is fine)
 
@@ -33,7 +36,7 @@ Found while tracing the flows on these pages against the [TDD](../TDD.md), first
 | D4 | 7.2 | Every consumer uses the inbox | Consumers that change counters or state once per event use it (promotion, order's payment listener); naturally idempotent ones do not (search, order projections, notification keyed by event id, payment refunds keyed by event id) | Say so; see [2.3](02-platform-mechanics.md#23-events-outbox-relay-kafka-consumer) |
 | D5 | 9.1 revocation | "short in-memory cache" | 5 seconds (`foodstack.security.revocation-cache-ttl`), at most 100,000 users | Updated in PR #7 (TDD 9.1) |
 | D6 | 5.3 order placement flow | `order` calls `cart.checkoutSnapshot`, then `store`, `geo` and `promotion` itself and computes the totals | `order` calls `CartApi.checkout` once; `cart` prices everything, and the same code shows the customer the quote | Replace the flow with [6.3](06-ordering-flows.md#63-place-an-order-cash) |
-| D7 | 5.2 events | `order` publishes 8 events; `payment` 3; `identity` 4 | `order` publishes one event per step (12, adding `OrderPreparing`, `OrderCollected`, `OrderRejected`, `OrderFailed`); `payment` adds `RefundFailed`; `identity` adds `EmailCodeIssued` (`UserDeleted` and `RoleChanged` are not built) | Update the Publishes column |
+| D7 | 5.2 events | `order` publishes 8 events; `payment` 3; `identity` 4 | `order` publishes one event per step (12, adding `OrderPreparing`, `OrderCollected`, `OrderRejected`, `OrderFailed`); `payment` adds `RefundFailed`; `identity` adds `EmailCodeIssued` (M4 adds `AccountDeletionScheduled` and `UserDeleted`; `RoleChanged` is not built) | Update the Publishes column |
 | D8 | 8.1 idempotency | `Idempotency-Key` cached 24 h in Redis on order placement, payments and refunds | Order placement only, kept in MongoDB (`order_placement_keys`) inside the order's transaction. Payments are one per order (`_id` = order id) and refunds are keyed by the event id, so neither needs a header | Describe the per-case keys |
 | D9 | 8.1 rate limiting, 10 | Redis token bucket | Fixed window counter (`foodstack:<module>:rl:<scope>:<id>:<window>`) | Say fixed window; a token bucket only if bursts become a problem |
 | D10 | 10 login codes | `foodstack:identity:otp:<emailHash>` | `foodstack:identity:code:<purpose>:<userId>` (hash of the code and tries) plus a per-email rate limit | Update the row |
@@ -48,12 +51,6 @@ Listed so nobody looks for them in the code. Milestones are from the [PRD releas
 |---|---|---|
 | Kubernetes Helm chart, Gateway API routes, edge JWT check, Istio mTLS, `AuthorizationPolicy` | 9.1, 18 | M5 |
 | Edge rate limiting on Kubernetes (Envoy rate-limit service) | 8.1, 18.3 | M5, with the Helm chart (the single server has per-IP limits in Caddy since PR #7) |
-| Store merchant accounts, credit limits, `resolveMerchant` | 5.4 | M4 (M2 collects everything on the operator's account) |
-| Embedded card fields, saved cards | 5.4 | M4 |
-| Email template editor for the operator | 5.2 notification | M4 (M2 templates are in code, in every language) |
-| Per-store kitchen ticket paper width (80 or 58 mm) | 5.3 | M4 store screens (M2 tickets fit 80 mm rolls: no page margins, 72 mm print width) |
-| Ledger, commission postings, payouts | 5.2 ledger | M4 |
-| Cities (dispatch by city, per-city pricing and fees) | 5.6, PRD DR-1b | M4 (ilyas, 2026-11-03; TDD 24) |
 | Batching two orders to one rider | PRD DR-9 | Later ("Could") |
 | Social login, TOTP | 9.1 | M5 (email codes are built) |
 | Operator handbook: step-by-step setup and scaling runbooks for non-experts | Deployment guide | M6 |

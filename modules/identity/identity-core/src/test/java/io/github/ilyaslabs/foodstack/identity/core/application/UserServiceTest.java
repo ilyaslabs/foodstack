@@ -38,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 class UserServiceTest {
@@ -364,5 +365,20 @@ class UserServiceTest {
         verify(this.users).save(saved.capture());
         assertThat(saved.getValue().getDeleteAfter()).isNull();
         assertThat(saved.getValue().getDeletionRequestedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("signing in after the grace period is over is refused, even before the sweep erases the account")
+    void cancelDeletionTooLate() {
+        // given
+        UserDocument due = new UserDocument();
+        due.setId("u1");
+        due.setStatus(UserStatus.ACTIVE);
+        due.setDeleteAfter(NOW);
+        given(this.users.findById("u1")).willReturn(Optional.of(due));
+
+        // when / then
+        assertThatThrownBy(() -> this.service.cancelDeletion("u1")).isInstanceOf(ModuleException.Unauthorized.class);
+        verify(this.users, never()).save(any(UserDocument.class));
     }
 }
