@@ -31,9 +31,12 @@ public final class FoodstackKafkaAutoConfiguration {
     @ConditionalOnMissingBean
     ModuleEventing moduleEventing(@Value("${foodstack.namespace:foodstack}") String namespace,
             KafkaTemplate<String, String> kafkaTemplate, StringRedisTemplate redis, JsonMapper jsonMapper,
-            FoodstackKafkaProperties properties, org.springframework.beans.factory.ObjectProvider<Clock> clock) {
-        return new ModuleEventing(namespace, kafkaTemplate, redis, jsonMapper, properties,
+            FoodstackKafkaProperties properties, org.springframework.beans.factory.ObjectProvider<Clock> clock,
+            org.springframework.beans.factory.ObjectProvider<io.micrometer.core.instrument.MeterRegistry> meters) {
+        ModuleEventing eventing = new ModuleEventing(namespace, kafkaTemplate, redis, jsonMapper, properties,
                 clock.getIfAvailable(Clock::systemUTC));
+        meters.ifAvailable(eventing::setMeterRegistry);
+        return eventing;
     }
 
     /** Back-office writes go to the identity module's audit log through {@code <namespace>.audit} (PRD AD-3). */
@@ -56,6 +59,13 @@ public final class FoodstackKafkaAutoConfiguration {
                     .config(org.apache.kafka.common.config.TopicConfig.RETENTION_MS_CONFIG,
                             String.valueOf(java.time.Duration.ofDays(7).toMillis()))
                     .build());
+    }
+
+    /** Picked up by Boot's listener container factory: a replayed dead letter reaches only its group. */
+    @Bean
+    @ConditionalOnMissingBean(org.springframework.kafka.listener.adapter.RecordFilterStrategy.class)
+    ReplayFilter foodstackReplayFilter() {
+        return new ReplayFilter();
     }
 
     /** Picked up by Boot's listener container factory: retries with backoff, then the {@code .dlt} topic. */

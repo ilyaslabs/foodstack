@@ -53,6 +53,11 @@ class KafkaTestApplication {
         return new FailingListener();
     }
 
+    @Bean
+    OtherListener otherListener() {
+        return new OtherListener();
+    }
+
     /** Fails every record whose value is "poison", so it ends in the dead-letter topic. */
     static class FailingListener {
 
@@ -67,6 +72,18 @@ class KafkaTestApplication {
                 this.poisonAttempts.incrementAndGet();
                 throw new IllegalStateException("cannot handle poison");
             }
+            this.handled.add(value);
+        }
+    }
+
+    /** A second group on the same topic, which a replay meant for {@code dltest} must skip. */
+    static class OtherListener {
+
+        final java.util.List<String> handled = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+        @org.springframework.kafka.annotation.KafkaListener(id = "dltest-other-listener", groupId = "dltest-other",
+                topics = "foodstack.dltest.events", properties = "auto.offset.reset=earliest")
+        void onEvent(String value) {
             this.handled.add(value);
         }
     }

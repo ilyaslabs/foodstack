@@ -69,6 +69,8 @@ server:
   envFromSecrets: []
   # JVM heap as a share of the container memory limit.
   maxRamPercentage: 75
+  # Console log format: ecs or logstash (JSON lines with traceId), or "" for plain text.
+  logFormat: ecs
   tracing:
     # OTLP/HTTP endpoint for spans (the observability chart's collector, for example).
     enabled: false

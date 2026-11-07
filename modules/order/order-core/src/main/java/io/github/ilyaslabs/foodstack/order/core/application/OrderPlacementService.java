@@ -192,6 +192,10 @@ public class OrderPlacementService {
             }
             throw ex;
         }
+        OrderLifecycleService.reached(OrderStatus.PLACED);
+        if (confirmed.status() != OrderStatus.PLACED) {
+            OrderLifecycleService.reached(confirmed.status());
+        }
         this.live.publish(orderId, store.storeId(), confirmed.status().name(), confirmed.revision());
 
         if (cash) {

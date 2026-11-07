@@ -24,7 +24,7 @@
 {{- $address = $u.host }}
 {{- $tls = eq $u.scheme "rediss" }}
 {{- else }}
-{{- fail "gateway.rateLimit.redis.address is needed when datastores.existingSecret holds the Redis URL" }}
+{{- fail "Set datastores.redis.url, or gateway.rateLimit.redis.address when datastores.existingSecret holds the Redis URL (or values-dev.yaml for a trial)" }}
 {{- end }}
 {{- end }}
 {{- if and (not $authSecret) (not .Values.dev.enabled) .Values.datastores.redis.url }}

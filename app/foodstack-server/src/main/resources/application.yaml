@@ -78,6 +78,14 @@ management:
   health:
     elasticsearch:
       enabled: false
+  # Histograms for latency percentiles on dashboards and alerts (TDD 18.5)
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        foodstack.dispatch: true
+      slo:
+        http.server.requests: 100ms, 250ms, 500ms, 1s, 2s
   # Tracing (TDD 7.5): W3C traceparent through HTTP, module calls, the outbox and Kafka. Spans are
   # exported over OTLP only when FOODSTACK_TRACING_EXPORT is true, to FOODSTACK_OTLP_ENDPOINT.
   tracing:

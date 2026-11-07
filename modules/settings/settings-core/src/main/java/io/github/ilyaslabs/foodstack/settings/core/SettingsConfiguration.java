@@ -1,5 +1,12 @@
 package io.github.ilyaslabs.foodstack.settings.core;
 
+import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
+import io.github.ilyaslabs.foodstack.settings.core.deadletters.DeadLetterListener;
+import io.github.ilyaslabs.foodstack.settings.core.deadletters.DeadLetterService;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.kafka.core.KafkaTemplate;
 import java.time.Clock;
 import java.time.Duration;
 
@@ -106,5 +113,19 @@ public class SettingsConfiguration {
             ModuleMongo settingsMongo, SettingsCache settingsCache, Clock clock) {
         return new DeliverySettingsService(deliveryRepository, settingsOutbox, settingsMongo.transactionTemplate(),
                 settingsCache, clock);
+    }
+
+    @Bean
+    DeadLetterService settingsDeadLetters(MongoTemplate settingsMongoTemplate, KafkaTemplate<String, String> kafka,
+            PiiCipher pii, JsonMapper jsonMapper, @Value("${foodstack.namespace:foodstack}") String namespace,
+            Clock clock, ObjectProvider<MeterRegistry> meters) {
+        return new DeadLetterService(settingsMongoTemplate, kafka, pii, jsonMapper, namespace, clock,
+                meters.getIfAvailable(SimpleMeterRegistry::new));
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    DeadLetterListener settingsDeadLetterListener(DeadLetterService settingsDeadLetters) {
+        return new DeadLetterListener(settingsDeadLetters);
     }
 }

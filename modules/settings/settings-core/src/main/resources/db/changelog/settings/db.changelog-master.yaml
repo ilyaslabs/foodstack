@@ -36,3 +36,23 @@ databaseChangeLog:
               { "_id": "ordering", "cashEnabled": true, "cardEnabled": false, "serviceFeeMinor": { "$numberLong": "0" },
                 "serviceFeeBasisPoints": 0, "taxBasisPoints": 0, "tipsEnabled": true, "acceptTimeoutSeconds": 180,
                 "version": { "$numberLong": "0" } }
+  - changeSet:
+      id: settings-4
+      author: foodstack
+      comment: "settings_dead_letters (M5, G1): failed events for the back office; unsharded (rare), kept 30 days like the .dlt topics"
+      changes:
+        - createCollection:
+            collectionName: settings_dead_letters
+        - createIndex:
+            collectionName: settings_dead_letters
+            keys: '{ "status": 1, "failedAt": -1 }'
+            options: '{ "name": "status_failed" }'
+        - createIndex:
+            collectionName: settings_dead_letters
+            keys: '{ "failedAt": -1 }'
+            options: '{ "name": "failed" }'
+        - createIndex:
+            collectionName: settings_dead_letters
+            keys: '{ "expiresAt": 1 }'
+            options: '{ "name": "expires_ttl", "expireAfterSeconds": 0 }'
+

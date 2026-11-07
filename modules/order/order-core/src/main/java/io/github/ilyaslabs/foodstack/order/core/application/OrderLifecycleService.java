@@ -35,6 +35,7 @@ import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+import io.micrometer.core.instrument.Metrics;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -499,9 +500,15 @@ public class OrderLifecycleService {
             return changed;
         });
         if (after != null) {
+            reached(to);
             this.live.publish(after.id(), after.store().storeId(), after.status().name(), after.revision());
         }
         return after;
+    }
+
+    /** The order funnel (TDD 18.5): one count per order reaching each status. */
+    static void reached(OrderStatus status) {
+        Metrics.counter("foodstack.orders", "status", status.name()).increment();
     }
 
     /** A timeline note without a status change, with its event; {@code null} when the order changed meanwhile. */

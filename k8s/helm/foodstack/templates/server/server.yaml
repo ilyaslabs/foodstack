@@ -152,6 +152,11 @@ spec:
               value: "8082"
             - name: MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE
               value: health,info,prometheus
+            {{- with $root.Values.server.logFormat }}
+            # one JSON object per line with traceId and spanId, for Loki (TDD 18.5)
+            - name: LOGGING_STRUCTURED_FORMAT_CONSOLE
+              value: {{ . | quote }}
+            {{- end }}
             # the hook Job migrated before this pod started; trial datastores migrate here
             - name: FOODSTACK_MONGODB_MIGRATIONS_ENABLED
               value: {{ not (include "foodstack.migrationsJob" $root | eq "true") | quote }}

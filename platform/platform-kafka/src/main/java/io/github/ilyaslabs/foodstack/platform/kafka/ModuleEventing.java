@@ -4,6 +4,7 @@ import java.time.Clock;
 
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
+import io.micrometer.core.instrument.MeterRegistry;
 import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -28,6 +29,8 @@ public class ModuleEventing {
 
     private final Clock clock;
 
+    private MeterRegistry meters;
+
     public ModuleEventing(String namespace, KafkaTemplate<String, String> kafka, StringRedisTemplate redis,
             JsonMapper jsonMapper, FoodstackKafkaProperties properties, Clock clock) {
         this.namespace = namespace;
@@ -38,6 +41,11 @@ public class ModuleEventing {
         this.clock = clock;
     }
 
+    /** Outbox relays built after this publish their backlog meters here. */
+    public void setMeterRegistry(MeterRegistry meters) {
+        this.meters = meters;
+    }
+
     public OutboxWriter outbox(ModuleMongo mongo) {
         return new OutboxWriter(mongo, this.jsonMapper, this.clock);
     }
@@ -45,8 +53,12 @@ public class ModuleEventing {
     public OutboxRelay relay(ModuleMongo mongo) {
         BucketLeases leases = new BucketLeases(this.redis, this.namespace, mongo.module() + ":outbox",
                 this.properties.getRelay().getLease(), this.clock);
-        return new OutboxRelay(mongo, topic(mongo.module()), this.kafka, leases, this.jsonMapper, this.properties,
-                this.clock);
+        OutboxRelay relay = new OutboxRelay(mongo, topic(mongo.module()), this.kafka, leases, this.jsonMapper,
+                this.properties, this.clock);
+        if (this.meters != null) {
+            relay.bindTo(this.meters);
+        }
+        return relay;
     }
 
     public KafkaAdmin.NewTopics topics(String module) {
