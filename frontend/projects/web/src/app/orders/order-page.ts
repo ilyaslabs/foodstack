@@ -20,6 +20,7 @@ import { AuthService } from '@foodstack/auth';
 import { Icon, LocaleStore, PushRegistration } from '@foodstack/ui';
 
 import { Ui } from '../i18n';
+import { RateOrder } from '../reviews/rate-order';
 import { CancelOrderDialog } from './cancel-order-dialog';
 import { DeliveryTracking } from './delivery-tracking';
 import { hintKey, statusKey, stepsFor, tone } from './order-status';
@@ -30,7 +31,7 @@ import { hintKey, statusKey, stepsFor, tone } from './order-status';
  */
 @Component({
   selector: 'app-order-page',
-  imports: [RouterLink, MatButtonModule, MatProgressBarModule, DeliveryTracking, Icon],
+  imports: [RouterLink, MatButtonModule, MatProgressBarModule, DeliveryTracking, Icon, RateOrder],
   templateUrl: './order-page.html',
   styleUrl: './order-page.scss',
 })

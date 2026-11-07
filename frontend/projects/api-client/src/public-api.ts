@@ -18,3 +18,4 @@ export * from './lib/ordering-clients';
 export * from './lib/live-stream';
 export * from './lib/delivery-models';
 export * from './lib/delivery-clients';
+export * from './lib/review-client';

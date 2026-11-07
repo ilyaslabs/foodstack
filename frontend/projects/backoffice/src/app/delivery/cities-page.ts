@@ -3,14 +3,26 @@ import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import {
+  MAT_DIALOG_DATA,
+  MatDialog,
+  MatDialogModule,
+  MatDialogRef,
+} from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
-import { City, CityClient, CityInput, GeoClient, OperatorPricing, Translated } from '@foodstack/api-client';
+import {
+  City,
+  CityClient,
+  CityInput,
+  GeoClient,
+  OperatorPricing,
+  Translated,
+} from '@foodstack/api-client';
 import { Icon, LocaleStore } from '@foodstack/ui';
 
 import { describeError } from '../shared/errors';
@@ -24,7 +36,14 @@ import { TranslatedField, cleanTranslated, hasDefault } from '../shared/translat
  */
 @Component({
   selector: 'app-cities-page',
-  imports: [MatButtonModule, MatCardModule, MatDialogModule, MatProgressBarModule, MatSnackBarModule, Icon],
+  imports: [
+    MatButtonModule,
+    MatCardModule,
+    MatDialogModule,
+    MatProgressBarModule,
+    MatSnackBarModule,
+    Icon,
+  ],
   template: `
     <header class="fs-page-header head">
       <div>
@@ -372,7 +391,12 @@ export class CityDialog {
       this.error.set('Enter the city name.');
       return;
     }
-    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      Math.abs(lat) > 90 ||
+      Math.abs(lng) > 180
+    ) {
       this.error.set('Enter the centre as latitude and longitude, such as 31.5204 and 74.3587.');
       return;
     }

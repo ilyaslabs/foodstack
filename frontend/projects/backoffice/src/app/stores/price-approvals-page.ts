@@ -18,13 +18,21 @@ import { describeError } from '../shared/errors';
  */
 @Component({
   selector: 'app-price-approvals-page',
-  imports: [DatePipe, RouterLink, MatButtonModule, MatCardModule, MatProgressBarModule, MatSnackBarModule, Icon],
+  imports: [
+    DatePipe,
+    RouterLink,
+    MatButtonModule,
+    MatCardModule,
+    MatProgressBarModule,
+    MatSnackBarModule,
+    Icon,
+  ],
   template: `
     <header class="fs-page-header">
       <h1>Price approvals</h1>
       <p>
-        Price changes by store owners wait here. Customers keep the current price until you
-        approve. Turn approval on or off in
+        Price changes by store owners wait here. Customers keep the current price until you approve.
+        Turn approval on or off in
         <a routerLink="/settings/ordering">Ordering</a>.
       </p>
     </header>
@@ -55,13 +63,21 @@ import { describeError } from '../shared/errors';
                   }
                 </span>
               </div>
-              <div class="prices" [attr.aria-label]="'From ' + money(change.currentMinor) + ' to ' + proposed(change)">
+              <div
+                class="prices"
+                [attr.aria-label]="'From ' + money(change.currentMinor) + ' to ' + proposed(change)"
+              >
                 <span class="old">{{ money(change.currentMinor) }}</span>
                 <fs-icon name="chevron_right" />
                 <span class="new">{{ proposed(change) }}</span>
               </div>
               <div class="buttons">
-                <button mat-button type="button" (click)="decide(change, false)" [disabled]="busy() === change.id">
+                <button
+                  mat-button
+                  type="button"
+                  (click)="decide(change, false)"
+                  [disabled]="busy() === change.id"
+                >
                   Reject
                 </button>
                 <button
@@ -180,11 +196,17 @@ export class PriceApprovalsPage implements OnInit {
   protected async decide(change: PriceChange, approve: boolean): Promise<void> {
     this.busy.set(change.id);
     try {
-      await firstValueFrom(approve ? this.client.approve(change.id) : this.client.reject(change.id));
+      await firstValueFrom(
+        approve ? this.client.approve(change.id) : this.client.reject(change.id),
+      );
       this.changes.update((list) => list.filter((c) => c.id !== change.id));
-      this.snackBar.open(approve ? 'Approved. Customers see the new price now.' : 'Rejected.', undefined, {
-        duration: 3000,
-      });
+      this.snackBar.open(
+        approve ? 'Approved. Customers see the new price now.' : 'Rejected.',
+        undefined,
+        {
+          duration: 3000,
+        },
+      );
     } catch (error) {
       this.snackBar.open(describeError(error, 'That did not work. Try again.'), 'Dismiss', {
         duration: 8000,

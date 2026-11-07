@@ -13,7 +13,9 @@ public enum MediaPurpose {
     MENU_ITEM(true),
 
     /** Rider identity and vehicle documents; private, served only through short-lived signed URLs. */
-    RIDER_DOCUMENT(false);
+    RIDER_DOCUMENT(false),
+    /** Customer photos on store reviews (PRD RV-1); public once the review is published. */
+    REVIEW(true);
 
     private final boolean publicAsset;
 

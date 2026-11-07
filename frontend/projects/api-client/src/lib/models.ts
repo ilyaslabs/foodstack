@@ -45,7 +45,7 @@ export interface Me {
   storeIds?: string[];
 }
 
-export type MediaPurpose = 'BRANDING' | 'STORE' | 'MENU_ITEM' | 'RIDER_DOCUMENT';
+export type MediaPurpose = 'BRANDING' | 'STORE' | 'MENU_ITEM' | 'RIDER_DOCUMENT' | 'REVIEW';
 
 export interface MediaAsset {
   id: string;

@@ -1,0 +1,52 @@
+# Words masked in review texts and replies (PRD RV-3), one per line, matched as whole words and
+# ignoring case. Operators add their own with foodstack.review.blocked-words.
+# English
+arse
+arsehole
+asshole
+bastard
+bitch
+bollocks
+bullshit
+cock
+crap
+cunt
+dick
+dickhead
+fuck
+fucked
+fucker
+fucking
+motherfucker
+piss
+pissed
+prick
+shit
+shitty
+slut
+twat
+wanker
+whore
+# Arabic
+كلب
+حمار
+حقير
+وسخ
+زبالة
+عاهرة
+شرموطة
+منيوك
+كس
+طيز
+# Urdu
+کتا
+کمینہ
+حرامی
+گدھا
+الو کا پٹھا
+بے غیرت
+کنجر
+گشتی
+haramzada
+kamina
+kutta

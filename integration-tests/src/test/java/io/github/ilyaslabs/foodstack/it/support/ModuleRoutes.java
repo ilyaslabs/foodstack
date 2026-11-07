@@ -29,6 +29,7 @@ public final class ModuleRoutes {
         prefixes.put("dispatch", List.of("/api/v1/deliveries", "/api/v1/dispatch"));
         prefixes.put("notification", List.of("/api/v1/notifications", "/api/v1/devices"));
         prefixes.put("ledger", List.of("/api/v1/ledger", "/api/v1/payouts"));
+        prefixes.put("review", List.of("/api/v1/reviews"));
         PREFIXES = Map.copyOf(prefixes);
     }
 

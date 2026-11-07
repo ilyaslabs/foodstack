@@ -126,36 +126,43 @@ import { StoreContext } from './store-context';
                 >
               </div>
               @if (canEditBrand()) {
-              <div class="section-actions">
-                <button mat-button type="button" (click)="openItem(section, null)">
-                  <fs-icon name="add" /> Add dish
-                </button>
-                <button
-                  mat-icon-button
-                  type="button"
-                  [matMenuTriggerFor]="sectionMenu"
-                  aria-label="Section options"
-                >
-                  <fs-icon name="more_vert" />
-                </button>
-                <mat-menu #sectionMenu="matMenu">
-                  <button mat-menu-item type="button" (click)="startRename(section)">Rename</button>
+                <div class="section-actions">
+                  <button mat-button type="button" (click)="openItem(section, null)">
+                    <fs-icon name="add" /> Add dish
+                  </button>
                   <button
-                    mat-menu-item
+                    mat-icon-button
                     type="button"
-                    [disabled]="first"
-                    (click)="move(section, -1)"
+                    [matMenuTriggerFor]="sectionMenu"
+                    aria-label="Section options"
                   >
-                    Move up
+                    <fs-icon name="more_vert" />
                   </button>
-                  <button mat-menu-item type="button" [disabled]="last" (click)="move(section, 1)">
-                    Move down
-                  </button>
-                  <button mat-menu-item type="button" (click)="deleteSection(section)">
-                    Delete section
-                  </button>
-                </mat-menu>
-              </div>
+                  <mat-menu #sectionMenu="matMenu">
+                    <button mat-menu-item type="button" (click)="startRename(section)">
+                      Rename
+                    </button>
+                    <button
+                      mat-menu-item
+                      type="button"
+                      [disabled]="first"
+                      (click)="move(section, -1)"
+                    >
+                      Move up
+                    </button>
+                    <button
+                      mat-menu-item
+                      type="button"
+                      [disabled]="last"
+                      (click)="move(section, 1)"
+                    >
+                      Move down
+                    </button>
+                    <button mat-menu-item type="button" (click)="deleteSection(section)">
+                      Delete section
+                    </button>
+                  </mat-menu>
+                </div>
               }
             }
           </header>

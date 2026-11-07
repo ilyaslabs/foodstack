@@ -25,9 +25,19 @@ import java.util.Map;
  * @param temporarilyClosed the owner's safety switch
  * @param prepMinutes average preparation time
  * @param dietaryTags dietary tags found on its menu
+ * @param ratingCount published reviews of the branch (PRD RV-4)
+ * @param ratingAverage their mean, one decimal; 0 with none
  */
 public record StoreCard(String storeId, String slug, String brandId, String brandName, String branchName, int branchCount,
         Map<String, String> description, List<String> cuisines, Map<String, String> logoUrls, Map<String, String> coverUrls,
         String area, String city, long distanceMeters, String deliveryMode, boolean pickupEnabled, boolean openNow,
-        boolean temporarilyClosed, int prepMinutes, List<String> dietaryTags) {
+        boolean temporarilyClosed, int prepMinutes, List<String> dietaryTags, long ratingCount, double ratingAverage) {
+
+    public StoreCard(String storeId, String slug, String brandId, String brandName, String branchName, int branchCount,
+            Map<String, String> description, List<String> cuisines, Map<String, String> logoUrls, Map<String, String> coverUrls,
+            String area, String city, long distanceMeters, String deliveryMode, boolean pickupEnabled, boolean openNow,
+            boolean temporarilyClosed, int prepMinutes, List<String> dietaryTags) {
+        this(storeId, slug, brandId, brandName, branchName, branchCount, description, cuisines, logoUrls, coverUrls, area, city,
+                distanceMeters, deliveryMode, pickupEnabled, openNow, temporarilyClosed, prepMinutes, dietaryTags, 0, 0);
+    }
 }

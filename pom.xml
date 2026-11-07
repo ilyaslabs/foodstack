@@ -360,6 +360,26 @@
             </dependency>
             <dependency>
                 <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-review-api</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-review-core</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-review-impl</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-review-web</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
                 <artifactId>foodstack-rider-api</artifactId>
                 <version>${revision}</version>
             </dependency>

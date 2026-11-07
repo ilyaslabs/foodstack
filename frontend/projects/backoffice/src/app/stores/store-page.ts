@@ -21,6 +21,10 @@ import { StoreContext } from './store-context';
 import { StoreHours } from './store-hours';
 import { StoreOwners } from './store-owners';
 import { StorePayments } from './store-payments';
+import { StoreReviews } from './store-reviews';
+
+/** Profile, Menu, Hours, Delivery, Riders and Reviews come first. */
+const PAYMENTS_TAB = 6;
 import { StoreRiders } from './store-riders';
 import { StoreProfile } from './store-profile';
 import { StoreZones } from './store-zones';
@@ -43,6 +47,7 @@ import { StoreZones } from './store-zones';
     StoreHours,
     StoreOwners,
     StorePayments,
+    StoreReviews,
     StoreRiders,
     StoreProfile,
     StoreZones,
@@ -175,6 +180,11 @@ import { StoreZones } from './store-zones';
           ></mat-tab>
           <mat-tab label="Riders"
             ><ng-template matTabContent><app-store-riders /></ng-template
+          ></mat-tab>
+        }
+        @if (!paymentsOnly()) {
+          <mat-tab label="Reviews"
+            ><ng-template matTabContent><app-store-reviews /></ng-template
           ></mat-tab>
         }
         @if (showPayments()) {
@@ -313,7 +323,7 @@ export class StorePage {
     effect(() => {
       // until the session is known no tab is picked, so a hidden tab never loads
       if (this.paymentsOnly()) this.tab.set(0);
-      else if (this.openTab() === 'payments' && this.showPayments()) this.tab.set(5);
+      else if (this.openTab() === 'payments' && this.showPayments()) this.tab.set(PAYMENTS_TAB);
     });
   }
 

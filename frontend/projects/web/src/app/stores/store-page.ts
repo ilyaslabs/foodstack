@@ -20,6 +20,8 @@ import {
   DeliveryQuote,
   Menu,
   MenuItem,
+  RatingSummary,
+  ReviewClient,
   StoreClient,
   StorePage as Page,
   WEEKDAYS,
@@ -31,6 +33,7 @@ import { BrandingStore, Icon, LocaleStore } from '@foodstack/ui';
 import { CartPanel } from '../cart/cart-panel';
 
 import { Ui } from '../i18n';
+import { StoreReviews } from '../reviews/store-reviews';
 import { LocationStore } from '../location-store';
 import { cuisineLabel } from './cuisine';
 import { foodColour } from './food-colour';
@@ -69,7 +72,7 @@ const DIETARY: Record<string, Record<string, string>> = {
 /** A store's page: who they are, whether they are open, the delivery fee to you, and the menu. */
 @Component({
   selector: 'app-store-page',
-  imports: [RouterLink, MatButtonModule, MatProgressBarModule, Icon, CartPanel],
+  imports: [RouterLink, MatButtonModule, MatProgressBarModule, Icon, CartPanel, StoreReviews],
   templateUrl: './store-page.html',
   styleUrl: './store-page.scss',
 })
@@ -92,6 +95,8 @@ export class StorePage {
   protected readonly menu = signal<Menu | null>(null);
   protected readonly missing = signal(false);
   protected readonly quote = signal<DeliveryQuote | null>(null);
+  protected readonly rating = signal<RatingSummary | null>(null);
+  private readonly reviews = inject(ReviewClient);
   protected readonly browser = signal(false);
   protected readonly cuisineLabel = cuisineLabel;
 
@@ -156,15 +161,22 @@ export class StorePage {
   private async load(slug: string): Promise<void> {
     this.store.set(null);
     this.menu.set(null);
+    this.rating.set(null);
     this.missing.set(false);
     try {
       const store = await firstValueFrom(this.stores.page(slug));
       const menu = await firstValueFrom(this.stores.menu(store.id));
       this.store.set(store);
       this.menu.set(menu);
+      this.rating.set(await firstValueFrom(this.reviews.summary(store.id)).catch(() => null));
     } catch {
       this.missing.set(true);
     }
+  }
+
+  protected jumpToReviews(event: Event): void {
+    event.preventDefault();
+    this.document.getElementById('reviews')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   /** One canonical address per store page, so search engines index the slug URL. */

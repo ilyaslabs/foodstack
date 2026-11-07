@@ -128,6 +128,8 @@ module-switch:
       mode: local
     ledger:
       mode: local
+    review:
+      mode: local
   propagate-headers: [Authorization, Accept-Language]
 
 foodstack:

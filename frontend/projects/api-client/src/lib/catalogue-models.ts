@@ -441,6 +441,9 @@ export interface StoreCard {
   temporarilyClosed: boolean;
   prepMinutes: number;
   dietaryTags: string[];
+  /** Published reviews of the branch. */
+  ratingCount?: number;
+  ratingAverage?: number;
 }
 
 export interface StoreSearchPage {

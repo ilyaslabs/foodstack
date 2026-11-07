@@ -40,7 +40,17 @@ import { foodGradient } from './food-colour';
         }
       </div>
       <div class="text">
-        <h3>{{ card.brandName }}</h3>
+        <div class="title">
+          <h3>{{ card.brandName }}</h3>
+          @if (card.ratingCount) {
+            <span
+              class="rating"
+              [attr.aria-label]="ui.t('starsLabel', { n: ui.number(card.ratingAverage ?? 0, 1) })"
+              ><fs-icon name="star" /> {{ ui.number(card.ratingAverage ?? 0, 1) }}
+              <span class="count">({{ ui.number(card.ratingCount) }})</span></span
+            >
+          }
+        </div>
         <p class="cuisines">{{ cuisines() }}</p>
         <p class="meta">
           <span>{{ ui.distance(card.distanceMeters) }}</span>
@@ -139,6 +149,32 @@ import { foodGradient } from './food-colour';
       font-size: 13px;
       font-weight: 700;
       box-shadow: var(--fs-shadow-card);
+    }
+    .title {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .title h3 {
+      min-inline-size: 0;
+    }
+    .rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      flex: none;
+      font: var(--mat-sys-label-large);
+      color: var(--mat-sys-on-surface);
+    }
+    .rating fs-icon {
+      --fs-icon-size: 16px;
+      color: #f5a623;
+      align-self: center;
+    }
+    .rating .count {
+      color: var(--mat-sys-on-surface-variant);
+      font-weight: 400;
     }
     .time fs-icon {
       --fs-icon-size: 15px;

@@ -1,11 +1,13 @@
 package io.github.ilyaslabs.foodstack.media.web;
 
+import io.github.ilyaslabs.foodstack.media.api.MediaPurpose;
 import io.github.ilyaslabs.foodstack.media.core.application.MediaService;
 import io.github.ilyaslabs.foodstack.media.core.application.StartUpload;
 import io.github.ilyaslabs.foodstack.media.web.dto.MediaAssetResponse;
 import io.github.ilyaslabs.foodstack.media.web.dto.StartUploadRequest;
 import io.github.ilyaslabs.foodstack.media.web.dto.UploadTicketResponse;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
+import io.github.ilyaslabs.moduleswitch.ModuleException;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
@@ -31,14 +33,18 @@ class MediaController {
 
     @PostMapping("/uploads")
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasAuthority('media:upload')")
+    @PreAuthorize("hasAnyAuthority('media:upload', 'media:upload:review')")
     UploadTicketResponse startUpload(@Valid @RequestBody StartUploadRequest request) {
+        if (!CurrentUser.hasAuthority("media:upload") && request.purpose() != MediaPurpose.REVIEW) {
+            // customers upload review photos only
+            throw new ModuleException.Forbidden("Only review photos can be uploaded", "MEDIA_PURPOSE_DENIED");
+        }
         return MediaWebMapper.toResponse(this.mediaService.startUpload(
                 new StartUpload(request.purpose(), request.contentType(), request.sizeBytes()), CurrentUser.id()));
     }
 
     @PostMapping("/uploads/{mediaId}/complete")
-    @PreAuthorize("hasAuthority('media:upload')")
+    @PreAuthorize("hasAnyAuthority('media:upload', 'media:upload:review')")
     MediaAssetResponse complete(@PathVariable String mediaId) {
         return MediaWebMapper.toResponse(this.mediaService.completeUpload(mediaId, CurrentUser.id()));
     }

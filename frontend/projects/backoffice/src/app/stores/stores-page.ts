@@ -31,7 +31,11 @@ import { STATUS_LABELS } from './store-status';
   template: `
     <header class="fs-page-header with-action">
       <div>
-        <h1>{{ session.operator() ? 'Stores' : (stores()?.length ?? 0) > 1 ? 'Branches' : 'My store' }}</h1>
+        <h1>
+          {{
+            session.operator() ? 'Stores' : (stores()?.length ?? 0) > 1 ? 'Branches' : 'My store'
+          }}
+        </h1>
         <p>
           @if (session.operator()) {
             Onboard restaurants, check what keeps a draft from going live, and help owners.

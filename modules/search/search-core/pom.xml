@@ -36,6 +36,10 @@
             <artifactId>foodstack-geo-api</artifactId>
         </dependency>
         <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-review-api</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-elasticsearch</artifactId>
         </dependency>

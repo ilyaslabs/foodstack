@@ -143,6 +143,13 @@ export class Shell {
       permission: ['ledger:read', 'ledger:store'],
     },
     {
+      path: '/reviews',
+      label: 'Reviews',
+      icon: 'rate_review',
+      exact: false,
+      permission: 'review:moderate',
+    },
+    {
       path: '/users',
       label: 'Users',
       icon: 'group',

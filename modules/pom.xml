@@ -23,6 +23,7 @@
         <module>search</module>
         <module>promotion</module>
         <module>ledger</module>
+        <module>review</module>
         <module>cart</module>
         <module>payment</module>
         <module>order</module>

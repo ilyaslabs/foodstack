@@ -144,7 +144,12 @@ export const DIETARY_LABELS: Record<string, string> = {
               <mat-chip-option value="some">Chosen branches</mat-chip-option>
             </mat-chip-listbox>
             @if (!everywhere) {
-              <mat-chip-listbox multiple aria-label="Branches" [(ngModel)]="branchIds" class="branches">
+              <mat-chip-listbox
+                multiple
+                aria-label="Branches"
+                [(ngModel)]="branchIds"
+                class="branches"
+              >
                 @for (branch of data.branches; track branch.id) {
                   <mat-chip-option [value]="branch.id">{{ branch.name }}</mat-chip-option>
                 }

@@ -57,8 +57,8 @@ interface Row {
     <form (ngSubmit)="save()">
       <mat-dialog-content>
         <p class="lead">
-          <strong>{{ locale.pick(data.item.name) }}</strong>. Leave a field empty to use the
-          brand's price.
+          <strong>{{ locale.pick(data.item.name) }}</strong
+          >. Leave a field empty to use the brand's price.
           @if (data.approval) {
             The platform approves price changes before customers see them.
           }
@@ -66,7 +66,12 @@ interface Row {
         @for (row of rows; track row.optionId) {
           <mat-form-field appearance="outline">
             <mat-label>{{ row.label }}</mat-label>
-            <input matInput inputmode="decimal" [name]="row.optionId ?? 'item'" [(ngModel)]="row.value" />
+            <input
+              matInput
+              inputmode="decimal"
+              [name]="row.optionId ?? 'item'"
+              [(ngModel)]="row.value"
+            />
             <span matTextSuffix>&nbsp;{{ data.currency }}</span>
             <mat-hint>Brand price {{ locale.money(row.brandMinor, data.currency) }}</mat-hint>
           </mat-form-field>

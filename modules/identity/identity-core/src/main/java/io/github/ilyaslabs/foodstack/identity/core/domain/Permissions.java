@@ -73,20 +73,26 @@ public final class Permissions {
     /** Connect the merchant account of one's own brand or branch (PRD DP-3, BB-9). */
     public static final String PAYMENT_ACCOUNT = "payment:account";
 
+    /** Upload review photos only (PRD RV-1). */
+    public static final String MEDIA_UPLOAD_REVIEW = "media:upload:review";
+
+    /** Moderation queue: hide and show store reviews with a reason (PRD RV-3). */
+    public static final String REVIEW_MODERATE = "review:moderate";
+
     private static final Map<Role, Set<String>> BY_ROLE = new EnumMap<>(Role.class);
 
     static {
         BY_ROLE.put(Role.ADMIN, Set.of(SETTINGS_MANAGE, MEDIA_UPLOAD, USERS_READ, USERS_MANAGE, STORE_MANAGE,
                 GEO_MANAGE, SEARCH_MANAGE, PROMOTION_MANAGE, ORDER_MANAGE, PAYMENT_MANAGE, RIDER_MANAGE, DISPATCH_MANAGE, AUDIT_READ,
-                LEDGER_READ, LEDGER_SETTLE, STORE_COLLECTION_MANAGE));
+                LEDGER_READ, LEDGER_SETTLE, STORE_COLLECTION_MANAGE, REVIEW_MODERATE));
         BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ, PAYMENT_MANAGE, LEDGER_READ, LEDGER_SETTLE, STORE_COLLECTION_MANAGE));
-        BY_ROLE.put(Role.SUPPORT, Set.of(USERS_READ, ORDER_MANAGE, DISPATCH_MANAGE));
+        BY_ROLE.put(Role.SUPPORT, Set.of(USERS_READ, ORDER_MANAGE, DISPATCH_MANAGE, REVIEW_MODERATE));
         BY_ROLE.put(Role.BRAND_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD, LEDGER_STORE, PAYMENT_ACCOUNT));
         BY_ROLE.put(Role.STORE_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD, LEDGER_STORE, PAYMENT_ACCOUNT));
         BY_ROLE.put(Role.STORE_STAFF, Set.of(STORE_PORTAL));
         BY_ROLE.put(Role.RIDER, Set.of(RIDER_PORTAL, MEDIA_UPLOAD));
         BY_ROLE.put(Role.STORE_RIDER, Set.of(RIDER_PORTAL, MEDIA_UPLOAD));
-        BY_ROLE.put(Role.CUSTOMER, Set.of());
+        BY_ROLE.put(Role.CUSTOMER, Set.of(MEDIA_UPLOAD_REVIEW));
     }
 
     private Permissions() {
