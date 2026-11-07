@@ -113,6 +113,26 @@ import { toMajor, toMinor } from '../shared/money';
               the price they are added with.
             </p>
           </div>
+          <div class="card-section">
+            <h2>Branches collecting card payments</h2>
+            <mat-slide-toggle name="directCollection" [(ngModel)]="directCollectionEnabled"
+              >Finance may let a branch take card payments into its own merchant
+              account</mat-slide-toggle
+            >
+            <p class="section-hint">
+              Card payments go to your account unless finance allows a branch on its Payments tab
+              and the branch connects its account. You then collect your commission and fees from
+              the branch. When a branch owes you more than its credit limit, its card payments come
+              back to your account until it settles.
+            </p>
+            <div class="grid-3">
+              <mat-form-field appearance="outline">
+                <mat-label>Default credit limit ({{ currency() }})</mat-label>
+                <input matInput name="creditLimit" inputmode="decimal" [(ngModel)]="creditLimit" />
+                <mat-hint>Unless a branch has its own limit</mat-hint>
+              </mat-form-field>
+            </div>
+          </div>
           @if (error()) {
             <div class="banner error" role="alert">{{ error() }}</div>
           }
@@ -162,6 +182,8 @@ export class OrderingPage implements OnInit {
   protected taxPercent = '';
   protected acceptMinutes = 5;
   protected priceApprovalRequired = false;
+  protected directCollectionEnabled = false;
+  protected creditLimit = '';
   private etag = '';
 
   async ngOnInit(): Promise<void> {
@@ -180,6 +202,8 @@ export class OrderingPage implements OnInit {
       this.taxPercent = percent(value.taxBasisPoints);
       this.acceptMinutes = Math.round(value.acceptTimeoutSeconds / 60);
       this.priceApprovalRequired = value.priceApprovalRequired ?? false;
+      this.directCollectionEnabled = value.directCollectionEnabled ?? false;
+      this.creditLimit = toMajor(value.creditLimitMinor ?? 5_000_000, this.currency());
       this.loaded.set(true);
     } catch {
       this.loadError.set(true);
@@ -196,6 +220,11 @@ export class OrderingPage implements OnInit {
     }
     if (fee === null || feeBp === null || taxBp === null) {
       this.error.set('Fees and tax must be numbers of 0 or more.');
+      return;
+    }
+    const limit = toMinor(this.creditLimit, this.currency());
+    if (limit === null) {
+      this.error.set('The credit limit must be a number of 0 or more.');
       return;
     }
     if (!(this.acceptMinutes >= 1 && this.acceptMinutes <= 60)) {
@@ -216,6 +245,8 @@ export class OrderingPage implements OnInit {
             tipsEnabled: this.tipsEnabled,
             acceptTimeoutSeconds: Math.round(this.acceptMinutes) * 60,
             priceApprovalRequired: this.priceApprovalRequired,
+            directCollectionEnabled: this.directCollectionEnabled,
+            creditLimitMinor: limit,
           },
           this.etag,
         ),

@@ -123,6 +123,18 @@ export interface StoreDetails {
   /** The branch's own dated commission changes, over the brand's. */
   commissionChanges: CommissionChange[];
   brandOwnerUserIds: string[];
+  /** Who collects card payments (PRD DP-2, DP-7); missing on servers before M4. */
+  paymentCollection?: PaymentCollection;
+}
+
+/** Whether the branch collects card payments itself, with its credit limit. */
+export interface PaymentCollection {
+  mode: 'OPERATOR' | 'DIRECT';
+  /** The branch's own credit limit in minor units, or null for the operator's default. */
+  creditLimitMinor: number | null;
+  reason: string | null;
+  changedBy: string | null;
+  changedAt: number | null;
 }
 
 export interface StoreSummary {

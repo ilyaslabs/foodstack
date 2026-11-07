@@ -332,6 +332,42 @@ export interface OrderingSettings {
   acceptTimeoutSeconds: number;
   /** Store owners' price changes wait for operator approval (PRD ST-6, BB-4). Off by default. */
   priceApprovalRequired?: boolean;
+  /** Branches may be allowed to collect card payments themselves (PRD DP-1). Off by default. */
+  directCollectionEnabled?: boolean;
+  /** What a direct-collecting branch may owe before it is suspended, unless it has its own limit. */
+  creditLimitMinor?: number;
+}
+
+/** A brand's or branch's merchant account, without its keys. */
+export interface MerchantAccount {
+  id: string;
+  scope: 'BRAND' | 'STORE';
+  ownerId: string;
+  gateway: string;
+  keyHint: string;
+  status: 'ACTIVE' | 'FAILED' | 'REVOKED';
+  lastError: string | null;
+  verifiedAt: number | null;
+}
+
+/** Where a branch's card payments go (PRD DP-1 to DP-7, BB-9). */
+export interface CardCollection {
+  storeId: string;
+  brandId: string | null;
+  /** Direct collection is on for the platform. */
+  enabled: boolean;
+  gateway: string;
+  mode: 'OPERATOR' | 'DIRECT';
+  /** Over its credit limit: the operator collects until it settles. */
+  suspended: boolean;
+  storeAccount: MerchantAccount | null;
+  brandAccount: MerchantAccount | null;
+  collectedBy: 'OPERATOR' | 'STORE';
+  accountId: string | null;
+  storeWebhookUrl: string | null;
+  brandWebhookUrl: string | null;
+  canConnectStore: boolean;
+  canConnectBrand: boolean;
 }
 
 export type PromotionType = 'PERCENT' | 'FIXED' | 'FREE_DELIVERY';

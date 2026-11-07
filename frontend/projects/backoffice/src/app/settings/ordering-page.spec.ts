@@ -15,6 +15,8 @@ const SETTINGS: OrderingSettings = {
   taxBasisPoints: 1600,
   tipsEnabled: true,
   acceptTimeoutSeconds: 300,
+  directCollectionEnabled: true,
+  creditLimitMinor: 2_500_000,
 };
 
 describe('OrderingPage', () => {

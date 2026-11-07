@@ -262,6 +262,11 @@ class StoreControllersTest {
             .andExpect(jsonPath("$.paymentCollection.mode").value("DIRECT"))
             .andExpect(jsonPath("$.paymentCollection.creditLimitMinor").value(900))
             .andExpect(jsonPath("$.paymentCollection.changedAt").value(1_800_000_000L));
+        given(this.storeService.get("s1")).willReturn(direct);
+        this.mvc.perform(get("/api/v1/stores/s1/details")
+            .with(jwt().authorities(List.of(new SimpleGrantedAuthority("store:payment-collection:manage")))))
+            .andExpect(status().isOk());
+        this.mvc.perform(get("/api/v1/stores/s1/details").with(jwt())).andExpect(status().isForbidden());
     }
 
     private static BrandDetails brand() {

@@ -1,5 +1,6 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -47,6 +48,7 @@ type Preset = 'this-week' | 'last-week' | 'this-month' | 'last-month' | 'custom'
 @Component({
   selector: 'app-finance-page',
   imports: [
+    RouterLink,
     FormsModule,
     MatButtonModule,
     MatButtonToggleModule,
@@ -173,7 +175,16 @@ type Preset = 'this-week' | 'last-week' | 'this-month' | 'last-month' | 'custom'
         @for (row of r.rows; track row.accountId) {
           <div class="row">
             <span class="name">
-              <strong>{{ row.name }}</strong>
+              @if (row.partyType === 'STORE' && session.can('store:payment-collection:manage')) {
+                <a
+                  class="branch-link"
+                  [routerLink]="['/stores', row.partyId]"
+                  [queryParams]="{ tab: 'payments' }"
+                  ><strong>{{ row.name }}</strong></a
+                >
+              } @else {
+                <strong>{{ row.name }}</strong>
+              }
               @if (brandName(row.brandId); as brand) {
                 <span class="muted">{{ brand }}</span>
               }
@@ -323,6 +334,14 @@ type Preset = 'this-week' | 'last-week' | 'this-month' | 'last-month' | 'custom'
       flex-direction: column;
       min-inline-size: 0;
     }
+    .branch-link {
+      color: inherit;
+      text-decoration: none;
+    }
+    .branch-link:hover strong,
+    .branch-link:focus-visible strong {
+      text-decoration: underline;
+    }
     .name strong {
       font: var(--mat-sys-body-large);
       font-weight: 500;
@@ -435,7 +454,7 @@ type Preset = 'this-week' | 'last-week' | 'this-month' | 'last-month' | 'custom'
 export class FinancePage implements OnInit {
   private readonly client = inject(LedgerClient);
   private readonly stores = inject(StoreClient);
-  private readonly session = inject(Session);
+  protected readonly session = inject(Session);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   protected readonly locale = inject(LocaleStore);

@@ -5,7 +5,12 @@ import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import {
+  MAT_DIALOG_DATA,
+  MatDialog,
+  MatDialogModule,
+  MatDialogRef,
+} from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -62,8 +67,8 @@ import { STATUS_LABELS } from './store-status';
             <div>
               <h2>Branches</h2>
               <p class="section-hint">
-                Every branch shares the brand's menu. A branch can change its own prices and add
-                its own items on the Menu tab.
+                Every branch shares the brand's menu. A branch can change its own prices and add its
+                own items on the Menu tab.
               </p>
             </div>
             <button mat-stroked-button type="button" (click)="addBranch()">
@@ -76,7 +81,11 @@ import { STATUS_LABELS } from './store-status';
           <ul class="rows" role="list">
             @for (branch of branches() ?? []; track branch.id) {
               <li>
-                <a class="row" [routerLink]="['/stores', branch.id]" [class.current]="branch.id === store()?.id">
+                <a
+                  class="row"
+                  [routerLink]="['/stores', branch.id]"
+                  [class.current]="branch.id === store()?.id"
+                >
                   <span class="badge" aria-hidden="true"><fs-icon name="storefront" /></span>
                   <span class="main">
                     <strong>{{ branch.branchName ?? branch.brandName }}</strong>
@@ -144,7 +153,9 @@ import { STATUS_LABELS } from './store-status';
             </div>
             @if (history().length) {
               <table class="history">
-                <caption class="visually-hidden">Commission changes</caption>
+                <caption class="visually-hidden">
+                  Commission changes
+                </caption>
                 <thead>
                   <tr>
                     <th scope="col">From</th>
@@ -156,13 +167,21 @@ import { STATUS_LABELS } from './store-status';
                   @for (change of history(); track $index) {
                     <tr [class.planned]="change.effectiveFrom * 1000 > nowMillis">
                       <td>
-                        {{ change.effectiveFrom ? (change.effectiveFrom * 1000 | date: 'mediumDate') : 'Start' }}
+                        {{
+                          change.effectiveFrom
+                            ? (change.effectiveFrom * 1000 | date: 'mediumDate')
+                            : 'Start'
+                        }}
                         @if (change.effectiveFrom * 1000 > nowMillis) {
                           <span class="chip plain">Planned</span>
                         }
                       </td>
                       <td>{{ change.scope }}</td>
-                      <td>{{ change.commission ? describe(change.commission) : 'Back to the brand rate' }}</td>
+                      <td>
+                        {{
+                          change.commission ? describe(change.commission) : 'Back to the brand rate'
+                        }}
+                      </td>
                     </tr>
                   }
                 </tbody>
@@ -371,7 +390,9 @@ export class StoreBrand {
       ...c,
       scope: 'This branch',
     }));
-    return [...brand, ...branch].sort((a, b) => b.effectiveFrom - a.effectiveFrom) as (CommissionChange & {
+    return [...brand, ...branch].sort(
+      (a, b) => b.effectiveFrom - a.effectiveFrom,
+    ) as (CommissionChange & {
       scope: string;
     })[];
   });
@@ -451,20 +472,30 @@ export class StoreBrand {
       const percent = Number(String(this.percent).replace(',', '.'));
       const fixed = this.fixed.trim() === '' ? 0 : toMinor(this.fixed, this.locale.currency());
       if (!Number.isFinite(percent) || percent < 0 || percent > 100 || fixed === null) {
-        this.snackBar.open('Enter a commission from 0 to 100 % and a fixed fee of 0 or more.', 'Dismiss', {
-          duration: 6000,
-        });
+        this.snackBar.open(
+          'Enter a commission from 0 to 100 % and a fixed fee of 0 or more.',
+          'Dismiss',
+          {
+            duration: 6000,
+          },
+        );
         return;
       }
       commission = { percentBasisPoints: Math.round(percent * 100), fixedMinor: fixed };
     }
-    const effectiveFrom = this.from ? Math.floor(new Date(`${this.from}T00:00:00`).getTime() / 1000) : null;
+    const effectiveFrom = this.from
+      ? Math.floor(new Date(`${this.from}T00:00:00`).getTime() / 1000)
+      : null;
     this.saving.set(true);
     try {
       if (this.target === 'brand') {
-        this.fill(await firstValueFrom(this.brands.updateCommission(brand.id, commission!, effectiveFrom)));
+        this.fill(
+          await firstValueFrom(this.brands.updateCommission(brand.id, commission!, effectiveFrom)),
+        );
       } else {
-        this.context.set(await firstValueFrom(this.stores.updateCommission(store.id, commission, effectiveFrom)));
+        this.context.set(
+          await firstValueFrom(this.stores.updateCommission(store.id, commission, effectiveFrom)),
+        );
       }
       this.from = '';
       this.snackBar.open(
@@ -494,9 +525,13 @@ export class StoreBrand {
     );
     if (!created) return;
     this.branches.update((list) => [...(list ?? []), summaryOf(created)]);
-    this.snackBar.open('Branch added as a draft. Open it to finish its hours and delivery area.', undefined, {
-      duration: 5000,
-    });
+    this.snackBar.open(
+      'Branch added as a draft. Open it to finish its hours and delivery area.',
+      undefined,
+      {
+        duration: 5000,
+      },
+    );
   }
 }
 
@@ -651,7 +686,12 @@ export class NewBranchDialog {
 
   protected async save(): Promise<void> {
     this.error.set(null);
-    if (!this.branchName.trim() || !this.legalName.trim() || !this.line1.trim() || !this.town.trim()) {
+    if (
+      !this.branchName.trim() ||
+      !this.legalName.trim() ||
+      !this.line1.trim() ||
+      !this.town.trim()
+    ) {
       this.error.set('Enter the branch name, legal name, street address and town.');
       return;
     }

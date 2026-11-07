@@ -6,11 +6,13 @@ import { liveStream } from './live-stream';
 import { Versioned } from './models';
 import {
   AddCartLine,
+  CardCollection,
   Cart,
   Checkout,
   CheckoutRequest,
   EmailDelivery,
   InboxItem,
+  MerchantAccount,
   NotificationPreferences,
   Order,
   OrderAction,
@@ -162,6 +164,36 @@ export class PaymentClient {
 
   options(): Observable<PaymentOptions> {
     return this.http.get<PaymentOptions>(`${this.config.apiUrl}/api/v1/payments/options`);
+  }
+
+  /** Where a branch's card payments go, with its brand's and its own merchant accounts. */
+  collection(storeId: string): Observable<CardCollection> {
+    return this.http.get<CardCollection>(
+      `${this.config.apiUrl}/api/v1/payments/merchant-accounts`,
+      {
+        params: { storeId },
+      },
+    );
+  }
+
+  /** Connects a brand's or branch's merchant account; the keys are tried by the gateway first. */
+  connect(
+    scope: 'brands' | 'stores',
+    ownerId: string,
+    secretKey: string,
+    webhookSecret: string,
+  ): Observable<MerchantAccount> {
+    return this.http.put<MerchantAccount>(
+      `${this.config.apiUrl}/api/v1/payments/merchant-accounts/${scope}/${encodeURIComponent(ownerId)}`,
+      { secretKey, webhookSecret },
+    );
+  }
+
+  /** Stops using the account; payments already taken keep it for refunds. */
+  disconnect(scope: 'brands' | 'stores', ownerId: string): Observable<void> {
+    return this.http.delete<void>(
+      `${this.config.apiUrl}/api/v1/payments/merchant-accounts/${scope}/${encodeURIComponent(ownerId)}`,
+    );
   }
 }
 

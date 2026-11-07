@@ -47,80 +47,80 @@ import { StoreContext } from './store-context';
   template: `
     <div class="stack">
       @if (canEditBrand()) {
-      <mat-card appearance="outlined">
-        <form [formGroup]="brandForm" (ngSubmit)="saveBrand()">
-          <section class="card-section">
-            <h2>Brand</h2>
-            <p class="section-hint">Shared by every branch of the brand.</p>
-            <mat-form-field appearance="outline">
-              <mat-label>Brand name</mat-label>
-              <input matInput formControlName="name" maxlength="80" required />
-              <mat-error>Enter the brand name</mat-error>
-            </mat-form-field>
-            <app-translated-field
-              label="Description"
-              [multiline]="true"
-              [maxLength]="500"
-              [(value)]="description"
-            />
-            <mat-form-field appearance="outline">
-              <mat-label>Cuisines</mat-label>
-              <input matInput formControlName="cuisines" />
-              <mat-hint>Separate with commas, such as "pakistani, bbq".</mat-hint>
-            </mat-form-field>
-          </section>
-          <section class="card-section">
-            <h2>Images</h2>
-            <div class="images">
-              @for (slot of imageSlots; track slot.key) {
-                <div class="image-slot">
-                  <div class="image-box" [class.cover]="slot.key === 'cover'">
-                    @if (images()[slot.key]; as image) {
-                      <img [src]="image.url" [alt]="slot.label" />
-                    } @else {
-                      <fs-icon name="image" />
-                    }
-                  </div>
-                  <div class="image-text">
-                    <strong>{{ slot.label }}</strong>
-                    <span>{{ slot.hint }}</span>
-                    <div class="image-buttons">
-                      <button
-                        mat-stroked-button
-                        type="button"
-                        (click)="input.click()"
-                        [disabled]="uploading()"
-                      >
-                        <fs-icon name="upload" /> {{ images()[slot.key] ? 'Replace' : 'Upload' }}
-                      </button>
-                      @if (images()[slot.key]) {
-                        <button mat-button type="button" (click)="clearImage(slot.key)">
-                          Remove
-                        </button>
+        <mat-card appearance="outlined">
+          <form [formGroup]="brandForm" (ngSubmit)="saveBrand()">
+            <section class="card-section">
+              <h2>Brand</h2>
+              <p class="section-hint">Shared by every branch of the brand.</p>
+              <mat-form-field appearance="outline">
+                <mat-label>Brand name</mat-label>
+                <input matInput formControlName="name" maxlength="80" required />
+                <mat-error>Enter the brand name</mat-error>
+              </mat-form-field>
+              <app-translated-field
+                label="Description"
+                [multiline]="true"
+                [maxLength]="500"
+                [(value)]="description"
+              />
+              <mat-form-field appearance="outline">
+                <mat-label>Cuisines</mat-label>
+                <input matInput formControlName="cuisines" />
+                <mat-hint>Separate with commas, such as "pakistani, bbq".</mat-hint>
+              </mat-form-field>
+            </section>
+            <section class="card-section">
+              <h2>Images</h2>
+              <div class="images">
+                @for (slot of imageSlots; track slot.key) {
+                  <div class="image-slot">
+                    <div class="image-box" [class.cover]="slot.key === 'cover'">
+                      @if (images()[slot.key]; as image) {
+                        <img [src]="image.url" [alt]="slot.label" />
+                      } @else {
+                        <fs-icon name="image" />
                       }
                     </div>
+                    <div class="image-text">
+                      <strong>{{ slot.label }}</strong>
+                      <span>{{ slot.hint }}</span>
+                      <div class="image-buttons">
+                        <button
+                          mat-stroked-button
+                          type="button"
+                          (click)="input.click()"
+                          [disabled]="uploading()"
+                        >
+                          <fs-icon name="upload" /> {{ images()[slot.key] ? 'Replace' : 'Upload' }}
+                        </button>
+                        @if (images()[slot.key]) {
+                          <button mat-button type="button" (click)="clearImage(slot.key)">
+                            Remove
+                          </button>
+                        }
+                      </div>
+                    </div>
+                    <input
+                      #input
+                      type="file"
+                      hidden
+                      accept="image/png,image/jpeg,image/webp"
+                      (change)="upload(slot.key, $event)"
+                    />
                   </div>
-                  <input
-                    #input
-                    type="file"
-                    hidden
-                    accept="image/png,image/jpeg,image/webp"
-                    (change)="upload(slot.key, $event)"
-                  />
-                </div>
+                }
+              </div>
+              @if (uploading()) {
+                <mat-progress-bar mode="indeterminate" />
               }
+            </section>
+            <div class="actions">
+              <button mat-flat-button type="submit" [disabled]="savingBrand() || uploading()">
+                {{ savingBrand() ? 'Saving…' : 'Save brand' }}
+              </button>
             </div>
-            @if (uploading()) {
-              <mat-progress-bar mode="indeterminate" />
-            }
-          </section>
-          <div class="actions">
-            <button mat-flat-button type="submit" [disabled]="savingBrand() || uploading()">
-              {{ savingBrand() ? 'Saving…' : 'Save brand' }}
-            </button>
-          </div>
-        </form>
-      </mat-card>
+          </form>
+        </mat-card>
       }
 
       <mat-card appearance="outlined">

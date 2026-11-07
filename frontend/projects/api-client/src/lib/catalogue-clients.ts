@@ -109,6 +109,22 @@ export class StoreClient {
       .pipe(map(versioned));
   }
 
+  /** Lets the branch collect card payments itself, or stops it (finance, PRD DP-2, DP-7). */
+  setPaymentCollection(
+    storeId: string,
+    mode: 'OPERATOR' | 'DIRECT',
+    creditLimitMinor: number | null,
+    reason: string,
+  ): Observable<Versioned<StoreDetails>> {
+    return this.http
+      .put<StoreDetails>(
+        this.url(`/${storeId}/payment-collection`),
+        { mode, creditLimitMinor, reason },
+        { observe: 'response' },
+      )
+      .pipe(map(versioned));
+  }
+
   /** Changes the branch's web address (operator only); a taken slug answers 409 SLUG_TAKEN. */
   updateSlug(storeId: string, slug: string, etag: string): Observable<Versioned<StoreDetails>> {
     return this.put(`/${storeId}/slug`, { slug }, etag);

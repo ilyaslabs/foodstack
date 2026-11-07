@@ -61,43 +61,43 @@ import { StoreContext } from './store-context';
         </section>
       </mat-card>
       @if (canEdit()) {
-      <mat-card appearance="outlined">
-        <form [formGroup]="form" (ngSubmit)="add()">
-          <section class="card-section">
-            <h2>Give access</h2>
-            <p class="section-hint">
-              For a new email an account is created with the starting password; share it with them
-              safely. An existing account keeps its password.
-            </p>
-            <div class="grid-3">
-              <mat-form-field appearance="outline">
-                <mat-label>Email</mat-label>
-                <input matInput type="email" formControlName="email" required />
-                <mat-error>Enter a valid email</mat-error>
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Name</mat-label>
-                <input matInput formControlName="displayName" maxlength="80" />
-              </mat-form-field>
-              <mat-form-field appearance="outline">
-                <mat-label>Starting password</mat-label>
-                <input
-                  matInput
-                  formControlName="initialPassword"
-                  type="password"
-                  autocomplete="new-password"
-                />
-                <mat-hint>At least 12 characters</mat-hint>
-              </mat-form-field>
+        <mat-card appearance="outlined">
+          <form [formGroup]="form" (ngSubmit)="add()">
+            <section class="card-section">
+              <h2>Give access</h2>
+              <p class="section-hint">
+                For a new email an account is created with the starting password; share it with them
+                safely. An existing account keeps its password.
+              </p>
+              <div class="grid-3">
+                <mat-form-field appearance="outline">
+                  <mat-label>Email</mat-label>
+                  <input matInput type="email" formControlName="email" required />
+                  <mat-error>Enter a valid email</mat-error>
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Name</mat-label>
+                  <input matInput formControlName="displayName" maxlength="80" />
+                </mat-form-field>
+                <mat-form-field appearance="outline">
+                  <mat-label>Starting password</mat-label>
+                  <input
+                    matInput
+                    formControlName="initialPassword"
+                    type="password"
+                    autocomplete="new-password"
+                  />
+                  <mat-hint>At least 12 characters</mat-hint>
+                </mat-form-field>
+              </div>
+            </section>
+            <div class="actions">
+              <button mat-flat-button type="submit" [disabled]="saving()">
+                <fs-icon name="add" /> {{ scope() === 'brand' ? 'Add brand owner' : 'Add manager' }}
+              </button>
             </div>
-          </section>
-          <div class="actions">
-            <button mat-flat-button type="submit" [disabled]="saving()">
-              <fs-icon name="add" /> {{ scope() === 'brand' ? 'Add brand owner' : 'Add manager' }}
-            </button>
-          </div>
-        </form>
-      </mat-card>
+          </form>
+        </mat-card>
       }
     </div>
   `,

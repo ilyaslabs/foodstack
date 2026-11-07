@@ -20,6 +20,7 @@ import { StoreBrand } from './store-brand';
 import { StoreContext } from './store-context';
 import { StoreHours } from './store-hours';
 import { StoreOwners } from './store-owners';
+import { StorePayments } from './store-payments';
 import { StoreRiders } from './store-riders';
 import { StoreProfile } from './store-profile';
 import { StoreZones } from './store-zones';
@@ -41,6 +42,7 @@ import { StoreZones } from './store-zones';
     StoreBrand,
     StoreHours,
     StoreOwners,
+    StorePayments,
     StoreRiders,
     StoreProfile,
     StoreZones,
@@ -86,7 +88,7 @@ import { StoreZones } from './store-zones';
             </div>
           </div>
         </div>
-        <div class="head-actions">
+        <div class="head-actions" [hidden]="paymentsOnly()">
           <mat-slide-toggle
             [checked]="!store.temporarilyClosed"
             (change)="setOpen($event.checked, $event.source)"
@@ -118,7 +120,9 @@ import { StoreZones } from './store-zones';
         </div>
       </header>
 
-      @if (store.status !== 'LIVE' && context.readiness().length > 0) {
+      @if (paymentsOnly()) {
+        <!-- finance sees card payments only -->
+      } @else if (store.status !== 'LIVE' && context.readiness().length > 0) {
         <div class="readiness" role="status">
           <fs-icon name="info" />
           <div>
@@ -156,21 +160,28 @@ import { StoreZones } from './store-zones';
         [selectedIndex]="tab()"
         (selectedIndexChange)="tab.set($event)"
       >
-        <mat-tab label="Profile"
-          ><ng-template matTabContent><app-store-profile /></ng-template
-        ></mat-tab>
-        <mat-tab label="Menu"
-          ><ng-template matTabContent><app-menu-editor /></ng-template
-        ></mat-tab>
-        <mat-tab label="Hours"
-          ><ng-template matTabContent><app-store-hours /></ng-template
-        ></mat-tab>
-        <mat-tab label="Delivery"
-          ><ng-template matTabContent><app-store-zones /></ng-template
-        ></mat-tab>
-        <mat-tab label="Riders"
-          ><ng-template matTabContent><app-store-riders /></ng-template
-        ></mat-tab>
+        @if (!paymentsOnly()) {
+          <mat-tab label="Profile"
+            ><ng-template matTabContent><app-store-profile /></ng-template
+          ></mat-tab>
+          <mat-tab label="Menu"
+            ><ng-template matTabContent><app-menu-editor /></ng-template
+          ></mat-tab>
+          <mat-tab label="Hours"
+            ><ng-template matTabContent><app-store-hours /></ng-template
+          ></mat-tab>
+          <mat-tab label="Delivery"
+            ><ng-template matTabContent><app-store-zones /></ng-template
+          ></mat-tab>
+          <mat-tab label="Riders"
+            ><ng-template matTabContent><app-store-riders /></ng-template
+          ></mat-tab>
+        }
+        @if (showPayments()) {
+          <mat-tab label="Payments"
+            ><ng-template matTabContent><app-store-payments /></ng-template
+          ></mat-tab>
+        }
         @if (session.operator() || session.ownsBrand(store.brand.id)) {
           <mat-tab label="Managers"
             ><ng-template matTabContent><app-store-owners /></ng-template
@@ -232,6 +243,9 @@ import { StoreZones } from './store-zones';
       gap: 8px;
       flex-wrap: wrap;
     }
+    .head-actions[hidden] {
+      display: none;
+    }
     .head-actions {
       display: flex;
       align-items: center;
@@ -279,9 +293,28 @@ export class StorePage {
   protected readonly readinessLabels = READINESS_LABELS;
   protected readonly busy = signal(false);
   protected readonly tab = signal(0);
+  /** Finance, the operator's payment staff and owners who connect merchant accounts (PRD DP-2, DP-3). */
+  protected readonly showPayments = computed(
+    () =>
+      this.session.can('store:payment-collection:manage') ||
+      this.session.can('payment:manage') ||
+      this.session.can('payment:account'),
+  );
+
+  /** Finance only sets who collects card payments: the branch opens on that tab alone. */
+  protected readonly paymentsOnly = computed(
+    () => !this.session.operator() && !this.session.storePortal() && this.showPayments(),
+  );
+  /** {@code ?tab=payments} opens the Payments tab, as the Finance page links it. */
+  readonly openTab = input<string | undefined>(undefined, { alias: 'tab' });
 
   constructor() {
     effect(() => void this.context.load(this.id()));
+    effect(() => {
+      // until the session is known no tab is picked, so a hidden tab never loads
+      if (this.paymentsOnly()) this.tab.set(0);
+      else if (this.openTab() === 'payments' && this.showPayments()) this.tab.set(5);
+    });
   }
 
   protected async setOpen(open: boolean, toggle: MatSlideToggle): Promise<void> {

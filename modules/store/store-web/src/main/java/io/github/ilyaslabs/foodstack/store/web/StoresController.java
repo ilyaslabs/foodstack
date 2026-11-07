@@ -51,6 +51,8 @@ class StoresController {
 
     static final String OPERATOR_PERMISSION = "store:manage";
 
+    static final String COLLECTION_PERMISSION = "store:payment-collection:manage";
+
     private final StoreService storeService;
 
     private final MenuService menuService;
@@ -91,7 +93,7 @@ class StoresController {
     @GetMapping("/{storeId}/details")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<StoreDtos.StoreResponse> details(@PathVariable String storeId) {
-        CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
+        requireReadAccess(storeId);
         StoreDetails store = this.storeService.get(storeId);
         return ResponseEntity.ok().eTag(etag(store)).body(StoreMapper.store(store));
     }
@@ -164,7 +166,7 @@ class StoresController {
     @GetMapping("/{storeId}/readiness")
     @PreAuthorize("isAuthenticated()")
     StoreDtos.ReadinessResponse readiness(@PathVariable String storeId) {
-        CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
+        requireReadAccess(storeId);
         return new StoreDtos.ReadinessResponse(this.storeService.readiness(storeId));
     }
 
@@ -213,6 +215,13 @@ class StoresController {
         StoreDetails updated = this.storeService.setPaymentCollection(storeId, request.mode(), request.creditLimitMinor(),
                 request.reason(), CurrentUser.id());
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
+    }
+
+    /** Finance reads a branch to set who collects its card payments (PRD DP-2); it edits nothing else. */
+    private static void requireReadAccess(String storeId) {
+        if (!CurrentUser.hasAuthority(COLLECTION_PERMISSION)) {
+            CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
+        }
     }
 
     private static void requireBrandOwnerOf(String storeId) {
