@@ -9,6 +9,7 @@ import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.core.domain.Permissions;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.AuditLogDocument;
 import io.github.ilyaslabs.foodstack.platform.core.AuditEntry;
+import io.github.ilyaslabs.foodstack.platform.core.EpochSeconds;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
@@ -83,6 +84,18 @@ public class AuditLog {
      *        time-ordered), or {@code null}
      * @param limit most entries
      */
+    /** {@link #search} as a page for the back office, with the marker of the next page when this one is full. */
+    public AuditPage page(String actorId, String kind, String text, String beforeId, int limit) {
+        List<AuditLogDocument> found = search(actorId, kind, text, beforeId, limit);
+        String next = (!found.isEmpty() && found.size() == Math.clamp(limit, 1, 200)) ? found.getLast().id() : null;
+        return new AuditPage(found.stream().map(AuditLog::line).toList(), next);
+    }
+
+    static AuditLine line(AuditLogDocument d) {
+        return new AuditLine(d.id(), d.kind(), EpochSeconds.of(d.at()), d.actorId(), d.actorName(), d.roles(), d.area(),
+                d.action(), d.resource(), d.status(), d.request(), d.before(), d.after(), d.ip(), d.traceId());
+    }
+
     public List<AuditLogDocument> search(String actorId, String kind, String text, String beforeId, int limit) {
         if (!CurrentUser.hasAuthority(Permissions.AUDIT_READ)) {
             throw new ModuleException.Forbidden("Only operator staff read the audit log", "AUDIT_ACCESS_DENIED");

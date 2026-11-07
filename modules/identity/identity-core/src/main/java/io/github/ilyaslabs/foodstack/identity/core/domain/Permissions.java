@@ -58,15 +58,25 @@ public final class Permissions {
     /** Read the audit log of back-office writes and sign-ins (PRD AD-3, ID-8). */
     public static final String AUDIT_READ = "identity:audit:read";
 
+    /** See every branch's and rider's balance, payouts and the operator's earnings (PRD FI-3, FI-7). */
+    public static final String LEDGER_READ = "ledger:read";
+
+    /** Settle balances with a reference (PRD FI-3). */
+    public static final String LEDGER_SETTLE = "ledger:settle";
+
+    /** See the balances and payouts of one's own branches, or brand (PRD FI-7, BB-8). */
+    public static final String LEDGER_STORE = "ledger:store";
+
     private static final Map<Role, Set<String>> BY_ROLE = new EnumMap<>(Role.class);
 
     static {
         BY_ROLE.put(Role.ADMIN, Set.of(SETTINGS_MANAGE, MEDIA_UPLOAD, USERS_READ, USERS_MANAGE, STORE_MANAGE,
-                GEO_MANAGE, SEARCH_MANAGE, PROMOTION_MANAGE, ORDER_MANAGE, PAYMENT_MANAGE, RIDER_MANAGE, DISPATCH_MANAGE, AUDIT_READ));
-        BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ, PAYMENT_MANAGE));
+                GEO_MANAGE, SEARCH_MANAGE, PROMOTION_MANAGE, ORDER_MANAGE, PAYMENT_MANAGE, RIDER_MANAGE, DISPATCH_MANAGE, AUDIT_READ,
+                LEDGER_READ, LEDGER_SETTLE));
+        BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ, PAYMENT_MANAGE, LEDGER_READ, LEDGER_SETTLE));
         BY_ROLE.put(Role.SUPPORT, Set.of(USERS_READ, ORDER_MANAGE, DISPATCH_MANAGE));
-        BY_ROLE.put(Role.BRAND_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD));
-        BY_ROLE.put(Role.STORE_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD));
+        BY_ROLE.put(Role.BRAND_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD, LEDGER_STORE));
+        BY_ROLE.put(Role.STORE_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD, LEDGER_STORE));
         BY_ROLE.put(Role.STORE_STAFF, Set.of(STORE_PORTAL));
         BY_ROLE.put(Role.RIDER, Set.of(RIDER_PORTAL, MEDIA_UPLOAD));
         BY_ROLE.put(Role.STORE_RIDER, Set.of(RIDER_PORTAL, MEDIA_UPLOAD));

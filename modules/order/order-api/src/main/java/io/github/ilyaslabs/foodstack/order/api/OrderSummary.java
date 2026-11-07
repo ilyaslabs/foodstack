@@ -24,8 +24,16 @@ import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
  * @param promotionId promotion of the coupon used, or {@code null}
  * @param language the customer's language when ordering, for messages
  * @param placedAt when the order was placed
+ * @param money the order's money split into its parts, for the ledger; {@code null} on events sent before it was kept
  */
 public record OrderSummary(String orderId, String number, String customerId, String storeId, String storeName,
         Set<String> storeOwnerIds, OrderStatus status, Fulfilment fulfilment, PaymentMethod paymentMethod, int itemCount,
-        long totalMinor, String currency, String promotionId, String language, long placedAt) {
+        long totalMinor, String currency, String promotionId, String language, long placedAt, OrderMoney money) {
+
+    public OrderSummary(String orderId, String number, String customerId, String storeId, String storeName,
+            Set<String> storeOwnerIds, OrderStatus status, Fulfilment fulfilment, PaymentMethod paymentMethod, int itemCount,
+            long totalMinor, String currency, String promotionId, String language, long placedAt) {
+        this(orderId, number, customerId, storeId, storeName, storeOwnerIds, status, fulfilment, paymentMethod, itemCount,
+                totalMinor, currency, promotionId, language, placedAt, null);
+    }
 }

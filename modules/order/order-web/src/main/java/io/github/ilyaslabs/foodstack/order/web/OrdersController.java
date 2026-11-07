@@ -68,7 +68,7 @@ class OrdersController {
     record ReasonRequest(String reason) {
     }
 
-    record RefundRequest(Long amountMinor, String reason) {
+    record RefundRequest(Long amountMinor, String reason, String fundedBy) {
     }
 
     @PostMapping("/api/v1/orders")
@@ -124,7 +124,8 @@ class OrdersController {
     @PostMapping("/api/v1/orders/{orderId}/refund")
     @PreAuthorize("hasAuthority('order:manage')")
     OrderDetails refund(@PathVariable String orderId, @RequestBody RefundRequest body) {
-        return this.orders.refund(orderId, (body.amountMinor() != null) ? body.amountMinor() : 0, body.reason());
+        return this.orders.refund(orderId, (body.amountMinor() != null) ? body.amountMinor() : 0, body.reason(),
+                body.fundedBy());
     }
 
     @GetMapping("/api/v1/orders/stores/{storeId}/board")

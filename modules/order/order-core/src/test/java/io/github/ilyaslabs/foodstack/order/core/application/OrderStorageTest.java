@@ -317,7 +317,11 @@ class OrderStorageTest {
         assertThat(this.orders.get(id).actions()).contains("PICKED_UP", "CANCEL", "REFUND");
         assertThatThrownBy(() -> this.orders.refund(id, 170_001, "Cold")).isInstanceOf(ModuleException.BadRequest.class);
         assertThatThrownBy(() -> this.orders.refund(id, 1_000, " ")).isInstanceOf(ModuleException.BadRequest.class);
-        assertThat(this.orders.refund(id, 20_000, "Cold food").refundRequestedMinor()).isEqualTo(20_000);
+        assertThatThrownBy(() -> this.orders.refund(id, 1_000, "Cold", "RIDER")).isInstanceOfSatisfying(
+                ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("REFUND_FUNDER_INVALID"));
+        assertThat(this.orders.refund(id, 20_000, "Cold food", "operator").refundRequestedMinor()).isEqualTo(20_000);
+        assertThat(lastEvent(id).get("data", String.class)).contains("\"fundedBy\":\"OPERATOR\"")
+            .contains("\"money\":{").contains("\"subtotalMinor\":");
         this.orders.storeAction(id, "PICKED_UP", null, null);
         OrderDetails cancelled = this.orders.cancel(id, "Rider had an accident");
         assertThat(cancelled.refundRequestedMinor()).isEqualTo(170_000);

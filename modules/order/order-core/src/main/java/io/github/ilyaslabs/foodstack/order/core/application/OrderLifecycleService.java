@@ -13,6 +13,7 @@ import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.order.api.OrderDelivery;
 import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
+import io.github.ilyaslabs.foodstack.order.api.OrderMoney;
 import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderAccepted;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCancelled;
@@ -200,7 +201,19 @@ public class OrderLifecycleService {
 
     /** Support gives money back, in full or in part, on a card-paid order (PRD OF-6). */
     public OrderDocument refund(String orderId, Actor actor, long amountMinor, String reason) {
+        return refund(orderId, actor, amountMinor, reason, OrderRefunded.STORE);
+    }
+
+    /**
+     * Support gives money back and says who bears it once the order is done (ilyas, 2026-11-06):
+     * {@link OrderRefunded#STORE} or {@link OrderRefunded#OPERATOR}.
+     */
+    public OrderDocument refund(String orderId, Actor actor, long amountMinor, String reason, String fundedBy) {
         String why = requireReason(reason);
+        String funder = (fundedBy == null || fundedBy.isBlank()) ? OrderRefunded.STORE : fundedBy.toUpperCase(java.util.Locale.ROOT);
+        if (!OrderRefunded.STORE.equals(funder) && !OrderRefunded.OPERATOR.equals(funder)) {
+            throw new ModuleException.BadRequest("Choose who pays the refund: the store or the operator", "REFUND_FUNDER_INVALID");
+        }
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
             OrderDocument order = require(orderId);
             long left = refundable(order);
@@ -213,7 +226,7 @@ public class OrderLifecycleService {
             }
             OrderDocument after = note(order, actor, "Refund requested: " + why,
                     new Update().inc("refundRequestedMinor", amountMinor),
-                    (changed) -> new OrderRefunded(summary(changed), actor.asEventActor(), amountMinor, why));
+                    (changed) -> new OrderRefunded(summary(changed), actor.asEventActor(), amountMinor, why, funder));
             if (after != null) {
                 return after;
             }
@@ -248,7 +261,7 @@ public class OrderLifecycleService {
             OrderDocument after = note(order, Actor.system(), "Payment arrived after the order closed; refunding",
                     new Update().set("paidMinor", amountMinor).inc("refundRequestedMinor", amountMinor),
                     (changed) -> new OrderRefunded(summary(changed), "payment", amountMinor,
-                            "Payment arrived after the order closed"));
+                            "Payment arrived after the order closed", null));
             if (after != null) {
                 return null;
             }
@@ -415,7 +428,19 @@ public class OrderLifecycleService {
         int items = o.lines().stream().mapToInt(OrderDocument.Line::quantity).sum();
         return new OrderSummary(o.id(), o.number(), o.customerId(), o.store().storeId(), o.store().name(),
                 o.store().ownerUserIds(), o.status(), o.fulfilment(), o.paymentMethod(), items, o.totals().totalMinor(),
-                o.currency(), (o.coupon() != null) ? o.coupon().promotionId() : null, o.language(), o.placedAt().getEpochSecond());
+                o.currency(), (o.coupon() != null) ? o.coupon().promotionId() : null, o.language(), o.placedAt().getEpochSecond(),
+                money(o));
+    }
+
+    /** The order's money for the ledger (PRD FI-1). */
+    static OrderMoney money(OrderDocument o) {
+        OrderDocument.Totals t = o.totals();
+        OrderDocument.Commission c = o.commission();
+        return new OrderMoney(o.store().brandId(), (o.fulfilment() == Fulfilment.DELIVERY) ? o.deliveryMode() : null,
+                OrderMoney.OPERATOR, t.subtotalMinor(), t.itemsDiscountMinor(), t.deliveryChargeMinor(),
+                t.deliveryDiscountMinor(), t.serviceFeeMinor(), t.taxMinor(), t.tipMinor(),
+                (o.coupon() != null) ? o.coupon().operatorShareMinor() : 0, (c != null) ? c.basisPoints() : 0,
+                (c != null) ? c.fixedMinor() : 0);
     }
 
     // ---- mechanics -----------------------------------------------------------------------------

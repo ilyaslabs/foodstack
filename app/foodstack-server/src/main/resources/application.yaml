@@ -126,6 +126,8 @@ module-switch:
       mode: local
     notification:
       mode: local
+    ledger:
+      mode: local
   propagate-headers: [Authorization, Accept-Language]
 
 foodstack:

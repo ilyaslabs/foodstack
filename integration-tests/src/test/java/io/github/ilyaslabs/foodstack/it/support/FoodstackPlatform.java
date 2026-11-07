@@ -23,7 +23,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 public final class FoodstackPlatform {
 
     public static final String[] MODULES = { "identity", "settings", "media", "geo", "store", "search", "promotion", "cart",
-        "payment", "order", "rider", "dispatch", "notification" };
+        "payment", "order", "rider", "dispatch", "notification", "ledger" };
 
     public static final String ADMIN_EMAIL = "admin@it.foodstack.local";
 
@@ -111,7 +111,7 @@ public final class FoodstackPlatform {
             String issuer = moduleUrls.get("identity");
             // Start in dependency order so a module's callers find it running.
             for (String module : List.of("media", "settings", "identity", "geo", "store", "search", "promotion", "payment", "cart",
-                    "order", "rider", "dispatch", "notification")) {
+                    "order", "rider", "dispatch", "notification", "ledger")) {
                 Map<String, String> properties = new LinkedHashMap<>(shared);
                 properties.put("server.port", String.valueOf(ports.get(module)));
                 properties.put("foodstack.security.issuer", issuer);

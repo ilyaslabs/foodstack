@@ -157,8 +157,13 @@ public class OrderService {
 
     /** Support gives money back (PRD OF-6). */
     public OrderDetails refund(String orderId, long amountMinor, String reason) {
+        return refund(orderId, amountMinor, reason, null);
+    }
+
+    /** Support gives money back and picks who bears it, the store (default) or the operator. */
+    public OrderDetails refund(String orderId, long amountMinor, String reason, String fundedBy) {
         requireSupport();
-        return details(this.lifecycle.refund(orderId, Actor.support(CurrentUser.id()), amountMinor, reason));
+        return details(this.lifecycle.refund(orderId, Actor.support(CurrentUser.id()), amountMinor, reason, fundedBy));
     }
 
     // ---- helpers -------------------------------------------------------------------------------

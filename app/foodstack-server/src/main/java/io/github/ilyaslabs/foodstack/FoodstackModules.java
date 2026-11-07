@@ -6,7 +6,7 @@ import java.util.List;
 final class FoodstackModules {
 
     static final List<String> ALL = List.of("identity", "settings", "media", "geo", "store", "search", "promotion", "cart",
-            "payment", "order", "rider", "dispatch", "notification");
+            "payment", "order", "rider", "dispatch", "notification", "ledger");
 
     private FoodstackModules() {
     }

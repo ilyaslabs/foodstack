@@ -3,13 +3,14 @@ package io.github.ilyaslabs.foodstack.identity.web;
 import java.time.Instant;
 import java.util.List;
 
+import io.github.ilyaslabs.foodstack.identity.core.application.AuditLine;
 import io.github.ilyaslabs.foodstack.identity.core.application.AuditLog;
-import io.github.ilyaslabs.foodstack.identity.core.persistence.AuditLogDocument;
+import io.github.ilyaslabs.foodstack.identity.core.application.AuditPage;
 import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -45,10 +46,10 @@ class AuditControllerTest {
     @Test
     @DisplayName("lists entries for staff with identity:audit:read, with the cursor of the next page when the page is full")
     void list() throws Exception {
-        AuditLogDocument line = new AuditLogDocument("e2", AuditLogDocument.WRITE, Instant.parse("2026-11-06T12:00:00Z"),
+        AuditLine line = new AuditLine("e2", "WRITE", Instant.parse("2026-11-06T12:00:00Z").getEpochSecond(),
                 "admin-1", "Demo Admin", List.of("ADMIN"), "stores", "PUT /api/v1/stores/{storeId}", "/api/v1/stores/s1", 200,
                 "{\"name\":\"Spice Route\"}", "{\"name\":\"Spice\"}", "{\"name\":\"Spice Route\"}", "10.0.0.1", null);
-        given(this.log.search("admin-1", null, "stores", "e9", 1)).willReturn(List.of(line));
+        given(this.log.page("admin-1", null, "stores", "e9", 1)).willReturn(new AuditPage(List.of(line), "e2"));
 
         this.mvc.perform(get("/api/v1/audit").param("actorId", "admin-1").param("q", "stores").param("before", "e9")
             .param("limit", "1")

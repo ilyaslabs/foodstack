@@ -1,0 +1,58 @@
+# Liquibase changelog of the ledger module (database foodstack_ledger). Shard keys are applied by
+# LedgerConfiguration (TDD 6.3) and listed next to each collection.
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: ledger-1
+      author: foodstack
+      comment: "ledger_transactions ({ partition: hashed }; partition = the branch, so a branch's lines sit on one shard), append only (PRD FI-1, TDD 6.4)"
+      changes:
+        - createCollection:
+            collectionName: ledger_transactions
+        - createIndex:
+            collectionName: ledger_transactions
+            keys: '{ "legs.accountId": 1, "at": -1 }'
+            options: '{ "name": "account_newest" }'
+        - createIndex:
+            collectionName: ledger_transactions
+            keys: '{ "bucket": 1, "day": 1, "rolled": 1 }'
+            options: '{ "name": "bucket_day" }'
+        - createIndex:
+            collectionName: ledger_transactions
+            keys: '{ "rolled": 1, "bucket": 1 }'
+            options: '{ "name": "not_rolled", "partialFilterExpression": { "rolled": false } }'
+  - changeSet:
+      id: ledger-2
+      author: foodstack
+      comment: "ledger_daily ({ accountId: hashed }): one row per account, day, kind and bucket, rebuilt by the roll-up workers; reports read these"
+      changes:
+        - createCollection:
+            collectionName: ledger_daily
+        - createIndex:
+            collectionName: ledger_daily
+            keys: '{ "accountId": 1, "day": 1 }'
+            options: '{ "name": "account_day" }'
+        - createIndex:
+            collectionName: ledger_daily
+            keys: '{ "partyType": 1, "brandId": 1, "day": 1 }'
+            options: '{ "name": "party_brand_day" }'
+  - changeSet:
+      id: ledger-3
+      author: foodstack
+      comment: "ledger_accounts ({ _id: hashed }), ledger_orders ({ _id: hashed }) and ledger_settlements ({ accountId: hashed })"
+      changes:
+        - createCollection:
+            collectionName: ledger_accounts
+        - createCollection:
+            collectionName: ledger_orders
+        - createCollection:
+            collectionName: ledger_settlements
+        - createIndex:
+            collectionName: ledger_settlements
+            keys: '{ "accountId": 1, "periodTo": -1 }'
+            options: '{ "name": "account_period" }'
+        - createIndex:
+            collectionName: ledger_settlements
+            keys: '{ "settledAt": -1 }'
+            options: '{ "name": "newest" }'
