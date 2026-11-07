@@ -1,5 +1,5 @@
-// Customer browsing load test (testing strategy: k6 before each release): search near a point, open a store, read its menu and a
-// delivery quote, like the customer app does. Read-only, so it is safe against a live site, but
+// Customer browsing load test, run before each release (testing strategy): search near a point,
+// open a store, read its menu and a delivery quote, like the customer app does. Read-only, so it is safe against a live site, but
 // it does count against the site's rate limits: run it from an address the limits allow, or
 // against a staging copy.
 //
