@@ -340,4 +340,29 @@ class UserServiceTest {
         user.setCreatedAt(NOW);
         return user;
     }
+
+    @Test
+    @DisplayName("signing in again during the grace period cancels a requested deletion")
+    void cancelDeletion() {
+        // given
+        UserDocument pending = new UserDocument();
+        pending.setId("u1");
+        pending.setStatus(UserStatus.ACTIVE);
+        pending.setDeleteAfter(NOW.plusSeconds(3600));
+        pending.setDeletionRequestedAt(NOW);
+        given(this.users.findById("u1")).willReturn(Optional.of(pending));
+        given(this.users.findById("u2")).willReturn(Optional.empty());
+
+        // when
+        boolean cancelled = this.service.cancelDeletion("u1");
+        boolean nothing = this.service.cancelDeletion("u2");
+
+        // then
+        assertThat(cancelled).isTrue();
+        assertThat(nothing).isFalse();
+        ArgumentCaptor<UserDocument> saved = ArgumentCaptor.forClass(UserDocument.class);
+        verify(this.users).save(saved.capture());
+        assertThat(saved.getValue().getDeleteAfter()).isNull();
+        assertThat(saved.getValue().getDeletionRequestedAt()).isNull();
+    }
 }

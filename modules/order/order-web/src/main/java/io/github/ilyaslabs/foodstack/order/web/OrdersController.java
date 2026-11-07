@@ -93,6 +93,13 @@ class OrdersController {
         return this.orders.mine(before, limit);
     }
 
+    /** The customer's orders in full, for their data export (PRD ID-7). */
+    @GetMapping("/api/v1/orders/mine/export")
+    @PreAuthorize("isAuthenticated()")
+    List<OrderDetails> export() {
+        return this.orders.export();
+    }
+
     @GetMapping("/api/v1/orders")
     @PreAuthorize("hasAuthority('order:manage')")
     OrderPage all(@RequestParam(required = false) OrderStatus status, @RequestParam(required = false) String storeId,

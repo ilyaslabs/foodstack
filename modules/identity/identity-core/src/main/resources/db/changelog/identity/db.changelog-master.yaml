@@ -120,3 +120,12 @@ databaseChangeLog:
             collectionName: identity_audit_log
             keys: '{ "resource": 1, "at": -1 }'
             options: '{ "name": "resource_newest" }'
+  - changeSet:
+      id: identity-9
+      author: foodstack
+      comment: "M4 account deletion (PRD ID-7): the sweep finds accounts whose grace period is over"
+      changes:
+        - createIndex:
+            collectionName: identity_users
+            keys: '{ "deleteAfter": 1 }'
+            options: '{ "name": "delete_after", "partialFilterExpression": { "deleteAfter": { "$exists": true } } }'

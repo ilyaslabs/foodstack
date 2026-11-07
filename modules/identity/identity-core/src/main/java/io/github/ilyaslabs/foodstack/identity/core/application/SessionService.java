@@ -194,6 +194,7 @@ public class SessionService {
     /** Starts a sign-in for an account that proved who it is. */
     public Session start(String userId, Client client) {
         UserService.TokenClaims claims = claims(userId);
+        this.users.cancelDeletion(userId);
         String familyId = Ids.newId();
         return issue(userId, familyId, client, claims.tokenVersion(), claims);
     }

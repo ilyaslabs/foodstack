@@ -4,6 +4,7 @@ import java.util.List;
 
 import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
+import io.github.ilyaslabs.foodstack.review.core.application.CustomerReviews;
 import io.github.ilyaslabs.foodstack.review.core.application.OrderReviewState;
 import io.github.ilyaslabs.foodstack.review.core.application.RatingSummary;
 import io.github.ilyaslabs.foodstack.review.core.application.ReviewPage;
@@ -67,6 +68,19 @@ class ReviewsControllerTest {
         this.mvc.perform(get("/api/v1/reviews/stores/s1/summary"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.brandAverage").value(4.3));
+    }
+
+    @Test
+    @DisplayName("a customer's review export needs a signed-in user")
+    void export() throws Exception {
+        // given
+        given(this.reviews.export()).willReturn(new CustomerReviews(List.of(review()), List.of()));
+
+        // when / then
+        this.mvc.perform(get("/api/v1/reviews/mine/export")).andExpect(status().isUnauthorized());
+        this.mvc.perform(get("/api/v1/reviews/mine/export").with(jwt()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.reviews[0].rating").exists());
     }
 
     @Test

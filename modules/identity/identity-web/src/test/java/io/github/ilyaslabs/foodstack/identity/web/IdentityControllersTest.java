@@ -6,8 +6,11 @@ import java.util.Set;
 
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
+import io.github.ilyaslabs.foodstack.identity.core.application.AccountDeletion;
+import io.github.ilyaslabs.foodstack.identity.core.application.AddressBook;
 import io.github.ilyaslabs.foodstack.identity.core.application.EmailCodeService;
 import io.github.ilyaslabs.foodstack.identity.core.application.NewUser;
+import io.github.ilyaslabs.foodstack.identity.core.application.SavedAddress;
 import io.github.ilyaslabs.foodstack.identity.core.application.SessionService;
 import io.github.ilyaslabs.foodstack.identity.core.application.SessionService.Client;
 import io.github.ilyaslabs.foodstack.identity.core.application.SessionService.Session;
@@ -17,9 +20,9 @@ import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
 import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -66,6 +69,12 @@ class IdentityControllersTest {
     @MockitoBean
     JwtDecoder jwtDecoder;
 
+    @MockitoBean
+    AddressBook addressBook;
+
+    @MockitoBean
+    AccountDeletion accountDeletion;
+
     @Autowired
     MockMvc mvc;
 
@@ -106,6 +115,42 @@ class IdentityControllersTest {
         this.mvc.perform(get("/api/v1/me").with(jwt().jwt((t) -> t.subject("u1"))))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.permissions[0]").value("settings:manage"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/me/export returns the account and saved addresses")
+    void export() throws Exception {
+        // given
+        given(this.userService.get("u1")).willReturn(account("u1", Role.CUSTOMER));
+        given(this.addressBook.list("u1")).willReturn(List.of(new SavedAddress("a1", "HOME", null, 31.5, 74.3,
+                "12 Main Boulevard", "Blue gate", true, java.time.Instant.ofEpochSecond(1_800_000_000L), 1)));
+
+        // when / then
+        this.mvc.perform(get("/api/v1/me/export")).andExpect(status().isUnauthorized());
+        this.mvc.perform(get("/api/v1/me/export").with(jwt().jwt((t) -> t.subject("u1"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.account.id").value("u1"))
+            .andExpect(jsonPath("$.account.roles[0]").value("CUSTOMER"))
+            .andExpect(jsonPath("$.addresses[0].addressLine").value("12 Main Boulevard"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/me/deletion schedules the deletion and answers its date")
+    void deletion() throws Exception {
+        // given
+        given(this.accountDeletion.request("u1")).willReturn(java.time.Instant.ofEpochSecond(1_800_000_000L));
+        given(this.accountDeletion.grace()).willReturn(java.time.Duration.ofDays(14));
+        given(this.accountDeletion.request("staff"))
+            .willThrow(new ModuleException.Conflict("staff", "ACCOUNT_HAS_STAFF_ROLES"));
+
+        // when / then
+        this.mvc.perform(post("/api/v1/me/deletion").with(jwt().jwt((t) -> t.subject("u1"))))
+            .andExpect(status().isAccepted())
+            .andExpect(jsonPath("$.deleteAfter").value(1_800_000_000L))
+            .andExpect(jsonPath("$.graceDays").value(14));
+        this.mvc.perform(post("/api/v1/me/deletion").with(jwt().jwt((t) -> t.subject("staff"))))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ACCOUNT_HAS_STAFF_ROLES"));
     }
 
     @Test

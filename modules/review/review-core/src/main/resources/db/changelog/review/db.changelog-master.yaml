@@ -47,3 +47,16 @@ databaseChangeLog:
             options: '{ "name": "rider_newest" }'
         - createCollection:
             collectionName: review_rider_stats
+  - changeSet:
+      id: review-3
+      author: foodstack
+      comment: "M4 account deletion and data export (PRD ID-7): a customer's reviews and rider ratings, found by customer"
+      changes:
+        - createIndex:
+            collectionName: review_reviews
+            keys: '{ "customerId": 1, "createdAt": -1 }'
+            options: '{ "name": "customer_newest" }'
+        - createIndex:
+            collectionName: review_rider_ratings
+            keys: '{ "customerId": 1, "createdAt": -1 }'
+            options: '{ "name": "customer_newest" }'

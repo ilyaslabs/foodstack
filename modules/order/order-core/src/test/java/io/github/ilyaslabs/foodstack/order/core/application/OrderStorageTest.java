@@ -316,6 +316,45 @@ class OrderStorageTest {
     }
 
     @Test
+    @DisplayName("a customer exports their orders in full; after deletion their orders keep the money and lose the person")
+    void exportAndErase() {
+        // given
+        given(this.carts.checkout(any())).willReturn(checkout(Fulfilment.DELIVERY, PaymentMethod.CASH, null));
+        PlaceOrder delivery = new PlaceOrder(Fulfilment.DELIVERY, new PlaceOrder.Address(31.4697, 74.4085, "12 Canal Road",
+                "Gate 2"), null, 0, PaymentMethod.CASH, null, "+92 300 1234567", "en");
+        String id = this.placement.place(this.customer, "k-export", delivery).orderId();
+        this.projections.refresh(id);
+        signIn(this.customer);
+        assertThat(this.orders.export()).singleElement().satisfies((order) -> {
+            assertThat(order.contactPhone()).isEqualTo("+92 300 1234567");
+            assertThat(order.destination().addressLine()).isEqualTo("12 Canal Road");
+        });
+        signIn("stranger");
+        assertThat(this.orders.export()).isEmpty();
+        long total = this.orderMongo.template().findById(id, OrderDocument.class).totals().totalMinor();
+
+        // when
+        int erased = new CustomerErasure(this.orderMongo.template(), this.projections).erase(this.customer);
+
+        // then
+        assertThat(erased).isEqualTo(1);
+        OrderDocument order = this.orderMongo.template().findById(id, OrderDocument.class);
+        assertThat(order.customerId()).isEqualTo(this.customer);
+        assertThat(order.customerName()).isEqualTo("Deleted user");
+        assertThat(order.contactPhone()).isNull();
+        assertThat(order.destination().addressLine()).isNull();
+        assertThat(order.destination().instructions()).isNull();
+        assertThat(order.destination().lat()).isEqualTo(31.47);
+        assertThat(order.destination().lng()).isEqualTo(74.41);
+        assertThat(order.lines()).allSatisfy((line) -> assertThat(line.note()).isNull());
+        assertThat(order.totals().totalMinor()).isEqualTo(total);
+        signIn("owner-1", STORE);
+        assertThat(this.orders.storeHistory(STORE, null, 50).items()).filteredOn((row) -> row.id().equals(id))
+            .singleElement()
+            .satisfies((row) -> assertThat(row.customerName()).isEqualTo("Deleted user"));
+    }
+
+    @Test
     @DisplayName("support cancels at any step and refunds part of a card payment, never more than paid")
     void support() {
         given(this.carts.checkout(any())).willReturn(checkout(Fulfilment.DELIVERY, PaymentMethod.CARD, null));

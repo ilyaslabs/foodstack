@@ -106,6 +106,18 @@ class OrdersControllerTest {
     }
 
     @Test
+    @DisplayName("the data export of a customer's orders needs a signed-in user")
+    void export() throws Exception {
+        // given
+        given(this.orders.export()).willReturn(List.of());
+
+        // when / then
+        this.mvc.perform(get("/api/v1/orders/mine/export")).andExpect(status().isUnauthorized());
+        this.mvc.perform(get("/api/v1/orders/mine/export").with(jwt())).andExpect(status().isOk());
+        verify(this.orders).export();
+    }
+
+    @Test
     @DisplayName("support lists and refunds need order:manage")
     void support() throws Exception {
         given(this.orders.all(null, null, null, 20)).willReturn(new OrderPage(List.of(), null));

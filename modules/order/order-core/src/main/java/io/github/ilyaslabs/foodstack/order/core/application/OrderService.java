@@ -70,6 +70,34 @@ public class OrderService {
         return page(OrderSummaryDocument.BY_CUSTOMER, criteria, before, limit);
     }
 
+    /**
+     * Every order of the signed-in customer, newest first, in full: their part of the data export
+     * (PRD ID-7).
+     */
+    public List<OrderDetails> export() {
+        String customerId = CurrentUser.id();
+        Query mine = Query.query(Criteria.where("customerId").is(customerId))
+            .with(Sort.by(Sort.Direction.DESC, "placedAt"))
+            .limit(10_000);
+        mine.fields().include("_id");
+        List<String> ids = this.mongo.find(mine, org.bson.Document.class, OrderSummaryDocument.BY_CUSTOMER)
+            .stream()
+            .map((row) -> row.getString("_id"))
+            .toList();
+        List<OrderDetails> orders = new java.util.ArrayList<>(ids.size());
+        for (int from = 0; from < ids.size(); from += 200) {
+            List<String> batch = ids.subList(from, Math.min(ids.size(), from + 200));
+            java.util.Map<String, OrderDocument> found = new java.util.HashMap<>();
+            this.mongo.find(Query.query(Criteria.where("_id").in(batch)), OrderDocument.class)
+                .forEach((order) -> found.put(order.id(), order));
+            batch.stream()
+                .map(found::get)
+                .filter((order) -> order != null && customerId.equals(order.customerId()))
+                .forEach((order) -> orders.add(details(order)));
+        }
+        return orders;
+    }
+
     /** A branch's orders still in progress, oldest first (the live board, PRD OF-1). */
     public List<OrderDetails> board(String storeId) {
         CurrentUser.requireStoreAccess(storeId, ORDER_MANAGE);

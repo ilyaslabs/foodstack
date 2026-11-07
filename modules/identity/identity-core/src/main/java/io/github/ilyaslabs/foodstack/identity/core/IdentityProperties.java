@@ -19,6 +19,9 @@ public class IdentityProperties {
     /** How long access tokens live (TDD 9.1). */
     private Duration accessTokenTtl = Duration.ofMinutes(10);
 
+    /** How long after a customer asks to delete their account it is deleted (PRD ID-7). */
+    private Duration deletionGrace = Duration.ofDays(14);
+
     private final BootstrapAdmin bootstrapAdmin = new BootstrapAdmin();
 
     /**
@@ -41,6 +44,14 @@ public class IdentityProperties {
 
     public void setSigningKeys(List<String> signingKeys) {
         this.signingKeys = signingKeys;
+    }
+
+    public Duration getDeletionGrace() {
+        return this.deletionGrace;
+    }
+
+    public void setDeletionGrace(Duration deletionGrace) {
+        this.deletionGrace = deletionGrace;
     }
 
     public Duration getAccessTokenTtl() {

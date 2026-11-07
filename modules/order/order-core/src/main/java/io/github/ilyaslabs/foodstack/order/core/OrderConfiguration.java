@@ -5,12 +5,14 @@ import java.time.Duration;
 
 import io.github.ilyaslabs.foodstack.cart.api.CartApi;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
+import io.github.ilyaslabs.foodstack.order.core.application.CustomerErasure;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderLifecycleService;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderLiveUpdates;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderPlacementService;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderProjections;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderService;
 import io.github.ilyaslabs.foodstack.order.core.events.DispatchEventsListener;
+import io.github.ilyaslabs.foodstack.order.core.events.IdentityEventsListener;
 import io.github.ilyaslabs.foodstack.order.core.events.OrderProjectionListener;
 import io.github.ilyaslabs.foodstack.order.core.events.PaymentEventsListener;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
@@ -31,7 +33,6 @@ import io.github.ilyaslabs.foodstack.platform.security.RateLimiter;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.promotion.api.PromotionApi;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
-import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +42,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaAdmin;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Wiring of the order module (TDD 5.2): its database, outbox and relay, placement, the state
@@ -135,6 +137,17 @@ public class OrderConfiguration {
     @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
     OrderProjectionListener orderProjectionListener(OrderProjections orderProjections, JsonMapper jsonMapper) {
         return new OrderProjectionListener(orderProjections, jsonMapper);
+    }
+
+    @Bean
+    CustomerErasure orderCustomerErasure(ModuleMongo orderMongo, OrderProjections orderProjections) {
+        return new CustomerErasure(orderMongo.template(), orderProjections);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    IdentityEventsListener orderIdentityEventsListener(CustomerErasure orderCustomerErasure, JsonMapper jsonMapper) {
+        return new IdentityEventsListener(orderCustomerErasure, jsonMapper);
     }
 
     @Bean

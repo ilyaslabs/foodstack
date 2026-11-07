@@ -53,6 +53,9 @@ public class ReviewService {
 
     public static final int MAX_TEXT = 1000;
 
+    /** Shown instead of the name of a customer who deleted their account. */
+    public static final String DELETED_NAME = "Deleted user";
+
     public static final int MAX_REASON = 500;
 
     public static final int MAX_PAGE = 50;
@@ -125,6 +128,53 @@ public class ReviewService {
                 open && order.riderId() != null && !order.isRiderRated(), order.riderName(),
                 (order.completedAt() != null) ? order.completedAt().plus(this.window).getEpochSecond() : null, review,
                 riderRating);
+    }
+
+    /**
+     * The signed-in customer's reviews, hidden ones included, and rider ratings: their part of the
+     * data export (PRD ID-7).
+     */
+    public CustomerReviews export() {
+        String userId = CurrentUser.id();
+        List<ReviewView> reviews = this.mongo
+            .find(Query.query(Criteria.where("customerId").is(userId)).with(Sort.by(Sort.Direction.DESC, "createdAt")),
+                    ReviewDocument.class)
+            .stream()
+            .map((review) -> view(review, Audience.MODERATOR))
+            .toList();
+        List<CustomerReviews.RiderRating> riders = this.mongo
+            .find(Query.query(Criteria.where("customerId").is(userId)).with(Sort.by(Sort.Direction.DESC, "createdAt")),
+                    RiderRatingDocument.class)
+            .stream()
+            .map((rating) -> new CustomerReviews.RiderRating(rating.id(), rating.rating(), rating.tags(),
+                    rating.createdAt().getEpochSecond()))
+            .toList();
+        return new CustomerReviews(reviews, riders);
+    }
+
+    /**
+     * Anonymises a deleted customer's reviews (PRD ID-7, on {@code UserDeleted}): they stay, and
+     * keep counting, under "Deleted user"; their photos are released for cleanup. Safe to run again.
+     * @return how many reviews were changed
+     */
+    public int eraseCustomer(String customerId) {
+        List<ReviewDocument> reviews = this.mongo.find(Query.query(Criteria.where("customerId").is(customerId)),
+                ReviewDocument.class);
+        int erased = 0;
+        for (ReviewDocument review : reviews) {
+            if (review.photo() != null && review.photo().mediaId() != null) {
+                try {
+                    this.serviceCalls.run(() -> this.media.release(review.photo().mediaId(), new MediaOwner(MODULE, review.id())));
+                }
+                catch (RuntimeException ex) {
+                    // the link goes anyway; an unreleased photo only waits longer for cleanup
+                }
+            }
+            this.mongo.updateFirst(Query.query(Criteria.where("storeId").is(review.storeId()).and("_id").is(review.id())),
+                    new Update().set("customerName", DELETED_NAME).unset("photo"), ReviewDocument.class);
+            erased++;
+        }
+        return erased;
     }
 
     /** Rates a finished order of the signed-in customer: the branch, the rider, or both. */

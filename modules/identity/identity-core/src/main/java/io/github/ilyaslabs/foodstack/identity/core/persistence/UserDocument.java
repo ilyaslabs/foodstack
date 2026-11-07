@@ -53,6 +53,14 @@ public class UserDocument {
 
     private String blockedReason;
 
+    /** When the customer asked to delete the account, or {@code null} (PRD ID-7). */
+    private Instant deletionRequestedAt;
+
+    /** When a requested deletion runs; signing in before then clears it. */
+    private Instant deleteAfter;
+
+    private Instant deletedAt;
+
     private Instant createdAt;
 
     private Instant updatedAt;
@@ -194,5 +202,29 @@ public class UserDocument {
 
     public void setBlockedReason(String blockedReason) {
         this.blockedReason = blockedReason;
+    }
+
+    public Instant getDeletionRequestedAt() {
+        return this.deletionRequestedAt;
+    }
+
+    public void setDeletionRequestedAt(Instant deletionRequestedAt) {
+        this.deletionRequestedAt = deletionRequestedAt;
+    }
+
+    public Instant getDeleteAfter() {
+        return this.deleteAfter;
+    }
+
+    public void setDeleteAfter(Instant deleteAfter) {
+        this.deleteAfter = deleteAfter;
+    }
+
+    public Instant getDeletedAt() {
+        return this.deletedAt;
+    }
+
+    public void setDeletedAt(Instant deletedAt) {
+        this.deletedAt = deletedAt;
     }
 }

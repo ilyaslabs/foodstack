@@ -173,6 +173,30 @@ class DispatchStorageTest {
     }
 
     @Test
+    @DisplayName("a deleted customer's jobs keep the pay and lose the name, phone and address")
+    void erase() {
+        // given
+        String id = order();
+        this.dispatch.orderAccepted(summary(id), delivery(DeliveryMode.OPERATOR, null, "4821", 0), START.plusSeconds(1_200)
+            .getEpochSecond(), "store:owner-1");
+        long charge = job(id).deliveryChargeMinor();
+
+        // when
+        int erased = new CustomerErasure(this.dispatchMongo.template()).erase("customer-1");
+
+        // then
+        assertThat(erased).isGreaterThanOrEqualTo(1);
+        JobDocument job = job(id);
+        assertThat(job.customerId()).isEqualTo("customer-1");
+        assertThat(job.customerName()).isEqualTo("Deleted user");
+        assertThat(job.contactPhoneCipher()).isNull();
+        assertThat(job.dropoffAddress()).isNull();
+        assertThat(job.instructions()).isNull();
+        assertThat(job.dropoffLat()).isEqualTo(31.5);
+        assertThat(job.deliveryChargeMinor()).isEqualTo(charge);
+    }
+
+    @Test
     @DisplayName("an operator delivery: search from the lead time, offer, accept, pickup and delivery with the customer's code")
     void operatorDelivery() {
         String id = order();

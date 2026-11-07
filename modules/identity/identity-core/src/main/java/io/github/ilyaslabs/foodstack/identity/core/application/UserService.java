@@ -227,6 +227,24 @@ public class UserService {
         }
     }
 
+    /**
+     * Cancels a requested account deletion (PRD ID-7): the customer signed in again during the
+     * grace period.
+     * @return whether a deletion was pending
+     */
+    public boolean cancelDeletion(String userId) {
+        Optional<UserDocument> user = this.users.findById(userId);
+        if (user.isEmpty() || user.get().getDeleteAfter() == null || user.get().getStatus() != UserStatus.ACTIVE) {
+            return false;
+        }
+        UserDocument document = user.get();
+        document.setDeleteAfter(null);
+        document.setDeletionRequestedAt(null);
+        document.setUpdatedAt(this.clock.instant());
+        this.users.save(document);
+        return true;
+    }
+
     /** Claims for a new access token: roles, permissions and the current token version. */
     public TokenClaims tokenClaims(String userId) {
         UserDocument user = find(userId);
@@ -366,7 +384,8 @@ public class UserService {
     }
 
     UserAccount toAccount(UserDocument user) {
-        return new UserAccount(user.getId(), this.pii.decrypt(user.getEmailCipher()), user.getDisplayName(),
+        String email = (user.getEmailCipher() != null) ? this.pii.decrypt(user.getEmailCipher()) : null;
+        return new UserAccount(user.getId(), email, user.getDisplayName(),
                 Set.copyOf(user.getRoles()), Permissions.of(user.getRoles()), user.getStatus(), user.getCreatedAt(),
                 Set.copyOf(user.getBrandIds()), Set.copyOf(user.getStoreIds()));
     }

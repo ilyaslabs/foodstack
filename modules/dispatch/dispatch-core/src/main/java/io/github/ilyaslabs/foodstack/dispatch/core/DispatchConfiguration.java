@@ -3,8 +3,10 @@ package io.github.ilyaslabs.foodstack.dispatch.core;
 import java.time.Clock;
 import java.time.Duration;
 
+import io.github.ilyaslabs.foodstack.dispatch.core.application.CustomerErasure;
 import io.github.ilyaslabs.foodstack.dispatch.core.application.DispatchLive;
 import io.github.ilyaslabs.foodstack.dispatch.core.application.DispatchService;
+import io.github.ilyaslabs.foodstack.dispatch.core.events.IdentityEventsListener;
 import io.github.ilyaslabs.foodstack.dispatch.core.events.OrderEventsListener;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.platform.kafka.BucketLeases;
@@ -24,7 +26,6 @@ import io.github.ilyaslabs.foodstack.platform.security.RateLimiter;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.rider.api.RiderApi;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
-import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -34,6 +35,7 @@ import org.springframework.data.mongodb.MongoTransactionManager;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaAdmin;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Everything the dispatch module runs on: database {@code foodstack_dispatch} with its shard keys,
@@ -104,6 +106,17 @@ public class DispatchConfiguration {
             PiiCipher piiCipher, Clock clock) {
         return new DispatchService(dispatchMongo.template(), dispatchMongo.transactionTemplate(), dispatchOutbox, dispatchLive,
                 riderApi, settingsApi, geoApi, serviceCalls, rateLimiter, piiCipher, clock);
+    }
+
+    @Bean
+    CustomerErasure dispatchCustomerErasure(ModuleMongo dispatchMongo) {
+        return new CustomerErasure(dispatchMongo.template());
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    IdentityEventsListener dispatchIdentityEventsListener(CustomerErasure dispatchCustomerErasure, JsonMapper jsonMapper) {
+        return new IdentityEventsListener(dispatchCustomerErasure, jsonMapper);
     }
 
     @Bean

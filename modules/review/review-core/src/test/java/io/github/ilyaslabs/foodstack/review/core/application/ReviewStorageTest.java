@@ -57,6 +57,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 /**
  * Rating, replying and moderating against a real two-shard MongoDB (TDD 15.3), with identity, media
@@ -290,6 +291,45 @@ class ReviewStorageTest {
         ReviewPage next = this.reviews.storeReviews(this.store, page.next(), 2);
         assertThat(next.items()).extracting(ReviewView::rating).containsExactly(5);
         assertThat(next.next()).isNull();
+    }
+
+    @Test
+    @DisplayName("a customer exports their reviews and rider ratings; after deletion the reviews stay as Deleted user")
+    void exportAndErase() {
+        // given
+        String customer = "cust-" + Ids.newId();
+        String order = finished(customer, "rider-9");
+        signIn(customer);
+        given(this.identity.getUser(customer)).willReturn(user(customer, "Ayesha Khan"));
+        String photo = Ids.newId();
+        given(this.media.claim(any(), any(), any())).willAnswer((call) -> new MediaAssetView(photo, MediaPurpose.REVIEW,
+                MediaStatus.READY, Map.of("thumb", new MediaVariantView("https://cdn/t.webp", 160, 160, 10)),
+                call.getArgument(2, MediaOwner.class), 1));
+        String id = this.reviews.submit(new SubmitReview(order, 5, "Lovely", photo, 4, List.of("ON_TIME")))
+            .storeReview()
+            .id();
+
+        // when
+        CustomerReviews mine = this.reviews.export();
+        int erased = this.reviews.eraseCustomer(customer);
+
+        // then
+        assertThat(mine.reviews()).singleElement().satisfies((review) -> assertThat(review.text()).isEqualTo("Lovely"));
+        assertThat(mine.riderRatings()).singleElement().satisfies((rating) -> {
+            assertThat(rating.orderId()).isEqualTo(order);
+            assertThat(rating.tags()).containsExactly("ON_TIME");
+        });
+        assertThat(erased).isEqualTo(1);
+        verify(this.serviceCalls).run(any());
+        signIn("someone-else");
+        ReviewView after = this.reviews.storeReviews(this.store, null, 10).items().stream()
+            .filter((review) -> review.id().equals(id))
+            .findFirst()
+            .orElseThrow();
+        assertThat(after.customerName()).isEqualTo("Deleted user");
+        assertThat(after.photoThumbUrl()).isNull();
+        assertThat(after.text()).isEqualTo("Lovely");
+        assertThat(this.reviews.storeRating(this.store).count()).isEqualTo(1);
     }
 
     @Test

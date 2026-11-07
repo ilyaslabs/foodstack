@@ -5,6 +5,7 @@ import java.time.Instant;
 
 import io.github.ilyaslabs.foodstack.dispatch.api.DeliverySummary;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryCompleted;
+import io.github.ilyaslabs.foodstack.identity.api.events.UserDeleted;
 import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCollected;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderDelivered;
@@ -18,7 +19,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Which orders can be rated, and by whose rider, from the order and dispatch events (PRD RV-1).
  * Both only set fields on the order's row, so redelivery and either arrival order are harmless and
- * no inbox is needed.
+ * no inbox is needed. Also anonymises a deleted customer's reviews ({@code UserDeleted}, PRD ID-7),
+ * which is as safe to repeat.
  */
 public class FinishedOrdersListener {
 
@@ -27,6 +29,8 @@ public class FinishedOrdersListener {
     private static final String COLLECTED = EventTypes.type("order", OrderCollected.class);
 
     private static final String COMPLETED = EventTypes.type("dispatch", DeliveryCompleted.class);
+
+    private static final String USER_DELETED = EventTypes.type("identity", UserDeleted.class);
 
     private final ReviewService reviews;
 
@@ -42,7 +46,8 @@ public class FinishedOrdersListener {
 
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.review:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-review-orders", groupId = "${foodstack.namespace:foodstack}-review",
-            topics = { "${foodstack.namespace:foodstack}.order.events", "${foodstack.namespace:foodstack}.dispatch.events" },
+            topics = { "${foodstack.namespace:foodstack}.order.events", "${foodstack.namespace:foodstack}.dispatch.events",
+                "${foodstack.namespace:foodstack}.identity.events" },
             properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
@@ -53,6 +58,9 @@ public class FinishedOrdersListener {
         }
         else if (COLLECTED.equals(type)) {
             finished(event.dataAs(OrderCollected.class, this.jsonMapper).order(), at);
+        }
+        else if (USER_DELETED.equals(type)) {
+            this.reviews.eraseCustomer(event.dataAs(UserDeleted.class, this.jsonMapper).userId());
         }
         else if (COMPLETED.equals(type)) {
             DeliveryCompleted completed = event.dataAs(DeliveryCompleted.class, this.jsonMapper);

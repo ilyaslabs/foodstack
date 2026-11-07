@@ -39,7 +39,7 @@ class FinishedOrdersListenerTest {
             Clock.fixed(AT, ZoneOffset.UTC));
 
     @Test
-    @DisplayName("delivered and collected orders become rateable, a completed delivery names the rider, the rest is ignored")
+    @DisplayName("delivered and collected orders become rateable, a completed delivery names the rider, a deleted customer is anonymised, the rest is ignored")
     void events() {
         this.listener.onEvent(envelope("foodstack.order.OrderDelivered.v1", new OrderDelivered(order("o1", Fulfilment.DELIVERY), "rider:r1")));
         this.listener.onEvent(envelope("foodstack.order.OrderCollected.v1", new OrderCollected(order("o2", Fulfilment.PICKUP), "c1")));
@@ -48,10 +48,12 @@ class FinishedOrdersListenerTest {
         this.listener.onEvent(envelope("foodstack.dispatch.DeliveryCompleted.v1",
                 new DeliveryCompleted(d, "rider:r1", "OPERATOR", 100, 70, 10, 0, "PKR", 1_000, "TAP")));
         this.listener.onEvent(envelope("foodstack.order.OrderPlaced.v1", Map.of("orderId", "o3")));
+        this.listener.onEvent(envelope("foodstack.identity.UserDeleted.v1", Map.of("userId", "c9")));
 
         verify(this.reviews).orderFinished("o1", "N-o1", "c1", "s1", null, "Napoli", Set.of("u1"), "en", AT);
         verify(this.reviews).orderFinished("o2", "N-o2", "c1", "s1", null, "Napoli", Set.of("u1"), "en", AT);
         verify(this.reviews).delivered("o1", "r1", "Hamza", "OPERATOR");
+        verify(this.reviews).eraseCustomer("c9");
         verifyNoMoreInteractions(this.reviews);
     }
 

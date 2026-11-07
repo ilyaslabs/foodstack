@@ -1,7 +1,9 @@
 package io.github.ilyaslabs.foodstack.identity.core;
 
 import java.time.Clock;
+import java.time.Duration;
 
+import io.github.ilyaslabs.foodstack.identity.core.application.AccountDeletion;
 import io.github.ilyaslabs.foodstack.identity.core.application.AddressBook;
 import io.github.ilyaslabs.foodstack.identity.core.application.AuditLog;
 import io.github.ilyaslabs.foodstack.identity.core.application.BootstrapAdmin;
@@ -13,6 +15,7 @@ import io.github.ilyaslabs.foodstack.identity.core.events.AuditListener;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.LoginKeyRepository;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.UserRepository;
 import io.github.ilyaslabs.foodstack.identity.core.security.AccessTokens;
+import io.github.ilyaslabs.foodstack.platform.core.PeriodicTask;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
@@ -118,6 +121,20 @@ public class IdentityConfiguration {
             TokenRevocations tokenRevocations, Clock clock) {
         return new UserService(users, loginKeys, piiCipher, identityPasswordEncoder, identityOutbox,
                 identityMongo.transactionTemplate(), tokenRevocations, clock);
+    }
+
+    @Bean
+    AccountDeletion identityAccountDeletion(ModuleMongo identityMongo, OutboxWriter identityOutbox,
+            UserService identityUserService, TokenRevocations tokenRevocations, IdentityProperties properties, Clock clock) {
+        return new AccountDeletion(identityMongo.template(), identityMongo.transactionTemplate(), identityOutbox,
+                identityUserService, tokenRevocations, properties.getDeletionGrace(), clock);
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    PeriodicTask identityAccountDeletionSweep(AccountDeletion identityAccountDeletion) {
+        return PeriodicTask.start("account-deletions", Duration.ofMinutes(2), Duration.ofMinutes(30),
+                () -> identityAccountDeletion.runDue(200));
     }
 
     @Bean

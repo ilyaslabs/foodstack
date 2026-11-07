@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.review.web;
 
 import java.util.List;
 
+import io.github.ilyaslabs.foodstack.review.core.application.CustomerReviews;
 import io.github.ilyaslabs.foodstack.review.core.application.OrderReviewState;
 import io.github.ilyaslabs.foodstack.review.core.application.RatingSummary;
 import io.github.ilyaslabs.foodstack.review.core.application.ReviewPage;
@@ -59,6 +60,13 @@ class ReviewsController {
     @PreAuthorize("isAuthenticated()")
     OrderReviewState order(@PathVariable String orderId) {
         return this.reviews.orderState(orderId);
+    }
+
+    /** The customer's reviews and rider ratings, for their data export (PRD ID-7). */
+    @GetMapping("/mine/export")
+    @PreAuthorize("isAuthenticated()")
+    CustomerReviews export() {
+        return this.reviews.export();
     }
 
     @GetMapping("/rider-tags")
