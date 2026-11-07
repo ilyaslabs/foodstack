@@ -131,8 +131,17 @@ export class OrderClient {
     return this.http.post<Order>(this.url(`/${orderId}/actions/${path}`), body);
   }
 
-  refund(orderId: string, amountMinor: number, reason: string): Observable<Order> {
-    return this.http.post<Order>(this.url(`/${orderId}/refund`), { amountMinor, reason });
+  /**
+   * Gives money back to the card. `fundedBy` says who bears it once the order is done: the store
+   * (the default) or the operator.
+   */
+  refund(
+    orderId: string,
+    amountMinor: number,
+    reason: string,
+    fundedBy: 'STORE' | 'OPERATOR' = 'STORE',
+  ): Observable<Order> {
+    return this.http.post<Order>(this.url(`/${orderId}/refund`), { amountMinor, reason, fundedBy });
   }
 
   /** Live changes of one order. */

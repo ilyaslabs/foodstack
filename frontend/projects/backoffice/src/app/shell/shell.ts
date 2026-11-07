@@ -136,6 +136,13 @@ export class Shell {
       permission: ['promotion:manage', 'store:portal'],
     },
     {
+      path: '/finance',
+      label: 'Finance',
+      icon: 'account_balance',
+      exact: false,
+      permission: ['ledger:read', 'ledger:store'],
+    },
+    {
       path: '/users',
       label: 'Users',
       icon: 'group',
@@ -196,6 +203,10 @@ export class Shell {
           permissions.has(p),
         ),
     );
+    const payouts = items.findIndex((item) => item.path === '/finance');
+    if (payouts >= 0 && !permissions.has('ledger:read')) {
+      items[payouts] = { ...items[payouts]!, label: 'Payouts' };
+    }
     if (!permissions.has('store:manage') && permissions.has('store:portal')) {
       const storeIds = this.me()?.storeIds ?? [];
       // a brand owner runs every branch of the brand; a branch manager usually one branch

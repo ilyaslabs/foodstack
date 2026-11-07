@@ -11,6 +11,7 @@ import {
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatRadioModule } from '@angular/material/radio';
 
 import { Order, OrderClient } from '@foodstack/api-client';
 import { Icon, LocaleStore } from '@foodstack/ui';
@@ -30,6 +31,7 @@ import { STATUS_LABELS, clock, dateTime, statusTone } from './order-labels';
     MatFormFieldModule,
     MatInputModule,
     MatProgressBarModule,
+    MatRadioModule,
     Icon,
   ],
   template: `
@@ -146,6 +148,23 @@ import { STATUS_LABELS, clock, dateTime, statusTone } from './order-labels';
                 <input matInput name="reason" required maxlength="200" [(ngModel)]="reason" />
               </mat-form-field>
             </div>
+            <mat-radio-group
+              class="funder"
+              name="fundedBy"
+              aria-label="Who pays the refund"
+              [(ngModel)]="fundedBy"
+            >
+              <span class="funder-label">Who pays it</span>
+              <mat-radio-button value="STORE">The store</mat-radio-button>
+              <mat-radio-button value="OPERATOR">We do</mat-radio-button>
+            </mat-radio-group>
+            <p class="funder-hint">
+              {{
+                fundedBy === 'STORE'
+                  ? 'Taken from what we owe the store for this order.'
+                  : 'The store keeps its full share; we bear the refund.'
+              }}
+            </p>
             <div class="refund-actions">
               <button mat-button type="button" (click)="refunding.set(false)">Cancel</button>
               <button mat-flat-button type="submit" [disabled]="busy() || !reason.trim()">
@@ -271,6 +290,21 @@ import { STATUS_LABELS, clock, dateTime, statusTone } from './order-labels';
       grid-template-columns: 1fr 2fr;
       gap: 12px;
     }
+    .funder {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 12px;
+    }
+    .funder-label {
+      font: var(--mat-sys-label-large);
+      margin-inline-end: 4px;
+    }
+    .funder-hint {
+      font: var(--mat-sys-body-small);
+      color: var(--mat-sys-on-surface-variant);
+      margin: 0 0 8px;
+    }
     .refund-actions {
       display: flex;
       justify-content: flex-end;
@@ -305,6 +339,8 @@ export class OrderDetailDialog {
   protected changed = false;
   protected amount = '';
   protected reason = '';
+  /** Who bears the refund once the order is done (ilyas, 2026-11-06): the store by default. */
+  protected fundedBy: 'STORE' | 'OPERATOR' = 'STORE';
 
   constructor() {
     void this.load();
@@ -330,6 +366,7 @@ export class OrderDetailDialog {
   protected startRefund(): void {
     this.amount = toMajor(this.refundable(), this.order()?.currency ?? 'USD');
     this.reason = '';
+    this.fundedBy = 'STORE';
     this.refunding.set(true);
   }
 
@@ -341,7 +378,9 @@ export class OrderDetailDialog {
       this.error.set(`Enter an amount up to ${this.money(this.refundable())}.`);
       return;
     }
-    await this.run(() => firstValueFrom(this.orders.refund(o.id, minor, this.reason.trim())));
+    await this.run(() =>
+      firstValueFrom(this.orders.refund(o.id, minor, this.reason.trim(), this.fundedBy)),
+    );
     this.refunding.set(false);
   }
 
