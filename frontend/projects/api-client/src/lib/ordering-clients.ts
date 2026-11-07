@@ -13,6 +13,11 @@ import {
   EmailDelivery,
   InboxItem,
   MerchantAccount,
+  MessagePreview,
+  MessageTemplate,
+  MessageTemplateSummary,
+  MessageTemplateText,
+  MessageText,
   NotificationPreferences,
   Order,
   OrderAction,
@@ -277,6 +282,42 @@ export class NotificationClient {
 
   retry(id: string): Observable<void> {
     return this.http.post<void>(this.url(`/deliveries/${id}/retry`), null);
+  }
+
+  /** Every message the operator can reword (PRD NO-2). */
+  templates(): Observable<MessageTemplateSummary[]> {
+    return this.http.get<MessageTemplateSummary[]>(this.url('/templates'));
+  }
+
+  template(id: string): Observable<MessageTemplate> {
+    return this.http.get<MessageTemplate>(this.url(`/templates/${encodeURIComponent(id)}`));
+  }
+
+  /** Saves the operator's wording; `version` is the one read (0 for a message not edited yet). */
+  saveTemplate(
+    id: string,
+    language: string,
+    text: MessageText,
+    version: number,
+  ): Observable<MessageTemplateText> {
+    return this.http.put<MessageTemplateText>(
+      this.url(`/templates/${encodeURIComponent(id)}/${encodeURIComponent(language)}`),
+      { ...text, version },
+    );
+  }
+
+  /** Goes back to the built-in text. */
+  resetTemplate(id: string, language: string): Observable<MessageTemplateText> {
+    return this.http.delete<MessageTemplateText>(
+      this.url(`/templates/${encodeURIComponent(id)}/${encodeURIComponent(language)}`),
+    );
+  }
+
+  previewTemplate(id: string, language: string, text: MessageText): Observable<MessagePreview> {
+    return this.http.post<MessagePreview>(
+      this.url(`/templates/${encodeURIComponent(id)}/${encodeURIComponent(language)}/preview`),
+      text,
+    );
   }
 }
 

@@ -324,6 +324,45 @@ export interface CardCheckout {
   savedCards: SavedCard[];
 }
 
+/** A title, body and subject; a blank field keeps the built-in one. */
+export interface MessageText {
+  title: string | null;
+  body: string | null;
+  subject: string | null;
+}
+
+export interface MessageTemplateSummary {
+  id: string;
+  placeholders: string[];
+  editedLanguages: string[];
+}
+
+/** One message in one language: the built-in text beside the operator's own wording. */
+export interface MessageTemplateText {
+  language: string;
+  builtIn: MessageText;
+  /** The built-in text's language: English for a language FoodStack has no text for. */
+  builtInLanguage: string;
+  edited: MessageText | null;
+  version: number;
+  updatedAt: string | null;
+}
+
+export interface MessageTemplate {
+  id: string;
+  placeholders: string[];
+  /** Placeholders every edit must keep, such as the sign-in code. */
+  required: string[];
+  languages: MessageTemplateText[];
+}
+
+export interface MessagePreview {
+  subject: string;
+  title: string;
+  body: string;
+  html: string;
+}
+
 export interface InboxItem {
   id: string;
   template: string;

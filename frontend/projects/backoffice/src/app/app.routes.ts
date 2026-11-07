@@ -91,6 +91,10 @@ export const routes: Routes = [
         loadComponent: () => import('./settings/audit-page').then((m) => m.AuditPage),
       },
       {
+        path: 'settings/messages',
+        loadComponent: () => import('./settings/messages-page').then((m) => m.MessagesPage),
+      },
+      {
         path: 'settings/emails',
         loadComponent: () => import('./settings/emails-page').then((m) => m.EmailsPage),
       },

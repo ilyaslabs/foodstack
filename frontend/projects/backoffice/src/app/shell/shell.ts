@@ -185,6 +185,13 @@ export class Shell {
       permission: 'settings:manage',
     },
     {
+      path: '/settings/messages',
+      label: 'Messages',
+      icon: 'edit',
+      exact: false,
+      permission: 'settings:manage',
+    },
+    {
       path: '/settings/emails',
       label: 'Email log',
       icon: 'mail',
