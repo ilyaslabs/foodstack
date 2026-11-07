@@ -116,6 +116,20 @@ class TwoStepAndSocialScenario {
         assertThat(this.platform.client().withToken(second.path("accessToken")).get("/api/v1/me").<String>path("id"))
             .isEqualTo(me.<String>path("id"));
         assertThat(social(google.idToken("someone-else.apps", subject, email, "Gul")).statusCode()).isEqualTo(401);
+
+        // and: someone signs up first with a password for another person's address; when the
+        // owner of the address signs in with Google, that password and its sign-ins stop working
+        String taken = "sana-" + System.nanoTime() + "@it.foodstack.local";
+        post("/api/v1/auth/register", Map.of("email", taken, "password", "squatter-password-1", "displayName", "Squatter"))
+            .then().log().ifValidationFails().statusCode(201);
+        Response squatter = post("/api/v1/auth/login", Map.of("client", "mobile", "email", taken, "password", "squatter-password-1"));
+        squatter.then().statusCode(200);
+        Response owner = social(google.idToken(clientId, "owner-" + System.nanoTime(), taken, "Sana"));
+        owner.then().log().ifValidationFails().statusCode(200);
+        assertThat(post("/api/v1/auth/login", Map.of("client", "mobile", "email", taken, "password", "squatter-password-1"))
+            .statusCode()).isEqualTo(401);
+        assertThat(this.platform.client().withToken(squatter.path("accessToken")).get("/api/v1/me").statusCode()).isEqualTo(401);
+        assertThat(this.platform.client().withToken(owner.path("accessToken")).get("/api/v1/me").statusCode()).isEqualTo(200);
     }
 
     private Response login(String email) {

@@ -256,6 +256,7 @@ public class SessionService {
             auditFailure(email, "email code");
             throw new ModuleException.Unauthorized("The code is not correct or has expired", "CODE_INVALID");
         }
+        this.users.markEmailVerified(verified.get());
         return signedIn(verified.get(), client, "email code");
     }
 

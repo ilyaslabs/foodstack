@@ -71,6 +71,12 @@ public class UserDocument {
 
     private Instant totpEnabledAt;
 
+    /**
+     * When someone first proved they read this address (an emailed code, or a provider's verified
+     * email); {@code null} until then. Sign-up does not prove it.
+     */
+    private Instant emailVerifiedAt;
+
     /** The time step of the last code used, so each code works once. */
     private Long totpLastStep;
 
@@ -173,6 +179,14 @@ public class UserDocument {
 
     public void setTotpPendingCipher(String totpPendingCipher) {
         this.totpPendingCipher = totpPendingCipher;
+    }
+
+    public Instant getEmailVerifiedAt() {
+        return this.emailVerifiedAt;
+    }
+
+    public void setEmailVerifiedAt(Instant emailVerifiedAt) {
+        this.emailVerifiedAt = emailVerifiedAt;
     }
 
     public Instant getTotpEnabledAt() {
