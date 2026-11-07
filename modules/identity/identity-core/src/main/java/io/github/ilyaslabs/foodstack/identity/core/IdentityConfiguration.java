@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.identity.core;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 
 import io.github.ilyaslabs.foodstack.identity.core.application.AccountDeletion;
 import io.github.ilyaslabs.foodstack.identity.core.application.AddressBook;
@@ -9,12 +10,16 @@ import io.github.ilyaslabs.foodstack.identity.core.application.AuditLog;
 import io.github.ilyaslabs.foodstack.identity.core.application.BootstrapAdmin;
 import io.github.ilyaslabs.foodstack.identity.core.application.EmailCodeService;
 import io.github.ilyaslabs.foodstack.identity.core.application.SessionService;
+import io.github.ilyaslabs.foodstack.identity.core.application.SignInSettingsService;
+import io.github.ilyaslabs.foodstack.identity.core.application.TwoFactorService;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserDirectory;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
 import io.github.ilyaslabs.foodstack.identity.core.events.AuditListener;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.LoginKeyRepository;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.UserRepository;
 import io.github.ilyaslabs.foodstack.identity.core.security.AccessTokens;
+import io.github.ilyaslabs.foodstack.identity.core.security.ChallengeTokens;
+import io.github.ilyaslabs.foodstack.identity.core.security.SocialTokens;
 import io.github.ilyaslabs.foodstack.platform.core.PeriodicTask;
 import io.github.ilyaslabs.foodstack.platform.kafka.ModuleEventing;
 import io.github.ilyaslabs.foodstack.platform.kafka.OutboxRelay;
@@ -155,9 +160,38 @@ public class IdentityConfiguration {
     @Bean
     SessionService identitySessionService(ModuleMongo identityMongo, UserService identityUserService,
             EmailCodeService identityEmailCodeService, AccessTokens identityAccessTokens, RateLimiter rateLimiter,
-            PiiCipher piiCipher, Clock clock, AuditLog identityAuditLog) {
-        return new SessionService(identityMongo.template(), identityUserService, identityEmailCodeService,
+            PiiCipher piiCipher, Clock clock, AuditLog identityAuditLog, TwoFactorService identityTwoFactorService,
+            ChallengeTokens identityChallengeTokens, SocialTokens identitySocialTokens,
+            SignInSettingsService identitySignInSettings) {
+        SessionService sessions = new SessionService(identityMongo.template(), identityUserService, identityEmailCodeService,
                 identityAccessTokens, rateLimiter, piiCipher, clock, identityAuditLog);
+        sessions.enableTwoStep(identityTwoFactorService, identityChallengeTokens);
+        sessions.enableSocial(identitySocialTokens, identitySignInSettings);
+        return sessions;
+    }
+
+    @Bean
+    TwoFactorService identityTwoFactorService(ModuleMongo identityMongo, UserService identityUserService, PiiCipher piiCipher,
+            RateLimiter rateLimiter, Clock clock, IdentityProperties properties) {
+        return new TwoFactorService(identityMongo.template(), identityUserService, piiCipher, rateLimiter, clock,
+                properties.getTotp().getRequiredRoles(), properties.getTotp().getIssuer());
+    }
+
+    @Bean
+    ChallengeTokens identityChallengeTokens(JWKSource<SecurityContext> identityJwkSource, Clock clock) {
+        return new ChallengeTokens(identityJwkSource, clock);
+    }
+
+    @Bean
+    SocialTokens identitySocialTokens(IdentityProperties properties, Clock clock) {
+        IdentityProperties.Social social = properties.getSocial();
+        return new SocialTokens(List.of(new SocialTokens.Provider("google", social.getGoogleIssuer(), social.getGoogleJwksUri()),
+                new SocialTokens.Provider("apple", social.getAppleIssuer(), social.getAppleJwksUri())), clock);
+    }
+
+    @Bean
+    SignInSettingsService identitySignInSettings(ModuleMongo identityMongo, Clock clock) {
+        return new SignInSettingsService(identityMongo.template(), clock);
     }
 
     @Bean

@@ -180,6 +180,11 @@ public final class FoodstackPlatform {
         // Account deletion runs within seconds instead of after 14 days (PRD ID-7)
         properties.put("foodstack.identity.deletion-grace", "PT2S");
         properties.put("foodstack.identity.deletion-sweep", "PT2S");
+        // Two-step sign-in required for FINANCE only, so the other journeys sign in as admin in one
+        // step; TwoStepScenario covers the required enrolment with a finance account (PRD ID-5)
+        properties.put("foodstack.identity.totp.required-roles", "FINANCE");
+        // Google sign-in checks tokens from a local stand-in (PRD ID-2)
+        properties.put("foodstack.identity.social.google-jwks-uri", SocialProviderStub.get().jwksUri());
         // No calls to a public geocoder from the tests
         properties.put("foodstack.geo.geocoding.provider", "none");
         return properties;
