@@ -50,7 +50,7 @@ Listed so nobody looks for them in the code. Milestones are from the [PRD releas
 | Area | TDD | Planned |
 |---|---|---|
 | Kubernetes Helm chart, Gateway API routes, edge JWT check, Istio mTLS, `AuthorizationPolicy` | 9.1, 18 | M5 |
-| Edge rate limiting on Kubernetes (Envoy rate-limit service) | 8.1, 18.3 | M5, with the Helm chart (the single server has per-IP limits in Caddy since PR #7) |
+| Edge rate limiting on Kubernetes (Envoy rate-limit service) | 8.1, 18.3 | M5, with the Helm chart (a single server has no edge limits: ilyas, 2026-11-07; the app's own limits apply) |
 | Batching two orders to one rider | PRD DR-9 | Later ("Could") |
 | Social login, TOTP | 9.1 | M5 (email codes are built) |
 | Operator handbook: step-by-step setup and scaling runbooks for non-experts | Deployment guide | M6 |

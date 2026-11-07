@@ -53,4 +53,3 @@ jobs:
           docker build -t foodstack-server:ci app/foodstack-server
           docker build -f frontend/docker/web.Dockerfile -t foodstack-web:ci frontend
           docker build -f frontend/docker/backoffice.Dockerfile -t foodstack-backoffice:ci frontend
-          docker build -t foodstack-proxy:ci deploy/unit-deployer/src/main/dist/proxy

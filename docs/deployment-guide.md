@@ -105,7 +105,6 @@ Edit `/opt/foodstack/.env`, then run `./restart.sh server`. The main settings:
 | `MAP_TILE_URL`, `MAP_TILE_ORIGIN`, `MAP_ATTRIBUTION` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, `https://tile.openstreetmap.org`, `© OpenStreetMap contributors` | Map tiles in the back office, where stores draw their delivery zones. OpenStreetMap's public tiles allow light use only (see their tile usage policy); with many stores, use your own tile server or a hosted provider. `MAP_TILE_ORIGIN` must be the scheme and host of `MAP_TILE_URL`, because the page's security policy only loads tiles from there |
 | `ELASTICSEARCH_URIS`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD` | set by `install.sh` | Point at an external Elasticsearch 9 cluster if you run one; the index is rebuilt from store data on start |
 | `JAVA_HEAP`, `ES_HEAP` | `4g`, `2g` | Sized by `install.sh` from server memory |
-| `FOODSTACK_RATE_LIMIT_API`, `FOODSTACK_RATE_LIMIT_SIGN_IN`, `FOODSTACK_RATE_LIMIT_ORDERS` | `1200`, `60`, `20` | Requests per minute per client address, checked by the proxy before the server sees them (429 with `Retry-After` above it): the whole API, sign-in and codes, order placement. Mobile networks put many people behind one address, so raise them rather than lower them if customers see "too many requests". Apply with `./restart.sh proxy` |
 | `FOODSTACK_REFRESH_COOKIE_SECURE` | `true` | Keep `true`. Only a plain-HTTP trial (`--local`) sets `false`, or browsers would drop the sign-in cookie |
 | `FOODSTACK_TRACING_EXPORT`, `FOODSTACK_OTLP_ENDPOINT`, `FOODSTACK_TRACING_SAMPLING` | `false`, `http://collector:4318/v1/traces`, `0.1` | Send traces to an OpenTelemetry collector (Jaeger, Tempo, a vendor). Off by default; a trace follows a request through every module and through Kafka events |
 
@@ -161,7 +160,6 @@ Migrations are always backward compatible with the previous release, so a rollba
 - [ ] Real SMTP, maps and payment credentials set; demo map services not used.
 - [ ] `FOODSTACK_ENVIRONMENT=production` (blocks the `test-seed` demo data).
 - [ ] Disk usage alert at 80% (`status.sh` reports it).
-- [ ] Edge rate limits reviewed for your traffic (`FOODSTACK_RATE_LIMIT_*`).
 - [ ] The web app and the API on the same site (for example `example.com` and `api.example.com`), so the sign-in cookie is sent; `FOODSTACK_REFRESH_COOKIE_SECURE=true`.
 
 ## 4. Kubernetes (Helm)

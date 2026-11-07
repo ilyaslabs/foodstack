@@ -16,18 +16,13 @@ x-service: &service
 services:
   proxy:
     <<: *service
-    # Caddy with its rate-limit plugin (proxy/Dockerfile): pulled when published, else built here once.
-    image: ilyaslabs/foodstack-proxy:caddy-2.10
-    build: ./proxy
+    image: caddy:2.10-alpine
     ports:
       - "${HTTP_PORT:-80}:80"
       - "${HTTPS_PORT:-443}:443"
     environment:
       FOODSTACK_SITES: ${FOODSTACK_SITES}
       FOODSTACK_ADMIN_ROOT_HOST: ${FOODSTACK_ADMIN_ROOT_HOST}
-      FOODSTACK_RATE_LIMIT_API: ${FOODSTACK_RATE_LIMIT_API:-1200}
-      FOODSTACK_RATE_LIMIT_SIGN_IN: ${FOODSTACK_RATE_LIMIT_SIGN_IN:-60}
-      FOODSTACK_RATE_LIMIT_ORDERS: ${FOODSTACK_RATE_LIMIT_ORDERS:-20}
     volumes:
       - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy:/data

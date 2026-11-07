@@ -187,7 +187,6 @@ cp -a "$here/app/." "$target/app/"
 cp -a "$here/config/Caddyfile" "$here/config/backoffice.conf.template" "$target/config/"
 cp -a "$here/docker-compose.yml" "$here/.env.example" "$here/VERSION" "$here/README.md" "$target/"
 cp -a "$here/lib/." "$target/lib/"
-mkdir -p "$target/proxy" && cp -a "$here/proxy/." "$target/proxy/"
 for script in start stop restart status logs backup restore upgrade uninstall; do
   cp -a "$here/$script.sh" "$target/"
 done
@@ -199,12 +198,9 @@ export FOODSTACK_HOME="$target"
 if $macos && [[ -n ${SUDO_USER:-} ]]; then
   info "Pulling images as $SUDO_USER"
   for image in $(compose config --images); do
-    # the proxy image may not be published yet; compose then builds it
     sudo -H -u "$SUDO_USER" docker pull -q "$image" > /dev/null 2>&1 || true
   done
 fi
-# The edge proxy: the published image when there is one, otherwise built here (once, about a minute).
-compose pull -q --ignore-pull-failures proxy > /dev/null 2>&1 || true
 info "Starting the datastores"
 compose up -d "${datastores[@]}"
 for service in "${datastores[@]}"; do wait_healthy "$service" 300; done

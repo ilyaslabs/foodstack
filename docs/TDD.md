@@ -33,7 +33,7 @@
 | D11 | Maps | Provider SPI; default OpenStreetMap stack (MapLibre, Nominatim, OSRM); Google Maps adapter |
 | D12 | Front-end | Angular workspace, two apps (`web`, `backoffice`), Angular Material 3 with design tokens, no micro-frontends |
 | D13 | Repository | Monorepo: backend, frontend, `k8s/helm`, docs |
-| D14 | Artifacts | Maven `io.github.ilyaslabs:foodstack-*`; images `ilyaslabs/foodstack-server`, `ilyaslabs/foodstack-web`, `ilyaslabs/foodstack-backoffice` and `ilyaslabs/foodstack-proxy` (Caddy with rate limits, single server) on Docker Hub, mirrored to GHCR |
+| D14 | Artifacts | Maven `io.github.ilyaslabs:foodstack-*`; images `ilyaslabs/foodstack-server`, `ilyaslabs/foodstack-web`, and `ilyaslabs/foodstack-backoffice` on Docker Hub, mirrored to GHCR |
 | D15 | Kubernetes | **Optional.** Helm chart; managed datastores in production, in-cluster datastores with `values-dev.yaml`; one `topology` value (`monolith` default, `split`, `microservices`, `custom`) generates every Deployment, route and Module-Switch setting (section 18.2) |
 | D16 | Service mesh | Istio ambient mode (ztunnel mTLS, waypoints for L7), Gateway API for ingress |
 | D17 | Observability | OpenTelemetry; optional Prometheus, Grafana, Tempo and Loki stack |
@@ -380,7 +380,7 @@ The goal (ilyas): grow by adding machines, never by changing code, while one box
 | 2, 5, 6 | One leader per module relayed the outbox, matched riders and swept timeouts | Work buckets on every replica (7.3) | `platform-kafka`, `dispatch`, `order` |
 | 3, 4, 14 | One GEO set and one live channel for every rider in the country; plain pub/sub reaches every Redis Cluster node | Riders in one GEO set per 0.25° map cell (`<ns>:rider:geo:<cell>`); live channels per cell (`rt:cell:<cell>`), maps subscribe to the cells they show (at most 64, wider views must zoom in); sharded pub/sub on a cluster; Redis standalone, Sentinel or Cluster by config only | `rider`, `dispatch`, `platform-kafka` `LiveChannels`, `fs-map` |
 | 7 | Every quote read zones and operator pricing from MongoDB | Redis caches with generation keys, 10 min, raised after each change and by `geo`'s own event listener | `geo` `GeoCache` |
-| 8 | No edge limits on one server; no traces across Kafka | Per-IP limits in Caddy (`foodstack-proxy` image) and, on Kubernetes, the Envoy rate-limit service (M5 chart); tracing as in 7.4 | `deploy`, `platform-mongo`, `platform-kafka` |
+| 8 | No edge limits on one server; no traces across Kafka | On Kubernetes, the Envoy rate-limit service (M5 chart); one server keeps only the app's own limits (ilyas, 2026-11-07); tracing as in 7.4 | `deploy`, `platform-mongo`, `platform-kafka` |
 | 9 | Search: one shard setting, deep pages, a 10,000-hit brand lookup, unordered writes | Shards and `auto_expand_replicas` from config (applied to an existing index at start-up); results stop at 500 (`foodstack.search.max-results`); brand lookups page through a point in time with `search_after`; writes carry the branch version as an external version, so an older re-read arriving late is refused; listener threads per module from config | `search` |
 | 10 | Self-delivery zones have no size cap, so a zone alone could flood a search | Discovery radius on top of the zone: 8 km road by default, widened by the customer in steps (8, 15, 25 km; `foodstack.search.discovery-steps-km`); a direct link and checkout use the zone only | `search`, web home page |
 | 11 | Hours, peak windows and tickets used the deployment's time zone | Each branch has its own IANA zone, found offline from its location (IANA `zone.tab` plus timeshape boundaries, only for countries with several zones) and editable; hours, open-now, closures, peak windows and order times use it | `store`, `geo`, back office |
@@ -401,7 +401,7 @@ Accepted as they are: order placement is a distributed transaction across shards
 - Pagination: cursor-based (`?cursor=&limit=`), response `{ items, nextCursor }`.
 - `Idempotency-Key` header required on order placement, payments and refunds; responses cached 24 h in Redis under `foodstack:<module>:idem:<key>`.
 - `ETag` / `If-None-Match` on settings, branding and menus; `If-Match` for back-office edits to prevent lost updates.
-- Rate limiting in two layers: **at the edge** (per client IP, before traffic reaches any pod: Caddy's rate-limit plugin on one server, section 17.2; the Envoy rate-limit service on Kubernetes, section 18.3) and **in the app** (per user and per action, a fixed window in Redis, stricter on sign-in, login codes, order placement and coupon checks).
+- Rate limiting in two layers: **at the edge** on Kubernetes (per client IP, before traffic reaches any pod: the Envoy rate-limit service, section 18.3; a single server has no edge limits, ilyas 2026-11-07) and **in the app** (per user and per action, a fixed window in Redis, stricter on sign-in, login codes, order placement and coupon checks).
 - Additive changes only within `v1`; deprecations announced with a `Deprecation` header.
 
 ### 8.2 Routing in split deployments
@@ -456,7 +456,7 @@ Every REST prefix belongs to exactly one module (section 5.2). The Helm chart ge
 | Read-through caches (settings, branding, geocoding) | `foodstack:<module>:cache:<name>:<key>` | 1 to 10 min; evicted on the module's own changes |
 | Generation caches (menus; quote zones and operator pricing) | `foodstack:store:menu:<storeId>:<gen>`, `foodstack:geo:cache:zones:<storeId>:<gen>`, `foodstack:geo:cache:operator-pricing:<gen>` | 10 min; a change raises the generation after commit, so a late reader never hides it |
 | Idempotency | `foodstack:<module>:idem:<key>` | 24 h |
-| Rate limiting (app) | `foodstack:<module>:rl:<scope>:<id>:<window>` | fixed window; edge limits live in Caddy (one server) or the Envoy rate-limit service (Kubernetes) |
+| Rate limiting (app) | `foodstack:<module>:rl:<scope>:<id>:<window>` | fixed window; edge limits live in the Envoy rate-limit service (Kubernetes only) |
 | Login codes | `foodstack:identity:code:<purpose>:<userId>` | 5 min |
 | Token revocation floor | `foodstack:identity:revoked:<userId>` | no expiry; cached 5 s per JVM, at most 100,000 users |
 | Rider live location | `foodstack:rider:geo:<cell>` (GEO set per 0.25° cell), `foodstack:rider:pos:<id>` | refreshed on each ping; stale riders pruned |
@@ -593,7 +593,7 @@ All services share one Docker network, `foodstack`. Only the reverse proxy publi
 
 | Service | Image | Notes |
 |---|---|---|
-| `proxy` | `ilyaslabs/foodstack-proxy` (Caddy with its rate-limit plugin; built on the server once if the image is not published) | The API gateway on a single server: automatic HTTPS for the operator's domains, routing of `/api`, `/oauth2`, `/.well-known` to the server and the rest to the web apps, per-IP rate limits (API 1200, sign-in 60, order placement 20 per minute, from `.env`; 429 with `Retry-After`), request-size limits and security headers |
+| `proxy` | `caddy:2.10-alpine` (stock Caddy) | The API gateway on a single server: automatic HTTPS for the operator's domains, routing of `/api`, `/oauth2`, `/.well-known` to the server and the rest to the web apps, request-size limits and security headers. No per-IP rate limits (ilyas, 2026-11-07): the server limits sign-in, codes, coupon checks and order placement itself |
 | `server` | Eclipse Temurin 25 JRE | Runs the mounted `foodstack-server.jar`; healthcheck on actuator readiness |
 | `web` | Node (LTS) | Customer app SSR server from the mounted bundle |
 | `backoffice` | nginx-unprivileged | Static back-office app |
@@ -868,7 +868,7 @@ The scale review (section 7.5) was built on the M3 follow-up pull request (PR #7
 | Spring Authorization Server | Drop the hosted login and the server session | Kept only for JWKS, its metadata and the client-credentials service token; no user clients, no login page, no session | Split deployments still need the service token, and JWKS is unchanged for every module |
 | Refresh lifetime | 30 days for every user type | 30 days, sliding: each refresh starts a new 30 days | A user active at least once a month stays signed in |
 | Live maps | Per-geo-cell channels | 0.25° cells (about 28 × 28 km), at most 64 per map; a wider view gets the board without live dots and the hint "Zoom in to follow riders live" | Bounds what one map can subscribe to; the same cells hold the rider GEO sets |
-| Edge rate limits, one server | Caddy | `ilyaslabs/foodstack-proxy`: Caddy with its rate-limit plugin, pulled when published and built on the server once otherwise; per IP: API 1200, sign-in 60, order placement 20 per minute | Stock Caddy has no rate limiting. (Decision card to ilyas, 2026-11-04: own proxy image, recommended, or per-IP limits in the server) |
+| Edge rate limits, one server | Caddy | None: stock Caddy, and the server's own per-user limits (sign-in, codes, coupon checks, order placement) | ilyas, 2026-11-07: a single server does without edge limits; Kubernetes gets them in M5. The `foodstack-proxy` image built in PR #7 was removed in M4 |
 | Edge rate limits, Kubernetes | Envoy rate-limit service | With the Helm chart in M5 | The chart is not built yet |
 | Search depth | Cap at about 500 | `foodstack.search.max-results` (500): a page past it is empty, the page before says there is no more | — |
 | Discovery radius | 8 km road, then wider steps | Steps from `discovery-steps-km` (8, 15, 25); the road distance is divided by `road-factor` (1.3) for Elasticsearch's straight-line filter; pickup keeps its own 15 km and gets no wider step | Elasticsearch measures straight lines |
