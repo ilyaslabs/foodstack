@@ -96,6 +96,8 @@ Edit `/opt/foodstack/.env`, then run `./restart.sh server`. The main settings:
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_AUTH`, `SMTP_STARTTLS`, `SMTP_FROM`, `SMTP_FROM_NAME` | `smtp.example.net`, `587`, …, `true`, `true`, `orders@example.com`, `Your brand` | Order emails, sign-in codes and password reset. While `SMTP_HOST` or `SMTP_FROM` is empty nothing is emailed: customers still see updates in the app and the **Email log** page shows each message as "Not sent" |
 | `PAYMENT_GATEWAY` | `none` or `stripe` | Card payments. `none` means cash only. `sandbox` is a test page that charges nothing, for development; the server refuses it when `FOODSTACK_ENVIRONMENT=production` |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `sk_live_…`, `whsec_…` | With `PAYMENT_GATEWAY=stripe`. In the Stripe dashboard add a webhook endpoint `https://api.example.com/api/v1/payment-webhooks/stripe` for `checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed`, and copy its signing secret |
+| `STRIPE_PUBLISHABLE_KEY` | `pk_live_…` | Only for card fields inside the app (Ordering page: "In card fields inside the app"). The fields are Stripe's own secure frame, so card numbers never reach your server (PCI SAQ A). Without the key customers are sent to Stripe's page. Saved cards (Ordering page, off by default) need no extra key |
+| `FOODSTACK_IDENTITY_DELETION_GRACE` | `P14D` | How long after a customer asks to delete their account it is deleted; signing in again before then cancels it. Orders stay without the customer's name, phone or address, and reviews show "Deleted user" |
 | `FOODSTACK_WEB_URL` | `https://example.com` | Set by `install.sh`. Where customers come back to after paying, and the links in emails |
 | `FCM_SERVICE_ACCOUNT`, `FCM_WEB_CONFIG`, `FCM_VAPID_KEY` | `/config/push/fcm.json`, `{"apiKey":"…","projectId":"…","messagingSenderId":"…","appId":"…"}`, `BK…` | Push to riders (new jobs) and customers (order updates). Create a Firebase project, save its service account key as `/opt/foodstack/config/push/fcm.json` (the server sees it as `/config/push/fcm.json`), and copy the web app config (one line) and the Web Push key pair from the Firebase console. While `FCM_SERVICE_ACCOUNT` is empty nothing is pushed and everyone still sees updates in the app |
 | `ROUTING_PROVIDER`, `ROUTING_URL` | `none` or `osrm`, `http://osrm.internal:5000` | Road distance and driving time for delivery charges, dispatch and live ETAs. `none` uses the straight-line distance times a road factor; `osrm` asks an OSRM server you run |
@@ -114,12 +116,13 @@ Everything else (branding, languages, currency, timezone, fees, commission, feat
 1. Open `https://admin.example.com`, set the admin password, and enable two-factor login.
 2. **Settings → Branding:** name, logos, colours, font.
 3. **Settings → Locale:** languages, default language, currency, timezone.
-4. **Ordering:** cash and card, service fee, tax, tips and how long stores have to accept an order.
-5. **Settings → Features:** pickup, operator rider service, card payments, saved cards, store direct payment collection.
-6. **Email log:** sign in once with "Email me a sign-in code" and check that the email shows as Sent (push notifications arrive with M3).
-7. **Delivery:** if you run your own riders, switch on the operator rider service and set operator delivery pricing and rider pay; otherwise stores deliver themselves.
-8. **Stores:** onboard the first store and choose whether it may use operator delivery; let the owner set delivery mode, hours, zones and menu.
-9. Place a test order end to end, then delete it from the admin panel.
+4. **Ordering:** cash and card (on the gateway's page or in card fields inside the app, and whether customers may save a card), service fee, tax, tips and how long stores have to accept an order.
+5. **Messages:** reword any email, notification or push message in each of your languages, with a preview; a field left empty keeps FoodStack's text.
+6. **Settings → Features:** pickup, operator rider service, card payments, saved cards, store direct payment collection.
+7. **Email log:** sign in once with "Email me a sign-in code" and check that the email shows as Sent (push notifications arrive with M3).
+8. **Delivery:** if you run your own riders, switch on the operator rider service and set operator delivery pricing and rider pay; otherwise stores deliver themselves.
+9. **Stores:** onboard the first store and choose whether it may use operator delivery; let the owner set delivery mode, hours, zones and menu.
+10. Place a test order end to end, then delete it from the admin panel.
 
 ### 3.5 Day-to-day operations
 

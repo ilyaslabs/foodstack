@@ -120,7 +120,8 @@ class SettingsController {
         OrderingDetails current = this.orderingService.get();
         OrderingDetails updated = this.orderingService.update(new UpdateOrdering(request.cashEnabled(), request.cardEnabled(),
                 request.serviceFeeMinor(), request.serviceFeeBasisPoints(), request.taxBasisPoints(), request.tipsEnabled(),
-                request.acceptTimeoutSeconds(), request.priceApprovalRequired(),
+                request.acceptTimeoutSeconds(),
+                (request.priceApprovalRequired() != null) ? request.priceApprovalRequired() : current.priceApprovalRequired(),
                 (request.directCollectionEnabled() != null) ? request.directCollectionEnabled() : current.directCollectionEnabled(),
                 (request.creditLimitMinor() != null) ? request.creditLimitMinor() : current.creditLimitMinor(),
                 (request.cardStyle() != null) ? request.cardStyle() : current.cardStyle(),

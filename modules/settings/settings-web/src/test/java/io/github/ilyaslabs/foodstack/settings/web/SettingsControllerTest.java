@@ -176,6 +176,15 @@ class SettingsControllerTest {
             .andExpect(status().isOk())
             .andExpect(header().string("ETag", "\"ordering-1\""))
             .andExpect(jsonPath("$.serviceFeeBasisPoints").value(250));
+
+        // an older client that sends none of the M4 switches keeps them as they are
+        given(this.orderingService.update(eq(new UpdateOrdering(true, true, 4900, 250, 1600, false, 300, false)), eq(0L),
+                eq("admin-1")))
+            .willReturn(new OrderingDetails(true, true, 4900, 250, 1600, false, 300, 2, null, false, false, 5_000_000L));
+        this.mvc.perform(put("/api/v1/settings/ordering").with(admin()).header("If-Match", "\"ordering-0\"")
+            .contentType(MediaType.APPLICATION_JSON).content(body.replace(",\"priceApprovalRequired\":true", "")))
+            .andExpect(status().isOk())
+            .andExpect(header().string("ETag", "\"ordering-2\""));
     }
 
     @Test

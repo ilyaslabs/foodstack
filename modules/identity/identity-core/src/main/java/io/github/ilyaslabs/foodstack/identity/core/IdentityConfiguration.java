@@ -132,9 +132,10 @@ public class IdentityConfiguration {
 
     @Bean
     @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
-    PeriodicTask identityAccountDeletionSweep(AccountDeletion identityAccountDeletion) {
-        return PeriodicTask.start("account-deletions", Duration.ofMinutes(2), Duration.ofMinutes(30),
-                () -> identityAccountDeletion.runDue(200));
+    PeriodicTask identityAccountDeletionSweep(AccountDeletion identityAccountDeletion, IdentityProperties properties) {
+        Duration every = properties.getDeletionSweep();
+        Duration first = (every.compareTo(Duration.ofMinutes(2)) < 0) ? every : Duration.ofMinutes(2);
+        return PeriodicTask.start("account-deletions", first, every, () -> identityAccountDeletion.runDue(200));
     }
 
     @Bean
