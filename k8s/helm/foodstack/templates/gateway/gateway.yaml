@@ -13,11 +13,13 @@ spec:
   infrastructure:
     labels:
       app.kubernetes.io/part-of: foodstack
+    {{- if or .Values.gateway.annotations .Values.gateway.trustedProxies }}
     annotations:
       {{- with .Values.gateway.annotations }}{{ toYaml . | nindent 6 }}{{ end }}
       {{- if .Values.gateway.trustedProxies }}
       proxy.istio.io/config: '{"gatewayTopology":{"numTrustedProxies":{{ .Values.gateway.trustedProxies }}}}'
       {{- end }}
+    {{- end }}
   listeners:
     - name: http
       port: 80
