@@ -1,0 +1,117 @@
+{{- $n := include "obs.name" . }}
+{{- define "obs.collectorConfig" -}}
+{{- $n := include "obs.name" . -}}
+receivers:
+  otlp:
+    protocols:
+      http: { endpoint: 0.0.0.0:4318 }
+      grpc: { endpoint: 0.0.0.0:4317 }
+  # Container logs of the FoodStack namespaces on this node
+  file_log:
+    include:
+      {{- range .Values.logNamespaces }}
+      - /var/log/pods/{{ . }}_*/*/*.log
+      {{- end }}
+    start_at: end
+    include_file_path: true
+    storage: file_storage
+    operators:
+      # CRI or Docker log lines; adds k8s.namespace.name, k8s.pod.name, k8s.container.name
+      - type: container
+      # ECS or Logstash JSON from the server: take the level as the severity
+      - type: regex_parser
+        if: 'body matches "\"level\":\""'
+        regex: '"level":"(?P<level>[A-Za-z]+)"'
+        severity: { parse_from: attributes.level }
+extensions:
+  health_check: { endpoint: 0.0.0.0:13133 }
+  file_storage: { directory: /var/lib/otelcol }
+processors:
+  memory_limiter: { check_interval: 1s, limit_percentage: 80, spike_limit_percentage: 20 }
+  batch: {}
+  # service.name for Loki: the pod name without its ReplicaSet and pod suffixes
+  transform/logs:
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["service.name"], attributes["k8s.pod.name"]) where attributes["service.name"] == nil
+          - replace_pattern(attributes["service.name"], "-[a-z0-9]{6,10}-[a-z0-9]{5}$", "")
+exporters:
+  otlp_http/tempo: { endpoint: "http://{{ $n }}-tempo:4318" }
+  otlp_http/loki: { endpoint: "http://{{ $n }}-loki:3100/otlp" }
+service:
+  extensions: [health_check, file_storage]
+  telemetry:
+    logs: { level: warn }
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/tempo]
+    logs:
+      receivers: [file_log, otlp]
+      processors: [memory_limiter, transform/logs, batch]
+      exporters: [otlp_http/loki]
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $n }}-otel-collector
+  labels: {{- include "obs.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    {{- include "obs.collectorConfig" . | nindent 4 }}
+---
+# One collector per node: it reads that node's container logs and takes spans over OTLP.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ $n }}-otel-collector
+  labels: {{- include "obs.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{- include "obs.selector" (list . "otel-collector") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "obs.selector" (list . "otel-collector") | nindent 8 }}
+      annotations:
+        checksum/config: {{ include "obs.collectorConfig" . | sha256sum | trunc 16 }}
+    spec:
+      # Container log files on the node belong to root and are not world-readable.
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        seccompProfile: { type: RuntimeDefault }
+      tolerations: [{ operator: Exists, effect: NoSchedule }]
+      containers:
+        - name: collector
+          image: {{ .Values.collector.image }}
+          args: [--config=/etc/otelcol/config.yaml]
+          ports:
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: otlp-grpc, containerPort: 4317 }
+          readinessProbe: { httpGet: { path: /, port: 13133 } }
+          livenessProbe: { httpGet: { path: /, port: 13133 }, initialDelaySeconds: 15 }
+          resources: {{- toYaml .Values.collector.resources | nindent 12 }}
+          {{- include "obs.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/otelcol }
+            - { name: pods, mountPath: /var/log/pods, readOnly: true }
+            - { name: state, mountPath: /var/lib/otelcol }
+      volumes:
+        - { name: config, configMap: { name: {{ $n }}-otel-collector } }
+        - { name: pods, hostPath: { path: /var/log/pods } }
+        - { name: state, hostPath: { path: /var/lib/foodstack-otelcol, type: DirectoryOrCreate } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $n }}-otel-collector
+  labels: {{- include "obs.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "obs.selector" (list . "otel-collector") | nindent 4 }}
+  # spans go to the collector on the sender's own node when there is one
+  trafficDistribution: PreferClose
+  ports:
+    - { name: otlp-http, port: 4318, targetPort: otlp-http }
+    - { name: otlp-grpc, port: 4317, targetPort: otlp-grpc }

@@ -1,0 +1,90 @@
+# FoodStack observability (TDD 18.5). Install it in its own namespace, named like this so the
+# FoodStack chart's default tracing endpoint finds the collector:
+#
+#   helm install foodstack-observability k8s/helm/foodstack-observability \
+#     -n foodstack-observability --create-namespace
+#
+# Then turn tracing on in the FoodStack release: --set server.tracing.enabled=true
+#
+# Every part is one small pod with a volume; enough for one operator's traffic. For more, point
+# Prometheus remote_write, Loki and Tempo at a managed service or their scalable charts instead.
+
+# Prefix of every object's name; the FoodStack chart expects "foodstack" (foodstack-otel-collector).
+namePrefix: foodstack
+
+# Namespaces whose container logs the collector ships to Loki.
+logNamespaces: [foodstack]
+
+storageClass: ""
+
+# Istio ambient: Prometheus joins the mesh so it can scrape FoodStack pods, whose mesh only
+# takes mutual TLS. Set false on a cluster without Istio.
+ambient: true
+
+prometheus:
+  image: docker.io/prom/prometheus:v3.15.1
+  retention: 15d
+  storage: 20Gi
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { memory: 2Gi }
+  # Extra scrape jobs, as Prometheus scrape_config entries.
+  extraScrapeConfigs: []
+  # Extra alerting rules, as Prometheus rule entries (alert, expr, for, labels, annotations).
+  extraRules: []
+  # Thresholds of the built-in alerts.
+  alerts:
+    errorRatio: 0.02 # share of 5xx answers over 10 minutes
+    latencySeconds: 1 # p95 of API requests over 10 minutes
+    outboxAgeSeconds: 120 # oldest event not yet on Kafka
+    consumerLag: 10000 # records a consumer is behind
+    heapRatio: 0.9 # JVM heap used after garbage collection
+    certificateDays: 14 # TLS certificate expiry (cert-manager)
+
+alertmanager:
+  enabled: false
+  image: docker.io/prom/alertmanager:v0.34.1
+  storage: 1Gi
+  # Alertmanager configuration (route and receivers). Default: alerts only show in Grafana and
+  # Prometheus. Example for email:
+  #   route: { receiver: ops }
+  #   receivers:
+  #     - name: ops
+  #       email_configs: [{ to: ops@example.com, from: alerts@example.com, smarthost: smtp.example.com:587, auth_username: alerts@example.com, auth_password: secret }]
+  config:
+    route: { receiver: none }
+    receivers: [{ name: none }]
+  resources:
+    requests: { cpu: 10m, memory: 64Mi }
+    limits: { memory: 256Mi }
+
+grafana:
+  image: docker.io/grafana/grafana:13.2.4
+  storage: 2Gi
+  # Admin password; empty generates one, kept across upgrades in the Secret <prefix>-grafana.
+  adminPassword: ""
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }
+
+loki:
+  image: docker.io/grafana/loki:3.7.9
+  retention: 168h
+  storage: 20Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 1Gi }
+
+tempo:
+  image: docker.io/grafana/tempo:2.10.10
+  retention: 72h
+  storage: 10Gi
+  resources:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits: { memory: 1Gi }
+
+collector:
+  image: docker.io/otel/opentelemetry-collector-contrib:0.159.0
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }

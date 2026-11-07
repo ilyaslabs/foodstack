@@ -1,0 +1,83 @@
+{{- $n := include "obs.name" . }}
+{{- $config := printf `server:
+  http_listen_port: 3200
+  log_level: warn
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http: { endpoint: 0.0.0.0:4318 }
+        grpc: { endpoint: 0.0.0.0:4317 }
+ingester:
+  max_block_duration: 5m
+compactor:
+  compaction:
+    block_retention: %s
+storage:
+  trace:
+    backend: local
+    wal: { path: /var/tempo/wal }
+    local: { path: /var/tempo/blocks }
+usage_report:
+  reporting_enabled: false
+` .Values.tempo.retention }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $n }}-tempo
+  labels: {{- include "obs.labels" . | nindent 4 }}
+data:
+  tempo.yaml: {{- $config | toYaml | indent 1 }}
+---
+{{ include "obs.pvc" (list . "tempo" .Values.tempo.storage) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $n }}-tempo
+  labels: {{- include "obs.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "obs.selector" (list . "tempo") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "obs.selector" (list . "tempo") | nindent 8 }}
+      annotations:
+        checksum/config: {{ $config | sha256sum | trunc 16 }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3200"
+    spec:
+      {{- include "obs.podSecurity" . | nindent 6 }}
+      containers:
+        - name: tempo
+          image: {{ .Values.tempo.image }}
+          args: [-config.file=/etc/tempo/tempo.yaml]
+          ports:
+            - { name: http, containerPort: 3200 }
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: otlp-grpc, containerPort: 4317 }
+          readinessProbe: { httpGet: { path: /ready, port: http }, initialDelaySeconds: 15 }
+          resources: {{- toYaml .Values.tempo.resources | nindent 12 }}
+          {{- include "obs.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/tempo }
+            - { name: data, mountPath: /var/tempo }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: config, configMap: { name: {{ $n }}-tempo } }
+        - { name: data, persistentVolumeClaim: { claimName: {{ $n }}-tempo } }
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $n }}-tempo
+  labels: {{- include "obs.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "obs.selector" (list . "tempo") | nindent 4 }}
+  ports:
+    - { name: http, port: 3200, targetPort: http }
+    - { name: otlp-http, port: 4318, targetPort: otlp-http }
+    - { name: otlp-grpc, port: 4317, targetPort: otlp-grpc }

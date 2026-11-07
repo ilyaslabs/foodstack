@@ -1,0 +1,116 @@
+{{- $n := include "obs.name" . }}
+{{- $a := .Values.prometheus.alerts }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $n }}-prometheus
+  labels: {{- include "obs.labels" . | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+      evaluation_interval: 30s
+    rule_files: [/etc/prometheus/rules.yml]
+    {{- if .Values.alertmanager.enabled }}
+    alerting:
+      alertmanagers:
+        - static_configs: [{ targets: ["{{ $n }}-alertmanager:9093"] }]
+    {{- end }}
+    scrape_configs:
+      # Every pod annotated prometheus.io/scrape: "true", with its port and path annotations.
+      - job_name: pods
+        kubernetes_sd_configs: [{ role: pod }]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            regex: "true"
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Pending|Succeeded|Failed
+            action: drop
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            regex: (.+)
+            target_label: __metrics_path__
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            target_label: job
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          # FoodStack server pods: which module group (core, order, ...) the pod runs
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+            target_label: component
+      {{- with .Values.prometheus.extraScrapeConfigs }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+  rules.yml: |
+    groups:
+      - name: foodstack
+        rules:
+          - alert: FoodStackPodDown
+            expr: up{job="foodstack-server"} == 0
+            for: 5m
+            labels: { severity: critical }
+            annotations:
+              summary: "FoodStack pod {{`{{ $labels.pod }}`}} does not answer"
+              description: "Prometheus cannot read the pod's metrics for 5 minutes; it is down or stuck."
+          - alert: FoodStackErrors
+            expr: |
+              sum by (namespace, component) (rate(http_server_requests_seconds_count{job="foodstack-server", status=~"5..", uri!~"/actuator.*"}[10m]))
+                / sum by (namespace, component) (rate(http_server_requests_seconds_count{job="foodstack-server", uri!~"/actuator.*"}[10m]))
+                > {{ $a.errorRatio }}
+            for: 10m
+            labels: { severity: critical }
+            annotations:
+              summary: "{{`{{ $labels.component }}`}} answers {{`{{ $value | humanizePercentage }}`}} of requests with a server error"
+              description: "Look at the logs of the pods in Grafana (Explore, Loki) for the failing requests."
+          - alert: FoodStackSlow
+            expr: |
+              histogram_quantile(0.95, sum by (namespace, component, le) (rate(http_server_requests_seconds_bucket{job="foodstack-server", uri=~"/api/.*"}[10m])))
+                > {{ $a.latencySeconds }}
+            for: 10m
+            labels: { severity: warning }
+            annotations:
+              summary: "{{`{{ $labels.component }}`}} is slow: 95 % of API requests take up to {{`{{ $value | humanizeDuration }}`}}"
+              description: "Check CPU, the database and the Tempo traces of slow requests."
+          - alert: FoodStackOutboxStuck
+            expr: max by (namespace, module) (foodstack_outbox_oldest_age_seconds) > {{ $a.outboxAgeSeconds }}
+            for: 5m
+            labels: { severity: critical }
+            annotations:
+              summary: "{{`{{ $labels.module }}`}} events wait {{`{{ $value | humanizeDuration }}`}} to reach Kafka"
+              description: "The outbox relay is not publishing: Kafka is down or unreachable, or no pod holds the relay lease."
+          - alert: FoodStackDeadLetters
+            expr: sum by (namespace) (increase(foodstack_dead_letters_total[15m])) > 0
+            labels: { severity: warning }
+            annotations:
+              summary: "Events failed and wait in the back office (Settings, Failed events)"
+              description: "A module could not handle an event after its retries. Fix the cause, then replay it."
+          - alert: FoodStackConsumerLag
+            expr: max by (namespace, group) (label_replace(kafka_consumer_fetch_manager_records_lag_max{job="foodstack-server"}, "group", "$1", "client_id", "consumer-(.+)-[0-9]+")) > {{ $a.consumerLag }}
+            for: 10m
+            labels: { severity: warning }
+            annotations:
+              summary: "Consumer group {{`{{ $labels.group }}`}} is {{`{{ $value }}`}} events behind"
+              description: "Add pods of that module or raise its listener concurrency."
+          - alert: FoodStackMemory
+            expr: max by (namespace, pod) (jvm_memory_usage_after_gc{job="foodstack-server", area="heap"}) > {{ $a.heapRatio }}
+            for: 10m
+            labels: { severity: warning }
+            annotations:
+              summary: "{{`{{ $labels.pod }}`}} uses {{`{{ $value | humanizePercentage }}`}} of its heap after garbage collection"
+              description: "Raise the pod's memory limit, or look for a leak."
+          - alert: CertificateExpiring
+            expr: (certmanager_certificate_expiration_timestamp_seconds - time()) < {{ mul $a.certificateDays 86400 }}
+            for: 1h
+            labels: { severity: warning }
+            annotations:
+              summary: "Certificate {{`{{ $labels.name }}`}} expires in {{`{{ $value | humanizeDuration }}`}}"
+              description: "cert-manager has not renewed it. Check the Certificate and its ClusterIssuer."
+      {{- with .Values.prometheus.extraRules }}
+      - name: extra
+        rules: {{- toYaml . | nindent 10 }}
+      {{- end }}

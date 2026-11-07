@@ -1,0 +1,17 @@
+FoodStack observability is installing in {{ .Release.Namespace }}.
+
+Grafana (dashboards in the FoodStack folder, logs and traces under Explore):
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "obs.name" . }}-grafana 3000:3000
+  open http://localhost:3000 and sign in as admin with:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "obs.name" . }}-grafana -o jsonpath='{.data.admin-password}' | base64 -d
+
+Send traces from FoodStack (its pods ship their logs already):
+  helm upgrade <release> k8s/helm/foodstack -n <namespace> --reuse-values --set server.tracing.enabled=true
+{{- if ne .Release.Namespace "foodstack-observability" }}
+  --set server.tracing.endpoint=http://{{ include "obs.name" . }}-otel-collector.{{ .Release.Namespace }}.svc.cluster.local:4318/v1/traces
+{{- end }}
+{{- if not .Values.alertmanager.enabled }}
+
+Alerts show in Prometheus and Grafana only. To get them by email or chat, set
+alertmanager.enabled=true and alertmanager.config.
+{{- end }}

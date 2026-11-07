@@ -1,0 +1,146 @@
+{{- $n := include "obs.name" . }}
+{{- $secret := printf "%s-grafana" $n }}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace $secret }}
+{{- $password := .Values.grafana.adminPassword }}
+{{- if not $password }}
+{{- if and $existing (index ($existing.data | default dict) "admin-password") }}
+{{- $password = index $existing.data "admin-password" | b64dec }}
+{{- else }}
+{{- $password = randAlphaNum 24 }}
+{{- end }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secret }}
+  labels: {{- include "obs.labels" . | nindent 4 }}
+type: Opaque
+data:
+  admin-user: {{ "admin" | b64enc }}
+  admin-password: {{ $password | b64enc }}
+---
+{{- define "obs.datasources" -}}
+{{- $n := include "obs.name" . -}}
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    url: http://{{ $n }}-prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 30s
+      {{- if .Values.alertmanager.enabled }}
+      alertmanagerUid: alertmanager
+      {{- end }}
+  - name: Loki
+    uid: loki
+    type: loki
+    url: http://{{ $n }}-loki:3100
+    jsonData:
+      # trace ids in the server's JSON log lines open the trace in Tempo
+      derivedFields:
+        - name: Trace
+          datasourceUid: tempo
+          matcherRegex: '"(?:traceId|trace\.id)"\s*:\s*"(\w+)"'
+          url: "$${__value.raw}"
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    url: http://{{ $n }}-tempo:3200
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        filterByTraceID: true
+      nodeGraph: { enabled: true }
+  {{- if .Values.alertmanager.enabled }}
+  - name: Alertmanager
+    uid: alertmanager
+    type: alertmanager
+    url: http://{{ $n }}-alertmanager:9093
+    jsonData: { implementation: prometheus }
+  {{- end }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $n }}-grafana
+  labels: {{- include "obs.labels" . | nindent 4 }}
+data:
+  datasources.yaml: |
+    {{- include "obs.datasources" . | nindent 4 }}
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: foodstack
+        folder: FoodStack
+        type: file
+        disableDeletion: true
+        allowUiUpdates: false
+        options: { path: /var/lib/grafana/dashboards/foodstack }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $n }}-grafana-dashboards
+  labels: {{- include "obs.labels" . | nindent 4 }}
+data:
+{{ (.Files.Glob "dashboards/*.json").AsConfig | indent 2 }}
+---
+{{ include "obs.pvc" (list . "grafana" .Values.grafana.storage) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $n }}-grafana
+  labels: {{- include "obs.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "obs.selector" (list . "grafana") | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "obs.selector" (list . "grafana") | nindent 8 }}
+      annotations:
+        checksum/config: {{ printf "%s%s" (include "obs.datasources" .) ((.Files.Glob "dashboards/*.json").AsConfig) | sha256sum | trunc 16 }}
+    spec:
+      {{- include "obs.podSecurity" . | nindent 6 }}
+      containers:
+        - name: grafana
+          image: {{ .Values.grafana.image }}
+          env:
+            - { name: GF_SECURITY_ADMIN_USER, valueFrom: { secretKeyRef: { name: {{ $secret }}, key: admin-user } } }
+            - { name: GF_SECURITY_ADMIN_PASSWORD, valueFrom: { secretKeyRef: { name: {{ $secret }}, key: admin-password } } }
+            - { name: GF_AUTH_ANONYMOUS_ENABLED, value: "false" }
+            - { name: GF_ANALYTICS_REPORTING_ENABLED, value: "false" }
+            - { name: GF_ANALYTICS_CHECK_FOR_UPDATES, value: "false" }
+            - { name: GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES, value: "false" }
+            - { name: GF_NEWS_NEWS_FEED_ENABLED, value: "false" }
+            - { name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH, value: /var/lib/grafana/dashboards/foodstack/overview.json }
+          ports: [{ name: http, containerPort: 3000 }]
+          readinessProbe: { httpGet: { path: /api/health, port: http } }
+          resources: {{- toYaml .Values.grafana.resources | nindent 12 }}
+          {{- include "obs.containerSecurity" . | nindent 10 }}
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/grafana }
+            - { name: config, mountPath: /etc/grafana/provisioning/datasources/datasources.yaml, subPath: datasources.yaml }
+            - { name: config, mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml, subPath: dashboards.yaml }
+            - { name: dashboards, mountPath: /var/lib/grafana/dashboards/foodstack }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: data, persistentVolumeClaim: { claimName: {{ $n }}-grafana } }
+        - { name: config, configMap: { name: {{ $n }}-grafana } }
+        - { name: dashboards, configMap: { name: {{ $n }}-grafana-dashboards } }
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $n }}-grafana
+  labels: {{- include "obs.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "obs.selector" (list . "grafana") | nindent 4 }}
+  ports: [{ name: http, port: 3000, targetPort: http }]
