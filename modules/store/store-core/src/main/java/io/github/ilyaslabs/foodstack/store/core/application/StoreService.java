@@ -566,6 +566,36 @@ public class StoreService {
         return brandDetails(saved);
     }
 
+    /** Highest search boost an operator can give a brand. */
+    public static final int MAX_SEARCH_BOOST = 3;
+
+    /** The brand's search boost, 0 to 3 (operator only). */
+    public int searchBoost(String brandId) {
+        return findBrand(brandId).getSearchBoost();
+    }
+
+    /**
+     * Moves a brand up in search (operator only, TDD 11): 0 is none, 1 to 3 rank its branches
+     * higher among those equally open, near and well rated. Search re-reads its branches.
+     */
+    public int updateSearchBoost(String brandId, int level, String userId) {
+        if (level < 0 || level > MAX_SEARCH_BOOST) {
+            throw new ModuleException.BadRequest("The boost is 0 to " + MAX_SEARCH_BOOST, "SEARCH_BOOST_INVALID",
+                    Map.of("errors", Map.of("level", "must be 0 to " + MAX_SEARCH_BOOST)));
+        }
+        BrandDocument brand = findBrand(brandId);
+        Instant now = this.clock.instant();
+        brand.setSearchBoost(level);
+        brand.setUpdatedAt(now);
+        brand.setUpdatedBy(userId);
+        this.transaction.execute((status) -> {
+            BrandDocument result = this.brands.save(brand);
+            this.outbox.append(new BrandChanged(brandId, version(result.getVersion()), userId));
+            return result;
+        });
+        return level;
+    }
+
     /**
      * Plans a branch's own commission from a date (operator only, PRD BB-8, FI-2); a {@code null}
      * commission goes back to the brand's from that date.

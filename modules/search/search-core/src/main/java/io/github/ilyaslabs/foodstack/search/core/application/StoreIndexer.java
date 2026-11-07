@@ -84,7 +84,8 @@ public class StoreIndexer {
                 listing.location(), listing.area(), listing.city(), listing.deliveryMode().name(), listing.pickupEnabled(),
                 listing.temporarilyClosed(), listing.prepMinutes(), listing.timezone(), listing.openingHours(),
                 listing.closedDates(), listing.dishNames(), listing.dietaryTags(),
-                (area.polygons() != null) ? area.polygons() : List.of(), listing.version(), rating.count(), rating.average()));
+                (area.polygons() != null) ? area.polygons() : List.of(), listing.version(), rating.count(), rating.average(),
+                listing.searchBoost()));
     }
 
     private StoreRating rating(String storeId) {

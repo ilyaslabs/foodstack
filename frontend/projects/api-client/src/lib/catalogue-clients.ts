@@ -307,6 +307,15 @@ export class BrandClient {
     return this.http.put<Brand>(this.url(`/${brandId}/branch-promotions`), { allowed });
   }
 
+  /** How much higher the operator places the brand in search, 0 (none) to 3 (top). */
+  searchBoost(brandId: string): Observable<{ level: number }> {
+    return this.http.get<{ level: number }>(this.url(`/${brandId}/search-boost`));
+  }
+
+  updateSearchBoost(brandId: string, level: number): Observable<{ level: number }> {
+    return this.http.put<{ level: number }>(this.url(`/${brandId}/search-boost`), { level });
+  }
+
   /** The brand menu for editing; with `storeId`, only what that branch sells (branch managers may read it). */
   menu(brandId: string, storeId?: string): Observable<EditorMenu> {
     const params = storeId ? new HttpParams().set('storeId', storeId) : undefined;

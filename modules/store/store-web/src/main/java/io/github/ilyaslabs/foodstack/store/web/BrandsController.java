@@ -86,6 +86,19 @@ class BrandsController {
         return ResponseEntity.ok().eTag(ETags.of("brand", updated.version())).body(StoreMapper.brand(updated));
     }
 
+    /** How far the operator moves the brand up in search, 0 to 3 (operator only, TDD 11). */
+    @GetMapping("/{brandId}/search-boost")
+    @PreAuthorize("hasAuthority('store:manage')")
+    StoreDtos.SearchBoost searchBoost(@PathVariable String brandId) {
+        return new StoreDtos.SearchBoost(this.storeService.searchBoost(brandId));
+    }
+
+    @PutMapping("/{brandId}/search-boost")
+    @PreAuthorize("hasAuthority('store:manage')")
+    StoreDtos.SearchBoost updateSearchBoost(@PathVariable String brandId, @Valid @RequestBody StoreDtos.SearchBoost request) {
+        return new StoreDtos.SearchBoost(this.storeService.updateSearchBoost(brandId, request.level(), CurrentUser.id()));
+    }
+
     // ---- Branches and owners (PRD BB-1, BB-5) ----------------------------------------------
 
     @GetMapping("/{brandId}/branches")

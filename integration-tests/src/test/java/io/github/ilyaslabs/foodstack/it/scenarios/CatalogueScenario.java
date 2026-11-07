@@ -61,6 +61,12 @@ class CatalogueScenario {
         assertThat(admin.get("/api/v1/stores/" + storeId + "/readiness").<List<String>>path("missing"))
             .containsExactly("MENU");
         assertThat(this.platform.client().get("/api/v1/stores/" + storeId).statusCode()).isEqualTo(404);
+        // the operator may move the brand up in search (TDD 11), 0 to 3
+        admin.request("/api/v1/brands/" + brandId + "/search-boost").contentType("application/json").body(Map.of("level", 2))
+            .put("/api/v1/brands/" + brandId + "/search-boost").then().log().ifValidationFails().statusCode(200);
+        assertThat(admin.get("/api/v1/brands/" + brandId + "/search-boost").<Integer>path("level")).isEqualTo(2);
+        assertThat(admin.request("/api/v1/brands/" + brandId + "/search-boost").contentType("application/json").body(Map.of("level", 4))
+            .put("/api/v1/brands/" + brandId + "/search-boost").statusCode()).isEqualTo(400);
 
         // and builds its menu in two languages
         Response section = admin.postJson("/api/v1/brands/" + brandId + "/menu/sections",

@@ -37,8 +37,20 @@ import tools.jackson.databind.node.ObjectNode;
  */
 public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
 
-    /** 2: open windows ({@code openFrom}/{@code openUntil}) for open-now-first ranking across pages. */
-    static final int MAPPING_VERSION = 2;
+    /**
+     * 2: open windows ({@code openFrom}/{@code openUntil}) for open-now-first ranking across pages.
+     * 3: {@code ratingScore} and {@code rankFactor} for ranking by rating and operator boost.
+     */
+    static final int MAPPING_VERSION = 3;
+
+    /** Reviews a branch needs before its own average outweighs the prior (Bayesian average). */
+    static final double RATING_WEIGHT = 5;
+
+    /** What a branch without reviews is assumed to score, out of 5. */
+    static final double RATING_PRIOR = 4.0;
+
+    /** Rank multiplier per operator boost level 0 to 3. */
+    static final double[] BOOST_FACTORS = { 1.0, 1.25, 1.5, 2.0 };
 
     /**
      * Days of opening windows stored per branch. The scheduled rebuild re-reads every branch well
@@ -332,7 +344,20 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         body.put("track_total_hits", false);
         body.putObject("_source").putArray("excludes").add("deliveryArea").add("dishes");
 
-        ObjectNode bool = body.putObject("query").putObject("bool");
+        // Relevance x nearness x rating and boost (TDD 11); the open-now sort still comes first
+        ObjectNode scored = body.putObject("query").putObject("function_score");
+        ObjectNode bool = scored.putObject("query").putObject("bool");
+        ArrayNode functions = scored.putArray("functions");
+        ObjectNode nearness = functions.addObject().putObject("gauss").putObject("location");
+        location(nearness.putObject("origin"), query);
+        nearness.put("offset", this.properties.rankingOffsetMeters() + "m");
+        nearness.put("scale", this.properties.rankingScaleMeters() + "m");
+        nearness.put("decay", 0.5);
+        ObjectNode factor = functions.addObject().putObject("field_value_factor");
+        factor.put("field", "rankFactor");
+        factor.put("missing", rankFactor(RATING_PRIOR, 0));
+        scored.put("score_mode", "multiply");
+        scored.put("boost_mode", "multiply");
         ArrayNode filter = bool.putArray("filter");
         if (query.fulfilment() == Fulfilment.PICKUP) {
             filter.addObject().putObject("term").put("pickupEnabled", true);
@@ -368,6 +393,10 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
             fields(fuzzy);
             textBool.put("minimum_should_match", 1);
         }
+        else {
+            // every match scores 1, so the functions alone rank
+            bool.putArray("must").addObject().putObject("match_all");
+        }
 
         ObjectNode cuisineFilter = this.jsonMapper.createObjectNode();
         if (query.cuisine() != null && !query.cuisine().isBlank()) {
@@ -379,7 +408,7 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         }
         body.putObject("collapse").put("field", "brandId");
         ArrayNode sort = body.putArray("sort");
-        // Open branches first across all pages (PRD SE-3), then relevance, then distance
+        // Open branches first across all pages (PRD SE-3), then the score, then distance
         ObjectNode openFirst = sort.addObject().putObject("_script");
         openFirst.put("type", "number");
         openFirst.put("order", "asc");
@@ -387,9 +416,7 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         script.put("lang", "painless");
         script.put("source", OPEN_FIRST_SCRIPT);
         script.putObject("params").put("now", this.clock.instant().getEpochSecond());
-        if (hasText) {
-            sort.add("_score");
-        }
+        sort.add("_score");
         ObjectNode geoSort = sort.addObject().putObject("_geo_distance");
         location(geoSort.putObject("location"), query);
         geoSort.put("order", "asc");
@@ -501,9 +528,14 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
             source.put("deliveryArea", Map.of("type", "geometrycollection", "geometries", polygons));
         }
         source.put("version", store.version());
-        // not mapped (dynamic false): shown on cards, not searched or ranked on yet
+        // shown on cards; not mapped (dynamic false)
         source.put("ratingCount", store.ratingCount());
         source.put("ratingAverage", store.ratingAverage());
+        source.put("searchBoost", store.searchBoost());
+        // ranking: a well-rated branch with few reviews does not jump ahead of one with many
+        double ratingScore = ratingScore(store.ratingCount(), store.ratingAverage());
+        source.put("ratingScore", ratingScore);
+        source.put("rankFactor", rankFactor(ratingScore, store.searchBoost()));
         return source;
     }
 
@@ -522,7 +554,18 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
                 Boolean.TRUE.equals(s.get("pickupEnabled")), Boolean.TRUE.equals(s.get("temporarilyClosed")),
                 number(s.get("prepMinutes")), (String) s.get("timezone"), hours, list(s.get("closedDates")), Map.of(),
                 list(s.get("dietaryTags")), List.of(), number(s.get("version")), number(s.get("ratingCount")),
-                (s.get("ratingAverage") instanceof Number n) ? n.doubleValue() : 0);
+                (s.get("ratingAverage") instanceof Number n) ? n.doubleValue() : 0, number(s.get("searchBoost")));
+    }
+
+    /** Bayesian average out of 5: few reviews stay near the prior, many count fully. */
+    static double ratingScore(long count, double average) {
+        return (RATING_WEIGHT * RATING_PRIOR + count * average) / (RATING_WEIGHT + count);
+    }
+
+    /** 0.5 to 1 from the rating (a 1-star branch ranks at half), times the operator's boost. */
+    static double rankFactor(double ratingScore, int boost) {
+        double rating = 0.5 + 0.1 * Math.min(Math.max(ratingScore, 0), 5);
+        return rating * BOOST_FACTORS[Math.min(Math.max(boost, 0), BOOST_FACTORS.length - 1)];
     }
 
     @SuppressWarnings("unchecked")
@@ -584,6 +627,8 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
         props.putObject("openUntil").put("type", "long");
         props.putObject("pickupEnabled").put("type", "boolean");
         props.putObject("temporarilyClosed").put("type", "boolean");
+        props.putObject("ratingScore").put("type", "float");
+        props.putObject("rankFactor").put("type", "float");
         props.putObject("location").put("type", "geo_point");
         props.putObject("deliveryArea").put("type", "geo_shape");
         ObjectNode timezone = props.putObject("timezone");

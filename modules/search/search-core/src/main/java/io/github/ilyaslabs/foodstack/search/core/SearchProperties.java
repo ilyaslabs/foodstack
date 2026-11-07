@@ -24,10 +24,13 @@ import org.springframework.boot.context.properties.bind.ConstructorBinding;
  *        A branch's own zones still decide whether it delivers to the customer.
  * @param roadFactor road distance per straight-line distance; keep it equal to {@code foodstack.geo.road-factor}
  * @param maxResults deepest result a search pages to (default 500)
+ * @param rankingOffsetMeters how near counts as "right here": no ranking penalty within it (default 1 km)
+ * @param rankingScaleMeters how far beyond the offset a branch's nearness score halves (default 4 km)
  */
 @ConfigurationProperties("foodstack.search")
 public record SearchProperties(String indexPrefix, Integer replicas, Integer pickupRadiusMeters, Duration rebuildInterval,
-        Integer shards, String autoExpandReplicas, List<Integer> discoveryStepsKm, Double roadFactor, Integer maxResults) {
+        Integer shards, String autoExpandReplicas, List<Integer> discoveryStepsKm, Double roadFactor, Integer maxResults,
+        Integer rankingOffsetMeters, Integer rankingScaleMeters) {
 
     @ConstructorBinding
     public SearchProperties {
@@ -47,11 +50,13 @@ public record SearchProperties(String indexPrefix, Integer replicas, Integer pic
         }
         roadFactor = (roadFactor == null || roadFactor < 1) ? 1.3 : roadFactor;
         maxResults = (maxResults == null || maxResults < 20) ? 500 : maxResults;
+        rankingOffsetMeters = (rankingOffsetMeters == null || rankingOffsetMeters < 0) ? 1_000 : rankingOffsetMeters;
+        rankingScaleMeters = (rankingScaleMeters == null || rankingScaleMeters < 100) ? 4_000 : rankingScaleMeters;
     }
 
     /** Defaults for everything added after the first four settings. */
     public SearchProperties(String indexPrefix, Integer replicas, Integer pickupRadiusMeters, Duration rebuildInterval) {
-        this(indexPrefix, replicas, pickupRadiusMeters, rebuildInterval, null, null, null, null, null);
+        this(indexPrefix, replicas, pickupRadiusMeters, rebuildInterval, null, null, null, null, null, null, null);
     }
 
     /** The discovery steps in road metres. */

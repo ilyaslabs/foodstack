@@ -62,6 +62,10 @@ public final class StoreDtos {
      * FI-2): the commission from {@code effectiveFrom} (UTC epoch seconds, {@code null} for now). On a branch a
      * {@code null} commission goes back to the brand's.
      */
+    /** The operator's search boost of a brand: 0 (none) to 3. */
+    public record SearchBoost(@jakarta.validation.constraints.Min(0) @jakarta.validation.constraints.Max(3) int level) {
+    }
+
     public record CommissionChangeRequest(@Valid CommissionDto commission, Long effectiveFrom) {
     }
 

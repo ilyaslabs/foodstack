@@ -139,6 +139,54 @@ class ElasticsearchStoreSearchEngineTest {
     }
 
     @Test
+    @DisplayName("among open branches about as near, the better rated ranks first, and an operator boost lifts a brand")
+    void ratingAndBoost() throws Exception {
+        // given: three open branches 1.5 to 2 km away; one well rated with many reviews, one poorly
+        ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
+                new SearchProperties("ranking_", 0, 15_000, null));
+        assertThat(engine.ensureIndex()).isTrue();
+        IndexedStore loved = rated(store("loved", "loved", "Loved Grill", null, List.of("bbq"),
+                new GeoPoint(LAT + 0.018, LNG), ring(LAT, LNG, 3), Map.of(), false), 120, 4.8, 0);
+        IndexedStore poor = rated(store("poor", "poor", "Poor Grill", null, List.of("bbq"),
+                new GeoPoint(LAT + 0.0135, LNG), ring(LAT, LNG, 3), Map.of(), false), 40, 2.1, 0);
+        IndexedStore fresh = rated(store("fresh", "fresh", "Fresh Grill", null, List.of("bbq"),
+                new GeoPoint(LAT + 0.016, LNG), ring(LAT, LNG, 3), Map.of(), false), 1, 5.0, 0);
+        for (IndexedStore s : List.of(loved, poor, fresh)) {
+            engine.index(s);
+        }
+        this.client.indices().refresh((r) -> r.index(engine.alias()));
+
+        // when
+        StoreSearchEngine.Result before = engine.search(new StoreSearchQuery(LAT, LNG, null, null, Fulfilment.DELIVERY, 0, 10));
+        engine.index(rated(poor, 40, 2.1, 3));
+        this.client.indices().refresh((r) -> r.index(engine.alias()));
+        StoreSearchEngine.Result boosted = engine.search(new StoreSearchQuery(LAT, LNG, null, null, Fulfilment.DELIVERY, 0, 10));
+
+        // then: many good reviews beat one perfect review; the nearest but poorly rated comes last
+        assertThat(before.hits()).extracting((h) -> h.store().storeId()).containsExactly("loved", "fresh", "poor");
+        assertThat(boosted.hits()).extracting((h) -> h.store().storeId()).startsWith("poor");
+        assertThat(boosted.hits().getFirst().store().searchBoost()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("a rating counts in proportion to its reviews")
+    void ratingScore() {
+        assertThat(ElasticsearchStoreSearchEngine.ratingScore(0, 0)).isEqualTo(4.0);
+        assertThat(ElasticsearchStoreSearchEngine.ratingScore(1, 5)).isCloseTo(4.17, org.assertj.core.data.Offset.offset(0.01));
+        assertThat(ElasticsearchStoreSearchEngine.ratingScore(120, 4.8)).isCloseTo(4.77, org.assertj.core.data.Offset.offset(0.01));
+        assertThat(ElasticsearchStoreSearchEngine.rankFactor(5, 3)).isEqualTo(2.0);
+        assertThat(ElasticsearchStoreSearchEngine.rankFactor(0, 0)).isEqualTo(0.5);
+    }
+
+    private static IndexedStore rated(IndexedStore s, long count, double average, int boost) {
+        return new IndexedStore(s.storeId(), s.slug(), s.brandId(), s.brandName(), s.branchName(), s.branchCount(),
+                s.description(), s.cuisines(), s.logoUrls(), s.coverUrls(), s.location(), s.area(), s.city(),
+                s.deliveryMode(), s.pickupEnabled(), s.temporarilyClosed(), s.prepMinutes(), s.timezone(),
+                s.openingHours(), s.closedDates(), s.dishNames(), s.dietaryTags(), s.deliveryArea(), s.version() + boost + 1,
+                count, average, boost);
+    }
+
+    @Test
     @DisplayName("a new mapping version takes over the alias and drops the older index")
     void mappingUpgrade() throws Exception {
         // given: an index of the previous version holding the alias

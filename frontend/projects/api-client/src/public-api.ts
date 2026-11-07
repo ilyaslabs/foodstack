@@ -9,6 +9,7 @@ export * from './lib/media-client';
 export * from './lib/me-client';
 export * from './lib/users-client';
 export * from './lib/two-step-client';
+export * from './lib/dead-letters-client';
 export * from './lib/audit-client';
 export * from './lib/ledger-client';
 export * from './lib/load-runtime-config';

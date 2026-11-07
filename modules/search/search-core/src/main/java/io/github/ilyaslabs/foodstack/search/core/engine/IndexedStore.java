@@ -33,15 +33,29 @@ import io.github.ilyaslabs.foodstack.store.api.TimeRange;
  * @param dietaryTags dietary tags on the menu
  * @param deliveryArea polygons the branch delivers to; empty when it does not deliver
  * @param version source version
- * @param ratingCount published reviews, kept in the source only (ranking by rating comes later)
+ * @param ratingCount published reviews
  * @param ratingAverage their mean
+ * @param searchBoost the operator's boost of the brand, 0 (none) to 3
  */
 public record IndexedStore(String storeId, String slug, String brandId, String brandName, String branchName, int branchCount,
         Map<String, String> description, List<String> cuisines, Map<String, String> logoUrls, Map<String, String> coverUrls,
         GeoPoint location, String area, String city, String deliveryMode, boolean pickupEnabled, boolean temporarilyClosed,
         int prepMinutes, String timezone, Map<String, List<TimeRange>> openingHours, List<String> closedDates,
         Map<String, List<String>> dishNames, List<String> dietaryTags, List<List<GeoPoint>> deliveryArea, long version,
-        long ratingCount, double ratingAverage) {
+        long ratingCount, double ratingAverage, int searchBoost) {
+
+    /** Without a search boost. */
+    public IndexedStore(String storeId, String slug, String brandId, String brandName, String branchName, int branchCount,
+            Map<String, String> description, List<String> cuisines, Map<String, String> logoUrls,
+            Map<String, String> coverUrls, GeoPoint location, String area, String city, String deliveryMode,
+            boolean pickupEnabled, boolean temporarilyClosed, int prepMinutes, String timezone,
+            Map<String, List<TimeRange>> openingHours, List<String> closedDates, Map<String, List<String>> dishNames,
+            List<String> dietaryTags, List<List<GeoPoint>> deliveryArea, long version, long ratingCount,
+            double ratingAverage) {
+        this(storeId, slug, brandId, brandName, branchName, branchCount, description, cuisines, logoUrls, coverUrls, location,
+                area, city, deliveryMode, pickupEnabled, temporarilyClosed, prepMinutes, timezone, openingHours, closedDates,
+                dishNames, dietaryTags, deliveryArea, version, ratingCount, ratingAverage, 0);
+    }
 
     public IndexedStore(String storeId, String slug, String brandId, String brandName, String branchName, int branchCount,
             Map<String, String> description, List<String> cuisines, Map<String, String> logoUrls,
@@ -51,6 +65,6 @@ public record IndexedStore(String storeId, String slug, String brandId, String b
             List<String> dietaryTags, List<List<GeoPoint>> deliveryArea, long version) {
         this(storeId, slug, brandId, brandName, branchName, branchCount, description, cuisines, logoUrls, coverUrls, location,
                 area, city, deliveryMode, pickupEnabled, temporarilyClosed, prepMinutes, timezone, openingHours, closedDates,
-                dishNames, dietaryTags, deliveryArea, version, 0, 0);
+                dishNames, dietaryTags, deliveryArea, version, 0, 0, 0);
     }
 }
