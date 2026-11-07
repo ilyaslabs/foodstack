@@ -3,15 +3,17 @@ package io.github.ilyaslabs.foodstack.payment.impl;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.payment.api.CardSessionView;
+import io.github.ilyaslabs.foodstack.payment.api.MerchantView;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentView;
 import io.github.ilyaslabs.foodstack.payment.api.StartCardRequest;
+import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts;
 import io.github.ilyaslabs.foodstack.payment.core.application.PaymentService;
 import io.github.ilyaslabs.foodstack.platform.security.FoodstackJwtAuthenticationConverter;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 
@@ -24,7 +26,9 @@ class PaymentApiImplTest {
 
     private final PaymentService payments = mock(PaymentService.class);
 
-    private final PaymentApiImpl api = new PaymentApiImpl(this.payments);
+    private final MerchantAccounts accounts = mock(MerchantAccounts.class);
+
+    private final PaymentApiImpl api = new PaymentApiImpl(this.payments, this.accounts);
 
     @AfterEach
     void signOut() {
@@ -44,6 +48,16 @@ class PaymentApiImplTest {
         assertThat(this.api.startCard(request)).isSameAs(session);
         callerWith("foodstack-service", "module:service");
         assertThat(this.api.startCard(request)).isSameAs(session);
+    }
+
+    @Test
+    @DisplayName("any signed-in caller learns whose merchant account a branch's card payment goes into")
+    void resolveMerchant() {
+        given(this.accounts.resolve("s1")).willReturn(new MerchantView("acc-1", MerchantView.STORE));
+
+        assertThatThrownBy(() -> this.api.resolveMerchant("s1")).isInstanceOf(ModuleException.class);
+        callerWith("c1");
+        assertThat(this.api.resolveMerchant("s1")).isEqualTo(new MerchantView("acc-1", MerchantView.STORE));
     }
 
     @Test

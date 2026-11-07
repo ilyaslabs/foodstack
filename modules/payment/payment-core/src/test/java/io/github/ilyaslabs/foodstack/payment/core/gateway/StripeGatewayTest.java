@@ -12,15 +12,15 @@ import javax.crypto.spec.SecretKeySpec;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.GatewayException;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.SessionRequest;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.WebhookEvent;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.json.JsonMapper;
-
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,6 +47,63 @@ class StripeGatewayTest {
             JsonMapper.builder().build(), Clock.fixed(NOW, ZoneOffset.UTC));
 
     @Test
+    @DisplayName("an embedded session for a saved-cards customer returns the client secret and offers saving the card")
+    void embeddedSession() {
+        // given
+        StripeGateway embedded = new StripeGateway(this.builder, "https://api.stripe.test", "sk_test", WEBHOOK_SECRET,
+                "pk_test", JsonMapper.builder().build(), Clock.fixed(NOW, ZoneOffset.UTC));
+        this.server.expect(requestTo("https://api.stripe.test/v1/checkout/sessions"))
+            .andExpect(content().formDataContains(Map.of("ui_mode", "embedded", "return_url", "https://shop/return",
+                    "customer", "cus_1", "saved_payment_method_options[payment_method_save]", "enabled")))
+            .andRespond(withSuccess("""
+                    {"id":"cs_2","client_secret":"cs_2_secret","expires_at":%d}"""
+                .formatted(NOW.plusSeconds(1860).getEpochSecond()), MediaType.APPLICATION_JSON));
+
+        // when
+        CardGateway.HostedSession session = embedded.createSession(new SessionRequest("o2", "A-2", 125_000, "PKR",
+                "Spice Route", "https://shop/return", "https://shop/cancel", NOW.plusSeconds(600), true, "cus_1"));
+
+        // then
+        assertThat(embedded.supportsEmbedded()).isTrue();
+        assertThat(this.gateway.supportsEmbedded()).isFalse();
+        assertThat(session.clientSecret()).isEqualTo("cs_2_secret");
+        assertThat(session.redirectUrl()).isNull();
+        this.server.verify();
+    }
+
+    @Test
+    @DisplayName("saved cards: a customer per user, their cards read back, one detached, the customer deleted")
+    void savedCards() {
+        // given
+        this.server.expect(requestTo("https://api.stripe.test/v1/customers"))
+            .andExpect(header("Idempotency-Key", "customer-u1"))
+            .andExpect(content().formDataContains(Map.of("metadata[userId]", "u1")))
+            .andRespond(withSuccess("{\"id\":\"cus_1\"}", MediaType.APPLICATION_JSON));
+        this.server.expect(requestTo("https://api.stripe.test/v1/customers/cus_1/payment_methods?type=card&limit=20"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess("""
+                    {"data":[{"id":"pm_1","card":{"brand":"visa","last4":"4242","exp_month":12,"exp_year":2030}}]}""",
+                    MediaType.APPLICATION_JSON));
+        this.server.expect(requestTo("https://api.stripe.test/v1/payment_methods/pm_1/detach"))
+            .andExpect(method(HttpMethod.POST))
+            .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        this.server.expect(requestTo("https://api.stripe.test/v1/customers/cus_1"))
+            .andExpect(method(HttpMethod.DELETE))
+            .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        // when
+        String customer = this.gateway.createCustomer("u1");
+        var cards = this.gateway.cards(customer);
+        this.gateway.removeCard(customer, "pm_1");
+        this.gateway.deleteCustomer(customer);
+
+        // then
+        assertThat(customer).isEqualTo("cus_1");
+        assertThat(cards).containsExactly(new CardGateway.SavedCard("pm_1", "visa", "4242", 12, 2030));
+        this.server.verify();
+    }
+
+    @Test
     @DisplayName("opens a Checkout Session for the order, at least 30 minutes long, with an idempotency key")
     void session() {
         this.server.expect(requestTo("https://api.stripe.test/v1/checkout/sessions"))
@@ -67,6 +124,25 @@ class StripeGatewayTest {
         assertThat(session.sessionReference()).isEqualTo("cs_1");
         assertThat(session.redirectUrl()).isEqualTo("https://checkout.stripe.test/cs_1");
         assertThat(session.expiresAt()).isEqualTo(NOW.plusSeconds(1860));
+        this.server.verify();
+    }
+
+    @Test
+    @DisplayName("verifies a store's keys by reading its balance; a wrong key is refused with Stripe's reason")
+    void verify() {
+        this.server.expect(requestTo("https://api.stripe.test/v1/balance"))
+            .andExpect(method(HttpMethod.GET))
+            .andExpect(header("Authorization", "Bearer sk_test"))
+            .andRespond(withSuccess("{\"object\":\"balance\"}", MediaType.APPLICATION_JSON));
+        this.server.expect(requestTo("https://api.stripe.test/v1/balance"))
+            .andRespond(withStatus(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON)
+                .body("{\"error\":{\"message\":\"Invalid API Key provided\"}}"));
+
+        this.gateway.verify();
+        assertThatThrownBy(this.gateway::verify).isInstanceOfSatisfying(GatewayException.class, (ex) -> {
+            assertThat(ex.getMessage()).isEqualTo("Stripe: Invalid API Key provided");
+            assertThat(ex.isRetryable()).isFalse();
+        });
         this.server.verify();
     }
 

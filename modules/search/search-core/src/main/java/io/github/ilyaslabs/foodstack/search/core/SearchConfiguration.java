@@ -4,18 +4,19 @@ import java.time.Clock;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
+import io.github.ilyaslabs.foodstack.review.api.ReviewApi;
 import io.github.ilyaslabs.foodstack.search.core.application.StoreIndexer;
 import io.github.ilyaslabs.foodstack.search.core.application.StoreSearchService;
 import io.github.ilyaslabs.foodstack.search.core.engine.ElasticsearchStoreSearchEngine;
 import io.github.ilyaslabs.foodstack.search.core.engine.StoreSearchEngine;
 import io.github.ilyaslabs.foodstack.search.core.events.CatalogueEventsListener;
 import io.github.ilyaslabs.foodstack.store.api.StoreApi;
-import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Everything the search module runs on. Search keeps no database of its own: the index is a read
@@ -33,8 +34,9 @@ public class SearchConfiguration {
 
     @Bean
     StoreIndexer searchStoreIndexer(StoreApi storeApi, GeoApi geoApi, StoreSearchEngine searchStoreEngine,
-            io.github.ilyaslabs.foodstack.platform.security.ServiceCalls serviceCalls) {
-        return new StoreIndexer(storeApi, geoApi, searchStoreEngine, serviceCalls);
+            io.github.ilyaslabs.foodstack.platform.security.ServiceCalls serviceCalls,
+            org.springframework.beans.factory.ObjectProvider<ReviewApi> reviewApi) {
+        return new StoreIndexer(storeApi, geoApi, searchStoreEngine, serviceCalls, reviewApi.getIfAvailable());
     }
 
     @Bean

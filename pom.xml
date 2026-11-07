@@ -72,6 +72,7 @@
         <webp-imageio.version>0.11.0</webp-imageio.version>
         <metadata-extractor.version>2.22.0</metadata-extractor.version>
         <timeshape.version>2026b.29</timeshape.version>
+        <pdfbox.version>3.0.5</pdfbox.version>
         <archunit.version>1.5.1</archunit.version>
         <instancio.version>6.1.0</instancio.version>
         <rest-assured.version>6.3.0</rest-assured.version>
@@ -339,6 +340,46 @@
             </dependency>
             <dependency>
                 <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-ledger-api</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-ledger-core</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-ledger-impl</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-ledger-web</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-review-api</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-review-core</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-review-impl</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>foodstack-review-web</artifactId>
+                <version>${revision}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
                 <artifactId>foodstack-rider-api</artifactId>
                 <version>${revision}</version>
             </dependency>
@@ -421,6 +462,12 @@
                 <groupId>net.iakovlev</groupId>
                 <artifactId>timeshape</artifactId>
                 <version>${timeshape.version}</version>
+            </dependency>
+            <dependency>
+                <!-- Payout reports as PDF (PRD FI-3) -->
+                <groupId>org.apache.pdfbox</groupId>
+                <artifactId>pdfbox</artifactId>
+                <version>${pdfbox.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.tngtech.archunit</groupId>

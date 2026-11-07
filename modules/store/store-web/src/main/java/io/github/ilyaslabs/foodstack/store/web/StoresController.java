@@ -20,8 +20,8 @@ import io.github.ilyaslabs.foodstack.store.web.dto.StoreDtos;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 import jakarta.validation.Valid;
 
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -51,6 +51,8 @@ class StoresController {
 
     static final String OPERATOR_PERMISSION = "store:manage";
 
+    static final String COLLECTION_PERMISSION = "store:payment-collection:manage";
+
     private final StoreService storeService;
 
     private final MenuService menuService;
@@ -68,8 +70,8 @@ class StoresController {
         StoreDetails created = this.storeService.onboard(new NewStore(request.brandName(), request.branchName(),
                 request.legalName(), request.taxId(), request.description(), request.cuisines(),
                 StoreMapper.address(request.address()), StoreMapper.point(request.location()), DeliveryMode.SELF,
-                request.pickupEnabled(), request.prepMinutes(), StoreMapper.commission(request.commission())),
-                CurrentUser.id());
+                request.pickupEnabled(), request.prepMinutes(), StoreMapper.commission(request.commission()),
+                request.cityId()), CurrentUser.id());
         return ResponseEntity.status(HttpStatus.CREATED).eTag(etag(created)).body(StoreMapper.store(created));
     }
 
@@ -77,15 +79,21 @@ class StoresController {
     @PreAuthorize("hasAuthority('store:manage') or hasAuthority('store:portal')")
     StoreDtos.StoreListResponse list(@RequestParam(required = false) String q,
             @RequestParam(defaultValue = "50") int limit) {
-        java.util.Set<String> onlyIds = CurrentUser.hasAuthority(OPERATOR_PERMISSION) ? null : CurrentUser.storeIds();
+        if (!CurrentUser.hasAuthority(OPERATOR_PERMISSION)) {
+            // a store-area user: their own branches and every branch of the brands they own (PRD BB-5)
+            return new StoreDtos.StoreListResponse(this.storeService.listFor(CurrentUser.storeIds(), CurrentUser.brandIds())
+                .stream()
+                .map(StoreMapper::summary)
+                .toList());
+        }
         return new StoreDtos.StoreListResponse(
-                this.storeService.list(onlyIds, q, limit).stream().map(StoreMapper::summary).toList());
+                this.storeService.list(null, q, limit).stream().map(StoreMapper::summary).toList());
     }
 
     @GetMapping("/{storeId}/details")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<StoreDtos.StoreResponse> details(@PathVariable String storeId) {
-        CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
+        requireReadAccess(storeId);
         StoreDetails store = this.storeService.get(storeId);
         return ResponseEntity.ok().eTag(etag(store)).body(StoreMapper.store(store));
     }
@@ -99,7 +107,8 @@ class StoresController {
         StoreDetails updated = this.storeService.updateBranch(storeId,
                 new UpdateBranch(request.branchName(), StoreMapper.address(request.address()),
                         StoreMapper.point(request.location()), request.prepMinutes(),
-                        StoreMapper.deliveryMode(request.deliveryMode()), request.pickupEnabled(), request.timezone()),
+                        StoreMapper.deliveryMode(request.deliveryMode()), request.pickupEnabled(), request.timezone(),
+                        request.ticketPaperMm()),
                 StoreMapper.requireIfMatch("store", ifMatch), CurrentUser.id());
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }
@@ -110,7 +119,7 @@ class StoresController {
             @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @Valid @RequestBody StoreDtos.StoreAdminRequest request) {
         StoreDetails updated = this.storeService.updateAdmin(storeId,
-                new StoreAdminUpdate(request.legalName(), request.taxId(), request.operatorDeliveryAllowed()),
+                new StoreAdminUpdate(request.legalName(), request.taxId(), request.operatorDeliveryAllowed(), request.cityId()),
                 StoreMapper.requireIfMatch("store", ifMatch), CurrentUser.id());
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }
@@ -157,29 +166,69 @@ class StoresController {
     @GetMapping("/{storeId}/readiness")
     @PreAuthorize("isAuthenticated()")
     StoreDtos.ReadinessResponse readiness(@PathVariable String storeId) {
-        CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
+        requireReadAccess(storeId);
         return new StoreDtos.ReadinessResponse(this.storeService.readiness(storeId));
     }
 
+    /** The branch's own owners and managers. Operator staff and the brand's owners. */
     @GetMapping("/{storeId}/owners")
-    @PreAuthorize("hasAuthority('store:manage')")
+    @PreAuthorize("isAuthenticated()")
     List<StoreDtos.OwnerResponse> owners(@PathVariable String storeId) {
+        requireBrandOwnerOf(storeId);
         return this.storeService.owners(storeId).stream().map(StoreMapper::owner).toList();
     }
 
+    /** Adds a branch manager or franchise owner (PRD BB-5, BB-6). Operator staff and the brand's owners. */
     @PostMapping("/{storeId}/owners")
-    @PreAuthorize("hasAuthority('store:manage')")
+    @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.CREATED)
     StoreDtos.OwnerResponse addOwner(@PathVariable String storeId, @Valid @RequestBody StoreDtos.OwnerRequest request) {
+        requireBrandOwnerOf(storeId);
         return StoreMapper.owner(this.storeService.addOwner(storeId,
                 new NewOwner(request.email(), request.displayName(), request.initialPassword()), CurrentUser.id()));
     }
 
     @DeleteMapping("/{storeId}/owners/{userId}")
-    @PreAuthorize("hasAuthority('store:manage')")
+    @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void removeOwner(@PathVariable String storeId, @PathVariable String userId) {
+        requireBrandOwnerOf(storeId);
         this.storeService.removeOwner(storeId, userId, CurrentUser.id());
+    }
+
+    /** The branch's own commission from a date (operator only, PRD BB-8, FI-2). */
+    @PutMapping("/{storeId}/commission")
+    @PreAuthorize("hasAuthority('store:manage')")
+    ResponseEntity<StoreDtos.StoreResponse> commission(@PathVariable String storeId,
+            @Valid @RequestBody StoreDtos.CommissionChangeRequest request) {
+        StoreDetails updated = this.storeService.updateBranchCommission(storeId, StoreMapper.commission(request.commission()),
+                (request.effectiveFrom() != null) ? java.time.Instant.ofEpochSecond(request.effectiveFrom()) : null,
+                CurrentUser.id());
+        return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
+    }
+
+    /** Lets a branch collect card payments itself, or stops it, with its credit limit (finance, PRD DP-2, DP-7). */
+    @PutMapping("/{storeId}/payment-collection")
+    @PreAuthorize("hasAuthority('store:payment-collection:manage')")
+    ResponseEntity<StoreDtos.StoreResponse> paymentCollection(@PathVariable String storeId,
+            @RequestBody StoreDtos.PaymentCollectionRequest request) {
+        StoreDetails updated = this.storeService.setPaymentCollection(storeId, request.mode(), request.creditLimitMinor(),
+                request.reason(), CurrentUser.id());
+        return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
+    }
+
+    /** Finance reads a branch to set who collects its card payments (PRD DP-2); it edits nothing else. */
+    private static void requireReadAccess(String storeId) {
+        if (!CurrentUser.hasAuthority(COLLECTION_PERMISSION)) {
+            CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
+        }
+    }
+
+    private static void requireBrandOwnerOf(String storeId) {
+        if (!CurrentUser.hasAuthority(OPERATOR_PERMISSION) && !CurrentUser.ownsBrandOf(storeId)) {
+            throw new io.github.ilyaslabs.moduleswitch.ModuleException.Forbidden("Only the brand's owners manage branch owners",
+                    "BRAND_ACCESS_DENIED");
+        }
     }
 
     @PutMapping("/{storeId}/menu/items/{itemId}/sold-out")
@@ -235,7 +284,7 @@ class StoresController {
     private StoreDetails visible(String storeId) {
         StoreDetails store = this.storeService.get(storeId);
         if (store.status() != StoreStatus.LIVE && !CurrentUser.hasAuthority(OPERATOR_PERMISSION)
-                && !CurrentUser.storeIds().contains(storeId)) {
+                && !CurrentUser.managesStore(storeId)) {
             throw new ModuleException.NotFound("Store not found", "STORE_NOT_FOUND");
         }
         return store;

@@ -52,6 +52,15 @@ export interface Image {
   urls: Record<string, string>;
 }
 
+/** A commission and when it starts (epoch seconds); `effectiveFrom` 0 is the starting value. */
+export interface CommissionChange {
+  /** Null on a branch means "back to the brand's commission". */
+  commission: Commission | null;
+  effectiveFrom: number;
+  setBy: string | null;
+  setAt: number | null;
+}
+
 export interface Brand {
   id: string;
   name: string;
@@ -59,10 +68,17 @@ export interface Brand {
   cuisines: string[];
   logo: Image | null;
   cover: Image | null;
+  /** The commission in force now. */
   commission: Commission;
   branchCount: number;
   version: number;
   updatedAt: number | null;
+  /** Dated changes, oldest first, including planned ones. */
+  commissionChanges: CommissionChange[];
+  /** Brand owners: they run every branch and the brand's menu. */
+  ownerUserIds: string[];
+  /** Whether branch managers may run their own branch's promotions (PRD BB-11). */
+  branchPromotionsAllowed: boolean;
 }
 
 export interface BrandUpdate {
@@ -100,6 +116,25 @@ export interface StoreDetails {
   version: number;
   createdAt: number | null;
   updatedAt: number | null;
+  /** The operator's city of the branch, or null. */
+  cityId: string | null;
+  /** Order ticket paper width in mm: 80 or 58. */
+  ticketPaperMm: 80 | 58;
+  /** The branch's own dated commission changes, over the brand's. */
+  commissionChanges: CommissionChange[];
+  brandOwnerUserIds: string[];
+  /** Who collects card payments (PRD DP-2, DP-7); missing on servers before M4. */
+  paymentCollection?: PaymentCollection;
+}
+
+/** Whether the branch collects card payments itself, with its credit limit. */
+export interface PaymentCollection {
+  mode: 'OPERATOR' | 'DIRECT';
+  /** The branch's own credit limit in minor units, or null for the operator's default. */
+  creditLimitMinor: number | null;
+  reason: string | null;
+  changedBy: string | null;
+  changedAt: number | null;
 }
 
 export interface StoreSummary {
@@ -114,6 +149,50 @@ export interface StoreSummary {
   createdAt: number | null;
   /** The brand's logo by size (thumb, card, full); empty when no logo is uploaded. */
   logoUrls: Record<string, string>;
+  cityId: string | null;
+  /** How many branches the brand has. */
+  branchCount: number;
+}
+
+export interface NewBranch {
+  branchName: string;
+  legalName: string;
+  taxId: string | null;
+  address: StoreAddress;
+  location: LatLng | null;
+  /** Empty picks the nearest of the operator's cities. */
+  cityId: string | null;
+  prepMinutes: number;
+  pickupEnabled: boolean;
+}
+
+/** One of the operator's cities (PRD AD-4): branches and riders belong to one. */
+export interface City {
+  id: string;
+  name: Translated;
+  centre: LatLng;
+  active: boolean;
+  /** The city's own operator delivery pricing, or null to use the operator-wide one. */
+  pricing: CityPricing | null;
+  version: number;
+  updatedAt: number | null;
+}
+
+export interface CityPricing {
+  baseChargeMinor: number;
+  perKmMinor: number;
+  maxDistanceMeters: number;
+  minOrderMinor: number;
+  freeDeliveryAboveMinor: number | null;
+  peakMultiplierPercent: number;
+  peakWindows: PeakWindow[];
+}
+
+export interface CityInput {
+  name: Translated;
+  centre: LatLng;
+  active: boolean;
+  pricing: CityPricing | null;
 }
 
 export interface Onboarding {
@@ -128,6 +207,7 @@ export interface Onboarding {
   pickupEnabled: boolean;
   prepMinutes: number;
   commission: Commission;
+  cityId?: string | null;
 }
 
 export interface BranchUpdate {
@@ -139,12 +219,46 @@ export interface BranchUpdate {
   pickupEnabled: boolean;
   /** IANA zone; empty finds it from the location. Unchanged while the location moves, it is found again. */
   timezone?: string | null;
+  /** Order ticket paper width: 80 or 58 mm. */
+  ticketPaperMm?: 80 | 58;
 }
 
 export interface StoreOwner {
   userId: string;
   email: string | null;
   displayName: string | null;
+}
+
+/** A branch's own price for a brand item, or for an option's extra price (PRD BB-4). */
+export interface BranchPrice {
+  itemId: string;
+  optionId: string | null;
+  priceMinor: number;
+}
+
+/** A price change waiting for operator approval (PRD ST-6). */
+export interface PriceChange {
+  id: string;
+  brandId: string;
+  brandName: string | null;
+  /** Null for the brand menu price. */
+  storeId: string | null;
+  branchName: string | null;
+  itemId: string;
+  itemName: Translated;
+  optionId: string | null;
+  optionName: Translated | null;
+  currentMinor: number;
+  /** Null means "back to the brand price". */
+  proposedMinor: number | null;
+  requestedBy: string | null;
+  requestedAt: number | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+}
+
+export interface BranchPrices {
+  prices: BranchPrice[];
+  pending: PriceChange[];
 }
 
 export interface ModifierOption {
@@ -327,6 +441,9 @@ export interface StoreCard {
   temporarilyClosed: boolean;
   prepMinutes: number;
   dietaryTags: string[];
+  /** Published reviews of the branch. */
+  ratingCount?: number;
+  ratingAverage?: number;
 }
 
 export interface StoreSearchPage {

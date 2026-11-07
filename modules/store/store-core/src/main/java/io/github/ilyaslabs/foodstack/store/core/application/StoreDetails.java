@@ -38,10 +38,41 @@ import io.github.ilyaslabs.foodstack.store.api.TimeRange;
  * @param version current version
  * @param createdAt onboarding time
  * @param updatedAt last change
+ * @param cityId the operator's city the branch is in, or {@code null}
+ * @param ticketPaperMm kitchen printer paper width, 80 or 58 mm
+ * @param commissionChanges the branch's own commission over time, oldest first ({@code null} commission: back to the
+ *        brand's); empty when it always used the brand's
+ * @param brandOwnerUserIds the brand's owners, who also run this branch
+ * @param paymentCollection who collects card payments, with the credit limit (PRD DP-2, DP-7)
  */
 public record StoreDetails(String id, String slug, BrandDetails brand, String branchName, String legalName, String taxId,
         Set<String> ownerUserIds, Address address, GeoPoint location, Map<DayOfWeek, List<TimeRange>> openingHours,
         List<Closure> closures, boolean temporarilyClosed, String closedReason, int prepMinutes, DeliveryMode deliveryMode,
         boolean operatorDeliveryAllowed, boolean pickupEnabled, Commission commission, StoreStatus status, String timezone,
-        boolean openNow, long version, Instant createdAt, Instant updatedAt) {
+        boolean openNow, long version, Instant createdAt, Instant updatedAt, String cityId, int ticketPaperMm,
+        List<CommissionChange> commissionChanges, Set<String> brandOwnerUserIds, PaymentCollection paymentCollection) {
+
+    /** A branch collected for by the operator. */
+    public StoreDetails(String id, String slug, BrandDetails brand, String branchName, String legalName, String taxId,
+            Set<String> ownerUserIds, Address address, GeoPoint location, Map<DayOfWeek, List<TimeRange>> openingHours,
+            List<Closure> closures, boolean temporarilyClosed, String closedReason, int prepMinutes, DeliveryMode deliveryMode,
+            boolean operatorDeliveryAllowed, boolean pickupEnabled, Commission commission, StoreStatus status, String timezone,
+            boolean openNow, long version, Instant createdAt, Instant updatedAt, String cityId, int ticketPaperMm,
+            List<CommissionChange> commissionChanges, Set<String> brandOwnerUserIds) {
+        this(id, slug, brand, branchName, legalName, taxId, ownerUserIds, address, location, openingHours, closures,
+                temporarilyClosed, closedReason, prepMinutes, deliveryMode, operatorDeliveryAllowed, pickupEnabled, commission,
+                status, timezone, openNow, version, createdAt, updatedAt, cityId, ticketPaperMm, commissionChanges,
+                brandOwnerUserIds, PaymentCollection.BY_OPERATOR);
+    }
+
+    /** A branch without a city, on 80 mm paper, with no dated commission changes or brand owners. */
+    public StoreDetails(String id, String slug, BrandDetails brand, String branchName, String legalName, String taxId,
+            Set<String> ownerUserIds, Address address, GeoPoint location, Map<DayOfWeek, List<TimeRange>> openingHours,
+            List<Closure> closures, boolean temporarilyClosed, String closedReason, int prepMinutes, DeliveryMode deliveryMode,
+            boolean operatorDeliveryAllowed, boolean pickupEnabled, Commission commission, StoreStatus status, String timezone,
+            boolean openNow, long version, Instant createdAt, Instant updatedAt) {
+        this(id, slug, brand, branchName, legalName, taxId, ownerUserIds, address, location, openingHours, closures,
+                temporarilyClosed, closedReason, prepMinutes, deliveryMode, operatorDeliveryAllowed, pickupEnabled, commission,
+                status, timezone, openNow, version, createdAt, updatedAt, null, 80, List.of(), Set.of(), PaymentCollection.BY_OPERATOR);
+    }
 }

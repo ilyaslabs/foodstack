@@ -2,11 +2,13 @@ package io.github.ilyaslabs.foodstack.promotion.web;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import io.github.ilyaslabs.foodstack.platform.core.EpochSeconds;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.web.ETags;
+import io.github.ilyaslabs.foodstack.promotion.core.application.PromotionAccess;
 import io.github.ilyaslabs.foodstack.promotion.core.application.PromotionDetails;
 import io.github.ilyaslabs.foodstack.promotion.core.application.PromotionInput;
 import io.github.ilyaslabs.foodstack.promotion.core.application.PromotionService;
@@ -30,58 +32,47 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Coupons in the back office (PRD 4.8). Operator staff with {@code promotion:manage} manage the
- * operator's promotions and see every store's; a store owner manages their own brand's (the
- * {@code brandIds} claim). Edits need the {@code If-Match} of the version the editor saw.
+ * operator's promotions and see every store's; a brand owner manages their own brand's, and a
+ * branch manager their own branch's when the brand owner allows it ({@link PromotionAccess}). Edits need the {@code If-Match} of the version the editor saw.
  */
 @RestController
 @RequestMapping("/api/v1/promotions")
 class PromotionsController {
 
-    static final String MANAGE = "promotion:manage";
+    static final String MANAGE = PromotionAccess.MANAGE;
 
     private final PromotionService promotions;
 
-    PromotionsController(PromotionService promotions) {
+    private final PromotionAccess access;
+
+    PromotionsController(PromotionService promotions, PromotionAccess access) {
         this.promotions = promotions;
+        this.access = access;
     }
 
     @GetMapping
     List<PromotionResponse> list(@RequestParam(required = false) String brandId,
             @RequestParam(defaultValue = "200") int limit) {
-        List<String> brands;
-        if (brandId != null) {
-            CurrentUser.requireBrandAccess(brandId, MANAGE);
-            brands = List.of(brandId);
-        }
-        else if (CurrentUser.hasAuthority(MANAGE)) {
-            brands = null;
-        }
-        else {
-            brands = List.copyOf(CurrentUser.brandIds());
-            if (brands.isEmpty()) {
-                throw new ModuleException.Forbidden("You cannot manage promotions", "PROMOTION_ACCESS_DENIED");
-            }
-        }
-        return this.promotions.list(brands, limit).stream().map(PromotionsController::toResponse).toList();
+        return this.promotions.listIn(this.access.listScope(brandId), limit).stream().map(PromotionsController::toResponse).toList();
+    }
+
+    /** Whether the brand lets branch managers create promotions for their branch (PRD BB-11). */
+    @GetMapping("/brands/{brandId}/rules")
+    Map<String, Boolean> brandRules(@PathVariable String brandId) {
+        this.access.listScope(brandId);
+        return Map.of("branchPromotionsAllowed", this.access.branchPromotionsAllowed(brandId));
     }
 
     @GetMapping("/{id}")
     ResponseEntity<PromotionResponse> get(@PathVariable String id) {
         PromotionDetails promotion = this.promotions.details(id);
-        requireAccess(promotion);
+        this.access.requireView(promotion);
         return ResponseEntity.ok().eTag(ETags.of("promotion", promotion.version())).body(toResponse(promotion));
     }
 
     @PostMapping
     ResponseEntity<PromotionResponse> create(@RequestBody PromotionRequest request) {
-        if (request.brandId() == null) {
-            if (!CurrentUser.hasAuthority(MANAGE)) {
-                throw new ModuleException.Forbidden("Only the operator creates operator promotions", "PROMOTION_ACCESS_DENIED");
-            }
-        }
-        else {
-            CurrentUser.requireBrandAccess(request.brandId(), MANAGE);
-        }
+        this.access.requireCreate(request.brandId(), request.storeIds());
         PromotionDetails created = this.promotions.create(request.brandId(), input(request), CurrentUser.id());
         return ResponseEntity.status(HttpStatus.CREATED).eTag(ETags.of("promotion", created.version())).body(toResponse(created));
     }
@@ -89,7 +80,7 @@ class PromotionsController {
     @PutMapping("/{id}")
     ResponseEntity<PromotionResponse> update(@PathVariable String id,
             @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch, @RequestBody PromotionRequest request) {
-        requireAccess(this.promotions.details(id));
+        this.access.requireEdit(this.promotions.details(id), request.storeIds());
         Long version = ETags.versionFromIfMatch("promotion", ifMatch);
         if (version == null) {
             throw new ModuleException.BadRequest("Send If-Match with the ETag you edited, so changes are not lost",
@@ -101,19 +92,9 @@ class PromotionsController {
 
     @PostMapping("/{id}/active")
     PromotionResponse setActive(@PathVariable String id, @RequestBody ActiveRequest request) {
-        requireAccess(this.promotions.details(id));
+        PromotionDetails promotion = this.promotions.details(id);
+        this.access.requireEdit(promotion, promotion.storeIds());
         return toResponse(this.promotions.setActive(id, request.active(), CurrentUser.id()));
-    }
-
-    private static void requireAccess(PromotionDetails promotion) {
-        if (promotion.brandId() == null) {
-            if (!CurrentUser.hasAuthority(MANAGE)) {
-                throw new ModuleException.Forbidden("Only the operator manages operator promotions", "PROMOTION_ACCESS_DENIED");
-            }
-        }
-        else {
-            CurrentUser.requireBrandAccess(promotion.brandId(), MANAGE);
-        }
     }
 
     private static PromotionInput input(PromotionRequest r) {

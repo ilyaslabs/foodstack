@@ -63,7 +63,7 @@ Priority: **M** = must for v1, **S** = should for v1, **C** = could (later).
 | ID-4 | Admins invite back-office users by email; roles and permissions assigned by admin | M |
 | ID-5 | Optional TOTP two-factor login for back-office users; mandatory for `ADMIN` and `FINANCE` | M |
 | ID-6 | Customer profile with saved addresses (pin on map, label, notes) | M |
-| ID-7 | Data export and account deletion requests, fulfilled within a configured time | M |
+| ID-7 | Data export and account deletion requests, fulfilled within a configured time. **Decided (ilyas, 2026-11-07):** the customer downloads everything as one JSON file; deletion runs after a 14-day grace period (configurable) that signing in cancels; past orders stay for the records without name, phone or address; reviews stay as "Deleted user"; staff accounts are closed by an admin instead | M |
 | ID-8 | Login rate limiting and lockout; audit log of back-office logins | M |
 
 ### 4.2 Stores and menus (`store`)
@@ -126,7 +126,7 @@ Decided in grooming on 2026-10-31. The data model ships in M1 with single-branch
 | CO-2 | Checkout shows itemised subtotal, delivery fee, service fee, discounts, tax, tip (optional), total | M |
 | CO-3 | Choose delivery or pickup. For a self-delivery store the address must be inside one of its zones and the charge comes from that zone; for an operator-delivery store the address must be within the operator's maximum distance and the charge comes from the operator's pricing. The charge is fixed at checkout | M |
 | CO-4 | Apply one coupon per order; validation explains why a coupon fails | M |
-| CO-5 | Pay by cash on delivery or by card through the configured gateway. The operator can **switch card payments off** entirely, and choose the integration style: the gateway's **hosted payment page** (redirect, recommended at launch) or embedded gateway fields | M |
+| CO-5 | Pay by cash on delivery or by card through the configured gateway. The operator can **switch card payments off** entirely, and choose the integration style: the gateway's **hosted payment page** (redirect, recommended at launch) or embedded gateway fields. **Rule (ilyas, 2026-11-07):** card data never reaches FoodStack's servers or page code; embedded fields are the gateway's own frame (Stripe Embedded Checkout), so the operator stays at the lightest PCI level (SAQ A) | M |
 | CO-5a | **Saved cards** (gateway tokens) are a separate setting, **off by default** | M |
 | CO-6 | Price and availability re-validated at order placement; customer is told about any change | M |
 | CO-7 | Idempotent order placement (double tap never creates two orders) | M |
@@ -188,7 +188,7 @@ Decided in grooming on 2026-10-31. The data model ships in M1 with single-branch
 |---|---|---|
 | RV-1 | After delivery, customer rates the store (1 to 5, text, optional photo) and the rider (1 to 5, tags) | M |
 | RV-2 | Store owner can reply publicly once | S |
-| RV-3 | Admin moderation queue; profanity filter; hide with reason | M |
+| RV-3 | Admin moderation queue; profanity filter; hide with reason. **Decided (ilyas, 2026-11-07):** a blocked word is masked with stars, the review is published and flagged for the moderation queue (keep, hide with reason, show again) | M |
 | RV-4 | Store rating shown as average with count, per branch and brand-wide (BB-10); rider rating private to operator | M |
 
 ### 4.10 Notifications (`notification`)

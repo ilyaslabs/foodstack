@@ -122,6 +122,30 @@
         </dependency>
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-ledger-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-ledger-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-ledger-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-review-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-review-impl</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>foodstack-review-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
             <artifactId>foodstack-rider-core</artifactId>
         </dependency>
         <dependency>

@@ -10,7 +10,33 @@ package io.github.ilyaslabs.foodstack.settings.core.application;
  * @param taxBasisPoints tax rate, 0 to 10000
  * @param tipsEnabled tips allowed
  * @param acceptTimeoutSeconds 60 to 1800
+ * @param priceApprovalRequired price changes wait for approval
+ * @param directCollectionEnabled branches may collect card payments themselves
+ * @param creditLimitMinor default credit limit, 0 or more
  */
 public record UpdateOrdering(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
-        int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds) {
+        int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, boolean priceApprovalRequired,
+        boolean directCollectionEnabled, long creditLimitMinor, String cardStyle, boolean savedCardsEnabled) {
+
+    /** Rules without card style and saved cards: hosted page, no saved cards. */
+    public UpdateOrdering(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
+            int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, boolean priceApprovalRequired,
+            boolean directCollectionEnabled, long creditLimitMinor) {
+        this(cashEnabled, cardEnabled, serviceFeeMinor, serviceFeeBasisPoints, taxBasisPoints, tipsEnabled,
+                acceptTimeoutSeconds, priceApprovalRequired, directCollectionEnabled, creditLimitMinor, "HOSTED_PAGE", false);
+    }
+
+    /** Rules without direct collection. */
+    public UpdateOrdering(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
+            int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, boolean priceApprovalRequired) {
+        this(cashEnabled, cardEnabled, serviceFeeMinor, serviceFeeBasisPoints, taxBasisPoints, tipsEnabled,
+                acceptTimeoutSeconds, priceApprovalRequired, false, 5_000_000L);
+    }
+
+    /** Rules without price approval. */
+    public UpdateOrdering(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
+            int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds) {
+        this(cashEnabled, cardEnabled, serviceFeeMinor, serviceFeeBasisPoints, taxBasisPoints, tipsEnabled,
+                acceptTimeoutSeconds, false);
+    }
 }

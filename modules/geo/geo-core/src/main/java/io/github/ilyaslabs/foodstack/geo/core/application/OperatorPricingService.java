@@ -104,7 +104,7 @@ public class OperatorPricingService {
                 document.getUpdatedAt());
     }
 
-    private static void validate(UpdateOperatorPricing update) {
+    static void validate(UpdateOperatorPricing update) {
         Map<String, String> errors = new LinkedHashMap<>();
         if (update.baseChargeMinor() < 0) {
             errors.put("baseChargeMinor", "must not be negative");

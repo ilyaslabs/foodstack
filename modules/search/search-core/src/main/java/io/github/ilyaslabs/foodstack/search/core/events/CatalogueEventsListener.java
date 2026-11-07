@@ -1,23 +1,26 @@
 package io.github.ilyaslabs.foodstack.search.core.events;
 
+import io.github.ilyaslabs.foodstack.geo.api.events.CityChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.OperatorDeliveryPricingChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.ZoneChanged;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
 import io.github.ilyaslabs.foodstack.platform.kafka.CloudEvents;
+import io.github.ilyaslabs.foodstack.review.api.events.ReviewHidden;
+import io.github.ilyaslabs.foodstack.review.api.events.ReviewPublished;
 import io.github.ilyaslabs.foodstack.search.core.application.StoreIndexer;
 import io.github.ilyaslabs.foodstack.store.api.events.BrandChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.ItemAvailabilityChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.MenuChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreAvailabilityChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreChanged;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.KafkaListener;
 import tools.jackson.databind.json.JsonMapper;
 
-import org.springframework.kafka.annotation.KafkaListener;
-
 /**
- * Feeds the index from store and geo events (TDD 11.2). The handler only needs the id in the
+ * Feeds the index from store, geo and review events (TDD 11.2). The handler only needs the id in the
  * event: {@link StoreIndexer} re-reads the source, so a redelivered or late event is harmless and
  * no inbox is kept. A failing refresh is retried with backoff and then sent to the dead-letter
  * topic (platform {@code DeadLetters}); the scheduled or manual rebuild repairs anything missed.
@@ -40,6 +43,12 @@ public class CatalogueEventsListener {
 
     private static final String PRICING_CHANGED = EventTypes.type("geo", OperatorDeliveryPricingChanged.class);
 
+    private static final String CITY_CHANGED = EventTypes.type("geo", CityChanged.class);
+
+    private static final String REVIEW_PUBLISHED = EventTypes.type("review", ReviewPublished.class);
+
+    private static final String REVIEW_HIDDEN = EventTypes.type("review", ReviewHidden.class);
+
     private final StoreIndexer indexer;
 
     private final JsonMapper jsonMapper;
@@ -52,7 +61,8 @@ public class CatalogueEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.search:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-search-catalogue",
             groupId = "${foodstack.namespace:foodstack}-search",
-            topics = { "${foodstack.namespace:foodstack}.store.events", "${foodstack.namespace:foodstack}.geo.events" },
+            topics = { "${foodstack.namespace:foodstack}.store.events", "${foodstack.namespace:foodstack}.geo.events",
+                "${foodstack.namespace:foodstack}.review.events" },
             properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
@@ -75,7 +85,13 @@ public class CatalogueEventsListener {
         else if (ZONE_CHANGED.equals(type)) {
             this.indexer.refresh(event.dataAs(ZoneChanged.class, this.jsonMapper).storeId());
         }
-        else if (PRICING_CHANGED.equals(type)) {
+        else if (REVIEW_PUBLISHED.equals(type)) {
+            this.indexer.refresh(event.dataAs(ReviewPublished.class, this.jsonMapper).storeId());
+        }
+        else if (REVIEW_HIDDEN.equals(type)) {
+            this.indexer.refresh(event.dataAs(ReviewHidden.class, this.jsonMapper).storeId());
+        }
+        else if (PRICING_CHANGED.equals(type) || CITY_CHANGED.equals(type)) {
             this.indexer.refreshOperatorDelivery();
         }
         else {

@@ -44,11 +44,11 @@ class RidersController {
     }
 
     record RiderRequest(String email, String initialPassword, String name, String phone, Vehicle vehicle, String plate,
-            String city, Long version) {
+            String city, String cityId, Long version) {
 
         RiderInput toInput() {
             return new RiderInput(this.email, this.initialPassword, this.name, this.phone, this.vehicle, this.plate, this.city,
-                    this.version);
+                    this.cityId, this.version);
         }
 
         @Override

@@ -14,3 +14,37 @@ databaseChangeLog:
             collectionName: payment_intents
             keys: '{ "status": 1, "expiresAt": 1 }'
             options: '{ "name": "status_expiry" }'
+  - changeSet:
+      id: payment-2
+      author: foodstack
+      comment: "payment_merchant_accounts (unsharded, one row per connection): brand and branch merchant accounts, one current per owner (PRD DP-3, BB-9); payment_store_collection ({ _id: hashed }): who collects for each branch (PRD DP-2, DP-7)"
+      changes:
+        - createCollection:
+            collectionName: payment_merchant_accounts
+        - createIndex:
+            collectionName: payment_merchant_accounts
+            keys: '{ "scope": 1, "ownerId": 1 }'
+            options: '{ "name": "current_per_owner", "unique": true, "partialFilterExpression": { "current": true } }'
+        - createIndex:
+            collectionName: payment_merchant_accounts
+            keys: '{ "scope": 1, "ownerId": 1, "updatedAt": -1 }'
+            options: '{ "name": "owner_newest" }'
+        - createCollection:
+            collectionName: payment_store_collection
+        - createIndex:
+            collectionName: payment_store_collection
+            keys: '{ "brandId": 1, "mode": 1 }'
+            options: '{ "name": "brand_mode" }'
+  - changeSet:
+      id: payment-3
+      author: foodstack
+      comment: "M4 saved cards (PRD CO-5a): payment_customers ({ _id: hashed }, _id = user id) holds only the gateway's customer reference; payment_sandbox_cards (unsharded, development only) stands in for a gateway's card vault"
+      changes:
+        - createCollection:
+            collectionName: payment_customers
+        - createCollection:
+            collectionName: payment_sandbox_cards
+        - createIndex:
+            collectionName: payment_sandbox_cards
+            keys: '{ "customer": 1, "createdAt": 1 }'
+            options: '{ "name": "customer_oldest" }'

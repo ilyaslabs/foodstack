@@ -54,6 +54,11 @@ export const routes: Routes = [
         loadComponent: () => import('./stores/onboard-page').then((m) => m.OnboardPage),
       },
       {
+        path: 'price-approvals',
+        loadComponent: () =>
+          import('./stores/price-approvals-page').then((m) => m.PriceApprovalsPage),
+      },
+      {
         path: 'stores/:id',
         loadComponent: () => import('./stores/store-page').then((m) => m.StorePage),
       },
@@ -74,6 +79,22 @@ export const routes: Routes = [
         loadComponent: () => import('./settings/ordering-page').then((m) => m.OrderingPage),
       },
       {
+        path: 'finance',
+        loadComponent: () => import('./finance/finance-page').then((m) => m.FinancePage),
+      },
+      {
+        path: 'reviews',
+        loadComponent: () => import('./reviews/reviews-page').then((m) => m.ReviewsPage),
+      },
+      {
+        path: 'audit',
+        loadComponent: () => import('./settings/audit-page').then((m) => m.AuditPage),
+      },
+      {
+        path: 'settings/messages',
+        loadComponent: () => import('./settings/messages-page').then((m) => m.MessagesPage),
+      },
+      {
         path: 'settings/emails',
         loadComponent: () => import('./settings/emails-page').then((m) => m.EmailsPage),
       },
@@ -81,6 +102,10 @@ export const routes: Routes = [
         path: 'delivery-pricing',
         loadComponent: () =>
           import('./delivery/delivery-pricing-page').then((m) => m.DeliveryPricingPage),
+      },
+      {
+        path: 'cities',
+        loadComponent: () => import('./delivery/cities-page').then((m) => m.CitiesPage),
       },
       {
         path: 'users',

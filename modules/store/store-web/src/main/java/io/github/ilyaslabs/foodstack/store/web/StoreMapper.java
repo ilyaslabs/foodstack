@@ -19,6 +19,7 @@ import io.github.ilyaslabs.foodstack.store.core.application.Address;
 import io.github.ilyaslabs.foodstack.store.core.application.BrandDetails;
 import io.github.ilyaslabs.foodstack.store.core.application.Closure;
 import io.github.ilyaslabs.foodstack.store.core.application.Commission;
+import io.github.ilyaslabs.foodstack.store.core.application.CommissionChange;
 import io.github.ilyaslabs.foodstack.store.core.application.DeliveryQuote;
 import io.github.ilyaslabs.foodstack.store.core.application.EffectiveMenu;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuDetails;
@@ -26,6 +27,7 @@ import io.github.ilyaslabs.foodstack.store.core.application.MenuItemInput;
 import io.github.ilyaslabs.foodstack.store.core.application.ModifierGroup;
 import io.github.ilyaslabs.foodstack.store.core.application.ModifierOption;
 import io.github.ilyaslabs.foodstack.store.core.application.OwnerDetails;
+import io.github.ilyaslabs.foodstack.store.core.application.PaymentCollection;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreDetails;
 import io.github.ilyaslabs.foodstack.store.core.application.StoreSummary;
 import io.github.ilyaslabs.foodstack.store.web.dto.MenuDtos;
@@ -151,7 +153,15 @@ final class StoreMapper {
         StoreDtos.ImageDto cover = (b.coverMediaId() != null) ? new StoreDtos.ImageDto(b.coverMediaId(), b.coverUrls())
                 : null;
         return new StoreDtos.BrandResponse(b.id(), b.name(), b.description(), b.cuisines(), logo, cover,
-                commission(b.commission()), b.branchCount(), b.version(), EpochSeconds.of(b.updatedAt()));
+                commission(b.commission()), b.branchCount(), b.version(), EpochSeconds.of(b.updatedAt()),
+                changes(b.commissionChanges()), b.ownerUserIds(), b.branchPromotionsAllowed());
+    }
+
+    static List<StoreDtos.CommissionChangeResponse> changes(List<CommissionChange> changes) {
+        return changes.stream()
+            .map((c) -> new StoreDtos.CommissionChangeResponse(commission(c.commission()), c.effectiveFrom().getEpochSecond(),
+                    c.setBy(), EpochSeconds.of(c.setAt())))
+            .toList();
     }
 
     static String displayName(String brandName, String branchName) {
@@ -164,7 +174,13 @@ final class StoreMapper {
                 address(s.address()), latLng(s.location()), hourDtos(s.openingHours()), closureDtos(s.closures()),
                 s.temporarilyClosed(), s.closedReason(), s.prepMinutes(), s.deliveryMode().name(),
                 s.operatorDeliveryAllowed(), s.pickupEnabled(), commission(s.commission()), s.status().name(), s.timezone(),
-                s.openNow(), s.version(), EpochSeconds.of(s.createdAt()), EpochSeconds.of(s.updatedAt()));
+                s.openNow(), s.version(), EpochSeconds.of(s.createdAt()), EpochSeconds.of(s.updatedAt()), s.cityId(),
+                s.ticketPaperMm(), changes(s.commissionChanges()), s.brandOwnerUserIds(), collection(s.paymentCollection()));
+    }
+
+    static StoreDtos.PaymentCollectionResponse collection(PaymentCollection c) {
+        return new StoreDtos.PaymentCollectionResponse(c.mode(), c.creditLimitMinor(), c.reason(), c.changedBy(),
+                EpochSeconds.of(c.changedAt()));
     }
 
     static StoreDtos.StorePageResponse page(StoreDetails s) {
@@ -182,7 +198,7 @@ final class StoreMapper {
     static StoreDtos.StoreSummaryResponse summary(StoreSummary s) {
         return new StoreDtos.StoreSummaryResponse(s.id(), s.brandId(), s.brandName(), s.branchName(), s.city(),
                 s.status().name(), s.temporarilyClosed(), s.deliveryMode().name(), EpochSeconds.of(s.createdAt()),
-                s.logoUrls());
+                s.logoUrls(), s.cityId(), s.branchCount());
     }
 
     static StoreDtos.OwnerResponse owner(OwnerDetails o) {

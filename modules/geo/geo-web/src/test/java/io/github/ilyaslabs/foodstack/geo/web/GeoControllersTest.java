@@ -35,12 +35,13 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = { GeoController.class, ZonesController.class }, properties = "module-switch.modules.geo.mode=local")
+@WebMvcTest(controllers = { GeoController.class, ZonesController.class, CitiesController.class }, properties = "module-switch.modules.geo.mode=local")
 @Import({ ApiSecurityConfiguration.class, ProblemDetailsAdvice.class, GeoWebConfiguration.class })
 class GeoControllersTest {
 
@@ -60,6 +61,9 @@ class GeoControllersTest {
 
     @MockitoBean
     GeocodingService geocodingService;
+
+    @MockitoBean
+    io.github.ilyaslabs.foodstack.geo.core.application.CityService cityService;
 
     @MockitoBean
     JwtDecoder jwtDecoder;
@@ -150,6 +154,35 @@ class GeoControllersTest {
             .andExpect(jsonPath("$.peakMultiplierPercent").value(150))
             .andExpect(jsonPath("$.peakWindows[0].days[0]").value("FRIDAY"))
             .andExpect(jsonPath("$.peakWindows[0].start").value("19:00"));
+    }
+
+    @Test
+    @DisplayName("cities: listed for anyone signed in, added and changed with If-Match by geo:manage only")
+    void cities() throws Exception {
+        io.github.ilyaslabs.foodstack.geo.core.application.City lahore = new io.github.ilyaslabs.foodstack.geo.core.application.City(
+                "c1", java.util.Map.of("en", "Lahore"), new GeoPoint(31.52, 74.35), true,
+                new io.github.ilyaslabs.foodstack.geo.core.application.CityPricing(20_000, 0, 12_000, 0, null, 100, List.of()), 4,
+                null);
+        given(this.cityService.list()).willReturn(List.of(lahore));
+        given(this.cityService.update(eq("c1"), org.mockito.ArgumentMatchers.any(), eq(3L), eq("admin-1"))).willReturn(lahore);
+        String body = "{\"name\":{\"en\":\"Lahore\"},\"centre\":{\"lat\":31.52,\"lng\":74.35},\"active\":true,"
+                + "\"pricing\":{\"baseChargeMinor\":20000,\"perKmMinor\":0,\"maxDistanceMeters\":12000}}";
+
+        this.mvc.perform(get("/api/v1/geo/cities").with(owner("s1")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].name.en").value("Lahore"))
+            .andExpect(jsonPath("$[0].pricing.maxDistanceMeters").value(12_000));
+        this.mvc.perform(get("/api/v1/geo/cities")).andExpect(status().isUnauthorized());
+        this.mvc.perform(put("/api/v1/geo/cities/c1").with(admin()).header("If-Match", "\"city-3\"")
+            .contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isOk())
+            .andExpect(header().string("ETag", "\"city-4\""));
+        verify(this.cityService).update(eq("c1"), eq(new io.github.ilyaslabs.foodstack.geo.core.application.CityInput(
+                java.util.Map.of("en", "Lahore"), new GeoPoint(31.52, 74.35), true,
+                new io.github.ilyaslabs.foodstack.geo.core.application.CityPricing(20_000, 0, 12_000, 0, null, 100, List.of()))),
+                eq(3L), eq("admin-1"));
+        this.mvc.perform(post("/api/v1/geo/cities").with(owner("s1")).contentType(MediaType.APPLICATION_JSON).content(body))
+            .andExpect(status().isForbidden());
     }
 
     private static JwtRequestPostProcessor admin() {

@@ -14,7 +14,8 @@ public final class ModuleRoutes {
 
     static {
         Map<String, List<String>> prefixes = new LinkedHashMap<>();
-        prefixes.put("identity", List.of("/api/v1/auth", "/api/v1/me", "/api/v1/users", "/oauth2", "/.well-known"));
+        prefixes.put("identity", List.of("/api/v1/auth", "/api/v1/me", "/api/v1/users", "/oauth2", "/.well-known",
+                "/api/v1/audit"));
         prefixes.put("settings", List.of("/api/v1/settings"));
         prefixes.put("media", List.of("/api/v1/media"));
         prefixes.put("geo", List.of("/api/v1/geo", "/api/v1/zones"));
@@ -27,6 +28,8 @@ public final class ModuleRoutes {
         prefixes.put("rider", List.of("/api/v1/riders", "/api/v1/rider"));
         prefixes.put("dispatch", List.of("/api/v1/deliveries", "/api/v1/dispatch"));
         prefixes.put("notification", List.of("/api/v1/notifications", "/api/v1/devices"));
+        prefixes.put("ledger", List.of("/api/v1/ledger", "/api/v1/payouts"));
+        prefixes.put("review", List.of("/api/v1/reviews"));
         PREFIXES = Map.copyOf(prefixes);
     }
 

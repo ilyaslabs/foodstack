@@ -9,12 +9,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
-import io.github.ilyaslabs.foodstack.store.core.application.Address;
-import io.github.ilyaslabs.foodstack.store.core.application.Closure;
-import io.github.ilyaslabs.foodstack.store.core.application.Commission;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.store.api.StoreStatus;
 import io.github.ilyaslabs.foodstack.store.api.TimeRange;
+import io.github.ilyaslabs.foodstack.store.core.application.Address;
+import io.github.ilyaslabs.foodstack.store.core.application.Closure;
+import io.github.ilyaslabs.foodstack.store.core.application.Commission;
+import io.github.ilyaslabs.foodstack.store.core.application.CommissionChange;
+import io.github.ilyaslabs.foodstack.store.core.application.PaymentCollection;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
@@ -76,8 +78,20 @@ public class StoreDocument {
     /** Overrides the brand commission when set (PRD BB-8). */
     private Commission commissionOverride;
 
-    /** {@code OPERATOR} until direct collection arrives (M4). */
+    /** {@code OPERATOR} or {@code DIRECT}: who collects card payments (PRD DP-2); the same as {@code collection.mode}. */
     private String paymentCollection = "OPERATOR";
+
+    /** The direct-collection permission with its credit limit and reason, or {@code null} before it was ever set. */
+    private PaymentCollection collection;
+
+    /** The operator's city the branch is in (PRD DR-1, DR-1b), or {@code null}. */
+    private String cityId;
+
+    /** Width of the kitchen printer's paper roll: 80 (default) or 58 mm. */
+    private Integer ticketPaperMm;
+
+    /** Dated changes of the branch's own commission (PRD FI-2); a {@code null} commission goes back to the brand's. */
+    private List<CommissionChange> commissionChanges = new ArrayList<>();
 
     private StoreStatus status;
 
@@ -269,6 +283,14 @@ public class StoreDocument {
         this.paymentCollection = paymentCollection;
     }
 
+    public PaymentCollection getCollection() {
+        return this.collection;
+    }
+
+    public void setCollection(PaymentCollection collection) {
+        this.collection = collection;
+    }
+
     public StoreStatus getStatus() {
         return this.status;
     }
@@ -315,5 +337,29 @@ public class StoreDocument {
 
     public void setVersion(Long version) {
         this.version = version;
+    }
+
+    public String getCityId() {
+        return this.cityId;
+    }
+
+    public void setCityId(String cityId) {
+        this.cityId = cityId;
+    }
+
+    public Integer getTicketPaperMm() {
+        return this.ticketPaperMm;
+    }
+
+    public void setTicketPaperMm(Integer ticketPaperMm) {
+        this.ticketPaperMm = ticketPaperMm;
+    }
+
+    public List<CommissionChange> getCommissionChanges() {
+        return this.commissionChanges;
+    }
+
+    public void setCommissionChanges(List<CommissionChange> commissionChanges) {
+        this.commissionChanges = commissionChanges;
     }
 }

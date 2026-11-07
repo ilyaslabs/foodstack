@@ -14,8 +14,11 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.mongo.ShardKeys;
+import io.github.ilyaslabs.foodstack.platform.security.BranchBrands;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
+import io.github.ilyaslabs.foodstack.store.core.application.BranchAccessBackfill;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuCache;
+import io.github.ilyaslabs.foodstack.store.core.application.MenuPrices;
 import io.github.ilyaslabs.foodstack.store.core.application.MenuService;
 import io.github.ilyaslabs.foodstack.store.core.application.OrderValidationService;
 import io.github.ilyaslabs.foodstack.store.core.application.SlugBackfill;
@@ -26,10 +29,11 @@ import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.ItemOverrideRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuItemRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.MenuSectionRepository;
+import io.github.ilyaslabs.foodstack.store.core.persistence.PriceChangeRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugRepository;
-import tools.jackson.databind.json.JsonMapper;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -39,6 +43,7 @@ import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.kafka.core.KafkaAdmin;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Everything the store module runs on: database {@code foodstack_store} with its shard keys,
@@ -59,7 +64,8 @@ public class StoreConfiguration {
             .hashed("store_slugs", "_id")
             .hashed("store_menu_sections", "brandId")
             .hashed("store_menu_items", "brandId")
-            .hashed("store_item_overrides", "storeId");
+            .hashed("store_item_overrides", "storeId")
+            .hashed("store_price_changes", "brandId");
     }
 
     @Bean
@@ -107,10 +113,20 @@ public class StoreConfiguration {
 
     @Bean
     StoreService storeService(BrandRepository brandRepository, StoreRepository storeRepository,
-            StoreSlugRepository storeSlugRepository, MenuItemRepository menuItemRepository, SettingsApi settingsApi, MediaApi mediaApi, IdentityApi identityApi,
-            GeoApi geoApi, OutboxWriter storeOutbox, ModuleMongo storeMongo, Clock clock) {
-        return new StoreService(brandRepository, storeRepository, storeSlugRepository, menuItemRepository, settingsApi, mediaApi, identityApi,
-                geoApi, storeOutbox, storeMongo.transactionTemplate(), clock, new BranchTimeZones());
+            StoreSlugRepository storeSlugRepository, MenuItemRepository menuItemRepository, SettingsApi settingsApi,
+            MediaApi mediaApi, IdentityApi identityApi, GeoApi geoApi, OutboxWriter storeOutbox, ModuleMongo storeMongo,
+            Clock clock, ObjectProvider<BranchBrands> branchBrands) {
+        StoreService service = new StoreService(brandRepository, storeRepository, storeSlugRepository, menuItemRepository,
+                settingsApi, mediaApi, identityApi, geoApi, storeOutbox, storeMongo.transactionTemplate(), clock,
+                new BranchTimeZones());
+        service.setBranchBrands(branchBrands.getIfAvailable());
+        return service;
+    }
+
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    BranchAccessBackfill storeBranchAccessBackfill(StoreService storeService) {
+        return new BranchAccessBackfill(storeService);
     }
 
     @Bean
@@ -123,9 +139,18 @@ public class StoreConfiguration {
     MenuService storeMenuService(MenuSectionRepository menuSectionRepository, MenuItemRepository menuItemRepository,
             ItemOverrideRepository itemOverrideRepository, StoreRepository storeRepository, BrandRepository brandRepository,
             SettingsApi settingsApi, MediaApi mediaApi, MenuCache storeMenuCache, OutboxWriter storeOutbox,
-            ModuleMongo storeMongo, Clock clock) {
+            ModuleMongo storeMongo, Clock clock, MenuPrices storeMenuPrices) {
         return new MenuService(menuSectionRepository, menuItemRepository, itemOverrideRepository, storeRepository,
-                brandRepository, settingsApi, mediaApi, storeMenuCache, storeOutbox, storeMongo.transactionTemplate(), clock);
+                brandRepository, settingsApi, mediaApi, storeMenuCache, storeOutbox, storeMongo.transactionTemplate(), clock,
+                storeMenuPrices);
+    }
+
+    @Bean
+    MenuPrices storeMenuPrices(MenuItemRepository menuItemRepository, ItemOverrideRepository itemOverrideRepository,
+            PriceChangeRepository priceChangeRepository, StoreRepository storeRepository, BrandRepository brandRepository,
+            SettingsApi settingsApi, MenuCache storeMenuCache, OutboxWriter storeOutbox, ModuleMongo storeMongo, Clock clock) {
+        return new MenuPrices(menuItemRepository, itemOverrideRepository, priceChangeRepository, storeRepository,
+                brandRepository, settingsApi, storeMenuCache, storeOutbox, storeMongo.transactionTemplate(), clock);
     }
 
     @Bean

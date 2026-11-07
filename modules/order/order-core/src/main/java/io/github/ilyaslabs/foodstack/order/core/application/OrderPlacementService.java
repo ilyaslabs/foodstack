@@ -22,10 +22,11 @@ import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderConfirmed;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderPlaced;
 import io.github.ilyaslabs.foodstack.order.core.persistence.ActiveOrderDocument;
-import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument.TimelineEntry;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument;
+import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument.TimelineEntry;
 import io.github.ilyaslabs.foodstack.order.core.persistence.PlacementKeyDocument;
 import io.github.ilyaslabs.foodstack.payment.api.CardSessionView;
+import io.github.ilyaslabs.foodstack.payment.api.MerchantView;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
 import io.github.ilyaslabs.foodstack.payment.api.StartCardRequest;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
@@ -39,9 +40,9 @@ import io.github.ilyaslabs.foodstack.promotion.api.CouponRequest;
 import io.github.ilyaslabs.foodstack.promotion.api.PromotionApi;
 import io.github.ilyaslabs.foodstack.store.api.OrderValidationView.StoreSnapshot;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -136,11 +137,14 @@ public class OrderPlacementService {
 
         String orderId = Ids.newId();
         StoreSnapshot store = checkout.store();
+        MerchantView merchant = (request.paymentMethod() == PaymentMethod.CARD) ? this.payments.resolveMerchant(store.storeId())
+                : MerchantView.BY_OPERATOR;
         CouponEvaluation coupon = checkout.coupon();
         if (coupon != null) {
             CouponEvaluation held = this.promotions.reserve(orderId, new CouponRequest(coupon.code(), customerId, store.storeId(),
                     store.brandId(), store.city(), checkout.subtotalMinor(), checkout.deliveryChargeMinor(),
-                    request.fulfilment(), request.paymentMethod(), true, checkout.currency()));
+                    request.fulfilment(), request.paymentMethod(), MerchantView.OPERATOR.equals(merchant.collectedBy()),
+                    checkout.currency(), store.cityId()));
             if (!held.applies() || held.totalDiscountMinor() != coupon.totalDiscountMinor()) {
                 if (held.applies()) {
                     this.promotions.release(orderId);
@@ -152,7 +156,7 @@ public class OrderPlacementService {
 
         Instant now = this.clock.instant();
         boolean cash = request.paymentMethod() == PaymentMethod.CASH;
-        OrderDocument order = newOrder(orderId, customerId, request, checkout, now);
+        OrderDocument order = newOrder(orderId, customerId, request, checkout, merchant, now);
         OrderDocument confirmed = null;
         try {
             OrderDocument saved = this.transaction.execute((status) -> {
@@ -198,7 +202,8 @@ public class OrderPlacementService {
         try {
             session = this.payments.startCard(new StartCardRequest(orderId, confirmed.number(), customerId,
                     checkout.totalMinor(), checkout.currency(), store.brandName(), this.webUrl + "/orders/" + orderId,
-                    this.webUrl + "/orders/" + orderId + "?payment=cancelled"));
+                    this.webUrl + "/orders/" + orderId + "?payment=cancelled", confirmed.merchantAccountId(),
+                    this.webUrl + "/pay/" + orderId));
         }
         catch (ModuleException ex) {
             this.lifecycle.paymentFailed(orderId, "UNAVAILABLE");
@@ -253,16 +258,17 @@ public class OrderPlacementService {
                 order.paymentMethod(), order.currency(), order.language(), order.lines(), order.totals(), order.coupon(),
                 order.commission(), order.prepMinutes(), order.travelMinutes(), this.lifecycle.acceptBy(now), null, null, 0, 0, 0,
                 order.cartVersion(), List.copyOf(timeline), null, order.placedAt(), now, 1, order.deliveryCodeCipher(), null, null,
-                order.normalDeliveryChargeMinor());
+                order.normalDeliveryChargeMinor(), order.merchantAccountId());
     }
 
-    private OrderDocument newOrder(String orderId, String customerId, PlaceOrder request, CheckoutView checkout, Instant now) {
+    private OrderDocument newOrder(String orderId, String customerId, PlaceOrder request, CheckoutView checkout,
+            MerchantView merchant, Instant now) {
         StoreSnapshot s = checkout.store();
         String storeName = (s.branchName() == null || s.branchName().isBlank()) ? s.brandName()
                 : s.brandName() + " · " + s.branchName();
         OrderDocument.Store store = new OrderDocument.Store(s.storeId(), s.brandId(), storeName, s.slug(), s.addressLine(), s.city(),
                 (s.location() != null) ? s.location().lat() : 0, (s.location() != null) ? s.location().lng() : 0,
-                s.logoUrls(), s.ownerUserIds(), s.timezone());
+                s.logoUrls(), s.ownerUserIds(), s.timezone(), s.cityId());
         List<OrderDocument.Line> lines = checkout.lines().stream()
             .map((line) -> new OrderDocument.Line(line.priced().itemId(), line.priced().name(), line.priced().quantity(),
                     line.priced().unitPriceMinor(),
@@ -298,7 +304,8 @@ public class OrderPlacementService {
                 null, null, 0, 0, 0, checkout.cartVersion(), List.copyOf(timeline), null, now, now, 0,
                 encrypt(this.lifecycle.deliveryCodeFor(request.fulfilment(), totals.totalMinor())), null, null,
                 (request.fulfilment() == Fulfilment.DELIVERY && checkout.delivery() != null) ? checkout.delivery().chargeMinor()
-                        : null);
+                        : null,
+                merchant.accountId());
     }
 
     private String customerName(String customerId) {

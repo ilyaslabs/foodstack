@@ -68,7 +68,7 @@ class OrdersController {
     record ReasonRequest(String reason) {
     }
 
-    record RefundRequest(Long amountMinor, String reason) {
+    record RefundRequest(Long amountMinor, String reason, String fundedBy) {
     }
 
     @PostMapping("/api/v1/orders")
@@ -91,6 +91,13 @@ class OrdersController {
     @PreAuthorize("isAuthenticated()")
     OrderPage mine(@RequestParam(required = false) String before, @RequestParam(defaultValue = "20") int limit) {
         return this.orders.mine(before, limit);
+    }
+
+    /** The customer's orders in full, for their data export (PRD ID-7). */
+    @GetMapping("/api/v1/orders/mine/export")
+    @PreAuthorize("isAuthenticated()")
+    List<OrderDetails> export() {
+        return this.orders.export();
     }
 
     @GetMapping("/api/v1/orders")
@@ -124,7 +131,8 @@ class OrdersController {
     @PostMapping("/api/v1/orders/{orderId}/refund")
     @PreAuthorize("hasAuthority('order:manage')")
     OrderDetails refund(@PathVariable String orderId, @RequestBody RefundRequest body) {
-        return this.orders.refund(orderId, (body.amountMinor() != null) ? body.amountMinor() : 0, body.reason());
+        return this.orders.refund(orderId, (body.amountMinor() != null) ? body.amountMinor() : 0, body.reason(),
+                body.fundedBy());
     }
 
     @GetMapping("/api/v1/orders/stores/{storeId}/board")

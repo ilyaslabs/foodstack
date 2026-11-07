@@ -58,7 +58,7 @@ class AddressesController {
                 (r.lng() != null) ? r.lng() : Double.NaN, r.addressLine(), r.instructions(), Boolean.TRUE.equals(r.preferred()));
     }
 
-    private static AddressResponse toResponse(SavedAddress a) {
+    static AddressResponse toResponse(SavedAddress a) {
         return new AddressResponse(a.id(), a.label(), a.name(), a.lat(), a.lng(), a.addressLine(), a.instructions(),
                 a.preferred(), a.updatedAt().getEpochSecond(), a.version());
     }

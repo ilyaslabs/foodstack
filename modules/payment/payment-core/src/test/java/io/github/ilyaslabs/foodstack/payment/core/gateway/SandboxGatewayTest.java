@@ -6,6 +6,7 @@ import java.util.Map;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.GatewayException;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.SessionRequest;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.WebhookEvent;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -50,5 +51,17 @@ class SandboxGatewayTest {
         byte[] changed = new String(paid.getKey()).replace("1000", "1").getBytes();
         assertThatThrownBy(() -> this.gateway.parseWebhook(changed, paid.getValue())).isInstanceOf(GatewayException.class);
         assertThatThrownBy(() -> this.gateway.parseWebhook(paid.getKey(), Map.of())).isInstanceOf(GatewayException.class);
+    }
+
+    @Test
+    @DisplayName("on a store's account, keys starting with sbx_ verify and anything else is refused")
+    void accountKeys() {
+        SandboxGateway sandbox = new SandboxGateway("http://localhost:8080", "secret", JsonMapper.builder().build());
+        sandbox.verify();
+        sandbox.forAccount("sbx_live_1").verify();
+        assertThatThrownBy(() -> sandbox.forAccount("sk_live_1").verify())
+            .isInstanceOf(GatewayException.class);
+        assertThat(sandbox.forAccount("sbx_live_1").pageToken("o1"))
+            .isEqualTo(sandbox.pageToken("o1"));
     }
 }

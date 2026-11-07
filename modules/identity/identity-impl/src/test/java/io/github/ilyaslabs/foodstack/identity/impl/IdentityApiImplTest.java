@@ -72,6 +72,7 @@ class IdentityApiImplTest {
         callerWith("u2");
         assertThatThrownBy(() -> this.api.getUser("u1")).isInstanceOf(ModuleException.Forbidden.class);
         callerWith("owner", "store:portal");
-        assertThatThrownBy(() -> this.api.revokeStoreAccess("u1", "b1", "s1")).isInstanceOf(ModuleException.Forbidden.class);
+        assertThatThrownBy(() -> this.api.revokeStoreAccess("u1", "s1")).isInstanceOf(ModuleException.Forbidden.class);
+        assertThatThrownBy(() -> this.api.revokeBrandAccess("u1", "b1")).isInstanceOf(ModuleException.Forbidden.class);
     }
 }

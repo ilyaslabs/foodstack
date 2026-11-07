@@ -10,6 +10,13 @@ import java.util.Set;
  * @param radiusMeters how far from the store
  * @param limit most riders to return, nearest first
  * @param excludeRiderIds riders to leave out (already asked, or busy)
+ * @param cityId the store's city; riders of another city are left out, riders without a city are not.
+ *        {@code null} for any city
  */
-public record RiderSearch(double lat, double lng, int radiusMeters, int limit, Set<String> excludeRiderIds) {
+public record RiderSearch(double lat, double lng, int radiusMeters, int limit, Set<String> excludeRiderIds, String cityId) {
+
+    /** A search in any city. */
+    public RiderSearch(double lat, double lng, int radiusMeters, int limit, Set<String> excludeRiderIds) {
+        this(lat, lng, radiusMeters, limit, excludeRiderIds, null);
+    }
 }

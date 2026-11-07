@@ -105,6 +105,7 @@ public class StoreSearchService {
         boolean open = OpenNow.isOpen(s.openingHours(), s.closedDates(), s.temporarilyClosed(), s.timezone(), now);
         return new StoreCard(s.storeId(), s.slug(), s.brandId(), s.brandName(), s.branchName(), s.branchCount(), s.description(),
                 s.cuisines(), s.logoUrls(), s.coverUrls(), s.area(), s.city(), hit.distanceMeters(), s.deliveryMode(),
-                s.pickupEnabled(), open, s.temporarilyClosed(), s.prepMinutes(), s.dietaryTags());
+                s.pickupEnabled(), open, s.temporarilyClosed(), s.prepMinutes(), s.dietaryTags(), s.ratingCount(),
+                s.ratingAverage());
     }
 }

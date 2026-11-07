@@ -23,7 +23,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 public final class FoodstackPlatform {
 
     public static final String[] MODULES = { "identity", "settings", "media", "geo", "store", "search", "promotion", "cart",
-        "payment", "order", "rider", "dispatch", "notification" };
+        "payment", "order", "rider", "dispatch", "notification", "ledger", "review" };
 
     public static final String ADMIN_EMAIL = "admin@it.foodstack.local";
 
@@ -111,7 +111,7 @@ public final class FoodstackPlatform {
             String issuer = moduleUrls.get("identity");
             // Start in dependency order so a module's callers find it running.
             for (String module : List.of("media", "settings", "identity", "geo", "store", "search", "promotion", "payment", "cart",
-                    "order", "rider", "dispatch", "notification")) {
+                    "order", "rider", "dispatch", "notification", "ledger", "review")) {
                 Map<String, String> properties = new LinkedHashMap<>(shared);
                 properties.put("server.port", String.valueOf(ports.get(module)));
                 properties.put("foodstack.security.issuer", issuer);
@@ -177,6 +177,9 @@ public final class FoodstackPlatform {
         properties.put("spring.mail.host", FoodstackContainers.mailpit().getHost());
         properties.put("spring.mail.port", String.valueOf(FoodstackContainers.mailpit().getMappedPort(1025)));
         properties.put("foodstack.notification.from-address", "no-reply@it.foodstack.local");
+        // Account deletion runs within seconds instead of after 14 days (PRD ID-7)
+        properties.put("foodstack.identity.deletion-grace", "PT2S");
+        properties.put("foodstack.identity.deletion-sweep", "PT2S");
         // No calls to a public geocoder from the tests
         properties.put("foodstack.geo.geocoding.provider", "none");
         return properties;

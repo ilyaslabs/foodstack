@@ -5,7 +5,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { map } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatListModule } from '@angular/material/list';
+import { MatRippleModule } from '@angular/material/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSidenavModule } from '@angular/material/sidenav';
 
@@ -32,7 +32,7 @@ interface NavItem {
     RouterLinkActive,
     MatButtonModule,
     MatDividerModule,
-    MatListModule,
+    MatRippleModule,
     MatMenuModule,
     MatSidenavModule,
     BrandHeader,
@@ -108,9 +108,23 @@ export class Shell {
       permission: 'store:manage',
     },
     {
+      path: '/price-approvals',
+      label: 'Price approvals',
+      icon: 'check_circle',
+      exact: true,
+      permission: 'store:manage',
+    },
+    {
       path: '/delivery-pricing',
       label: 'Delivery pricing',
       icon: 'delivery',
+      exact: false,
+      permission: 'geo:manage',
+    },
+    {
+      path: '/cities',
+      label: 'Cities',
+      icon: 'location_city',
       exact: false,
       permission: 'geo:manage',
     },
@@ -120,6 +134,20 @@ export class Shell {
       icon: 'local_offer',
       exact: false,
       permission: ['promotion:manage', 'store:portal'],
+    },
+    {
+      path: '/finance',
+      label: 'Finance',
+      icon: 'account_balance',
+      exact: false,
+      permission: ['ledger:read', 'ledger:store'],
+    },
+    {
+      path: '/reviews',
+      label: 'Reviews',
+      icon: 'rate_review',
+      exact: false,
+      permission: 'review:moderate',
     },
     {
       path: '/users',
@@ -157,11 +185,25 @@ export class Shell {
       permission: 'settings:manage',
     },
     {
+      path: '/settings/messages',
+      label: 'Messages',
+      icon: 'edit',
+      exact: false,
+      permission: 'settings:manage',
+    },
+    {
       path: '/settings/emails',
       label: 'Email log',
       icon: 'mail',
       exact: false,
       permission: ['settings:manage', 'order:manage'],
+    },
+    {
+      path: '/audit',
+      label: 'Audit log',
+      icon: 'history',
+      exact: false,
+      permission: 'identity:audit:read',
     },
   ];
 
@@ -175,11 +217,18 @@ export class Shell {
           permissions.has(p),
         ),
     );
+    const payouts = items.findIndex((item) => item.path === '/finance');
+    if (payouts >= 0 && !permissions.has('ledger:read')) {
+      items[payouts] = { ...items[payouts]!, label: 'Payouts' };
+    }
     if (!permissions.has('store:manage') && permissions.has('store:portal')) {
       const storeIds = this.me()?.storeIds ?? [];
+      // a brand owner runs every branch of the brand; a branch manager usually one branch
+      const brandOwner = (this.me()?.brandIds ?? []).length > 0;
+      const single = !brandOwner && storeIds.length === 1;
       items.splice(1, 0, {
-        path: storeIds.length === 1 ? `/stores/${storeIds[0]}` : '/stores',
-        label: storeIds.length === 1 ? 'My store' : 'My stores',
+        path: single ? `/stores/${storeIds[0]}` : '/stores',
+        label: brandOwner ? 'Branches' : single ? 'My store' : 'My stores',
         icon: 'storefront',
         exact: false,
       });

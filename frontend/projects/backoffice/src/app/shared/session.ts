@@ -16,6 +16,11 @@ export class Session {
   /** Store owners and staff, limited to their own branches. */
   readonly storePortal = computed(() => this.permissions().has('store:portal'));
 
+  /** Whether the user owns the brand (PRD BB-5): every branch, the menu and branch managers. */
+  ownsBrand(brandId: string | null | undefined): boolean {
+    return !!brandId && (this.me()?.brandIds ?? []).includes(brandId);
+  }
+
   can(permission: string): boolean {
     return this.permissions().has(permission);
   }

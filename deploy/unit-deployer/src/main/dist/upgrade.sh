@@ -31,7 +31,9 @@ cp -a "$FOODSTACK_HOME"/*.sh "$previous/"
 
 info "Installing $(cat "$release/VERSION")"
 rm -rf "${FOODSTACK_HOME:?}/app"
-cp -a "$release/app" "$release/docker-compose.yml" "$release/VERSION" "$release/lib" "$release/proxy" "$FOODSTACK_HOME/"
+cp -a "$release/app" "$release/docker-compose.yml" "$release/VERSION" "$release/lib" "$FOODSTACK_HOME/"
+# releases before 2026-11 built their own proxy image; it is no longer used
+rm -rf "${FOODSTACK_HOME:?}/proxy"
 cp -a "$release"/*.sh "$FOODSTACK_HOME/"
 cp -a "$release/config/Caddyfile" "$release/config/backoffice.conf.template" "$FOODSTACK_HOME/config/"
 mkdir -p "$FOODSTACK_HOME/config/push"

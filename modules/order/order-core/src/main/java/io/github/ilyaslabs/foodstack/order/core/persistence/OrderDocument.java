@@ -56,6 +56,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param handedBackAt when support gave an operator delivery back to the store, or {@code null}
  * @param normalDeliveryChargeMinor the delivery charge before a free-delivery threshold or coupon, which rider pay is
  *        based on; {@code null} for pickup and for orders placed before it was kept
+ * @param merchantAccountId the brand's or branch's merchant account the card payment goes into, or {@code null}
+ *        for the operator's (snapshotted at placement, so refunds use the same account)
  */
 @Document("order_orders")
 public record OrderDocument(@Id String id, String number, String customerId, String customerName, String contactPhone,
@@ -64,7 +66,12 @@ public record OrderDocument(@Id String id, String number, String customerId, Str
         Commission commission, int prepMinutes, int travelMinutes, Instant acceptBy, Instant readyBy, String paymentUrl,
         long paidMinor, long refundRequestedMinor, long refundedMinor, long cartVersion, List<TimelineEntry> timeline,
         String closeReason, Instant placedAt, Instant updatedAt, long revision, String deliveryCodeCipher, Rider rider,
-        Instant handedBackAt, Long normalDeliveryChargeMinor) {
+        Instant handedBackAt, Long normalDeliveryChargeMinor, String merchantAccountId) {
+
+    /** Who collects the card payment: the store when it goes into a brand's or branch's own account (TDD 5.4). */
+    public String collectedBy() {
+        return (this.merchantAccountId != null) ? "STORE" : "OPERATOR";
+    }
 
     /**
      * The rider on the order, as dispatch reported it.
@@ -89,9 +96,10 @@ public record OrderDocument(@Id String id, String number, String customerId, Str
      * @param logoUrls logo variants
      * @param ownerUserIds people who manage the branch
      * @param timezone IANA time zone
+     * @param cityId the operator's city of the branch, or {@code null}
      */
     public record Store(String storeId, String brandId, String name, String slug, String addressLine, String city, double lat,
-            double lng, Map<String, String> logoUrls, Set<String> ownerUserIds, String timezone) {
+            double lng, Map<String, String> logoUrls, Set<String> ownerUserIds, String timezone, String cityId) {
     }
 
     /**

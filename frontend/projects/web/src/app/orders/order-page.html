@@ -73,6 +73,9 @@
     @if (tracks(o)) {
       <app-delivery-tracking [order]="o" />
     }
+    @if (o.status === 'DELIVERED' || o.status === 'COLLECTED') {
+      <app-rate-order [order]="o" />
+    }
     @if (push.state() === 'ask' && tracks(o)) {
       <p class="banner push">
         <fs-icon name="notifications" /> <span>{{ ui.t('pushAsk') }}</span>

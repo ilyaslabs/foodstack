@@ -63,3 +63,18 @@ databaseChangeLog:
       changes:
         - createCollection:
             collectionName: store_slugs
+  - changeSet:
+      id: store-7
+      author: foodstack
+      comment: "store_price_changes: price changes waiting for operator approval (PRD ST-6, BB-4); shard key { brandId: hashed }"
+      changes:
+        - createCollection:
+            collectionName: store_price_changes
+        - createIndex:
+            collectionName: store_price_changes
+            keys: '{ "status": 1, "requestedAt": 1 }'
+            options: '{ "name": "status_requested" }'
+        - createIndex:
+            collectionName: store_price_changes
+            keys: '{ "brandId": 1, "status": 1 }'
+            options: '{ "name": "brand_status" }'

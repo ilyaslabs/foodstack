@@ -41,3 +41,12 @@ databaseChangeLog:
             collectionName: dispatch_active
             keys: '{ "status": 1, "bucket": 1, "offerExpiresAt": 1 }'
             options: '{ "name": "status_bucket_offer_expiry" }'
+  - changeSet:
+      id: dispatch-3
+      author: foodstack
+      comment: "M4 account deletion (PRD ID-7): a deleted customer's jobs are found by customer"
+      changes:
+        - createIndex:
+            collectionName: dispatch_jobs
+            keys: '{ "customerId": 1 }'
+            options: '{ "name": "customer" }'

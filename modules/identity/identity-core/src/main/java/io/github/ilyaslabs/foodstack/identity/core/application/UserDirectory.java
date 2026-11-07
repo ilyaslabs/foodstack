@@ -98,6 +98,7 @@ public class UserDirectory {
             throw new ModuleException.Conflict("You cannot block your own account", "CANNOT_BLOCK_SELF");
         }
         UserDocument user = find(userId);
+        requireNotDeleted(user);
         if (user.getStatus() == UserStatus.BLOCKED) {
             return this.users.toAccount(user);
         }
@@ -118,6 +119,7 @@ public class UserDirectory {
     /** Lets a blocked account sign in again. */
     public UserAccount unblock(String userId) {
         UserDocument user = find(userId);
+        requireNotDeleted(user);
         if (user.getStatus() == UserStatus.ACTIVE) {
             return this.users.toAccount(user);
         }
@@ -144,5 +146,11 @@ public class UserDirectory {
      * @param nextCursor pass as {@code afterId} for the next page; {@code null} on the last page
      */
     public record UserPage(List<UserAccount> items, String nextCursor) {
+    }
+
+    private static void requireNotDeleted(UserDocument user) {
+        if (user.getStatus() == UserStatus.DELETED) {
+            throw new ModuleException.Conflict("The account was deleted", "USER_DELETED");
+        }
     }
 }

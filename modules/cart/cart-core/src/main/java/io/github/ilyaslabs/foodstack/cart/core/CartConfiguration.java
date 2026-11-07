@@ -6,6 +6,7 @@ import io.github.ilyaslabs.foodstack.cart.core.application.CartService;
 import io.github.ilyaslabs.foodstack.cart.core.application.CheckoutService;
 import io.github.ilyaslabs.foodstack.cart.core.persistence.CartRepository;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
+import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
@@ -64,7 +65,7 @@ public class CartConfiguration {
 
     @Bean
     CheckoutService cartCheckoutService(CartService cartService, GeoApi geoApi, PromotionApi promotionApi,
-            SettingsApi settingsApi) {
-        return new CheckoutService(cartService, geoApi, promotionApi, settingsApi);
+            SettingsApi settingsApi, PaymentApi paymentApi) {
+        return new CheckoutService(cartService, geoApi, promotionApi, settingsApi, paymentApi);
     }
 }

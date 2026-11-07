@@ -13,7 +13,6 @@ import { BrandingStore, Icon, LocaleStore, PushRegistration } from '@foodstack/u
 import { AddressBook, addressTitle, locationOf } from './addresses/address-book';
 import { CartStore } from './cart/cart-store';
 import { Ui } from './i18n';
-import { LocationDialog } from './location/location-dialog';
 import { LocationStore } from './location-store';
 import { NotificationBell } from './notifications/notification-bell';
 
@@ -102,7 +101,9 @@ export class App {
     return location.label || this.ui.t('currentLocation');
   });
 
-  protected pickLocation(): void {
+  /** The address dialog loads on first use, so its search box and map code stay out of the first download. */
+  protected async pickLocation(): Promise<void> {
+    const { LocationDialog } = await import('./location/location-dialog');
     this.dialog.open(LocationDialog, {
       width: '560px',
       maxWidth: 'calc(100vw - 32px)',

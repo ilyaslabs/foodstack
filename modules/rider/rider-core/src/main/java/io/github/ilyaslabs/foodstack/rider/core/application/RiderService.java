@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
+import io.github.ilyaslabs.foodstack.geo.api.CityView;
+import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.RiderAccessGrant;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
@@ -60,8 +62,19 @@ public class RiderService {
 
     private final Clock clock;
 
+    private final GeoApi geo;
+
     public RiderService(MongoTemplate mongo, TransactionTemplate transaction, OutboxWriter outbox, IdentityApi identity,
             ServiceCalls serviceCalls, RiderPresence presence, PiiCipher pii, Clock clock) {
+        this(mongo, transaction, outbox, identity, serviceCalls, presence, pii, clock, null);
+    }
+
+    /**
+     * @param geo the operator's cities, to check a rider's city; {@code null} accepts no city
+     */
+    public RiderService(MongoTemplate mongo, TransactionTemplate transaction, OutboxWriter outbox, IdentityApi identity,
+            ServiceCalls serviceCalls, RiderPresence presence, PiiCipher pii, Clock clock, GeoApi geo) {
+        this.geo = geo;
         this.mongo = mongo;
         this.transaction = transaction;
         this.outbox = outbox;
@@ -115,7 +128,7 @@ public class RiderService {
             throw changed();
         }
         Update update = new Update().set("name", clean.name()).set("phoneCipher", this.pii.encrypt(clean.phone()))
-            .set("vehicle", clean.vehicle().name()).set("plate", clean.plate()).set("city", clean.city())
+            .set("vehicle", clean.vehicle().name()).set("plate", clean.plate()).set("city", clean.city()).set("cityId", clean.cityId())
             .set("updatedAt", this.clock.instant()).inc("version", 1);
         long matched = this.mongo.updateFirst(Query.query(Criteria.where("_id").is(riderId).and("version").is(rider.version())),
                 update, RiderDocument.class).getMatchedCount();
@@ -151,10 +164,16 @@ public class RiderService {
 
     // ---- store ---------------------------------------------------------------------------------
 
-    /** A store's own riders, for its people and operator staff. */
+    /**
+     * The riders who can deliver a branch's orders, for its people and operator staff: its own
+     * riders and those of the brand's other branches (PRD BB-12).
+     */
     public List<RiderDetails> storeRiders(String storeId) {
         CurrentUser.requireStoreAccess(storeId, MANAGE);
-        return this.mongo.find(Query.query(Criteria.where("kind").is(RiderKind.STORE.name()).and("storeId").is(storeId))
+        Criteria whose = CurrentUser.brandOf(storeId)
+            .map((brandId) -> new Criteria().orOperator(Criteria.where("storeId").is(storeId), Criteria.where("brandId").is(brandId)))
+            .orElse(Criteria.where("storeId").is(storeId));
+        return this.mongo.find(Query.query(new Criteria().andOperator(Criteria.where("kind").is(RiderKind.STORE.name()), whose))
             .with(Sort.by("name")), RiderDocument.class).stream().map(this::details).toList();
     }
 
@@ -215,7 +234,8 @@ public class RiderService {
         return new RiderDetails(r.id(), RiderKind.valueOf(r.kind()), r.storeId(), r.name(), phone, Vehicle.valueOf(r.vehicle()),
                 r.plate(), r.city(), RiderStatus.valueOf(r.status()), r.online(), r.lat(), r.lng(),
                 (r.lastSeenAt() != null) ? r.lastSeenAt().getEpochSecond() : null, r.activeOrderIds(),
-                acceptancePercent(r), r.deliveries(), r.createdAt().getEpochSecond(), (r.version() != null) ? r.version() : 0);
+                acceptancePercent(r), r.deliveries(), r.createdAt().getEpochSecond(), (r.version() != null) ? r.version() : 0,
+                r.cityId());
     }
 
     static int acceptancePercent(RiderDocument r) {
@@ -236,8 +256,9 @@ public class RiderService {
             throw new ModuleException.Conflict("This person is a rider already", "RIDER_EXISTS");
         }
         Instant now = this.clock.instant();
-        RiderDocument rider = new RiderDocument(user.id(), kind.name(), storeId, clean.name(), this.pii.encrypt(clean.phone()),
-                clean.vehicle().name(), clean.plate(), clean.city(), RiderStatus.ACTIVE.name(), false, now, null, null, null,
+        String brandId = (storeId != null) ? CurrentUser.brandOf(storeId).orElse(null) : null;
+        RiderDocument rider = new RiderDocument(user.id(), kind.name(), storeId, brandId, clean.name(), this.pii.encrypt(clean.phone()),
+                clean.vehicle().name(), clean.plate(), clean.city(), clean.cityId(), RiderStatus.ACTIVE.name(), false, now, null, null, null,
                 new ArrayList<>(), 0, 0, 0, now, now, null);
         RiderDocument saved = this.transaction.execute((tx) -> {
             RiderDocument inserted = this.mongo.insert(rider);
@@ -247,10 +268,10 @@ public class RiderService {
         return details(saved);
     }
 
-    private record Clean(String name, String phone, Vehicle vehicle, String plate, String city) {
+    private record Clean(String name, String phone, Vehicle vehicle, String plate, String city, String cityId) {
     }
 
-    private static Clean clean(RiderInput input) {
+    private Clean clean(RiderInput input) {
         String name = (input.name() != null) ? input.name().strip() : "";
         if (name.isEmpty() || name.length() > 60) {
             throw new ModuleException.BadRequest("Enter the rider's name (up to 60 characters)", "RIDER_INVALID");
@@ -271,7 +292,21 @@ public class RiderService {
         if (city != null && city.length() > 60) {
             throw new ModuleException.BadRequest("The city name is too long", "RIDER_INVALID");
         }
-        return new Clean(name, phone, input.vehicle(), plate, city);
+        String cityId = (input.cityId() != null && !input.cityId().isBlank()) ? input.cityId().strip() : null;
+        if (cityId != null) {
+            CityView chosen = (this.geo != null) ? this.serviceCalls.call(this.geo::cities)
+                .stream()
+                .filter((c) -> c.id().equals(input.cityId().strip()))
+                .findFirst()
+                .orElse(null) : null;
+            if (chosen == null) {
+                throw new ModuleException.BadRequest("Choose one of the operator's cities", "RIDER_CITY_UNKNOWN");
+            }
+            if (city == null && chosen.name() != null && !chosen.name().isEmpty()) {
+                city = chosen.name().values().iterator().next();
+            }
+        }
+        return new Clean(name, phone, input.vehicle(), plate, city, cityId);
     }
 
     private static void requireManage() {
@@ -285,7 +320,8 @@ public class RiderService {
         if (rider.id().equals(me) || CurrentUser.hasAuthority(MANAGE) || CurrentUser.hasAuthority(DISPATCH)) {
             return;
         }
-        if (rider.storeId() != null && CurrentUser.storeIds().contains(rider.storeId())) {
+        // a store rider rides for every branch of the brand, so each branch's people see them
+        if (rider.storeId() != null && CurrentUser.managesBrandOf(rider.storeId())) {
             return;
         }
         throw notFound();
@@ -295,7 +331,7 @@ public class RiderService {
         if (CurrentUser.hasAuthority(MANAGE)) {
             return;
         }
-        if (RiderKind.STORE.name().equals(rider.kind()) && CurrentUser.storeIds().contains(rider.storeId())) {
+        if (RiderKind.STORE.name().equals(rider.kind()) && CurrentUser.managesStore(rider.storeId())) {
             return;
         }
         throw new ModuleException.Forbidden("You cannot change this rider", "RIDER_ACCESS_DENIED");

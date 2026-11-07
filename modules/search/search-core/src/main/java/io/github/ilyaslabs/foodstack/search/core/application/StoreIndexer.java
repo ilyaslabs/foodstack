@@ -8,6 +8,8 @@ import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaView;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
+import io.github.ilyaslabs.foodstack.review.api.ReviewApi;
+import io.github.ilyaslabs.foodstack.review.api.StoreRating;
 import io.github.ilyaslabs.foodstack.search.core.engine.IndexedStore;
 import io.github.ilyaslabs.foodstack.search.core.engine.StoreSearchEngine;
 import io.github.ilyaslabs.foodstack.store.api.StoreApi;
@@ -15,6 +17,7 @@ import io.github.ilyaslabs.foodstack.store.api.StoreIdPage;
 import io.github.ilyaslabs.foodstack.store.api.StoreListingView;
 import io.github.ilyaslabs.foodstack.store.api.StoreStatus;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,10 +40,18 @@ public class StoreIndexer {
 
     private final ServiceCalls serviceCalls;
 
+    private final ReviewApi reviews;
+
     private final AtomicBoolean rebuilding = new AtomicBoolean();
 
     /** @param serviceCalls reads run as the platform: listings include branches that are not live yet (TDD 9.1) */
     public StoreIndexer(StoreApi stores, GeoApi geo, StoreSearchEngine engine, ServiceCalls serviceCalls) {
+        this(stores, geo, engine, serviceCalls, null);
+    }
+
+    /** @param reviews branch ratings for the cards (PRD RV-4), or {@code null} without the review module */
+    public StoreIndexer(StoreApi stores, GeoApi geo, StoreSearchEngine engine, ServiceCalls serviceCalls, ReviewApi reviews) {
+        this.reviews = reviews;
         this.stores = stores;
         this.geo = geo;
         this.engine = engine;
@@ -62,17 +73,33 @@ public class StoreIndexer {
             return;
         }
         if (listing.status() != StoreStatus.LIVE || listing.location() == null) {
-            this.engine.delete(storeId);
+            this.engine.delete(storeId, listing.version());
             return;
         }
+        StoreRating rating = rating(storeId);
         DeliveryAreaView area = this.geo.deliveryArea(
-                new DeliveryAreaRequest(storeId, listing.location(), listing.deliveryMode()));
+                new DeliveryAreaRequest(storeId, listing.location(), listing.deliveryMode(), listing.cityId()));
         this.engine.index(new IndexedStore(listing.storeId(), listing.slug(), listing.brandId(), listing.brandName(), listing.branchName(),
                 listing.branchCount(), listing.description(), listing.cuisines(), listing.logoUrls(), listing.coverUrls(),
                 listing.location(), listing.area(), listing.city(), listing.deliveryMode().name(), listing.pickupEnabled(),
                 listing.temporarilyClosed(), listing.prepMinutes(), listing.timezone(), listing.openingHours(),
                 listing.closedDates(), listing.dishNames(), listing.dietaryTags(),
-                (area.polygons() != null) ? area.polygons() : List.of(), listing.version()));
+                (area.polygons() != null) ? area.polygons() : List.of(), listing.version(), rating.count(), rating.average()));
+    }
+
+    private StoreRating rating(String storeId) {
+        if (this.reviews == null) {
+            return StoreRating.none(storeId);
+        }
+        try {
+            StoreRating rating = this.reviews.storeRating(storeId);
+            return (rating != null) ? rating : StoreRating.none(storeId);
+        }
+        catch (RuntimeException ex) {
+            // a branch without its rating beats a branch missing from search
+            log.warn("Could not read the rating of branch {}: {}", storeId, ex.getMessage());
+            return StoreRating.none(storeId);
+        }
     }
 
     /** A brand change (name, images, menu) touches every indexed branch of the brand. */

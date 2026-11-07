@@ -8,7 +8,13 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
-import { Earnings, Rider, RiderClient } from '@foodstack/api-client';
+import {
+  Earnings,
+  ReviewClient,
+  Rider,
+  RiderClient,
+  RiderRatingSummary,
+} from '@foodstack/api-client';
 import { FsMap, Icon, MapMarker } from '@foodstack/ui';
 
 import { confirmAction } from '../shared/confirm-dialog';
@@ -16,6 +22,17 @@ import { describeError } from '../shared/errors';
 import { EarningsView } from '../rider/earnings-view';
 import { RiderFormDialog, RiderFormData, VEHICLE_LABELS } from './rider-form-dialog';
 import { RiderPapers } from './rider-papers';
+
+const TAG_LABELS: Record<string, string> = {
+  FRIENDLY: 'Friendly',
+  ON_TIME: 'On time',
+  CAREFUL_WITH_FOOD: 'Careful with food',
+  FOLLOWED_INSTRUCTIONS: 'Followed instructions',
+  LATE: 'Late',
+  RUDE: 'Rude',
+  FOOD_DAMAGED: 'Food damaged',
+  HARD_TO_REACH: 'Hard to reach',
+};
 
 /** One rider: details, where they were last seen, suspending, and what they earned. */
 @Component({
@@ -93,6 +110,22 @@ import { RiderPapers } from './rider-papers';
               <dt>Deliveries</dt>
               <dd>{{ r.deliveries }}</dd>
             </div>
+            @if (rating(); as rr) {
+              <div>
+                <dt>Customer rating</dt>
+                <dd>
+                  @if (rr.count) {
+                    <span class="rating"><fs-icon name="star" /> {{ rr.average.toFixed(1) }}</span>
+                    <span class="muted"> from {{ rr.count }}</span>
+                    @if (topTags(); as tags) {
+                      <div class="muted">{{ tags }}</div>
+                    }
+                  } @else {
+                    Not rated yet
+                  }
+                </dd>
+              </div>
+            }
             <div>
               <dt>Offers accepted</dt>
               <dd>{{ r.acceptancePercent }}%</dd>
@@ -220,6 +253,20 @@ import { RiderPapers } from './rider-papers';
       margin: 0 0 12px;
       font: var(--mat-sys-title-medium);
     }
+    .rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      font-weight: 600;
+      --fs-icon-size: 16px;
+    }
+    .rating fs-icon {
+      color: #f5a623;
+    }
+    .muted {
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-body-small);
+    }
   `,
 })
 export class RiderDetailPage implements OnInit {
@@ -233,6 +280,19 @@ export class RiderDetailPage implements OnInit {
   protected readonly rider = signal<Rider | null>(null);
   protected readonly earnings = signal<Earnings | null>(null);
   protected readonly failed = signal(false);
+  /** Private to the operator (PRD RV-4). */
+  protected readonly rating = signal<RiderRatingSummary | null>(null);
+  private readonly reviews = inject(ReviewClient);
+
+  protected readonly topTags = computed(() => {
+    const tags = this.rating()?.tags ?? {};
+    return Object.entries(tags)
+      .filter(([, n]) => (n ?? 0) > 0)
+      .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+      .slice(0, 3)
+      .map(([tag, n]) => `${TAG_LABELS[tag] ?? tag} (${n})`)
+      .join(', ');
+  });
 
   protected readonly marker = computed<MapMarker[]>(() => {
     const r = this.rider();
@@ -244,6 +304,9 @@ export class RiderDetailPage implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       this.rider.set(await firstValueFrom(this.riders.get(this.id())));
+      void firstValueFrom(this.reviews.rider(this.id()))
+        .then((r) => this.rating.set(r))
+        .catch(() => this.rating.set(null));
       this.earnings.set(await firstValueFrom(this.riders.earningsOf(this.id(), 7)));
     } catch {
       if (!this.rider()) this.failed.set(true);

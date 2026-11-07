@@ -39,6 +39,8 @@ public class QuoteService {
 
     private final Supplier<ZoneId> timeZone;
 
+    private final CityService cities;
+
     public QuoteService(ZoneService zones, OperatorPricingService pricing, double roadFactor) {
         this(zones, pricing, roadFactor, RoutingService.estimating(roadFactor), Clock.systemUTC(), () -> ZoneOffset.UTC);
     }
@@ -48,6 +50,15 @@ public class QuoteService {
      */
     public QuoteService(ZoneService zones, OperatorPricingService pricing, double roadFactor, RoutingService routing,
             Clock clock, Supplier<ZoneId> timeZone) {
+        this(zones, pricing, roadFactor, routing, clock, timeZone, null);
+    }
+
+    /**
+     * @param cities the cities, whose own pricing replaces the operator's; {@code null} for none
+     */
+    public QuoteService(ZoneService zones, OperatorPricingService pricing, double roadFactor, RoutingService routing,
+            Clock clock, Supplier<ZoneId> timeZone, CityService cities) {
+        this.cities = cities;
         this.zones = zones;
         this.pricing = pricing;
         this.roadFactor = roadFactor;
@@ -61,7 +72,7 @@ public class QuoteService {
         requireValid(request.destination(), "destination");
         long distance = this.routing.route(request.storeLocation(), request.destination()).distanceMeters();
         if (request.deliveryMode() == DeliveryMode.OPERATOR) {
-            OperatorPricing operator = this.pricing.get();
+            OperatorPricing operator = effective(this.pricing.get(), request.cityId());
             if (!operator.enabled()) {
                 return refusal(DeliveryQuoteView.OPERATOR_DELIVERY_OFF, distance, DeliveryMode.OPERATOR);
             }
@@ -86,7 +97,7 @@ public class QuoteService {
 
     public DeliveryAreaView deliveryArea(DeliveryAreaRequest request) {
         if (request.deliveryMode() == DeliveryMode.OPERATOR) {
-            OperatorPricing operator = this.pricing.get();
+            OperatorPricing operator = effective(this.pricing.get(), request.cityId());
             if (!operator.enabled() || request.storeLocation() == null || !request.storeLocation().isValid()) {
                 return new DeliveryAreaView(request.storeId(), List.of());
             }
@@ -96,6 +107,20 @@ public class QuoteService {
         }
         return new DeliveryAreaView(request.storeId(),
                 this.zones.getZones(request.storeId()).stream().map(ZoneDetails::polygon).toList());
+    }
+
+    /**
+     * The operator's pricing, with the numbers of the branch's city when the city has its own
+     * (PRD DR-1b). Whether operator delivery is on stays the operator's single switch.
+     */
+    private OperatorPricing effective(OperatorPricing operator, String cityId) {
+        CityPricing city = (this.cities != null) ? this.cities.pricingOf(cityId) : null;
+        if (city == null) {
+            return operator;
+        }
+        return new OperatorPricing(operator.enabled(), city.baseChargeMinor(), city.perKmMinor(), city.maxDistanceMeters(),
+                city.minOrderMinor(), city.freeDeliveryAboveMinor(), city.peakMultiplierPercent(), city.peakWindows(),
+                operator.version(), operator.updatedAt());
     }
 
     /** Peak hours are the branch's local time (TDD 7.5, gap 11), so one window fits every zone of a country. */

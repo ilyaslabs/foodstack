@@ -22,6 +22,7 @@ import io.github.ilyaslabs.foodstack.order.core.OrderConfiguration;
 import io.github.ilyaslabs.foodstack.order.core.persistence.ActiveOrderDocument;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument;
 import io.github.ilyaslabs.foodstack.payment.api.CardSessionView;
+import io.github.ilyaslabs.foodstack.payment.api.MerchantView;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
@@ -40,13 +41,12 @@ import io.github.ilyaslabs.foodstack.settings.api.OrderingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.store.api.OrderValidationView;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.json.JsonMapper;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -58,6 +58,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -160,6 +161,7 @@ class OrderStorageTest {
         this.placement = new OrderPlacementService(this.orderMongo.template(), this.orderMongo.transactionTemplate(), outbox,
                 this.carts, this.promotions, this.payments, this.identity, this.lifecycle, this.live, this.pii, null,
                 "http://shop/", clock);
+        given(this.payments.resolveMerchant(any())).willReturn(MerchantView.BY_OPERATOR);
         this.orders = new OrderService(this.orderMongo.template(), this.lifecycle, this.pii);
         this.projections = new OrderProjections(this.orderMongo.template());
     }
@@ -259,6 +261,20 @@ class OrderStorageTest {
     }
 
     @Test
+    @DisplayName("a card order at a branch that collects itself keeps the branch's account for the payment and the ledger")
+    void directCollection() {
+        given(this.carts.checkout(any())).willReturn(checkout(Fulfilment.PICKUP, PaymentMethod.CARD, null));
+        given(this.payments.resolveMerchant(STORE)).willReturn(new MerchantView("acc-1", MerchantView.STORE));
+        given(this.payments.startCard(any())).willReturn(new CardSessionView("x", "https://pay/2", 0));
+
+        String id = this.placement.place(this.customer, "k-direct", pickup(PaymentMethod.CARD, 170_000L)).orderId();
+
+        verify(this.payments).startCard(org.mockito.ArgumentMatchers.argThat((r) -> "acc-1".equals(r.merchantAccountId())));
+        assertThat(this.orderMongo.template().findById(id, OrderDocument.class).merchantAccountId()).isEqualTo("acc-1");
+        assertThat(lastEvent(id).get("data", String.class)).contains("\"collectedBy\":\"STORE\"");
+    }
+
+    @Test
     @DisplayName("a payment that fails fails the order; one that arrives after cancelling is given back")
     void latePayment() {
         given(this.carts.checkout(any())).willReturn(checkout(Fulfilment.PICKUP, PaymentMethod.CARD, null));
@@ -300,6 +316,45 @@ class OrderStorageTest {
     }
 
     @Test
+    @DisplayName("a customer exports their orders in full; after deletion their orders keep the money and lose the person")
+    void exportAndErase() {
+        // given
+        given(this.carts.checkout(any())).willReturn(checkout(Fulfilment.DELIVERY, PaymentMethod.CASH, null));
+        PlaceOrder delivery = new PlaceOrder(Fulfilment.DELIVERY, new PlaceOrder.Address(31.4697, 74.4085, "12 Canal Road",
+                "Gate 2"), null, 0, PaymentMethod.CASH, null, "+92 300 1234567", "en");
+        String id = this.placement.place(this.customer, "k-export", delivery).orderId();
+        this.projections.refresh(id);
+        signIn(this.customer);
+        assertThat(this.orders.export()).singleElement().satisfies((order) -> {
+            assertThat(order.contactPhone()).isEqualTo("+92 300 1234567");
+            assertThat(order.destination().addressLine()).isEqualTo("12 Canal Road");
+        });
+        signIn("stranger");
+        assertThat(this.orders.export()).isEmpty();
+        long total = this.orderMongo.template().findById(id, OrderDocument.class).totals().totalMinor();
+
+        // when
+        int erased = new CustomerErasure(this.orderMongo.template(), this.projections).erase(this.customer);
+
+        // then
+        assertThat(erased).isEqualTo(1);
+        OrderDocument order = this.orderMongo.template().findById(id, OrderDocument.class);
+        assertThat(order.customerId()).isEqualTo(this.customer);
+        assertThat(order.customerName()).isEqualTo("Deleted user");
+        assertThat(order.contactPhone()).isNull();
+        assertThat(order.destination().addressLine()).isNull();
+        assertThat(order.destination().instructions()).isNull();
+        assertThat(order.destination().lat()).isEqualTo(31.47);
+        assertThat(order.destination().lng()).isEqualTo(74.41);
+        assertThat(order.lines()).allSatisfy((line) -> assertThat(line.note()).isNull());
+        assertThat(order.totals().totalMinor()).isEqualTo(total);
+        signIn("owner-1", STORE);
+        assertThat(this.orders.storeHistory(STORE, null, 50).items()).filteredOn((row) -> row.id().equals(id))
+            .singleElement()
+            .satisfies((row) -> assertThat(row.customerName()).isEqualTo("Deleted user"));
+    }
+
+    @Test
     @DisplayName("support cancels at any step and refunds part of a card payment, never more than paid")
     void support() {
         given(this.carts.checkout(any())).willReturn(checkout(Fulfilment.DELIVERY, PaymentMethod.CARD, null));
@@ -317,7 +372,11 @@ class OrderStorageTest {
         assertThat(this.orders.get(id).actions()).contains("PICKED_UP", "CANCEL", "REFUND");
         assertThatThrownBy(() -> this.orders.refund(id, 170_001, "Cold")).isInstanceOf(ModuleException.BadRequest.class);
         assertThatThrownBy(() -> this.orders.refund(id, 1_000, " ")).isInstanceOf(ModuleException.BadRequest.class);
-        assertThat(this.orders.refund(id, 20_000, "Cold food").refundRequestedMinor()).isEqualTo(20_000);
+        assertThatThrownBy(() -> this.orders.refund(id, 1_000, "Cold", "RIDER")).isInstanceOfSatisfying(
+                ModuleException.BadRequest.class, (ex) -> assertThat(ex.code()).isEqualTo("REFUND_FUNDER_INVALID"));
+        assertThat(this.orders.refund(id, 20_000, "Cold food", "operator").refundRequestedMinor()).isEqualTo(20_000);
+        assertThat(lastEvent(id).get("data", String.class)).contains("\"fundedBy\":\"OPERATOR\"")
+            .contains("\"money\":{").contains("\"subtotalMinor\":");
         this.orders.storeAction(id, "PICKED_UP", null, null);
         OrderDetails cancelled = this.orders.cancel(id, "Rider had an accident");
         assertThat(cancelled.refundRequestedMinor()).isEqualTo(170_000);

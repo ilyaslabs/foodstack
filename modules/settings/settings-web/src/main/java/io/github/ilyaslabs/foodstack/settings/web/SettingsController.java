@@ -9,22 +9,22 @@ import io.github.ilyaslabs.foodstack.platform.core.EpochSeconds;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.web.ETags;
 import io.github.ilyaslabs.foodstack.settings.core.application.BrandingDetails;
-import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.DeliveryDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.DeliverySettingsService;
+import io.github.ilyaslabs.foodstack.settings.core.application.LocaleDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingDetails;
 import io.github.ilyaslabs.foodstack.settings.core.application.OrderingSettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateBranding;
-import io.github.ilyaslabs.foodstack.settings.core.application.UpdateLocale;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateDelivery;
+import io.github.ilyaslabs.foodstack.settings.core.application.UpdateLocale;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateOrdering;
 import io.github.ilyaslabs.foodstack.settings.web.dto.BrandingRequest;
 import io.github.ilyaslabs.foodstack.settings.web.dto.BrandingResponse;
-import io.github.ilyaslabs.foodstack.settings.web.dto.LocaleRequest;
-import io.github.ilyaslabs.foodstack.settings.web.dto.LocaleResponse;
 import io.github.ilyaslabs.foodstack.settings.web.dto.DeliveryRequest;
 import io.github.ilyaslabs.foodstack.settings.web.dto.DeliveryResponse;
+import io.github.ilyaslabs.foodstack.settings.web.dto.LocaleRequest;
+import io.github.ilyaslabs.foodstack.settings.web.dto.LocaleResponse;
 import io.github.ilyaslabs.foodstack.settings.web.dto.OrderingRequest;
 import io.github.ilyaslabs.foodstack.settings.web.dto.OrderingResponse;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
@@ -117,9 +117,16 @@ class SettingsController {
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<OrderingResponse> updateOrdering(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @Valid @RequestBody OrderingRequest request) {
+        OrderingDetails current = this.orderingService.get();
         OrderingDetails updated = this.orderingService.update(new UpdateOrdering(request.cashEnabled(), request.cardEnabled(),
                 request.serviceFeeMinor(), request.serviceFeeBasisPoints(), request.taxBasisPoints(), request.tipsEnabled(),
-                request.acceptTimeoutSeconds()), requireIfMatch("ordering", ifMatch), CurrentUser.id());
+                request.acceptTimeoutSeconds(),
+                (request.priceApprovalRequired() != null) ? request.priceApprovalRequired() : current.priceApprovalRequired(),
+                (request.directCollectionEnabled() != null) ? request.directCollectionEnabled() : current.directCollectionEnabled(),
+                (request.creditLimitMinor() != null) ? request.creditLimitMinor() : current.creditLimitMinor(),
+                (request.cardStyle() != null) ? request.cardStyle() : current.cardStyle(),
+                (request.savedCardsEnabled() != null) ? request.savedCardsEnabled() : current.savedCardsEnabled()),
+                requireIfMatch("ordering", ifMatch), CurrentUser.id());
         return ResponseEntity.ok().eTag(ETags.of("ordering", updated.version())).body(toResponse(updated));
     }
 
@@ -167,7 +174,9 @@ class SettingsController {
 
     private static OrderingResponse toResponse(OrderingDetails o) {
         return new OrderingResponse(o.cashEnabled(), o.cardEnabled(), o.serviceFeeMinor(), o.serviceFeeBasisPoints(),
-                o.taxBasisPoints(), o.tipsEnabled(), o.acceptTimeoutSeconds(), o.version(), EpochSeconds.of(o.updatedAt()));
+                o.taxBasisPoints(), o.tipsEnabled(), o.acceptTimeoutSeconds(), o.version(), EpochSeconds.of(o.updatedAt()),
+                o.priceApprovalRequired(), o.directCollectionEnabled(), o.creditLimitMinor(), o.cardStyle(),
+                o.savedCardsEnabled());
     }
 
     private static DeliveryResponse toResponse(DeliveryDetails d) {

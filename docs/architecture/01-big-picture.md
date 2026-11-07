@@ -14,7 +14,7 @@ flowchart LR
     end
 
     subgraph Server["One server (Docker Compose)"]
-        P["Caddy (foodstack-proxy)<br/>TLS, routing by path, rate limits per IP,<br/>security headers, 25 MB body limit"]
+        P["Caddy<br/>TLS, routing by path,<br/>security headers, 25 MB body limit"]
         W["web<br/>Angular SSR on Node :4000"]
         BO["backoffice<br/>nginx with Angular build"]
         S["server<br/>Spring Boot, every module local :8080"]

@@ -5,7 +5,10 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 
 import org.springframework.beans.factory.ObjectProvider;
+import io.github.ilyaslabs.foodstack.platform.core.AuditSink;
+
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -71,4 +74,21 @@ public final class FoodstackSecurityAutoConfiguration {
         return new ServiceCalls(serviceTokens, jwtDecoder);
     }
 
+
+    /**
+     * Records back-office writes (PRD AD-3) where an audit sink is configured (Kafka); it runs right
+     * after the security filters, so the user is known.
+     */
+    @Bean
+    FilterRegistrationBean<AuditFilter> foodstackAuditFilter(ObjectProvider<AuditSink> sink,
+            ObjectProvider<tools.jackson.databind.json.JsonMapper> json, ObjectProvider<java.time.Clock> clock) {
+        AuditSink target = sink.getIfAvailable();
+        FilterRegistrationBean<AuditFilter> registration = new FilterRegistrationBean<>(new AuditFilter(
+                (target != null) ? target : (entry) -> { },
+                json.getIfAvailable(() -> tools.jackson.databind.json.JsonMapper.builder().build()),
+                clock.getIfAvailable(java.time.Clock::systemUTC)));
+        registration.setOrder(org.springframework.boot.security.autoconfigure.web.servlet.SecurityFilterProperties.DEFAULT_FILTER_ORDER + 10);
+        registration.setEnabled(target != null);
+        return registration;
+    }
 }

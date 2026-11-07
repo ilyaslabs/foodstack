@@ -2,13 +2,14 @@ package io.github.ilyaslabs.foodstack.notification.web;
 
 import java.util.List;
 
+import io.github.ilyaslabs.foodstack.notification.core.application.CustomerNotificationData;
 import io.github.ilyaslabs.foodstack.notification.core.application.InboxService;
 import io.github.ilyaslabs.foodstack.notification.core.application.NotificationService;
 import io.github.ilyaslabs.foodstack.platform.security.ApiSecurityConfiguration;
 import io.github.ilyaslabs.foodstack.platform.web.ProblemDetailsAdvice;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -45,8 +46,25 @@ class NotificationsControllerTest {
     @MockitoBean
     JwtDecoder jwtDecoder;
 
+    @MockitoBean
+    CustomerNotificationData data;
+
     @Autowired
     MockMvc mvc;
+
+    @Test
+    @DisplayName("the notification export is the signed-in user's own")
+    void export() throws Exception {
+        // given
+        given(this.data.export("u1")).willReturn(new CustomerNotificationData.Export(
+                new NotificationService.Preferences(true, false), List.of(), List.of()));
+
+        // when / then
+        this.mvc.perform(get("/api/v1/notifications/mine/export")).andExpect(status().isUnauthorized());
+        this.mvc.perform(get("/api/v1/notifications/mine/export").with(jwt().jwt((t) -> t.subject("u1"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.preferences.orderEmails").value(true));
+    }
 
     @Test
     @DisplayName("the bell shows only the signed-in user's own notifications")

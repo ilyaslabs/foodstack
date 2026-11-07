@@ -15,6 +15,8 @@ const SETTINGS: OrderingSettings = {
   taxBasisPoints: 1600,
   tipsEnabled: true,
   acceptTimeoutSeconds: 300,
+  directCollectionEnabled: true,
+  creditLimitMinor: 2_500_000,
 };
 
 describe('OrderingPage', () => {
@@ -70,6 +72,15 @@ describe('OrderingPage', () => {
     await fixture.whenStable();
 
     // then
-    expect(update).toHaveBeenCalledWith({ ...SETTINGS, taxBasisPoints: 1750 }, '"ordering-2"');
+    expect(update).toHaveBeenCalledWith(
+      {
+        ...SETTINGS,
+        taxBasisPoints: 1750,
+        priceApprovalRequired: false,
+        cardStyle: 'HOSTED_PAGE',
+        savedCardsEnabled: false,
+      },
+      '"ordering-2"',
+    );
   });
 });

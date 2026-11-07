@@ -38,7 +38,10 @@ class StoreIndexerTest {
 
     private final StoreSearchEngine engine = mock(StoreSearchEngine.class);
 
-    private final StoreIndexer indexer = new StoreIndexer(this.stores, this.geo, this.engine, passThrough());
+    private final io.github.ilyaslabs.foodstack.review.api.ReviewApi reviews = mock(
+            io.github.ilyaslabs.foodstack.review.api.ReviewApi.class);
+
+    private final StoreIndexer indexer = new StoreIndexer(this.stores, this.geo, this.engine, passThrough(), this.reviews);
 
     /** Runs the work directly, as the platform would with its service token. */
     @SuppressWarnings("unchecked")
@@ -61,6 +64,8 @@ class StoreIndexerTest {
         given(this.stores.getListing("s1")).willReturn(listing("s1", StoreStatus.LIVE));
         given(this.geo.deliveryArea(new DeliveryAreaRequest("s1", LOCATION, DeliveryMode.SELF)))
             .willReturn(new DeliveryAreaView("s1", area));
+        given(this.reviews.storeRating("s1"))
+            .willReturn(new io.github.ilyaslabs.foodstack.review.api.StoreRating("s1", 12, 4.4));
 
         this.indexer.refresh("s1");
 
@@ -69,6 +74,22 @@ class StoreIndexerTest {
         assertThat(indexed.getValue().deliveryArea()).isEqualTo(area);
         assertThat(indexed.getValue().dishNames()).containsEntry("ar", List.of("برياني"));
         assertThat(indexed.getValue().deliveryMode()).isEqualTo("SELF");
+        assertThat(indexed.getValue().ratingCount()).isEqualTo(12);
+        assertThat(indexed.getValue().ratingAverage()).isEqualTo(4.4);
+    }
+
+    @Test
+    @DisplayName("indexes a branch without its rating when reviews cannot be read")
+    void ratingUnavailable() {
+        given(this.stores.getListing("s1")).willReturn(listing("s1", StoreStatus.LIVE));
+        given(this.geo.deliveryArea(any())).willReturn(new DeliveryAreaView("s1", List.of()));
+        given(this.reviews.storeRating("s1")).willThrow(new IllegalStateException("review is down"));
+
+        this.indexer.refresh("s1");
+
+        ArgumentCaptor<IndexedStore> indexed = ArgumentCaptor.forClass(IndexedStore.class);
+        verify(this.engine).index(indexed.capture());
+        assertThat(indexed.getValue().ratingCount()).isZero();
     }
 
     @Test
@@ -80,7 +101,7 @@ class StoreIndexerTest {
         this.indexer.refresh("s1");
         this.indexer.refresh("s2");
 
-        verify(this.engine).delete("s1");
+        verify(this.engine).delete("s1", 4);
         verify(this.engine).delete("s2");
         verify(this.engine, never()).index(any());
         verify(this.geo, never()).deliveryArea(any());
@@ -117,6 +138,6 @@ class StoreIndexerTest {
     private static StoreListingView listing(String storeId, StoreStatus status) {
         return new StoreListingView(storeId, "spice-route-gulberg", "b1", "Spice Route", "Gulberg", 1, Map.of("en", "Biryani"), List.of("pakistani"),
                 Map.of(), Map.of(), LOCATION, "Gulberg", "Lahore", DeliveryMode.SELF, true, status, false, 25, "Asia/Karachi",
-                Map.of(), List.of(), Map.of("en", List.of("Biryani"), "ar", List.of("برياني")), List.of("halal"), 4);
+                Map.of(), List.of(), Map.of("en", List.of("Biryani"), "ar", List.of("برياني")), List.of("halal"), 4, null);
     }
 }

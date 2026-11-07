@@ -92,3 +92,40 @@ databaseChangeLog:
             collectionName: identity_refresh_tokens
             keys: '{ "expiresAt": 1 }'
             options: '{ "name": "expires_ttl", "expireAfterSeconds": 0 }'
+  - changeSet:
+      id: identity-7
+      author: foodstack
+      comment: "M4 brand owners (PRD BB-5): owners of a single-branch restaurant held STORE_OWNER with the brand in brandIds; they become BRAND_OWNER"
+      changes:
+        - runCommand:
+            command: >-
+              { "update": "identity_users",
+                "updates": [ { "q": { "roles": "STORE_OWNER", "brandIds.0": { "$exists": true } },
+                               "u": [ { "$set": { "roles": { "$concatArrays": [
+                                   { "$filter": { "input": "$roles", "cond": { "$ne": [ "$$this", "STORE_OWNER" ] } } },
+                                   [ "BRAND_OWNER" ] ] } } } ],
+                               "multi": true } ] }
+  - changeSet:
+      id: identity-8
+      author: foodstack
+      comment: "identity_audit_log ({ _id: hashed }; ids are time-ordered): back-office writes and sign-ins, newest first, by user and by resource (PRD AD-3, ID-8)"
+      changes:
+        - createCollection:
+            collectionName: identity_audit_log
+        - createIndex:
+            collectionName: identity_audit_log
+            keys: '{ "actorId": 1, "_id": -1 }'
+            options: '{ "name": "actor_newest" }'
+        - createIndex:
+            collectionName: identity_audit_log
+            keys: '{ "resource": 1, "at": -1 }'
+            options: '{ "name": "resource_newest" }'
+  - changeSet:
+      id: identity-9
+      author: foodstack
+      comment: "M4 account deletion (PRD ID-7): the sweep finds accounts whose grace period is over"
+      changes:
+        - createIndex:
+            collectionName: identity_users
+            keys: '{ "deleteAfter": 1 }'
+            options: '{ "name": "delete_after", "partialFilterExpression": { "deleteAfter": { "$exists": true } } }'

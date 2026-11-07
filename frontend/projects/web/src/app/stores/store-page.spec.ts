@@ -6,6 +6,7 @@ import { of, throwError } from 'rxjs';
 import {
   LocaleSettings,
   Menu,
+  ReviewClient,
   SettingsClient,
   StoreClient,
   StorePage as Page,
@@ -117,6 +118,44 @@ describe('StorePage', () => {
           useValue: { getLocale: () => of({ value: LOCALE, etag: '"locale-1"' }) },
         },
         { provide: StoreClient, useValue: stores },
+        {
+          provide: ReviewClient,
+          useValue: {
+            summary: () =>
+              of({
+                storeId: 's1',
+                count: 12,
+                average: 4.4,
+                stars: [0, 1, 1, 3, 7],
+                brandId: 'b1',
+                brandCount: 30,
+                brandAverage: 4.2,
+              }),
+            forStore: () =>
+              of({
+                items: [
+                  {
+                    id: 'r1',
+                    storeId: 's1',
+                    storeName: 'Spice Route',
+                    rating: 5,
+                    text: 'Best biryani in town',
+                    photoThumbUrl: null,
+                    photoUrl: null,
+                    customerName: 'Ayesha K.',
+                    createdAt: 1_762_000_000,
+                    reply: { text: 'Thank you!', at: 1_762_000_100 },
+                    status: 'PUBLISHED',
+                    orderNumber: null,
+                    flagged: false,
+                    originalText: null,
+                    hiddenReason: null,
+                  },
+                ],
+                next: null,
+              }),
+          },
+        },
         { provide: AuthService, useValue: auth },
         {
           provide: CartStore,
@@ -144,7 +183,7 @@ describe('StorePage', () => {
 
   it('shows the menu with prices, tags and sold-out dishes', async () => {
     // when
-    const { element } = await render({
+    const { element, fixture } = await render({
       page: () => of(PAGE),
       menu: () => of(MENU),
       quote: () => of() as never,
@@ -157,6 +196,12 @@ describe('StorePage', () => {
     expect(element.textContent).toContain('Halal');
     expect(element.querySelector('.sold-out')?.textContent).toContain('Sold out');
     expect(element.textContent).not.toContain('Drinks');
+    await new Promise((resolve) => setTimeout(resolve));
+    fixture.detectChanges();
+    expect(element.querySelector('.fact.rating')?.textContent).toContain('4.4');
+    expect(element.querySelector('#reviews')?.textContent).toContain('Best biryani in town');
+    expect(element.querySelector('#reviews')?.textContent).toContain('Thank you!');
+    expect(element.querySelector('#reviews')?.textContent).toContain('All Spice Route branches');
   });
 
   it('reads right to left in Urdu, with the default language where a dish has no Urdu', async () => {

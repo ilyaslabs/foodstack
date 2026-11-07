@@ -1,9 +1,25 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, forkJoin, map } from 'rxjs';
 
 import { AddressInput, Me, SavedAddress } from './models';
 import { RUNTIME_CONFIG } from './runtime-config';
+
+/** Everything FoodStack keeps about the signed-in customer, as one file (PRD ID-7). */
+export interface DataExport {
+  exportedAt: string;
+  account: unknown;
+  addresses: unknown[];
+  orders: unknown[];
+  reviews: unknown;
+  notifications: unknown;
+}
+
+/** A scheduled account deletion: when it runs, epoch seconds, and the grace period. */
+export interface AccountDeletion {
+  deleteAfter: number | null;
+  graceDays: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class MeClient {
@@ -45,5 +61,39 @@ export class MeClient {
     return this.http.delete<void>(
       `${this.config.apiUrl}/api/v1/me/addresses/${encodeURIComponent(id)}`,
     );
+  }
+
+  /**
+   * The customer's data export. Each module serves its own part (account and addresses, orders,
+   * reviews, notifications); this joins them into one document and fails if any part fails, so a
+   * download is never silently incomplete.
+   */
+  exportData(): Observable<DataExport> {
+    const api = this.config.apiUrl;
+    return forkJoin({
+      me: this.http.get<{ account: unknown; addresses: unknown[] }>(`${api}/api/v1/me/export`),
+      orders: this.http.get<unknown[]>(`${api}/api/v1/orders/mine/export`),
+      reviews: this.http.get<unknown>(`${api}/api/v1/reviews/mine/export`),
+      notifications: this.http.get<unknown>(`${api}/api/v1/notifications/mine/export`),
+    }).pipe(
+      map(({ me, orders, reviews, notifications }) => ({
+        exportedAt: new Date().toISOString(),
+        account: me.account,
+        addresses: me.addresses,
+        orders,
+        reviews,
+        notifications,
+      })),
+    );
+  }
+
+  /** How many days after a request the account is deleted. */
+  deletionPolicy(): Observable<AccountDeletion> {
+    return this.http.get<AccountDeletion>(`${this.config.apiUrl}/api/v1/me/deletion`);
+  }
+
+  /** Asks to delete the account; the customer is signed out everywhere and can cancel by signing in. */
+  requestDeletion(): Observable<AccountDeletion> {
+    return this.http.post<AccountDeletion>(`${this.config.apiUrl}/api/v1/me/deletion`, null);
   }
 }

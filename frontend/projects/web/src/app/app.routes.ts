@@ -24,6 +24,11 @@ export const routes: Routes = [
     loadComponent: () => import('./orders/order-page').then((m) => m.OrderPage),
   },
   {
+    path: 'pay/:orderId',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pay/pay-page').then((m) => m.PayPage),
+  },
+  {
     path: 'account',
     canActivate: [authGuard],
     loadComponent: () => import('./account/account-page').then((m) => m.AccountPage),

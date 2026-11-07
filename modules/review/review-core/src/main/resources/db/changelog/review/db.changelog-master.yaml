@@ -1,0 +1,62 @@
+# Liquibase changelog of the review module (database foodstack_review). Shard keys are applied by
+# ReviewConfiguration (TDD 6.3) and listed next to each collection.
+databaseChangeLog:
+  - include:
+      file: db/changelog/platform/outbox-inbox.yaml
+  - changeSet:
+      id: review-1
+      author: foodstack
+      comment: "review_reviews ({ storeId: hashed }): one review per order; a branch's newest first; the moderation queue"
+      changes:
+        - createCollection:
+            collectionName: review_reviews
+        - createIndex:
+            collectionName: review_reviews
+            keys: '{ "storeId": 1, "orderId": 1 }'
+            options: '{ "name": "one_per_order", "unique": true }'
+        - createIndex:
+            collectionName: review_reviews
+            keys: '{ "storeId": 1, "status": 1, "_id": -1 }'
+            options: '{ "name": "store_newest" }'
+        - createIndex:
+            collectionName: review_reviews
+            keys: '{ "flagged": 1, "_id": -1 }'
+            options: '{ "name": "flagged_newest", "partialFilterExpression": { "flagged": true } }'
+        - createIndex:
+            collectionName: review_reviews
+            keys: '{ "status": 1, "_id": -1 }'
+            options: '{ "name": "status_newest" }'
+  - changeSet:
+      id: review-2
+      author: foodstack
+      comment: "review_orders ({ _id: hashed }), review_store_stats ({ _id: hashed }), review_rider_ratings ({ riderId: hashed }) and review_rider_stats ({ _id: hashed })"
+      changes:
+        - createCollection:
+            collectionName: review_orders
+        - createCollection:
+            collectionName: review_store_stats
+        - createIndex:
+            collectionName: review_store_stats
+            keys: '{ "brandId": 1 }'
+            options: '{ "name": "brand" }'
+        - createCollection:
+            collectionName: review_rider_ratings
+        - createIndex:
+            collectionName: review_rider_ratings
+            keys: '{ "riderId": 1, "createdAt": -1 }'
+            options: '{ "name": "rider_newest" }'
+        - createCollection:
+            collectionName: review_rider_stats
+  - changeSet:
+      id: review-3
+      author: foodstack
+      comment: "M4 account deletion and data export (PRD ID-7): a customer's reviews and rider ratings, found by customer"
+      changes:
+        - createIndex:
+            collectionName: review_reviews
+            keys: '{ "customerId": 1, "createdAt": -1 }'
+            options: '{ "name": "customer_newest" }'
+        - createIndex:
+            collectionName: review_rider_ratings
+            keys: '{ "customerId": 1, "createdAt": -1 }'
+            options: '{ "name": "customer_newest" }'

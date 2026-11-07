@@ -30,6 +30,8 @@ export interface ItemDialogData {
   sections: EditorSection[];
   sectionId: string;
   item: EditorItem | null;
+  /** The brand's branches, to sell a dish at some of them only (PRD BB-3). */
+  branches?: { id: string; name: string }[];
 }
 
 interface OptionDraft {
@@ -128,6 +130,33 @@ export const DIETARY_LABELS: Record<string, string> = {
         </section>
         @if (uploading()) {
           <mat-progress-bar mode="indeterminate" />
+        }
+
+        @if ((data.branches?.length ?? 0) > 1) {
+          <div>
+            <h3>Sold at</h3>
+            <mat-chip-listbox
+              aria-label="Where the dish is sold"
+              [ngModel]="everywhere ? 'all' : 'some'"
+              (ngModelChange)="everywhere = $event !== 'some'"
+            >
+              <mat-chip-option value="all">Every branch</mat-chip-option>
+              <mat-chip-option value="some">Chosen branches</mat-chip-option>
+            </mat-chip-listbox>
+            @if (!everywhere) {
+              <mat-chip-listbox
+                multiple
+                aria-label="Branches"
+                [(ngModel)]="branchIds"
+                class="branches"
+              >
+                @for (branch of data.branches; track branch.id) {
+                  <mat-chip-option [value]="branch.id">{{ branch.name }}</mat-chip-option>
+                }
+              </mat-chip-listbox>
+              <p class="hint">Only these branches show the dish.</p>
+            }
+          </div>
         }
 
         <div>
@@ -345,6 +374,8 @@ export class ItemDialog {
       })),
     })),
   );
+  protected everywhere = !this.data.item?.branchIds?.length;
+  protected branchIds: string[] = [...(this.data.item?.branchIds ?? [])];
   protected readonly uploading = signal(false);
   protected readonly saving = signal(false);
   protected readonly error = signal('');
@@ -437,6 +468,10 @@ export class ItemDialog {
       });
     }
 
+    if (!this.everywhere && (this.data.branches?.length ?? 0) > 1 && !this.branchIds.length) {
+      this.error.set('Choose the branches that sell the dish, or pick every branch.');
+      return;
+    }
     const input: MenuItemInput = {
       sectionId: this.sectionId,
       name: cleanTranslated(this.name),
@@ -445,7 +480,7 @@ export class ItemDialog {
       imageMediaId: this.image()?.mediaId ?? null,
       dietaryTags: this.tags,
       modifierGroups: groups,
-      branchIds: this.data.item?.branchIds ?? null,
+      branchIds: this.everywhere || !this.branchIds.length ? null : this.branchIds,
       sortOrder:
         this.data.item?.sortOrder ??
         this.data.sections.find((s) => s.id === this.sectionId)?.items.length ??

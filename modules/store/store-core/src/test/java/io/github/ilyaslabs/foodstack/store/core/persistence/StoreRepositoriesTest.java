@@ -35,6 +35,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(classes = StoreRepositoriesTest.App.class, properties = "spring.data.mongodb.repositories.type=none")
@@ -86,6 +87,9 @@ class StoreRepositoriesTest {
 
     @Autowired
     ItemOverrideRepository overrides;
+
+    @Autowired
+    PriceChangeRepository priceChanges;
 
     @Autowired
     MongoTemplate storeMongoTemplate;
@@ -191,6 +195,35 @@ class StoreRepositoriesTest {
         // then
         assertThat(found).singleElement().satisfies((o) -> assertThat(o.isSoldOut()).isTrue());
         assertThat(shardKey("store_item_overrides")).isEqualTo(new Document("storeId", "hashed"));
+    }
+
+    @Test
+    @DisplayName("keeps one waiting price change per price, oldest first, sharded on hashed brandId")
+    void priceChanges() {
+        // given
+        String brandId = Ids.newId();
+        String id = PriceChangeDocument.idOf(brandId, null, "item-1", null);
+        PriceChangeDocument first = this.priceChanges.save(new PriceChangeDocument(id, brandId, null, "item-1", null, 500,
+                600L, PriceChangeDocument.PENDING, "owner-1", Instant.now(), null, null, null));
+        this.priceChanges.save(new PriceChangeDocument(PriceChangeDocument.idOf(brandId, "s1", "item-1", "opt"), brandId,
+                "s1", "item-1", "opt", 100, null, PriceChangeDocument.PENDING, "owner-1", Instant.now().plusSeconds(1), null,
+                null, null));
+
+        // when a newer request for the same price replaces the waiting one
+        this.priceChanges.save(new PriceChangeDocument(id, brandId, null, "item-1", null, 500, 650L,
+                PriceChangeDocument.PENDING, "owner-1", Instant.now(), null, null, first.version()));
+
+        // then
+        assertThat(this.priceChanges.findByBrandIdAndStatus(brandId, PriceChangeDocument.PENDING)).hasSize(2)
+            .anySatisfy((c) -> assertThat(c.proposedMinor()).isEqualTo(650L));
+        assertThat(this.priceChanges.findByStatusOrderByRequestedAtAsc(PriceChangeDocument.PENDING,
+                org.springframework.data.domain.PageRequest.of(0, 500)))
+            .extracting(PriceChangeDocument::brandId)
+            .contains(brandId);
+        assertThatExceptionOfType(org.springframework.dao.OptimisticLockingFailureException.class)
+            .isThrownBy(() -> this.priceChanges.save(new PriceChangeDocument(id, brandId, null, "item-1", null, 500, 700L,
+                    PriceChangeDocument.PENDING, "owner-1", Instant.now(), null, null, first.version())));
+        assertThat(shardKey("store_price_changes")).isEqualTo(new Document("brandId", "hashed"));
     }
 
     private Document shardKey(String collection) {

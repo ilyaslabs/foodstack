@@ -232,6 +232,27 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
     }
 
     @Override
+    public void delete(String storeId, long version) {
+        try {
+            // external version, like index(): an unversioned delete of a missing document leaves a
+            // tombstone one version higher each time, which refused the branch's first listing
+            this.client.delete((d) -> d.index(alias()).id(storeId).version(version).versionType(VersionType.ExternalGte));
+        }
+        catch (ElasticsearchException ex) {
+            if (ex.status() == 409) {
+                log.debug("Kept the newer indexed version of branch {}", storeId);
+                return;
+            }
+            if (ex.status() != 404) {
+                throw unavailable(ex);
+            }
+        }
+        catch (IOException ex) {
+            throw unavailable(ex);
+        }
+    }
+
+    @Override
     public List<String> storeIdsOfBrand(String brandId) {
         return idsWhere("brandId", brandId);
     }
@@ -480,6 +501,9 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
             source.put("deliveryArea", Map.of("type", "geometrycollection", "geometries", polygons));
         }
         source.put("version", store.version());
+        // not mapped (dynamic false): shown on cards, not searched or ranked on yet
+        source.put("ratingCount", store.ratingCount());
+        source.put("ratingAverage", store.ratingAverage());
         return source;
     }
 
@@ -497,7 +521,8 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
                 map(s.get("coverUrls")), point, (String) s.get("area"), (String) s.get("city"), (String) s.get("deliveryMode"),
                 Boolean.TRUE.equals(s.get("pickupEnabled")), Boolean.TRUE.equals(s.get("temporarilyClosed")),
                 number(s.get("prepMinutes")), (String) s.get("timezone"), hours, list(s.get("closedDates")), Map.of(),
-                list(s.get("dietaryTags")), List.of(), number(s.get("version")));
+                list(s.get("dietaryTags")), List.of(), number(s.get("version")), number(s.get("ratingCount")),
+                (s.get("ratingAverage") instanceof Number n) ? n.doubleValue() : 0);
     }
 
     @SuppressWarnings("unchecked")

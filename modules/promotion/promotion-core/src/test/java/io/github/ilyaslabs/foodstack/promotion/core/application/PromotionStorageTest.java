@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
@@ -14,18 +15,19 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
+import io.github.ilyaslabs.foodstack.platform.security.BranchBrands;
+import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponEvaluation;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponRequest;
 import io.github.ilyaslabs.foodstack.promotion.core.PromotionConfiguration;
 import io.github.ilyaslabs.foodstack.promotion.core.persistence.RedemptionDocument;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.json.JsonMapper;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -35,9 +37,12 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 
 /** Coupon uses and promotion edits against a real two-shard MongoDB (the lowest layer, TDD 15.3). */
 @SpringBootTest(classes = PromotionStorageTest.App.class, properties = "spring.data.mongodb.repositories.type=none")
@@ -110,6 +115,45 @@ class PromotionStorageTest {
         assertThat(store.operatorFundingBasisPoints()).isZero();
         assertThat(this.promotions.list(List.of("brand-x"), 10)).extracting(PromotionDetails::id).containsExactly(store.id());
         assertThat(this.promotions.setActive(store.id(), false, "owner-1").active()).isFalse();
+    }
+
+    @Test
+    @DisplayName("a branch sees its brand's promotions for every branch and for its own, not those of the brand's other branches (PRD BB-11)")
+    void branchScope() {
+        String brand = "brand-" + System.nanoTime();
+        BranchBrands map = mock(BranchBrands.class);
+        given(map.brandOf("gulberg")).willReturn(Optional.of(brand));
+        CurrentUser.useBranchBrands(map);
+        try {
+            PromotionDetails everywhere = this.promotions.create(brand, input(code(), null, null), "owner-1");
+            PromotionDetails gulberg = this.promotions.create(brand, branchInput(code(), List.of("gulberg")), "manager-1");
+            this.promotions.create(brand, branchInput(code(), List.of("dha")), "owner-1");
+            this.promotions.create(null, input(code(), null, null), "admin-1");
+
+            assertThat(this.promotions.listIn(new PromotionAccess.Scope(List.of(), List.of("gulberg")), 50))
+                .extracting(PromotionDetails::id)
+                .containsExactlyInAnyOrder(everywhere.id(), gulberg.id());
+            assertThat(this.promotions.listIn(new PromotionAccess.Scope(List.of(brand), List.of()), 50)).hasSize(3);
+            assertThat(this.promotions.listIn(new PromotionAccess.Scope(List.of(), List.of("unknown")), 50)).isEmpty();
+        }
+        finally {
+            CurrentUser.useBranchBrands(null);
+        }
+    }
+
+    @Test
+    @DisplayName("keeps each brand's branch-promotions switch; an older event never overwrites a newer one")
+    void brandRules() {
+        BrandRules rules = new BrandRules(this.promotionMongo.template());
+        String brand = "brand-" + System.nanoTime();
+        assertThat(rules.branchPromotionsAllowed(brand)).isFalse();
+
+        rules.apply(brand, true, 3);
+        assertThat(rules.branchPromotionsAllowed(brand)).isTrue();
+        rules.apply(brand, false, 2);
+        assertThat(rules.branchPromotionsAllowed(brand)).isTrue();
+        rules.apply(brand, false, 4);
+        assertThat(rules.branchPromotionsAllowed(brand)).isFalse();
     }
 
     @Test
@@ -187,6 +231,11 @@ class PromotionStorageTest {
     private static PromotionInput input(String code, Integer totalLimit, Integer perCustomerLimit) {
         return new PromotionInput(code, Map.of("en", "10% off"), "PERCENT", 1000, null, 0, 0, NOW.minusSeconds(60), null,
                 totalLimit, perCustomerLimit, false, List.of(), List.of(), List.of(), false, 10000);
+    }
+
+    private static PromotionInput branchInput(String code, List<String> storeIds) {
+        return new PromotionInput(code, Map.of("en", "10% off"), "PERCENT", 1000, null, 0, 0, NOW.minusSeconds(60), null,
+                null, null, false, storeIds, List.of(), List.of(), false, 0);
     }
 
     private static CouponRequest request(String code, String customerId) {

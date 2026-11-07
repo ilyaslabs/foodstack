@@ -55,6 +55,15 @@ public class GeoCache {
         }, loader);
     }
 
+    public List<City> cities(Supplier<List<City>> loader) {
+        return read(this.prefix + "cities", new TypeReference<>() {
+        }, loader);
+    }
+
+    public void evictCities() {
+        evict(this.prefix + "cities");
+    }
+
     public void evictZones(String storeId) {
         evict(zonesKey(storeId));
     }

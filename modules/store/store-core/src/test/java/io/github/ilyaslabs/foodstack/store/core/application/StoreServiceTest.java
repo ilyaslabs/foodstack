@@ -20,6 +20,7 @@ import io.github.ilyaslabs.foodstack.geo.api.DeliveryQuoteView;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.geo.api.QuoteRequest;
+import io.github.ilyaslabs.foodstack.identity.api.BrandAccessGrant;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.StoreAccessGrant;
@@ -34,6 +35,7 @@ import io.github.ilyaslabs.foodstack.store.api.TimeRange;
 import io.github.ilyaslabs.foodstack.store.api.events.BrandChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreAvailabilityChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreChanged;
+import io.github.ilyaslabs.foodstack.store.api.events.StorePaymentCollectionChanged;
 import io.github.ilyaslabs.foodstack.store.core.domain.BranchTimeZones;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
@@ -43,10 +45,10 @@ import io.github.ilyaslabs.foodstack.store.core.persistence.StoreRepository;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.StoreSlugRepository;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
 import org.springframework.data.mongodb.core.geo.GeoJsonPoint;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionCallback;
@@ -294,6 +296,28 @@ class StoreServiceTest {
     }
 
     @Test
+    @DisplayName("finance lets a branch collect card payments with a reason and a limit; the change is announced")
+    @SuppressWarnings("unchecked")
+    void paymentCollection() {
+        given(this.stores.findById("s1")).willReturn(Optional.of(store(StoreStatus.LIVE)));
+        given(this.brands.findById("b1")).willReturn(Optional.of(brand()));
+
+        assertThatThrownBy(() -> this.service.setPaymentCollection("s1", "SPLIT", -1L, " ", "fin-1"))
+            .isInstanceOfSatisfying(ModuleException.BadRequest.class, (ex) -> assertThat((Map<String, String>) ex.details().get("errors"))
+                .containsKeys("mode", "creditLimitMinor", "reason"));
+
+        StoreDetails updated = this.service.setPaymentCollection("s1", "DIRECT", 900_000L, " Signed agreement ", "fin-1");
+
+        assertThat(updated.paymentCollection().mode()).isEqualTo(PaymentCollection.DIRECT);
+        assertThat(updated.paymentCollection().creditLimitMinor()).isEqualTo(900_000L);
+        assertThat(updated.paymentCollection().reason()).isEqualTo("Signed agreement");
+        assertThat(updated.paymentCollection().changedBy()).isEqualTo("fin-1");
+        verify(this.outbox).append(org.mockito.ArgumentMatchers.argThat((e) -> e instanceof StorePaymentCollectionChanged c
+                && c.mode().equals("DIRECT") && c.creditLimitMinor() == 900_000L && c.reason().equals("Signed agreement")
+                && c.brandId().equals("b1") && c.storeName() != null));
+    }
+
+    @Test
     @DisplayName("saves sorted hours and drops closures that already ended; rejects bad times")
     void updateHours() {
         // given
@@ -374,26 +398,50 @@ class StoreServiceTest {
     }
 
     @Test
-    @DisplayName("gives an owner access through identity and records them on the branch and brand")
+    @DisplayName("gives a branch manager access to that branch only, through identity")
     void addOwner() {
         StoreDocument store = store(StoreStatus.LIVE);
         BrandDocument brand = brand();
         given(this.stores.findById("s1")).willReturn(Optional.of(store));
         given(this.brands.findById("b1")).willReturn(Optional.of(brand));
         given(this.identity.grantStoreAccess(any(StoreAccessGrant.class))).willReturn(new UserView("u9", "owner@example.com",
-                "Owner", Set.of(Role.STORE_OWNER), UserStatus.ACTIVE, 0, Set.of("b1"), Set.of("s1")));
+                "Owner", Set.of(Role.STORE_OWNER), UserStatus.ACTIVE, 0, Set.of(), Set.of("s1")));
 
         OwnerDetails owner = this.service.addOwner("s1", new NewOwner("owner@example.com", "Owner", "secret-pass-1"), "admin-1");
 
         assertThat(owner.userId()).isEqualTo("u9");
         assertThat(store.getOwnerUserIds()).contains("u9");
-        assertThat(brand.getOwnerUserIds()).contains("u9");
-        verify(this.identity).grantStoreAccess(
-                new StoreAccessGrant("owner@example.com", "Owner", "secret-pass-1", "b1", "s1", "admin-1"));
+        assertThat(brand.getOwnerUserIds()).doesNotContain("u9");
+        verify(this.identity)
+            .grantStoreAccess(new StoreAccessGrant("owner@example.com", "Owner", "secret-pass-1", "s1", "admin-1"));
 
         this.service.removeOwner("s1", "u9", "admin-1");
-        verify(this.identity).revokeStoreAccess("u9", "b1", "s1");
+        verify(this.identity).revokeStoreAccess("u9", "s1");
         assertThat(store.getOwnerUserIds()).doesNotContain("u9");
+    }
+
+    @Test
+    @DisplayName("gives a brand owner the whole brand and tells every branch")
+    void addBrandOwner() {
+        StoreDocument store = store(StoreStatus.LIVE);
+        BrandDocument brand = brand();
+        given(this.brands.findById("b1")).willReturn(Optional.of(brand));
+        given(this.brands.save(any(BrandDocument.class))).willAnswer((call) -> call.getArgument(0));
+        given(this.stores.findByBrandId("b1")).willReturn(List.of(store));
+        given(this.identity.grantBrandAccess(any(BrandAccessGrant.class))).willReturn(new UserView("u7", "brand@example.com",
+                "Brand", Set.of(Role.BRAND_OWNER), UserStatus.ACTIVE, 0, Set.of("b1"), Set.of()));
+
+        OwnerDetails owner = this.service.addBrandOwner("b1", new NewOwner("brand@example.com", "Brand", "secret-pass-1"),
+                "admin-1");
+
+        assertThat(owner.userId()).isEqualTo("u7");
+        assertThat(brand.getOwnerUserIds()).contains("u7");
+        assertThat(store.getOwnerUserIds()).doesNotContain("u7");
+        verify(this.outbox).append(any(StoreChanged.class));
+
+        this.service.removeBrandOwner("b1", "u7", "admin-1");
+        verify(this.identity).revokeBrandAccess("u7", "b1");
+        assertThat(brand.getOwnerUserIds()).doesNotContain("u7");
     }
 
     @Test

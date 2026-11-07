@@ -55,18 +55,44 @@ public final class Permissions {
     /** Work in the rider area of the back office: go online, take jobs, see earnings. */
     public static final String RIDER_PORTAL = "rider:portal";
 
+    /** Read the audit log of back-office writes and sign-ins (PRD AD-3, ID-8). */
+    public static final String AUDIT_READ = "identity:audit:read";
+
+    /** See every branch's and rider's balance, payouts and the operator's earnings (PRD FI-3, FI-7). */
+    public static final String LEDGER_READ = "ledger:read";
+
+    /** Settle balances with a reference (PRD FI-3). */
+    public static final String LEDGER_SETTLE = "ledger:settle";
+
+    /** See the balances and payouts of one's own branches, or brand (PRD FI-7, BB-8). */
+    public static final String LEDGER_STORE = "ledger:store";
+
+    /** Allow or stop a branch collecting card payments itself and set its credit limit (PRD DP-2, DP-7). */
+    public static final String STORE_COLLECTION_MANAGE = "store:payment-collection:manage";
+
+    /** Connect the merchant account of one's own brand or branch (PRD DP-3, BB-9). */
+    public static final String PAYMENT_ACCOUNT = "payment:account";
+
+    /** Upload review photos only (PRD RV-1). */
+    public static final String MEDIA_UPLOAD_REVIEW = "media:upload:review";
+
+    /** Moderation queue: hide and show store reviews with a reason (PRD RV-3). */
+    public static final String REVIEW_MODERATE = "review:moderate";
+
     private static final Map<Role, Set<String>> BY_ROLE = new EnumMap<>(Role.class);
 
     static {
         BY_ROLE.put(Role.ADMIN, Set.of(SETTINGS_MANAGE, MEDIA_UPLOAD, USERS_READ, USERS_MANAGE, STORE_MANAGE,
-                GEO_MANAGE, SEARCH_MANAGE, PROMOTION_MANAGE, ORDER_MANAGE, PAYMENT_MANAGE, RIDER_MANAGE, DISPATCH_MANAGE));
-        BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ, PAYMENT_MANAGE));
-        BY_ROLE.put(Role.SUPPORT, Set.of(USERS_READ, ORDER_MANAGE, DISPATCH_MANAGE));
-        BY_ROLE.put(Role.STORE_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD));
+                GEO_MANAGE, SEARCH_MANAGE, PROMOTION_MANAGE, ORDER_MANAGE, PAYMENT_MANAGE, RIDER_MANAGE, DISPATCH_MANAGE, AUDIT_READ,
+                LEDGER_READ, LEDGER_SETTLE, STORE_COLLECTION_MANAGE, REVIEW_MODERATE));
+        BY_ROLE.put(Role.FINANCE, Set.of(USERS_READ, PAYMENT_MANAGE, LEDGER_READ, LEDGER_SETTLE, STORE_COLLECTION_MANAGE));
+        BY_ROLE.put(Role.SUPPORT, Set.of(USERS_READ, ORDER_MANAGE, DISPATCH_MANAGE, REVIEW_MODERATE));
+        BY_ROLE.put(Role.BRAND_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD, LEDGER_STORE, PAYMENT_ACCOUNT));
+        BY_ROLE.put(Role.STORE_OWNER, Set.of(STORE_PORTAL, MEDIA_UPLOAD, LEDGER_STORE, PAYMENT_ACCOUNT));
         BY_ROLE.put(Role.STORE_STAFF, Set.of(STORE_PORTAL));
         BY_ROLE.put(Role.RIDER, Set.of(RIDER_PORTAL, MEDIA_UPLOAD));
         BY_ROLE.put(Role.STORE_RIDER, Set.of(RIDER_PORTAL, MEDIA_UPLOAD));
-        BY_ROLE.put(Role.CUSTOMER, Set.of());
+        BY_ROLE.put(Role.CUSTOMER, Set.of(MEDIA_UPLOAD_REVIEW));
     }
 
     private Permissions() {

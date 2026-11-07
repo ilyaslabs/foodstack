@@ -179,6 +179,14 @@ h1 {
     color: var(--mat-sys-primary);
   }
 
+  &.rating {
+    color: var(--mat-sys-on-surface);
+
+    fs-icon {
+      color: #f5a623;
+    }
+  }
+
   .reason {
     font-weight: 400;
   }

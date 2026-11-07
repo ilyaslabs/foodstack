@@ -62,6 +62,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param createdAt created at
  * @param updatedAt last change
  * @param revision number of changes
+ * @param cityId the store's city, to look for riders of that city only, or {@code null}
  */
 @Document("dispatch_jobs")
 public record JobDocument(@Id String id, String orderNumber, String customerId, String customerName, String contactPhoneCipher,
@@ -72,7 +73,7 @@ public record JobDocument(@Id String id, String orderNumber, String customerId, 
         Instant searchStartedAt, int radiusMeters, int widenings, String offerRiderId, Instant offerExpiresAt,
         List<String> triedRiderIds, Instant alertedAt, Instant assignedAt, Instant atStoreAt, Instant pickedUpAt,
         Instant closedAt, String closeReason, String proof, String proofPhotoUrl, long cashCollectedMinor, long earningMinor,
-        long distanceMeters, long payBasisMinor, Instant createdAt, Instant updatedAt, long revision) {
+        long distanceMeters, long payBasisMinor, Instant createdAt, Instant updatedAt, long revision, String cityId) {
 
     public List<String> triedRiderIds() {
         return (this.triedRiderIds != null) ? this.triedRiderIds : List.of();

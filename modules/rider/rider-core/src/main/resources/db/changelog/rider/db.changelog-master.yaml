@@ -57,3 +57,12 @@ databaseChangeLog:
             collectionName: rider_riders
             keys: '{ "online": 1, "lat": 1, "lng": 1 }'
             options: '{ "name": "online_area" }'
+  - changeSet:
+      id: rider-5
+      author: foodstack
+      comment: "A branch lists the store riders of its whole brand (PRD BB-12)"
+      changes:
+        - createIndex:
+            collectionName: rider_riders
+            keys: '{ "kind": 1, "brandId": 1, "name": 1 }'
+            options: '{ "name": "kind_brand_name" }'

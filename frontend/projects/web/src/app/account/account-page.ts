@@ -12,7 +12,9 @@ import {
   MeClient,
   NotificationClient,
   NotificationPreferences,
+  PaymentClient,
   SavedAddress,
+  SavedCard,
 } from '@foodstack/api-client';
 import { AuthService } from '@foodstack/auth';
 import { Icon } from '@foodstack/ui';
@@ -21,8 +23,13 @@ import { AddressBook, addressIcon, addressTitle } from '../addresses/address-boo
 import { AddressEditor } from '../addresses/address-editor';
 import { Ui, UiKey } from '../i18n';
 import { LocationStore } from '../location-store';
+import { DeleteAccountDialog } from './delete-account-dialog';
+import { cardBrand } from '../pay/card-brand';
 
-/** Saved addresses (PRD ID-6), email choices (PRD NO-3) and password (TDD 9.1). */
+/**
+ * Saved addresses (PRD ID-6), saved cards (PRD CO-5a), email choices (PRD NO-3), password (TDD 9.1), and the customer's
+ * data export and account deletion (PRD ID-7).
+ */
 @Component({
   selector: 'app-account-page',
   imports: [
@@ -87,6 +94,40 @@ import { LocationStore } from '../location-store';
           <p class="status error" role="alert">{{ ui.t(key) }}</p>
         }
       </section>
+
+      @if (cardsShown()) {
+        <section class="card" id="cards">
+          <h2>{{ ui.t('savedCards') }}</h2>
+          @for (card of cards(); track card.id) {
+            <div class="address">
+              <span class="address-icon"><fs-icon name="credit_card" /></span>
+              <div class="address-text">
+                <strong>{{
+                  ui.t('cardEnding', { brand: brand(card.brand), last4: card.last4 })
+                }}</strong>
+                <span class="muted">{{
+                  ui.t('cardExpires', { date: expiry(card.expMonth, card.expYear) })
+                }}</span>
+              </div>
+              <div class="address-actions">
+                <button
+                  mat-icon-button
+                  type="button"
+                  (click)="removeCard(card)"
+                  [attr.aria-label]="ui.t('removeCard') + ': ' + card.last4"
+                >
+                  <fs-icon name="delete" />
+                </button>
+              </div>
+            </div>
+          } @empty {
+            <p class="muted">{{ ui.t('noSavedCards') }}</p>
+          }
+          @if (cardMessage(); as key) {
+            <p class="status error" role="alert">{{ ui.t(key) }}</p>
+          }
+        </section>
+      }
 
       <section class="card">
         <h2>{{ ui.t('emailChoices') }}</h2>
@@ -158,6 +199,27 @@ import { LocationStore } from '../location-store';
         <button mat-stroked-button type="button" (click)="signOutEverywhere()">
           {{ ui.t('signOutEverywhere') }}
         </button>
+      </section>
+
+      <section class="card data" id="your-data">
+        <h2>{{ ui.t('yourData') }}</h2>
+        <p class="muted">{{ ui.t('yourDataIntro') }}</p>
+        <div class="row">
+          <button mat-stroked-button type="button" (click)="download()" [disabled]="downloading()">
+            <fs-icon name="download" /> {{ ui.t('downloadData') }}
+          </button>
+          @if (downloadFailed()) {
+            <span class="error" role="alert">{{ ui.t('downloadFailed') }}</span>
+          }
+        </div>
+        <div class="danger-zone">
+          <p class="muted">
+            {{ ui.t('deleteAccountIntro', { days: ui.number(graceDays()) }) }}
+          </p>
+          <button mat-stroked-button type="button" class="danger" (click)="deleteAccount()">
+            <fs-icon name="delete" /> {{ ui.t('deleteAccount') }}
+          </button>
+        </div>
       </section>
     </div>
   `,
@@ -292,6 +354,28 @@ import { LocationStore } from '../location-store';
     .error {
       color: var(--mat-sys-error);
     }
+    .muted {
+      margin: 0;
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-body-medium);
+    }
+    .data .row {
+      flex-wrap: wrap;
+      margin-block: 12px 0;
+    }
+    .danger-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+      margin-block-start: 20px;
+      padding-block-start: 20px;
+      border-block-start: 1px solid var(--mat-sys-outline-variant);
+    }
+    .danger {
+      --mat-button-outlined-label-text-color: var(--mat-sys-error);
+      --mat-button-outlined-outline-color: var(--mat-sys-error);
+    }
   `,
 })
 export class AccountPage {
@@ -310,12 +394,53 @@ export class AccountPage {
   protected readonly busy = signal(false);
   protected current = '';
   protected next = '';
+  protected readonly downloading = signal(false);
+  protected readonly downloadFailed = signal(false);
+  protected readonly graceDays = signal(14);
+  private readonly payments = inject(PaymentClient);
+  protected readonly cardsShown = signal(false);
+  protected readonly cards = signal<SavedCard[]>([]);
+  protected readonly cardMessage = signal<UiKey | null>(null);
 
   constructor() {
     afterNextRender(async () => {
       void this.book.load(true);
+      this.me.deletionPolicy().subscribe({
+        next: (policy) => this.graceDays.set(policy.graceDays),
+        error: () => undefined,
+      });
+      this.payments.options().subscribe({
+        next: (options) => {
+          if (options.savedCards) {
+            this.cardsShown.set(true);
+            this.payments.cards().subscribe({
+              next: (cards) => this.cards.set(cards),
+              error: () => this.cardMessage.set('cardsFailed'),
+            });
+          }
+        },
+        error: () => undefined,
+      });
       this.preferences.set(await firstValueFrom(this.notifications.preferences()));
     });
+  }
+
+  protected brand(brand: string): string {
+    return cardBrand(brand);
+  }
+
+  protected expiry(month: number, year: number): string {
+    return `${String(month).padStart(2, '0')}/${String(year % 100).padStart(2, '0')}`;
+  }
+
+  protected async removeCard(card: SavedCard): Promise<void> {
+    this.cardMessage.set(null);
+    try {
+      await firstValueFrom(this.payments.removeCard(card.id));
+      this.cards.update((list) => list.filter((c) => c.id !== card.id));
+    } catch {
+      this.cardMessage.set('cardsFailed');
+    }
   }
 
   protected title(address: SavedAddress): string {
@@ -394,5 +519,41 @@ export class AccountPage {
     } finally {
       await this.auth.signOut();
     }
+  }
+
+  /** Saves everything FoodStack keeps about the customer as a JSON file (PRD ID-7). */
+  protected async download(): Promise<void> {
+    this.downloading.set(true);
+    this.downloadFailed.set(false);
+    try {
+      const data = await firstValueFrom(this.me.exportData());
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `my-data-${data.exportedAt.slice(0, 10)}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      this.downloadFailed.set(true);
+    } finally {
+      this.downloading.set(false);
+    }
+  }
+
+  protected deleteAccount(): void {
+    this.dialogs
+      .open(DeleteAccountDialog, {
+        data: { graceDays: this.graceDays() },
+        width: '460px',
+        maxWidth: 'calc(100vw - 32px)',
+        autoFocus: false,
+      })
+      .afterClosed()
+      .subscribe((scheduled) => {
+        if (scheduled) {
+          void this.auth.signOut();
+        }
+      });
   }
 }

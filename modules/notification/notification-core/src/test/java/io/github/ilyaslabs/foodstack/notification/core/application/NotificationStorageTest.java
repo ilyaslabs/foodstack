@@ -14,10 +14,11 @@ import java.util.function.Supplier;
 
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
+import io.github.ilyaslabs.foodstack.identity.api.events.AccountDeletionScheduled;
 import io.github.ilyaslabs.foodstack.notification.core.NotificationConfiguration;
 import io.github.ilyaslabs.foodstack.notification.core.application.NotificationService.Message;
-import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport.MailFailure;
 import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport;
+import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport.MailFailure;
 import io.github.ilyaslabs.foodstack.notification.core.push.PushTransport;
 import io.github.ilyaslabs.foodstack.platform.mongo.FoodstackMongoProperties;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
@@ -27,14 +28,14 @@ import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
+import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.json.JsonMapper;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -42,6 +43,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -203,6 +205,29 @@ class NotificationStorageTest {
         Document row = this.notificationMongo.template().findById("e-push:" + this.user + ":PUSH", Document.class,
                 "notification_deliveries");
         assertThat(row.getString("status")).isEqualTo("FAILED");
+    }
+
+    @Test
+    @DisplayName("a requested deletion is emailed with its date; the export holds the centre; erasing removes it all")
+    void deletion() {
+        // given
+        given(this.settings.getLocale()).willReturn(new LocaleView("en", List.of("en"), "PKR", "Asia/Karachi", 1));
+        AccountMessages account = new AccountMessages(this.notifications, this.settings, this.identity, this.serviceCalls,
+                this.pii, Clock.systemUTC());
+        CustomerNotificationData data = new CustomerNotificationData(this.notificationMongo.template(), this.notifications);
+
+        // when
+        account.onDeletionScheduled("del-" + this.user,
+                new AccountDeletionScheduled(this.user, Instant.parse("2026-11-21T10:00:00Z")));
+        CustomerNotificationData.Export export = data.export(this.user);
+        data.erase(this.user);
+
+        // then
+        verify(this.mail).send(eq("sara@example.com"), contains("November 21, 2026"), contains("sign in before then"), any());
+        assertThat(export.preferences()).isNotNull();
+        assertThat(this.inbox.list(this.user, null, 10)).isEmpty();
+        assertThat(data.export(this.user).messages()).isEmpty();
+        assertThat(this.notifications.deliveries(null, null, 50)).noneMatch((d) -> d.id().startsWith("del-" + this.user));
     }
 
     @Test

@@ -5,8 +5,11 @@ import { Observable, map } from 'rxjs';
 import {
   AddressSuggestion,
   Brand,
+  BranchPrices,
   BrandUpdate,
   BranchUpdate,
+  City,
+  CityInput,
   Closure,
   Commission,
   DeliveryQuote,
@@ -15,8 +18,10 @@ import {
   EditorSection,
   Menu,
   MenuItemInput,
+  NewBranch,
   Onboarding,
   OperatorPricing,
+  PriceChange,
   StoreDetails,
   StoreOwner,
   StorePage,
@@ -75,10 +80,49 @@ export class StoreClient {
 
   updateAdmin(
     storeId: string,
-    update: { legalName: string; taxId: string | null; operatorDeliveryAllowed: boolean },
+    update: {
+      legalName: string;
+      taxId: string | null;
+      operatorDeliveryAllowed: boolean;
+      cityId?: string | null;
+    },
     etag: string,
   ): Observable<Versioned<StoreDetails>> {
     return this.put(`/${storeId}/admin`, update, etag);
+  }
+
+  /**
+   * The branch's own commission from a date (operator only); `commission` null goes back to the
+   * brand's. `effectiveFrom` is epoch seconds, null for now.
+   */
+  updateCommission(
+    storeId: string,
+    commission: Commission | null,
+    effectiveFrom: number | null,
+  ): Observable<Versioned<StoreDetails>> {
+    return this.http
+      .put<StoreDetails>(
+        this.url(`/${storeId}/commission`),
+        { commission, effectiveFrom },
+        { observe: 'response' },
+      )
+      .pipe(map(versioned));
+  }
+
+  /** Lets the branch collect card payments itself, or stops it (finance, PRD DP-2, DP-7). */
+  setPaymentCollection(
+    storeId: string,
+    mode: 'OPERATOR' | 'DIRECT',
+    creditLimitMinor: number | null,
+    reason: string,
+  ): Observable<Versioned<StoreDetails>> {
+    return this.http
+      .put<StoreDetails>(
+        this.url(`/${storeId}/payment-collection`),
+        { mode, creditLimitMinor, reason },
+        { observe: 'response' },
+      )
+      .pipe(map(versioned));
   }
 
   /** Changes the branch's web address (operator only); a taken slug answers 409 SLUG_TAKEN. */
@@ -150,6 +194,29 @@ export class StoreClient {
     });
   }
 
+  /** The branch's own prices, and its price changes waiting for approval. */
+  branchPrices(storeId: string): Observable<BranchPrices> {
+    return this.http.get<BranchPrices>(this.url(`/${storeId}/menu/prices`));
+  }
+
+  /**
+   * Sets the branch's own price for an item, or an option's extra price; null goes back to the
+   * brand price. PENDING means it waits for the operator's approval.
+   */
+  setBranchPrice(
+    storeId: string,
+    itemId: string,
+    optionId: string | null,
+    priceMinor: number | null,
+  ): Observable<'APPLIED' | 'PENDING'> {
+    return this.http
+      .put<{ outcome: 'APPLIED' | 'PENDING' }>(this.url(`/${storeId}/menu/items/${itemId}/price`), {
+        optionId,
+        priceMinor,
+      })
+      .pipe(map((response) => response.outcome));
+  }
+
   /** A live branch for customers, by its slug (spice-route-gulberg) or id. */
   page(slugOrId: string): Observable<StorePage> {
     return this.http.get<StorePage>(this.url(`/${encodeURIComponent(slugOrId)}`));
@@ -196,12 +263,59 @@ export class BrandClient {
       .pipe(map(versioned));
   }
 
-  updateCommission(brandId: string, commission: Commission): Observable<Brand> {
-    return this.http.put<Brand>(this.url(`/${brandId}/commission`), commission);
+  /** A commission from a date (operator only); `effectiveFrom` is epoch seconds, null for now. */
+  updateCommission(
+    brandId: string,
+    commission: Commission,
+    effectiveFrom: number | null = null,
+  ): Observable<Brand> {
+    return this.http.put<Brand>(this.url(`/${brandId}/commission`), { commission, effectiveFrom });
   }
 
-  menu(brandId: string): Observable<EditorMenu> {
-    return this.http.get<EditorMenu>(this.url(`/${brandId}/menu`));
+  /** Every branch of the brand (operator staff and the brand's owners). */
+  branches(brandId: string): Observable<StoreSummary[]> {
+    return this.http
+      .get<{ items: StoreSummary[] }>(this.url(`/${brandId}/branches`))
+      .pipe(map((response) => response.items));
+  }
+
+  /** Adds a branch in draft; it shares the brand's menu and goes live once ready. */
+  addBranch(brandId: string, branch: NewBranch): Observable<Versioned<StoreDetails>> {
+    return this.http
+      .post<StoreDetails>(this.url(`/${brandId}/branches`), branch, { observe: 'response' })
+      .pipe(map(versioned));
+  }
+
+  owners(brandId: string): Observable<StoreOwner[]> {
+    return this.http.get<StoreOwner[]>(this.url(`/${brandId}/owners`));
+  }
+
+  /** Brand owners are given by operator staff. */
+  addOwner(
+    brandId: string,
+    owner: { email: string; displayName: string; initialPassword: string },
+  ): Observable<StoreOwner> {
+    return this.http.post<StoreOwner>(this.url(`/${brandId}/owners`), owner);
+  }
+
+  removeOwner(brandId: string, userId: string): Observable<void> {
+    return this.http.delete<void>(this.url(`/${brandId}/owners/${userId}`));
+  }
+
+  /** Whether branch managers may run promotions for their own branch (PRD BB-11). */
+  setBranchPromotions(brandId: string, allowed: boolean): Observable<Brand> {
+    return this.http.put<Brand>(this.url(`/${brandId}/branch-promotions`), { allowed });
+  }
+
+  /** The brand menu for editing; with `storeId`, only what that branch sells (branch managers may read it). */
+  menu(brandId: string, storeId?: string): Observable<EditorMenu> {
+    const params = storeId ? new HttpParams().set('storeId', storeId) : undefined;
+    return this.http.get<EditorMenu>(this.url(`/${brandId}/menu`), { params });
+  }
+
+  /** Price changes of the brand and its branches waiting for approval. */
+  priceChanges(brandId: string): Observable<PriceChange[]> {
+    return this.http.get<PriceChange[]>(this.url(`/${brandId}/menu/price-changes`));
   }
 
   createSection(brandId: string, name: Translated): Observable<EditorSection> {
@@ -236,6 +350,55 @@ export class BrandClient {
 
   deleteItem(brandId: string, itemId: string): Observable<void> {
     return this.http.delete<void>(this.url(`/${brandId}/menu/items/${itemId}`));
+  }
+}
+
+/** Price changes waiting for approval (operator staff, PRD ST-6). */
+@Injectable({ providedIn: 'root' })
+export class PriceChangeClient {
+  private readonly http = inject(HttpClient);
+  private readonly config = inject(RUNTIME_CONFIG);
+
+  private url(path = ''): string {
+    return `${this.config.apiUrl}/api/v1/price-changes${path}`;
+  }
+
+  pending(): Observable<PriceChange[]> {
+    return this.http.get<PriceChange[]>(this.url());
+  }
+
+  approve(id: string): Observable<PriceChange> {
+    return this.http.post<PriceChange>(this.url(`/${encodeURIComponent(id)}/approve`), null);
+  }
+
+  reject(id: string): Observable<PriceChange> {
+    return this.http.post<PriceChange>(this.url(`/${encodeURIComponent(id)}/reject`), null);
+  }
+}
+
+/** The operator's cities (PRD AD-4), each with optional own delivery pricing. */
+@Injectable({ providedIn: 'root' })
+export class CityClient {
+  private readonly http = inject(HttpClient);
+  private readonly config = inject(RUNTIME_CONFIG);
+
+  private url(path = ''): string {
+    return `${this.config.apiUrl}/api/v1/geo/cities${path}`;
+  }
+
+  list(): Observable<City[]> {
+    return this.http.get<City[]>(this.url());
+  }
+
+  create(city: CityInput): Observable<Versioned<City>> {
+    return this.http.post<City>(this.url(), city, { observe: 'response' }).pipe(map(versioned));
+  }
+
+  /** Saves changes to the version read; another change in between answers 412. */
+  update(cityId: string, city: CityInput, version: number): Observable<City> {
+    return this.http.put<City>(this.url(`/${cityId}`), city, {
+      headers: { 'If-Match': `"city-${version}"` },
+    });
   }
 }
 

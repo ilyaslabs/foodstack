@@ -148,6 +148,45 @@ class QuoteServiceTest {
     }
 
     @Test
+    @DisplayName("a branch in a city with its own pricing is priced, limited and drawn with the city's numbers")
+    void cityPricing() {
+        // given the operator charges 100 + 30/km up to 8 km, Karachi charges a flat 200 up to 15 km
+        CityService cities = mock(CityService.class);
+        QuoteService withCities = new QuoteService(this.zones, this.pricing, 1.3, RoutingService.estimating(1.3),
+                Clock.systemUTC(), () -> ZoneOffset.UTC, cities);
+        given(this.pricing.get()).willReturn(new OperatorPricing(true, 10_000, 3_000, 8000, 0, null, 100, List.of(), 1, null));
+        given(cities.pricingOf("karachi")).willReturn(new CityPricing(20_000, 0, 15_000, 40_000, null, 100, List.of()));
+
+        // when
+        DeliveryQuoteView inCity = withCities.quote(new QuoteRequest("s1", STORE, DeliveryMode.OPERATOR, FAR, null, "karachi"));
+        DeliveryQuoteView elsewhere = withCities.quote(new QuoteRequest("s1", STORE, DeliveryMode.OPERATOR, FAR, null, "lahore"));
+        List<GeoPoint> circle = withCities
+            .deliveryArea(new DeliveryAreaRequest("s1", STORE, DeliveryMode.OPERATOR, "karachi"))
+            .polygons()
+            .getFirst();
+
+        // then
+        assertThat(inCity.deliverable()).isTrue();
+        assertThat(inCity.chargeMinor()).isEqualTo(20_000);
+        assertThat(inCity.minOrderMinor()).isEqualTo(40_000);
+        assertThat(elsewhere.reason()).isEqualTo(DeliveryQuoteView.TOO_FAR);
+        assertThat(GeoMath.distanceMeters(STORE, circle.getFirst())).isBetween(11_400.0, 11_700.0);
+    }
+
+    @Test
+    @DisplayName("a city's own pricing never switches operator delivery on")
+    void cityPricingKeepsSwitch() {
+        CityService cities = mock(CityService.class);
+        QuoteService withCities = new QuoteService(this.zones, this.pricing, 1.3, RoutingService.estimating(1.3),
+                Clock.systemUTC(), () -> ZoneOffset.UTC, cities);
+        given(this.pricing.get()).willReturn(new OperatorPricing(false, 10_000, 3_000, 8000, 0, null, 100, List.of(), 1, null));
+        given(cities.pricingOf("karachi")).willReturn(new CityPricing(20_000, 0, 15_000, 0, null, 100, List.of()));
+
+        assertThat(withCities.quote(new QuoteRequest("s1", STORE, DeliveryMode.OPERATOR, NEAR, null, "karachi")).reason())
+            .isEqualTo(DeliveryQuoteView.OPERATOR_DELIVERY_OFF);
+    }
+
+    @Test
     @DisplayName("rejects invalid locations")
     void invalidLocation() {
         assertThatThrownBy(() -> this.service.quote(new QuoteRequest("s1", STORE, DeliveryMode.SELF, new GeoPoint(120, 0))))

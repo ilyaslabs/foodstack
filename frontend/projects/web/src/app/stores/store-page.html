@@ -52,6 +52,14 @@
             }
           </span>
         }
+        @if (rating(); as r) {
+          @if (r.count > 0) {
+            <a class="fact link rating" href="#reviews" (click)="jumpToReviews($event)">
+              <fs-icon name="star" /> {{ ui.number(r.average, 1) }}
+              <span class="reason">({{ ui.number(r.count) }})</span>
+            </a>
+          }
+        }
         <span class="fact"><fs-icon name="schedule" /> {{ ui.minutes(store.prepMinutes) }}</span>
         @if (store.address) {
           <span class="fact"><fs-icon name="place" /> {{ store.address }}</span>
@@ -171,6 +179,7 @@
       } @empty {
         <p class="empty">{{ ui.t('emptyMenu') }}</p>
       }
+      <app-store-reviews [storeId]="store.id" [brandName]="store.brandName" [summary]="rating()" />
     </section>
   </div>
 } @else if (missing()) {

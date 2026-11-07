@@ -11,6 +11,8 @@ import io.github.ilyaslabs.foodstack.cart.core.persistence.CartDocument;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryQuoteView;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.geo.api.QuoteRequest;
+import io.github.ilyaslabs.foodstack.payment.api.MerchantView;
+import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponEvaluation;
@@ -38,13 +40,21 @@ public class CheckoutService {
 
     private final PromotionApi promotions;
 
+    private final PaymentApi payments;
+
     private final SettingsApi settings;
 
     public CheckoutService(CartService carts, GeoApi geo, PromotionApi promotions, SettingsApi settings) {
+        this(carts, geo, promotions, settings, null);
+    }
+
+    /** @param payments says whose merchant account a card payment would go into, or {@code null} for the operator's */
+    public CheckoutService(CartService carts, GeoApi geo, PromotionApi promotions, SettingsApi settings, PaymentApi payments) {
         this.carts = carts;
         this.geo = geo;
         this.promotions = promotions;
         this.settings = settings;
+        this.payments = payments;
     }
 
     public CheckoutView checkout(CheckoutRequest request) {
@@ -90,7 +100,7 @@ public class CheckoutService {
         }
         else {
             DeliveryQuoteView quote = this.geo.quote(new QuoteRequest(store.storeId(), store.location(), store.deliveryMode(),
-                    request.destination(), store.timezone()));
+                    request.destination(), store.timezone(), store.cityId()));
             delivery = new CheckoutView.Delivery(quote.deliverable(), quote.reason(), quote.deliveryMode(), quote.chargeMinor(),
                     quote.minOrderMinor(), quote.freeDeliveryAboveMinor(), quote.distanceMeters());
             if (!quote.deliverable()) {
@@ -111,7 +121,7 @@ public class CheckoutService {
         if (request.couponCode() != null && !request.couponCode().isBlank()) {
             coupon = this.promotions.evaluate(new CouponRequest(request.couponCode().strip(), request.customerId(),
                     store.storeId(), store.brandId(), store.city(), subtotal, deliveryCharge, fulfilment,
-                    request.paymentMethod(), true, priced.currency()));
+                    request.paymentMethod(), operatorMerchant(request, store.storeId()), priced.currency(), store.cityId()));
             if (coupon.applies()) {
                 itemsDiscount = Math.min(coupon.itemsDiscountMinor(), subtotal);
                 deliveryDiscount = Math.min(coupon.deliveryDiscountMinor(), deliveryCharge);
@@ -149,5 +159,13 @@ public class CheckoutService {
 
     private static CheckoutView.Problem problem(String code, String key, Object value) {
         return new CheckoutView.Problem(code, Map.of(key, value));
+    }
+
+    /** Whether the payment would go into the operator's account; coupons may be limited to that (PRD PR-3a). */
+    private boolean operatorMerchant(CheckoutRequest request, String storeId) {
+        if (this.payments == null || request.paymentMethod() != PaymentMethod.CARD) {
+            return true;
+        }
+        return MerchantView.OPERATOR.equals(this.payments.resolveMerchant(storeId).collectedBy());
     }
 }

@@ -15,7 +15,8 @@ import { StoreContext } from './store-context';
 
 /**
  * The branch's own riders (PRD DR-1, store self-delivery): they sign in to the rider screen, and
- * the branch picks one when it accepts a delivery order it delivers itself.
+ * the branch picks one when it accepts a delivery order it delivers itself. Riders of the brand's
+ * other branches are listed too (PRD BB-12); only their home branch removes them.
  */
 @Component({
   selector: 'app-store-riders',
@@ -32,7 +33,8 @@ import { StoreContext } from './store-context';
                 support hands a delivery back to you.
               } @else {
                 Pick one of them when you accept a delivery order. They follow the order in the
-                rider screen of this back office.
+                rider screen of this back office. Riders of the brand's other branches can deliver
+                for this branch too.
               }
             </p>
           </div>
@@ -61,7 +63,11 @@ import { StoreContext } from './store-context';
             } @else {
               <span class="chip">Offline</span>
             }
-            <button mat-button type="button" (click)="remove(rider)">Remove</button>
+            @if (rider.storeId === context.store()?.id) {
+              <button mat-button type="button" (click)="remove(rider)">Remove</button>
+            } @else {
+              <span class="chip shared">From another branch</span>
+            }
           </div>
         } @empty {
           <p class="none">No riders yet. Add the people who deliver for this branch.</p>
@@ -124,6 +130,9 @@ import { StoreContext } from './store-context';
     .chip.busy {
       background: var(--mat-sys-tertiary-container);
       color: var(--mat-sys-on-tertiary-container);
+    }
+    .chip.shared {
+      white-space: nowrap;
     }
     .none {
       font: var(--mat-sys-body-medium);

@@ -18,6 +18,14 @@ public interface StoreSearchEngine {
 
     void delete(String storeId);
 
+    /**
+     * Removes a branch that is not listed at this version of it (a draft, paused or closed
+     * branch). The version orders it with the branch's writes, as for {@link #index}: an older read
+     * arriving late is ignored, and removing a branch that was never indexed does not hold back its
+     * first listing.
+     */
+    void delete(String storeId, long version);
+
     /** Ids of indexed branches of a brand. */
     List<String> storeIdsOfBrand(String brandId);
 

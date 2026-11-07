@@ -27,8 +27,17 @@ import io.github.ilyaslabs.foodstack.rider.api.Vehicle;
  * @param deliveries deliveries completed
  * @param createdAt created at
  * @param version profile version, sent back with changes
+ * @param cityId the operator's city the rider works in, or {@code null} for any city
  */
 public record RiderDetails(String id, RiderKind kind, String storeId, String name, String phone, Vehicle vehicle, String plate,
         String city, RiderStatus status, boolean online, Double lat, Double lng, Long lastSeenAt, List<String> activeOrderIds,
-        int acceptancePercent, long deliveries, long createdAt, long version) {
+        int acceptancePercent, long deliveries, long createdAt, long version, String cityId) {
+
+    /** A rider without a city from the operator's list. */
+    public RiderDetails(String id, RiderKind kind, String storeId, String name, String phone, Vehicle vehicle, String plate,
+            String city, RiderStatus status, boolean online, Double lat, Double lng, Long lastSeenAt,
+            List<String> activeOrderIds, int acceptancePercent, long deliveries, long createdAt, long version) {
+        this(id, kind, storeId, name, phone, vehicle, plate, city, status, online, lat, lng, lastSeenAt, activeOrderIds,
+                acceptancePercent, deliveries, createdAt, version, null);
+    }
 }

@@ -293,6 +293,74 @@ export interface PaymentOptions {
   cash: boolean;
   card: boolean;
   gateway: string | null;
+  /** HOSTED_PAGE (the gateway's own page) or EMBEDDED (card fields inside the app, PRD CO-5). */
+  cardStyle?: 'HOSTED_PAGE' | 'EMBEDDED';
+  /** Whether customers may keep a card for next time (PRD CO-5a). */
+  savedCards?: boolean;
+}
+
+/** A card the gateway keeps for the customer; the app only ever sees brand and last four digits. */
+export interface SavedCard {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
+/** What the app's own payment page needs for one order (PRD CO-5). */
+export interface CardCheckout {
+  orderId: string;
+  status: string;
+  amountMinor: number;
+  currency: string;
+  gateway: string;
+  publishableKey: string | null;
+  clientSecret: string | null;
+  returnUrl: string;
+  cancelUrl: string;
+  expiresAt: number;
+  canSaveCard: boolean;
+  savedCards: SavedCard[];
+}
+
+/** A title, body and subject; a blank field keeps the built-in one. */
+export interface MessageText {
+  title: string | null;
+  body: string | null;
+  subject: string | null;
+}
+
+export interface MessageTemplateSummary {
+  id: string;
+  placeholders: string[];
+  editedLanguages: string[];
+}
+
+/** One message in one language: the built-in text beside the operator's own wording. */
+export interface MessageTemplateText {
+  language: string;
+  builtIn: MessageText;
+  /** The built-in text's language: English for a language FoodStack has no text for. */
+  builtInLanguage: string;
+  edited: MessageText | null;
+  version: number;
+  updatedAt: string | null;
+}
+
+export interface MessageTemplate {
+  id: string;
+  placeholders: string[];
+  /** Placeholders every edit must keep, such as the sign-in code. */
+  required: string[];
+  languages: MessageTemplateText[];
+}
+
+export interface MessagePreview {
+  subject: string;
+  title: string;
+  body: string;
+  html: string;
 }
 
 export interface InboxItem {
@@ -330,6 +398,48 @@ export interface OrderingSettings {
   taxBasisPoints: number;
   tipsEnabled: boolean;
   acceptTimeoutSeconds: number;
+  /** Store owners' price changes wait for operator approval (PRD ST-6, BB-4). Off by default. */
+  priceApprovalRequired?: boolean;
+  /** Branches may be allowed to collect card payments themselves (PRD DP-1). Off by default. */
+  directCollectionEnabled?: boolean;
+  /** What a direct-collecting branch may owe before it is suspended, unless it has its own limit. */
+  creditLimitMinor?: number;
+  /** Where customers type their card: the gateway's page or fields in the app (PRD CO-5). */
+  cardStyle?: 'HOSTED_PAGE' | 'EMBEDDED';
+  /** Customers may keep a card at the gateway for next time (PRD CO-5a). Off by default. */
+  savedCardsEnabled?: boolean;
+}
+
+/** A brand's or branch's merchant account, without its keys. */
+export interface MerchantAccount {
+  id: string;
+  scope: 'BRAND' | 'STORE';
+  ownerId: string;
+  gateway: string;
+  keyHint: string;
+  status: 'ACTIVE' | 'FAILED' | 'REVOKED';
+  lastError: string | null;
+  verifiedAt: number | null;
+}
+
+/** Where a branch's card payments go (PRD DP-1 to DP-7, BB-9). */
+export interface CardCollection {
+  storeId: string;
+  brandId: string | null;
+  /** Direct collection is on for the platform. */
+  enabled: boolean;
+  gateway: string;
+  mode: 'OPERATOR' | 'DIRECT';
+  /** Over its credit limit: the operator collects until it settles. */
+  suspended: boolean;
+  storeAccount: MerchantAccount | null;
+  brandAccount: MerchantAccount | null;
+  collectedBy: 'OPERATOR' | 'STORE';
+  accountId: string | null;
+  storeWebhookUrl: string | null;
+  brandWebhookUrl: string | null;
+  canConnectStore: boolean;
+  canConnectBrand: boolean;
 }
 
 export type PromotionType = 'PERCENT' | 'FIXED' | 'FREE_DELIVERY';

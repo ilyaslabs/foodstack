@@ -53,6 +53,11 @@ class CouponRulesTest {
         assertThat(reason(with(p, "storeIds", List.of("s9")), order(100_000), 0, 0)).isEqualTo(CouponEvaluation.NOT_FOR_STORE);
         assertThat(reason(with(p, "cities", List.of("Karachi")), order(100_000), 0, 0)).isEqualTo(CouponEvaluation.NOT_FOR_STORE);
         assertThat(reason(with(p, "cities", List.of(" lahore ")), order(100_000), 0, 0)).isNull();
+        // M4: cities are the operator's city ids
+        CouponRequest inCity = new CouponRequest("SAVE", "c1", "s1", "b1", "Lahore", 100_000, 15_000, Fulfilment.DELIVERY,
+                PaymentMethod.CASH, true, "PKR", "city-lhr");
+        assertThat(reason(with(p, "cities", List.of("city-lhr")), inCity, 0, 0)).isNull();
+        assertThat(reason(with(p, "cities", List.of("city-khi")), inCity, 0, 0)).isEqualTo(CouponEvaluation.NOT_FOR_STORE);
         assertThat(reason(with(p, "paymentMethods", List.of(PaymentMethod.CARD)), order(100_000), 0, 0))
             .isEqualTo(CouponEvaluation.PAYMENT_METHOD);
         assertThat(reason(with(p, "operatorMerchantOnly", true), new CouponRequest("SAVE", "c1", "s1", "b1", "Lahore", 100_000,

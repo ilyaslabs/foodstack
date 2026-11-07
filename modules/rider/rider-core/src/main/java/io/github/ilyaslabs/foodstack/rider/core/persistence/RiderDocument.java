@@ -15,11 +15,14 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param id the rider's user id
  * @param kind {@code OPERATOR} or {@code STORE}
  * @param storeId the store a store rider rides for, else {@code null}
+ * @param brandId the brand of that store: a store rider rides for every branch of the brand (PRD
+ *        BB-12); {@code null} for operator riders
  * @param name display name
  * @param phoneCipher phone, encrypted with the deployment's PII key
  * @param vehicle {@code BICYCLE}, {@code MOTORBIKE}, {@code SCOOTER} or {@code CAR}
  * @param plate number plate, or {@code null}
  * @param city where the rider works, as text until cities land (M4)
+ * @param cityId the operator's city the rider works in, or {@code null} for any city
  * @param status {@code ACTIVE} or {@code SUSPENDED}
  * @param online whether the rider is taking jobs
  * @param idleSince when the rider went online or finished the last job
@@ -35,8 +38,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param version optimistic lock of the profile
  */
 @Document("rider_riders")
-public record RiderDocument(@Id String id, String kind, String storeId, String name, String phoneCipher, String vehicle,
-        String plate, String city, String status, boolean online, Instant idleSince, Double lat, Double lng,
+public record RiderDocument(@Id String id, String kind, String storeId, String brandId, String name, String phoneCipher, String vehicle,
+        String plate, String city, String cityId, String status, boolean online, Instant idleSince, Double lat, Double lng,
         Instant lastSeenAt, List<String> activeOrderIds, long offers, long accepted, long deliveries, Instant createdAt,
         Instant updatedAt, @Version Long version) {
 

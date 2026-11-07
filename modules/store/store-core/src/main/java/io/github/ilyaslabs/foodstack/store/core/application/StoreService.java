@@ -18,12 +18,14 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import io.github.ilyaslabs.foodstack.geo.api.CityView;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaRequest;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryQuoteView;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.geo.api.QuoteRequest;
+import io.github.ilyaslabs.foodstack.identity.api.BrandAccessGrant;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.StoreAccessGrant;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
@@ -33,14 +35,18 @@ import io.github.ilyaslabs.foodstack.media.api.MediaOwner;
 import io.github.ilyaslabs.foodstack.media.api.MediaPurpose;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
+import io.github.ilyaslabs.foodstack.platform.security.BranchBrands;
 import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.store.api.StoreStatus;
 import io.github.ilyaslabs.foodstack.store.api.TimeRange;
+import io.github.ilyaslabs.foodstack.store.api.events.BranchPromotionsChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.BrandChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreAvailabilityChanged;
 import io.github.ilyaslabs.foodstack.store.api.events.StoreChanged;
+import io.github.ilyaslabs.foodstack.store.api.events.StorePaymentCollectionChanged;
 import io.github.ilyaslabs.foodstack.store.core.domain.BranchTimeZones;
+import io.github.ilyaslabs.foodstack.store.core.domain.CommissionSchedule;
 import io.github.ilyaslabs.foodstack.store.core.domain.OpeningHours;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandDocument;
 import io.github.ilyaslabs.foodstack.store.core.persistence.BrandRepository;
@@ -69,6 +75,12 @@ public class StoreService {
 
     private static final double RIDER_KMH = 20;
 
+    /** Branches per brand; a chain bigger than this is several brands. */
+    static final int MAX_BRANCHES = 500;
+
+    /** Owners per brand or branch. */
+    static final int MAX_OWNERS = 20;
+
     private final BrandRepository brands;
 
     private final StoreRepository stores;
@@ -92,6 +104,8 @@ public class StoreService {
     private final Clock clock;
 
     private final BranchTimeZones timeZones;
+
+    private BranchBrands branchBrands;
 
     public StoreService(BrandRepository brands, StoreRepository stores, StoreSlugRepository slugs, MenuItemRepository items,
             SettingsApi settings, MediaApi media, IdentityApi identity, GeoApi geo, OutboxWriter outbox,
@@ -119,6 +133,11 @@ public class StoreService {
         this.clock = clock;
     }
 
+    /** Where branch-to-brand links are published for brand owners' access checks (TDD 9.1); optional in tests. */
+    public void setBranchBrands(BranchBrands branchBrands) {
+        this.branchBrands = branchBrands;
+    }
+
     // ---- Onboarding and reads -------------------------------------------------------------
 
     /**
@@ -140,6 +159,7 @@ public class StoreService {
             errors.put("prepMinutes", "must be 5 to 120 minutes");
         }
         validate(errors, command.commission());
+        String cityId = cityFor(errors, command.cityId(), command.location(), null);
         if (command.deliveryMode() == DeliveryMode.OPERATOR) {
             errors.put("deliveryMode", "operator delivery is allowed per branch after onboarding");
         }
@@ -172,6 +192,7 @@ public class StoreService {
         store.setPrepMinutes(command.prepMinutes());
         store.setDeliveryMode(DeliveryMode.SELF);
         store.setPickupEnabled(command.pickupEnabled());
+        store.setCityId(cityId);
         store.setStatus(StoreStatus.DRAFT);
         store.setCreatedAt(now);
         store.setCreatedBy(userId);
@@ -187,7 +208,127 @@ public class StoreService {
             this.outbox.append(new StoreChanged(result.getId(), result.getBrandId(), version(result.getVersion()), userId));
             return result;
         }));
+        rememberBrand(saved);
         return details(saved, brand, locale);
+    }
+
+    /**
+     * Adds a branch to an existing brand (PRD BB-1, BB-2), in {@code DRAFT} until the operator makes it
+     * live. The brand's menu is shared at once; the branch needs its own hours, zones and riders.
+     * The brand shows in the apps from its second branch on.
+     */
+    public StoreDetails addBranch(String brandId, NewBranch command, String userId) {
+        LocaleView locale = this.settings.getLocale();
+        BrandDocument brand = findBrand(brandId);
+        Map<String, String> errors = new LinkedHashMap<>();
+        requireText(errors, "branchName", command.branchName(), 1, 60);
+        requireText(errors, "legalName", command.legalName(), 1, 120);
+        optionalText(errors, "taxId", command.taxId(), 40);
+        validate(errors, command.address(), command.location());
+        if (command.prepMinutes() < 5 || command.prepMinutes() > 120) {
+            errors.put("prepMinutes", "must be 5 to 120 minutes");
+        }
+        String cityId = cityFor(errors, command.cityId(), command.location(), null);
+        List<StoreDocument> existing = this.stores.findByBrandId(brandId);
+        if (existing.stream().anyMatch((b) -> command.branchName() != null && b.getBranchName() != null
+                && b.getBranchName().equalsIgnoreCase(command.branchName().trim()))) {
+            errors.put("branchName", "another branch of this brand has this name");
+        }
+        failIfAny(errors, "STORE_INVALID");
+        if (existing.size() >= MAX_BRANCHES) {
+            throw new ModuleException.Conflict("A brand can have at most " + MAX_BRANCHES + " branches", "BRANCH_LIMIT");
+        }
+        Instant now = this.clock.instant();
+        StoreDocument store = new StoreDocument();
+        store.setId(Ids.newId());
+        store.setBrandId(brandId);
+        store.setBrandName(brand.getName());
+        store.setBranchName(command.branchName().trim());
+        store.setLegalName(command.legalName().trim());
+        store.setTaxId(blankToNull(command.taxId()));
+        store.setAddress(clean(command.address()));
+        store.setLocation(point(command.location()));
+        store.setTimezone(timezoneAt(command.location(), locale).getId());
+        store.setOpeningHours(defaultHours());
+        store.setPrepMinutes(command.prepMinutes());
+        store.setDeliveryMode(DeliveryMode.SELF);
+        store.setPickupEnabled(command.pickupEnabled());
+        store.setCityId(cityId);
+        store.setStatus(StoreStatus.DRAFT);
+        store.setCreatedAt(now);
+        store.setCreatedBy(userId);
+        store.setUpdatedAt(now);
+        store.setUpdatedBy(userId);
+        store.setSlug(freeSlug(Slugs.of(brand.getName(), store.getBranchName())));
+        brand.setBranchCount(existing.size() + 1);
+        brand.setUpdatedAt(now);
+        brand.setUpdatedBy(userId);
+        StoreDocument saved = claimingSlug(() -> this.transaction.execute((status) -> {
+            this.slugs.insert(new StoreSlugDocument(store.getSlug(), store.getId(), now));
+            BrandDocument savedBrand = this.brands.save(brand);
+            StoreDocument result = this.stores.insert(store);
+            this.outbox.append(new BrandChanged(brandId, version(savedBrand.getVersion()), userId));
+            this.outbox.append(new StoreChanged(result.getId(), brandId, version(result.getVersion()), userId));
+            return result;
+        }));
+        rememberBrand(saved);
+        return details(saved, findBrand(brandId), locale);
+    }
+
+    /** The brand's branches, in the order they were added. */
+    public List<StoreSummary> branches(String brandId) {
+        findBrand(brandId);
+        return summaries(this.stores.findByBrandId(brandId)
+            .stream()
+            .sorted(java.util.Comparator.comparing(StoreDocument::getId))
+            .toList());
+    }
+
+    /** Publishes every branch's brand for access checks and moves owners kept on single branches to their brand. */
+    public int backfillBranchAccess() {
+        int moved = 0;
+        String after = "";
+        while (true) {
+            List<StoreDocument> page = this.stores.findByIdGreaterThanOrderByIdAsc(after, Limit.of(200));
+            if (page.isEmpty()) {
+                return moved;
+            }
+            for (StoreDocument store : page) {
+                rememberBrand(store);
+                moved += moveBrandOwnersOffBranch(store);
+            }
+            after = page.getLast().getId();
+        }
+    }
+
+    /**
+     * Before brand owners existed (M1 to M3) the owner of a single restaurant was kept on both the
+     * brand and its branch. They are the brand's owners (PRD BB-1); the branch keeps only its own.
+     */
+    private int moveBrandOwnersOffBranch(StoreDocument store) {
+        BrandDocument brand = this.brands.findById(store.getBrandId()).orElse(null);
+        if (brand == null || brand.getOwnerUserIds().stream().noneMatch(store.getOwnerUserIds()::contains)) {
+            return 0;
+        }
+        store.getOwnerUserIds().removeAll(brand.getOwnerUserIds());
+        try {
+            this.stores.save(store);
+            return 1;
+        }
+        catch (org.springframework.dao.OptimisticLockingFailureException ex) {
+            return 0;
+        }
+    }
+
+    private void rememberBrand(StoreDocument store) {
+        if (this.branchBrands != null) {
+            try {
+                this.branchBrands.remember(store.getId(), store.getBrandId());
+            }
+            catch (RuntimeException ex) {
+                // published again at the next start-up; until then brand owners use the branch through its owners list
+            }
+        }
     }
 
     // ---- Web addresses ----------------------------------------------------------------------
@@ -306,15 +447,40 @@ public class StoreService {
             .filter((s) -> needle.isEmpty() || contains(s.getBrandName(), needle) || contains(s.getBranchName(), needle))
             .limit(size)
             .toList();
-        // Logos live on the brand: one read for the whole page.
-        Map<String, Map<String, String>> logos = new HashMap<>();
+        return summaries(page);
+    }
+
+    /**
+     * Branches a store-area user works on: their own branches plus every branch of the brands they
+     * own (PRD BB-5), newest first.
+     */
+    public List<StoreSummary> listFor(Set<String> storeIds, Set<String> brandIds) {
+        Map<String, StoreDocument> found = new LinkedHashMap<>();
+        if (!storeIds.isEmpty()) {
+            this.stores.findByIdInOrderByIdDesc(storeIds).forEach((s) -> found.put(s.getId(), s));
+        }
+        for (String brandId : brandIds) {
+            this.stores.findByBrandId(brandId).forEach((s) -> found.put(s.getId(), s));
+        }
+        return summaries(found.values()
+            .stream()
+            .sorted(java.util.Comparator.comparing(StoreDocument::getId).reversed())
+            .limit(500)
+            .toList());
+    }
+
+    private List<StoreSummary> summaries(List<StoreDocument> page) {
+        // Logos and branch counts live on the brand: one read for the whole page.
+        Map<String, BrandDocument> brandsById = new HashMap<>();
         this.brands.findAllById(page.stream().map(StoreDocument::getBrandId).collect(Collectors.toSet()))
-            .forEach((b) -> logos.put(b.getId(), Map.copyOf(b.getLogoUrls())));
-        return page.stream()
-            .map((s) -> new StoreSummary(s.getId(), s.getBrandId(), s.getBrandName(), s.getBranchName(),
+            .forEach((b) -> brandsById.put(b.getId(), b));
+        return page.stream().map((s) -> {
+            BrandDocument brand = brandsById.get(s.getBrandId());
+            return new StoreSummary(s.getId(), s.getBrandId(), s.getBrandName(), s.getBranchName(),
                     (s.getAddress() != null) ? s.getAddress().city() : null, s.getStatus(), s.isTemporarilyClosed(),
-                    s.getDeliveryMode(), s.getCreatedAt(), logos.getOrDefault(s.getBrandId(), Map.of())))
-            .toList();
+                    s.getDeliveryMode(), s.getCreatedAt(), (brand != null) ? Map.copyOf(brand.getLogoUrls()) : Map.of(),
+                    s.getCityId(), (brand != null) ? brand.getBranchCount() : 1);
+        }).toList();
     }
 
     // ---- Brand ---------------------------------------------------------------------------
@@ -371,14 +537,26 @@ public class StoreService {
         return brandDetails(saved);
     }
 
-    /** Sets the brand's default commission (operator only, PRD ST-1, BB-8). */
+    /** Sets the brand's default commission now (operator only, PRD ST-1, BB-8). */
     public BrandDetails updateCommission(String brandId, Commission commission, String userId) {
+        return updateCommission(brandId, commission, null, userId);
+    }
+
+    /**
+     * Plans the brand's commission from a date (operator only, PRD FI-2, BB-8); {@code null} means
+     * now. Orders take the commission in force when they are placed; a change replaces any change
+     * planned on or after its date.
+     */
+    public BrandDetails updateCommission(String brandId, Commission commission, Instant effectiveFrom, String userId) {
         Map<String, String> errors = new LinkedHashMap<>();
         validate(errors, commission);
+        Instant now = this.clock.instant();
+        Instant from = effectiveFrom(errors, effectiveFrom, now);
         failIfAny(errors, "COMMISSION_INVALID");
         BrandDocument brand = findBrand(brandId);
-        brand.setCommission(commission);
-        brand.setUpdatedAt(this.clock.instant());
+        brand.setCommissionChanges(new ArrayList<>(CommissionSchedule.plan(brand.getCommissionChanges(),
+                new CommissionChange(commission, from, userId, now))));
+        brand.setUpdatedAt(now);
         brand.setUpdatedBy(userId);
         BrandDocument saved = this.transaction.execute((status) -> {
             BrandDocument result = this.brands.save(brand);
@@ -386,6 +564,89 @@ public class StoreService {
             return result;
         });
         return brandDetails(saved);
+    }
+
+    /**
+     * Plans a branch's own commission from a date (operator only, PRD BB-8, FI-2); a {@code null}
+     * commission goes back to the brand's from that date.
+     */
+    public StoreDetails updateBranchCommission(String storeId, Commission commission, Instant effectiveFrom, String userId) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (commission != null) {
+            validate(errors, commission);
+        }
+        Instant now = this.clock.instant();
+        Instant from = effectiveFrom(errors, effectiveFrom, now);
+        failIfAny(errors, "COMMISSION_INVALID");
+        StoreDocument store = findStore(storeId);
+        store.setCommissionChanges(new ArrayList<>(CommissionSchedule.plan(store.getCommissionChanges(),
+                new CommissionChange(commission, from, userId, now))));
+        return saveBranch(store, userId);
+    }
+
+    /**
+     * Lets a branch collect card payments into its own or its brand's merchant account, or stops it,
+     * and sets its credit limit (finance only, PRD DP-2, DP-7). The reason is kept and audit-logged.
+     *
+     * @param creditLimitMinor the branch's own limit, or {@code null} for the operator's default
+     */
+    public StoreDetails setPaymentCollection(String storeId, String mode, Long creditLimitMinor, String reason, String userId) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (!PaymentCollection.OPERATOR.equals(mode) && !PaymentCollection.DIRECT.equals(mode)) {
+            errors.put("mode", "must be OPERATOR or DIRECT");
+        }
+        if (creditLimitMinor != null && creditLimitMinor < 0) {
+            errors.put("creditLimitMinor", "must be 0 or more");
+        }
+        String why = (reason != null) ? reason.strip() : "";
+        if (why.isEmpty()) {
+            errors.put("reason", "say why, for the audit log");
+        }
+        else if (why.length() > 500) {
+            errors.put("reason", "must be at most 500 characters");
+        }
+        failIfAny(errors, "PAYMENT_COLLECTION_INVALID");
+        StoreDocument store = findStore(storeId);
+        store.setPaymentCollection(mode);
+        store.setCollection(new PaymentCollection(mode, creditLimitMinor, why, userId, this.clock.instant()));
+        BrandDocument brand = findBrand(store.getBrandId());
+        java.util.Set<String> owners = new java.util.TreeSet<>(store.getOwnerUserIds());
+        owners.addAll(brand.getOwnerUserIds());
+        String name = (store.getBranchName() == null || store.getBranchName().isBlank()) ? brand.getName()
+                : brand.getName() + " · " + store.getBranchName();
+        return saveBranch(store, () -> this.outbox.append(new StorePaymentCollectionChanged(storeId, store.getBrandId(), name,
+                java.util.Set.copyOf(owners), mode, creditLimitMinor, why, userId)), userId);
+    }
+
+    /** Whether branch managers may create promotions for their own branch (PRD BB-11); brand owners decide. */
+    public BrandDetails setBranchPromotionsAllowed(String brandId, boolean allowed, String userId) {
+        BrandDocument brand = findBrand(brandId);
+        brand.setBranchPromotionsAllowed(allowed);
+        brand.setUpdatedAt(this.clock.instant());
+        brand.setUpdatedBy(userId);
+        BrandDocument saved = this.transaction.execute((status) -> {
+            BrandDocument result = this.brands.save(brand);
+            this.outbox.append(new BrandChanged(brandId, version(result.getVersion()), userId));
+            this.outbox.append(new BranchPromotionsChanged(brandId, allowed, version(result.getVersion()), userId));
+            return result;
+        });
+        return brandDetails(saved);
+    }
+
+    /** The commission an order placed at {@code at} pays: the branch's own when it has one, else the brand's. */
+    Commission commissionAt(StoreDocument store, BrandDocument brand, Instant at) {
+        Commission own = CommissionSchedule.at(store.getCommissionOverride(), store.getCommissionChanges(), at);
+        return (own != null) ? own : CommissionSchedule.at(brand.getCommission(), brand.getCommissionChanges(), at);
+    }
+
+    private static Instant effectiveFrom(Map<String, String> errors, Instant effectiveFrom, Instant now) {
+        if (effectiveFrom == null) {
+            return now;
+        }
+        if (effectiveFrom.isBefore(now.minusSeconds(60))) {
+            errors.put("effectiveFrom", "must be now or later; past orders keep the commission they were placed with");
+        }
+        return effectiveFrom.isBefore(now) ? now : effectiveFrom;
     }
 
     // ---- Branch --------------------------------------------------------------------------
@@ -404,6 +665,9 @@ public class StoreService {
         if (update.timezone() != null && !update.timezone().isBlank() && BranchTimeZones.parse(update.timezone()).isEmpty()) {
             errors.put("timezone", "must be an IANA time zone such as Asia/Karachi");
         }
+        if (update.ticketPaperMm() != null && update.ticketPaperMm() != 58 && update.ticketPaperMm() != 80) {
+            errors.put("ticketPaperMm", "must be 80 or 58");
+        }
         failIfAny(errors, "STORE_INVALID");
         StoreDocument store = findStore(storeId);
         requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
@@ -418,6 +682,9 @@ public class StoreService {
         store.setPrepMinutes(update.prepMinutes());
         store.setDeliveryMode(update.deliveryMode());
         store.setPickupEnabled(update.pickupEnabled());
+        if (update.ticketPaperMm() != null) {
+            store.setTicketPaperMm(update.ticketPaperMm());
+        }
         return saveBranch(store, userId);
     }
 
@@ -426,9 +693,11 @@ public class StoreService {
         Map<String, String> errors = new LinkedHashMap<>();
         requireText(errors, "legalName", update.legalName(), 1, 120);
         optionalText(errors, "taxId", update.taxId(), 40);
-        failIfAny(errors, "STORE_INVALID");
         StoreDocument store = findStore(storeId);
+        String cityId = cityFor(errors, update.cityId(), location(store), store.getCityId());
+        failIfAny(errors, "STORE_INVALID");
         requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
+        store.setCityId(cityId);
         store.setLegalName(update.legalName().trim());
         store.setTaxId(blankToNull(update.taxId()));
         store.setOperatorDeliveryAllowed(update.operatorDeliveryAllowed());
@@ -540,7 +809,7 @@ public class StoreService {
             missing.add("MENU");
         }
         if (!store.isPickupEnabled() && store.getLocation() != null && this.geo
-            .deliveryArea(new DeliveryAreaRequest(store.getId(), location(store), store.getDeliveryMode()))
+            .deliveryArea(new DeliveryAreaRequest(store.getId(), location(store), store.getDeliveryMode(), store.getCityId()))
             .isEmpty()) {
             missing.add("DELIVERY_AREA");
         }
@@ -549,10 +818,19 @@ public class StoreService {
 
     // ---- Owners --------------------------------------------------------------------------
 
+    /** The branch's own owners and managers (PRD BB-5, BB-6), not the brand's owners. */
     public List<OwnerDetails> owners(String storeId) {
-        StoreDocument store = findStore(storeId);
+        return people(findStore(storeId).getOwnerUserIds());
+    }
+
+    /** The brand's owners (PRD BB-5). */
+    public List<OwnerDetails> brandOwners(String brandId) {
+        return people(findBrand(brandId).getOwnerUserIds());
+    }
+
+    private List<OwnerDetails> people(Set<String> userIds) {
         List<OwnerDetails> owners = new ArrayList<>();
-        for (String userId : store.getOwnerUserIds()) {
+        for (String userId : userIds) {
             try {
                 UserView user = this.identity.getUser(userId);
                 owners.add(new OwnerDetails(user.id(), user.email(), user.displayName()));
@@ -564,21 +842,22 @@ public class StoreService {
         return owners;
     }
 
-    /** Gives a person owner access to the branch and its brand (single-branch brands in M1). */
+    /**
+     * Gives a person access to one branch only (PRD BB-5, BB-6): a branch manager or a franchise
+     * owner. They run the branch but never edit the brand menu or prices.
+     */
     public OwnerDetails addOwner(String storeId, NewOwner owner, String userId) {
         StoreDocument store = findStore(storeId);
+        if (store.getOwnerUserIds().size() >= MAX_OWNERS) {
+            throw new ModuleException.Conflict("A branch can have at most " + MAX_OWNERS + " owners", "OWNER_LIMIT");
+        }
         UserView user = this.identity.grantStoreAccess(new StoreAccessGrant(owner.email(), owner.displayName(),
-                owner.initialPassword(), store.getBrandId(), storeId, userId));
-        BrandDocument brand = findBrand(store.getBrandId());
+                owner.initialPassword(), storeId, userId));
         store.getOwnerUserIds().add(user.id());
-        brand.getOwnerUserIds().add(user.id());
         Instant now = this.clock.instant();
         store.setUpdatedAt(now);
         store.setUpdatedBy(userId);
-        brand.setUpdatedAt(now);
-        brand.setUpdatedBy(userId);
         this.transaction.executeWithoutResult((status) -> {
-            this.brands.save(brand);
             StoreDocument saved = this.stores.save(store);
             this.outbox.append(new StoreChanged(storeId, saved.getBrandId(), version(saved.getVersion()), userId));
         });
@@ -590,16 +869,51 @@ public class StoreService {
         if (!store.getOwnerUserIds().remove(ownerUserId)) {
             return;
         }
-        BrandDocument brand = findBrand(store.getBrandId());
-        brand.getOwnerUserIds().remove(ownerUserId);
         store.setUpdatedAt(this.clock.instant());
         store.setUpdatedBy(userId);
         this.transaction.executeWithoutResult((status) -> {
-            this.brands.save(brand);
             StoreDocument saved = this.stores.save(store);
             this.outbox.append(new StoreChanged(storeId, saved.getBrandId(), version(saved.getVersion()), userId));
         });
-        this.identity.revokeStoreAccess(ownerUserId, store.getBrandId(), storeId);
+        this.identity.revokeStoreAccess(ownerUserId, storeId);
+    }
+
+    /** Gives a person brand owner access (PRD BB-5): the brand, its menu and every branch. */
+    public OwnerDetails addBrandOwner(String brandId, NewOwner owner, String userId) {
+        BrandDocument brand = findBrand(brandId);
+        if (brand.getOwnerUserIds().size() >= MAX_OWNERS) {
+            throw new ModuleException.Conflict("A brand can have at most " + MAX_OWNERS + " owners", "OWNER_LIMIT");
+        }
+        UserView user = this.identity.grantBrandAccess(new BrandAccessGrant(owner.email(), owner.displayName(),
+                owner.initialPassword(), brandId, userId));
+        brand.getOwnerUserIds().add(user.id());
+        brand.setUpdatedAt(this.clock.instant());
+        brand.setUpdatedBy(userId);
+        saveBrandAndBranches(brand, userId);
+        return new OwnerDetails(user.id(), user.email(), user.displayName());
+    }
+
+    public void removeBrandOwner(String brandId, String ownerUserId, String userId) {
+        BrandDocument brand = findBrand(brandId);
+        if (!brand.getOwnerUserIds().remove(ownerUserId)) {
+            return;
+        }
+        brand.setUpdatedAt(this.clock.instant());
+        brand.setUpdatedBy(userId);
+        saveBrandAndBranches(brand, userId);
+        this.identity.revokeBrandAccess(ownerUserId, brandId);
+    }
+
+    /** Saves the brand and tells every branch, whose order alerts go to the brand's owners too. */
+    private void saveBrandAndBranches(BrandDocument brand, String userId) {
+        List<StoreDocument> branches = this.stores.findByBrandId(brand.getId());
+        this.transaction.executeWithoutResult((status) -> {
+            BrandDocument saved = this.brands.save(brand);
+            this.outbox.append(new BrandChanged(saved.getId(), version(saved.getVersion()), userId));
+            for (StoreDocument branch : branches) {
+                this.outbox.append(new StoreChanged(branch.getId(), branch.getBrandId(), version(branch.getVersion()), userId));
+            }
+        });
     }
 
     // ---- Customers -----------------------------------------------------------------------
@@ -612,7 +926,7 @@ public class StoreService {
             return new DeliveryQuote(false, DeliveryQuoteView.OUT_OF_AREA, 0, 0, null, 0, 0, currency);
         }
         DeliveryQuoteView quote = this.geo.quote(new QuoteRequest(storeId, location(store), store.getDeliveryMode(),
-                destination, zone(store, this.settings.getLocale()).getId()));
+                destination, zone(store, this.settings.getLocale()).getId(), store.getCityId()));
         int travel = (int) Math.ceil(quote.distanceMeters() / 1000.0 / RIDER_KMH * 60);
         return new DeliveryQuote(quote.deliverable(), quote.reason(), quote.chargeMinor(), quote.minOrderMinor(),
                 quote.freeDeliveryAboveMinor(), quote.distanceMeters(), store.getPrepMinutes() + travel, currency);
@@ -658,20 +972,80 @@ public class StoreService {
         ZoneId zone = zone(store, locale);
         boolean open = store.getStatus() == StoreStatus.LIVE && OpeningHours.isOpen(store.getOpeningHours(),
                 closedDays(store.getClosures()), store.isTemporarilyClosed(), this.clock.instant(), zone);
-        Commission commission = (store.getCommissionOverride() != null) ? store.getCommissionOverride() : brand.getCommission();
-        return new StoreDetails(store.getId(), store.getSlug(), brandDetails(brand), store.getBranchName(), store.getLegalName(),
-                store.getTaxId(), Set.copyOf(store.getOwnerUserIds()), store.getAddress(), location(store),
-                Map.copyOf(store.getOpeningHours()), List.copyOf(store.getClosures()), store.isTemporarilyClosed(),
-                store.getClosedReason(), store.getPrepMinutes(), store.getDeliveryMode(), store.isOperatorDeliveryAllowed(),
-                store.isPickupEnabled(), commission, store.getStatus(), zone.getId(), open, version(store.getVersion()),
-                store.getCreatedAt(), store.getUpdatedAt());
+        Instant now = this.clock.instant();
+        Commission commission = commissionAt(store, brand, now);
+        return new StoreDetails(store.getId(), store.getSlug(), brandDetails(brand, now), store.getBranchName(),
+                store.getLegalName(), store.getTaxId(), Set.copyOf(store.getOwnerUserIds()), store.getAddress(),
+                location(store), Map.copyOf(store.getOpeningHours()), List.copyOf(store.getClosures()),
+                store.isTemporarilyClosed(), store.getClosedReason(), store.getPrepMinutes(), store.getDeliveryMode(),
+                store.isOperatorDeliveryAllowed(), store.isPickupEnabled(), commission, store.getStatus(), zone.getId(), open,
+                version(store.getVersion()), store.getCreatedAt(), store.getUpdatedAt(), store.getCityId(),
+                ticketPaper(store), branchCommission(store), Set.copyOf(brand.getOwnerUserIds()),
+                (store.getCollection() != null) ? store.getCollection() : PaymentCollection.BY_OPERATOR);
     }
 
-    static BrandDetails brandDetails(BrandDocument brand) {
+    /** The branch's own commission changes, oldest first; empty when it always used the brand's. */
+    private static List<CommissionChange> branchCommission(StoreDocument store) {
+        List<CommissionChange> changes = new ArrayList<>();
+        if (store.getCommissionOverride() != null) {
+            changes.add(new CommissionChange(store.getCommissionOverride(), Instant.EPOCH, null, null));
+        }
+        store.getCommissionChanges().stream()
+            .sorted(java.util.Comparator.comparing(CommissionChange::effectiveFrom))
+            .forEach(changes::add);
+        return List.copyOf(changes);
+    }
+
+    static int ticketPaper(StoreDocument store) {
+        return (store.getTicketPaperMm() != null) ? store.getTicketPaperMm() : 80;
+    }
+
+    BrandDetails brandDetails(BrandDocument brand) {
+        return brandDetails(brand, this.clock.instant());
+    }
+
+    static BrandDetails brandDetails(BrandDocument brand, Instant now) {
+        List<CommissionChange> changes = new ArrayList<>();
+        changes.add(new CommissionChange(brand.getCommission(), Instant.EPOCH, null, null));
+        brand.getCommissionChanges().stream()
+            .sorted(java.util.Comparator.comparing(CommissionChange::effectiveFrom))
+            .forEach(changes::add);
         return new BrandDetails(brand.getId(), brand.getName(), Map.copyOf(brand.getDescription()),
                 List.copyOf(brand.getCuisines()), brand.getLogoMediaId(), Map.copyOf(brand.getLogoUrls()),
-                brand.getCoverMediaId(), Map.copyOf(brand.getCoverUrls()), brand.getCommission(), brand.getBranchCount(),
-                version(brand.getVersion()), brand.getUpdatedAt());
+                brand.getCoverMediaId(), Map.copyOf(brand.getCoverUrls()),
+                CommissionSchedule.at(brand.getCommission(), brand.getCommissionChanges(), now), brand.getBranchCount(),
+                version(brand.getVersion()), brand.getUpdatedAt(), List.copyOf(changes), Set.copyOf(brand.getOwnerUserIds()),
+                brand.isBranchPromotionsAllowed());
+    }
+
+    /**
+     * The city a branch goes in: the one asked for (it must exist, and be active unless it is the
+     * branch's current one), else the nearest active city to its location, else none.
+     */
+    private String cityFor(Map<String, String> errors, String requested, GeoPoint location, String current) {
+        String wanted = blankToNull(requested);
+        List<CityView> cities;
+        try {
+            cities = this.geo.cities();
+        }
+        catch (RuntimeException ex) {
+            return (wanted != null) ? wanted : current;
+        }
+        if (wanted != null) {
+            CityView city = cities.stream().filter((c) -> c.id().equals(wanted)).findFirst().orElse(null);
+            if (city == null || (!city.active() && !wanted.equals(current))) {
+                errors.put("cityId", "must be one of the operator's active cities");
+            }
+            return wanted;
+        }
+        if (current != null) {
+            return current;
+        }
+        if (location == null || !location.isValid() || cities.isEmpty()) {
+            return null;
+        }
+        CityView nearest = this.geo.nearestCity(location);
+        return (nearest != null) ? nearest.id() : null;
     }
 
     static List<OpeningHours.ClosedDays> closedDays(List<Closure> closures) {

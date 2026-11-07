@@ -126,6 +126,10 @@ module-switch:
       mode: local
     notification:
       mode: local
+    ledger:
+      mode: local
+    review:
+      mode: local
   propagate-headers: [Authorization, Accept-Language]
 
 foodstack:
@@ -193,3 +197,4 @@ foodstack:
     stripe:
       secret-key: ${STRIPE_SECRET_KEY:}
       webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+      publishable-key: ${STRIPE_PUBLISHABLE_KEY:}

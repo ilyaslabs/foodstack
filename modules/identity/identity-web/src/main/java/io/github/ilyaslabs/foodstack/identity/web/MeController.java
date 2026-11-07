@@ -1,6 +1,13 @@
 package io.github.ilyaslabs.foodstack.identity.web;
 
+import java.time.Instant;
+import java.util.List;
+
+import io.github.ilyaslabs.foodstack.identity.core.application.AccountDeletion;
+import io.github.ilyaslabs.foodstack.identity.core.application.AddressBook;
+import io.github.ilyaslabs.foodstack.identity.core.application.UserAccount;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
+import io.github.ilyaslabs.foodstack.identity.web.dto.AddressResponse;
 import io.github.ilyaslabs.foodstack.identity.web.dto.UserResponse;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 
@@ -20,8 +27,14 @@ class MeController {
 
     private final UserService userService;
 
-    MeController(UserService userService) {
+    private final AddressBook addressBook;
+
+    private final AccountDeletion accountDeletion;
+
+    MeController(UserService userService, AddressBook addressBook, AccountDeletion accountDeletion) {
         this.userService = userService;
+        this.addressBook = addressBook;
+        this.accountDeletion = accountDeletion;
     }
 
     @GetMapping
@@ -44,5 +57,47 @@ class MeController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void revokeTokens() {
         this.userService.revokeTokens(CurrentUser.id(), "LOGOUT_EVERYWHERE");
+    }
+
+    /**
+     * This module's part of the customer's data export (PRD ID-7): the account and saved
+     * addresses. The other parts come from {@code /orders/mine/export},
+     * {@code /reviews/mine/export} and {@code /notifications/mine/export}.
+     */
+    record ExportResponse(Account account, List<AddressResponse> addresses) {
+
+        record Account(String id, String email, String displayName, List<String> roles, long createdAt) {
+        }
+    }
+
+    @GetMapping("/export")
+    ExportResponse export() {
+        String userId = CurrentUser.id();
+        UserAccount user = this.userService.get(userId);
+        return new ExportResponse(
+                new ExportResponse.Account(user.id(), user.email(), user.displayName(),
+                        user.roles().stream().map(Enum::name).sorted().toList(), user.createdAt().getEpochSecond()),
+                this.addressBook.list(userId).stream().map(AddressesController::toResponse).toList());
+    }
+
+    record DeletionResponse(Long deleteAfter, long graceDays) {
+    }
+
+    /** How deletion works here: the grace period, so the account screen can say it before anyone asks. */
+    @GetMapping("/deletion")
+    DeletionResponse deletion() {
+        CurrentUser.id();
+        return new DeletionResponse(null, this.accountDeletion.grace().toDays());
+    }
+
+    /**
+     * Asks to delete the account (PRD ID-7). The customer is signed out everywhere; signing in
+     * again before {@code deleteAfter} cancels it.
+     */
+    @PostMapping("/deletion")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    DeletionResponse requestDeletion() {
+        Instant deleteAfter = this.accountDeletion.request(CurrentUser.id());
+        return new DeletionResponse(deleteAfter.getEpochSecond(), this.accountDeletion.grace().toDays());
     }
 }

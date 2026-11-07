@@ -30,6 +30,8 @@ import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMigrations;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongoFactory;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
+import io.github.ilyaslabs.foodstack.platform.security.BranchBrands;
+import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.security.FoodstackJwtAuthenticationConverter;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.RateLimiter;
@@ -46,12 +48,11 @@ import io.github.ilyaslabs.foodstack.rider.core.persistence.LocationDocument;
 import io.github.ilyaslabs.foodstack.settings.api.DeliveryView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import tools.jackson.databind.json.JsonMapper;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringBootConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -64,6 +65,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -176,6 +178,7 @@ class RiderStorageTest {
     @AfterEach
     void signOut() {
         SecurityContextHolder.clearContext();
+        CurrentUser.useBranchBrands(null);
     }
 
     @Test
@@ -387,6 +390,32 @@ class RiderStorageTest {
         this.riders.removeStoreRider(store, own.id());
         assertThat(this.riders.storeRiders(store)).isEmpty();
         verify(this.identity).revokeRiderAccess(own.id());
+    }
+
+    @Test
+    @DisplayName("a store rider rides for every branch of the brand: the other branches list and see them, other brands do not (PRD BB-12)")
+    void sharedAcrossBranches() {
+        BranchBrands brands = new BranchBrands(this.redis, this.namespace, 100);
+        CurrentUser.useBranchBrands(brands);
+        String gulberg = "gulberg-" + System.nanoTime();
+        String dha = "dha-" + System.nanoTime();
+        String elsewhere = "elsewhere-" + System.nanoTime();
+        brands.remember(gulberg, "brand-1");
+        brands.remember(dha, "brand-1");
+        brands.remember(elsewhere, "brand-2");
+
+        signIn("owner-1", gulberg);
+        RiderDetails hamza = this.riders.addStoreRider(gulberg, input("Hamza", Vehicle.MOTORBIKE));
+
+        signIn("manager-dha", dha);
+        assertThat(this.riders.storeRiders(dha)).extracting(RiderDetails::id).containsExactly(hamza.id());
+        assertThat(this.riders.get(hamza.id()).storeId()).isEqualTo(gulberg);
+        // the home branch keeps the rider: another branch can neither change nor remove them
+        assertThatThrownBy(() -> this.riders.removeStoreRider(dha, hamza.id())).isInstanceOf(ModuleException.NotFound.class);
+
+        signIn("manager-elsewhere", elsewhere);
+        assertThat(this.riders.storeRiders(elsewhere)).isEmpty();
+        assertThatThrownBy(() -> this.riders.get(hamza.id())).isInstanceOf(ModuleException.NotFound.class);
     }
 
     @Test

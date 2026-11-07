@@ -57,13 +57,26 @@ public record OrderValidationView(StoreSnapshot store, String currency, List<Pri
      * @param prepMinutes average preparation time
      * @param commissionBasisPoints operator commission percentage in basis points
      * @param commissionFixedMinor operator commission per order
-     * @param ownerUserIds users who run the branch
+     * @param ownerUserIds users who run the branch: its own owners and managers and the brand's owners
      * @param timezone IANA zone of the opening hours
+     * @param cityId the operator's city the branch is in, or {@code null}
+     * @param branchOwnerUserIds the branch's own owners (a franchisee is paid as the branch, PRD BB-6)
      */
     public record StoreSnapshot(String storeId, String slug, String brandId, String brandName, String branchName,
             Map<String, String> logoUrls, GeoPoint location, String addressLine, String city, DeliveryMode deliveryMode,
             boolean pickupEnabled, boolean live, boolean openNow, int prepMinutes, int commissionBasisPoints,
-            long commissionFixedMinor, Set<String> ownerUserIds, String timezone) {
+            long commissionFixedMinor, Set<String> ownerUserIds, String timezone, String cityId,
+            Set<String> branchOwnerUserIds) {
+
+        /** A branch without a city, whose owners all manage this branch only. */
+        public StoreSnapshot(String storeId, String slug, String brandId, String brandName, String branchName,
+                Map<String, String> logoUrls, GeoPoint location, String addressLine, String city, DeliveryMode deliveryMode,
+                boolean pickupEnabled, boolean live, boolean openNow, int prepMinutes, int commissionBasisPoints,
+                long commissionFixedMinor, Set<String> ownerUserIds, String timezone) {
+            this(storeId, slug, brandId, brandName, branchName, logoUrls, location, addressLine, city, deliveryMode,
+                    pickupEnabled, live, openNow, prepMinutes, commissionBasisPoints, commissionFixedMinor, ownerUserIds,
+                    timezone, null, ownerUserIds);
+        }
     }
 
     /**

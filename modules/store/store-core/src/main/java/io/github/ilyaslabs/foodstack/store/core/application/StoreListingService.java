@@ -63,7 +63,7 @@ public class StoreListingService {
                 StoreService.zone(store, locale).getId(), hours,
                 store.getClosures().stream().flatMap((c) -> c.from().datesUntil(c.to().plusDays(1))).limit(400)
                     .map(Object::toString).toList(),
-                dishNames, List.copyOf(dietary), StoreService.version(store.getVersion()));
+                dishNames, List.copyOf(dietary), StoreService.version(store.getVersion()), store.getCityId());
     }
 
     public StoreIdPage storeIds(String afterId, int limit) {

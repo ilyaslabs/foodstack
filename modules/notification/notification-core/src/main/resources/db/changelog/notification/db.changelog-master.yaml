@@ -58,3 +58,19 @@ databaseChangeLog:
             collectionName: notification_deliveries
             keys: '{ "channel": 1, "createdAt": -1 }'
             options: '{ "name": "channel_newest" }'
+  - changeSet:
+      id: notification-4
+      author: foodstack
+      comment: "M4 account deletion (PRD ID-7): a deleted user's delivery log entries are found by user"
+      changes:
+        - createIndex:
+            collectionName: notification_deliveries
+            keys: '{ "userId": 1 }'
+            options: '{ "name": "user" }'
+  - changeSet:
+      id: notification-5
+      author: foodstack
+      comment: "M4 template editor (PRD NO-2): the operator's own wording per message and language, _id = template:language; a few dozen documents, so unsharded"
+      changes:
+        - createCollection:
+            collectionName: notification_templates

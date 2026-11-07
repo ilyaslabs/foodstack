@@ -48,7 +48,29 @@ public final class StoreDtos {
     public record OnboardRequest(@NotBlank @Size(max = 80) String brandName, @Size(max = 60) String branchName,
             @NotBlank @Size(max = 120) String legalName, @Size(max = 40) String taxId, Map<String, String> description,
             List<String> cuisines, @NotNull @Valid AddressDto address, @Valid LatLng location, boolean pickupEnabled,
-            @Min(5) @Max(120) int prepMinutes, @NotNull @Valid CommissionDto commission) {
+            @Min(5) @Max(120) int prepMinutes, @NotNull @Valid CommissionDto commission, @Size(max = 64) String cityId) {
+    }
+
+    /** {@code POST /api/v1/brands/{id}/branches}: another branch of the brand (PRD BB-1). */
+    public record NewBranchRequest(@NotBlank @Size(max = 60) String branchName, @NotBlank @Size(max = 120) String legalName,
+            @Size(max = 40) String taxId, @NotNull @Valid AddressDto address, @Valid LatLng location,
+            @Size(max = 64) String cityId, @Min(5) @Max(120) int prepMinutes, boolean pickupEnabled) {
+    }
+
+    /**
+     * {@code PUT /api/v1/brands/{id}/commission} or {@code PUT /api/v1/stores/{id}/commission} (operator only, PRD
+     * FI-2): the commission from {@code effectiveFrom} (UTC epoch seconds, {@code null} for now). On a branch a
+     * {@code null} commission goes back to the brand's.
+     */
+    public record CommissionChangeRequest(@Valid CommissionDto commission, Long effectiveFrom) {
+    }
+
+    /** A commission and when it starts; {@code effectiveFrom} 0 is the starting value. */
+    public record CommissionChangeResponse(CommissionDto commission, long effectiveFrom, String setBy, Long setAt) {
+    }
+
+    /** {@code PUT /api/v1/brands/{id}/branch-promotions}: whether branch managers may create promotions (PRD BB-11). */
+    public record BranchPromotionsRequest(boolean allowed) {
     }
 
     /** {@code PUT /api/v1/brands/{id}} with {@code If-Match}. */
@@ -62,12 +84,12 @@ public final class StoreDtos {
      */
     public record BranchRequest(@Size(max = 60) String branchName, @NotNull @Valid AddressDto address, @Valid LatLng location,
             @Min(5) @Max(120) int prepMinutes, @NotBlank String deliveryMode, boolean pickupEnabled,
-            @Size(max = 64) String timezone) {
+            @Size(max = 64) String timezone, Integer ticketPaperMm) {
     }
 
     /** {@code PUT /api/v1/stores/{id}/admin} with {@code If-Match} (operator only). */
     public record StoreAdminRequest(@NotBlank @Size(max = 120) String legalName, @Size(max = 40) String taxId,
-            boolean operatorDeliveryAllowed) {
+            boolean operatorDeliveryAllowed, @Size(max = 64) String cityId) {
     }
 
     /** {@code PUT /api/v1/stores/{id}/slug} with {@code If-Match}: the branch's web address (operator only). */
@@ -102,7 +124,8 @@ public final class StoreDtos {
 
     /** A brand. */
     public record BrandResponse(String id, String name, Map<String, String> description, List<String> cuisines,
-            ImageDto logo, ImageDto cover, CommissionDto commission, int branchCount, long version, Long updatedAt) {
+            ImageDto logo, ImageDto cover, CommissionDto commission, int branchCount, long version, Long updatedAt,
+            List<CommissionChangeResponse> commissionChanges, Set<String> ownerUserIds, boolean branchPromotionsAllowed) {
     }
 
     /** A branch with its brand, for the back office. */
@@ -111,12 +134,28 @@ public final class StoreDtos {
             Map<String, List<TimeRangeDto>> openingHours, List<ClosureDto> closures, boolean temporarilyClosed,
             String closedReason, int prepMinutes, String deliveryMode, boolean operatorDeliveryAllowed, boolean pickupEnabled,
             CommissionDto commission, String status, String timezone, boolean openNow, long version, Long createdAt,
-            Long updatedAt) {
+            Long updatedAt, String cityId, int ticketPaperMm, List<CommissionChangeResponse> commissionChanges,
+            Set<String> brandOwnerUserIds, PaymentCollectionResponse paymentCollection) {
+    }
+
+    /**
+     * {@code PUT /api/v1/stores/{id}/payment-collection} (finance, PRD DP-2, DP-7).
+     *
+     * @param mode {@code OPERATOR} or {@code DIRECT}
+     * @param creditLimitMinor the branch's own credit limit, or {@code null} for the operator's default
+     * @param reason why, kept in the audit log
+     */
+    public record PaymentCollectionRequest(String mode, Long creditLimitMinor, String reason) {
+    }
+
+    /** Who collects card payments; {@code changedAt} in epoch seconds. */
+    public record PaymentCollectionResponse(String mode, Long creditLimitMinor, String reason, String changedBy, Long changedAt) {
     }
 
     /** A branch in a back-office list. */
     public record StoreSummaryResponse(String id, String brandId, String brandName, String branchName, String city,
-            String status, boolean temporarilyClosed, String deliveryMode, Long createdAt, Map<String, String> logoUrls) {
+            String status, boolean temporarilyClosed, String deliveryMode, Long createdAt, Map<String, String> logoUrls,
+            String cityId, int branchCount) {
     }
 
     /** Back-office list of branches. */

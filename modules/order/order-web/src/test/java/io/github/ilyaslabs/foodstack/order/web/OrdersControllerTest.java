@@ -106,6 +106,18 @@ class OrdersControllerTest {
     }
 
     @Test
+    @DisplayName("the data export of a customer's orders needs a signed-in user")
+    void export() throws Exception {
+        // given
+        given(this.orders.export()).willReturn(List.of());
+
+        // when / then
+        this.mvc.perform(get("/api/v1/orders/mine/export")).andExpect(status().isUnauthorized());
+        this.mvc.perform(get("/api/v1/orders/mine/export").with(jwt())).andExpect(status().isOk());
+        verify(this.orders).export();
+    }
+
+    @Test
     @DisplayName("support lists and refunds need order:manage")
     void support() throws Exception {
         given(this.orders.all(null, null, null, 20)).willReturn(new OrderPage(List.of(), null));
@@ -117,7 +129,11 @@ class OrdersControllerTest {
         this.mvc.perform(post("/api/v1/orders/o1/refund").with(jwt().authorities(List.of(new SimpleGrantedAuthority("order:manage"))))
             .contentType(MediaType.APPLICATION_JSON).content("{\"amountMinor\":100,\"reason\":\"Cold\"}"))
             .andExpect(status().isOk());
-        verify(this.orders).refund("o1", 100, "Cold");
+        verify(this.orders).refund("o1", 100, "Cold", null);
+        this.mvc.perform(post("/api/v1/orders/o1/refund").with(jwt().authorities(List.of(new SimpleGrantedAuthority("order:manage"))))
+            .contentType(MediaType.APPLICATION_JSON).content("{\"amountMinor\":50,\"reason\":\"Late\",\"fundedBy\":\"OPERATOR\"}"))
+            .andExpect(status().isOk());
+        verify(this.orders).refund("o1", 50, "Late", "OPERATOR");
     }
 
     @Test

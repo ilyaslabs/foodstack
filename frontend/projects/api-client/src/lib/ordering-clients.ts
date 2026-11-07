@@ -6,11 +6,18 @@ import { liveStream } from './live-stream';
 import { Versioned } from './models';
 import {
   AddCartLine,
+  CardCollection,
   Cart,
   Checkout,
   CheckoutRequest,
   EmailDelivery,
   InboxItem,
+  MerchantAccount,
+  MessagePreview,
+  MessageTemplate,
+  MessageTemplateSummary,
+  MessageTemplateText,
+  MessageText,
   NotificationPreferences,
   Order,
   OrderAction,
@@ -18,7 +25,9 @@ import {
   OrderPage,
   OrderStatus,
   OrderingSettings,
+  CardCheckout,
   PaymentOptions,
+  SavedCard,
   PlaceOrder,
   PlacedOrder,
   Promotion,
@@ -131,8 +140,17 @@ export class OrderClient {
     return this.http.post<Order>(this.url(`/${orderId}/actions/${path}`), body);
   }
 
-  refund(orderId: string, amountMinor: number, reason: string): Observable<Order> {
-    return this.http.post<Order>(this.url(`/${orderId}/refund`), { amountMinor, reason });
+  /**
+   * Gives money back to the card. `fundedBy` says who bears it once the order is done: the store
+   * (the default) or the operator.
+   */
+  refund(
+    orderId: string,
+    amountMinor: number,
+    reason: string,
+    fundedBy: 'STORE' | 'OPERATOR' = 'STORE',
+  ): Observable<Order> {
+    return this.http.post<Order>(this.url(`/${orderId}/refund`), { amountMinor, reason, fundedBy });
   }
 
   /** Live changes of one order. */
@@ -153,6 +171,65 @@ export class PaymentClient {
 
   options(): Observable<PaymentOptions> {
     return this.http.get<PaymentOptions>(`${this.config.apiUrl}/api/v1/payments/options`);
+  }
+
+  /** The signed-in customer's order payment, for the app's embedded card fields. */
+  checkout(orderId: string): Observable<CardCheckout> {
+    return this.http.get<CardCheckout>(
+      `${this.config.apiUrl}/api/v1/payments/${encodeURIComponent(orderId)}/checkout`,
+    );
+  }
+
+  /** The sandbox's pretend card fields: pays with a typed number or a saved card. */
+  sandboxPay(
+    orderId: string,
+    body: { clientSecret: string; cardNumber?: string; savedCardId?: string; saveCard: boolean },
+  ): Observable<{ next: string }> {
+    return this.http.post<{ next: string }>(
+      `${this.config.apiUrl}/api/v1/payments/sandbox/${encodeURIComponent(orderId)}/card`,
+      body,
+    );
+  }
+
+  /** The signed-in customer's saved cards. */
+  cards(): Observable<SavedCard[]> {
+    return this.http.get<SavedCard[]>(`${this.config.apiUrl}/api/v1/payments/cards`);
+  }
+
+  removeCard(id: string): Observable<void> {
+    return this.http.delete<void>(
+      `${this.config.apiUrl}/api/v1/payments/cards/${encodeURIComponent(id)}`,
+    );
+  }
+
+  /** Where a branch's card payments go, with its brand's and its own merchant accounts. */
+  collection(storeId: string): Observable<CardCollection> {
+    return this.http.get<CardCollection>(
+      `${this.config.apiUrl}/api/v1/payments/merchant-accounts`,
+      {
+        params: { storeId },
+      },
+    );
+  }
+
+  /** Connects a brand's or branch's merchant account; the keys are tried by the gateway first. */
+  connect(
+    scope: 'brands' | 'stores',
+    ownerId: string,
+    secretKey: string,
+    webhookSecret: string,
+  ): Observable<MerchantAccount> {
+    return this.http.put<MerchantAccount>(
+      `${this.config.apiUrl}/api/v1/payments/merchant-accounts/${scope}/${encodeURIComponent(ownerId)}`,
+      { secretKey, webhookSecret },
+    );
+  }
+
+  /** Stops using the account; payments already taken keep it for refunds. */
+  disconnect(scope: 'brands' | 'stores', ownerId: string): Observable<void> {
+    return this.http.delete<void>(
+      `${this.config.apiUrl}/api/v1/payments/merchant-accounts/${scope}/${encodeURIComponent(ownerId)}`,
+    );
   }
 }
 
@@ -205,6 +282,42 @@ export class NotificationClient {
 
   retry(id: string): Observable<void> {
     return this.http.post<void>(this.url(`/deliveries/${id}/retry`), null);
+  }
+
+  /** Every message the operator can reword (PRD NO-2). */
+  templates(): Observable<MessageTemplateSummary[]> {
+    return this.http.get<MessageTemplateSummary[]>(this.url('/templates'));
+  }
+
+  template(id: string): Observable<MessageTemplate> {
+    return this.http.get<MessageTemplate>(this.url(`/templates/${encodeURIComponent(id)}`));
+  }
+
+  /** Saves the operator's wording; `version` is the one read (0 for a message not edited yet). */
+  saveTemplate(
+    id: string,
+    language: string,
+    text: MessageText,
+    version: number,
+  ): Observable<MessageTemplateText> {
+    return this.http.put<MessageTemplateText>(
+      this.url(`/templates/${encodeURIComponent(id)}/${encodeURIComponent(language)}`),
+      { ...text, version },
+    );
+  }
+
+  /** Goes back to the built-in text. */
+  resetTemplate(id: string, language: string): Observable<MessageTemplateText> {
+    return this.http.delete<MessageTemplateText>(
+      this.url(`/templates/${encodeURIComponent(id)}/${encodeURIComponent(language)}`),
+    );
+  }
+
+  previewTemplate(id: string, language: string, text: MessageText): Observable<MessagePreview> {
+    return this.http.post<MessagePreview>(
+      this.url(`/templates/${encodeURIComponent(id)}/${encodeURIComponent(language)}/preview`),
+      text,
+    );
   }
 }
 
@@ -271,5 +384,12 @@ export class PromotionClient {
 
   setActive(id: string, active: boolean): Observable<Promotion> {
     return this.http.post<Promotion>(this.url(`/${id}/active`), { active });
+  }
+
+  /** Whether the brand lets its branch managers create promotions for their branch (PRD BB-11). */
+  brandRules(brandId: string): Observable<{ branchPromotionsAllowed: boolean }> {
+    return this.http.get<{ branchPromotionsAllowed: boolean }>(
+      this.url(`/brands/${encodeURIComponent(brandId)}/rules`),
+    );
   }
 }

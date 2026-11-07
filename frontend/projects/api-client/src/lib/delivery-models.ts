@@ -13,6 +13,8 @@ export interface Rider {
   vehicle: Vehicle;
   plate: string | null;
   city: string | null;
+  /** The operator's city the rider works in; null takes jobs in any city. */
+  cityId: string | null;
   status: RiderStatus;
   online: boolean;
   lat: number | null;
@@ -36,6 +38,8 @@ export interface RiderInput {
   vehicle: Vehicle;
   plate: string | null;
   city: string | null;
+  /** One of the operator's cities; the name is taken from it when `city` is empty. */
+  cityId?: string | null;
   version?: number | null;
 }
 

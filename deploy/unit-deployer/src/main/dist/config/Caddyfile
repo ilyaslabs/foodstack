@@ -1,4 +1,4 @@
-# The single-server gateway (TDD 17.2): TLS, routing by path, rate limits and security headers.
+# The single-server gateway (TDD 17.2): TLS, routing by path and security headers.
 # FOODSTACK_SITES lists the site addresses, for example
 #   "example.com, admin.example.com, api.example.com"   (automatic HTTPS)
 #   "http://localhost"                                   (local trial without TLS)
@@ -6,7 +6,6 @@
 	servers {
 		trusted_proxies static private_ranges
 	}
-	order rate_limit before basic_auth
 }
 
 (foodstack) {
@@ -22,37 +21,8 @@
 		-Server
 	}
 
-	# Edge rate limits per client address (TDD 18.3), before any request reaches the server: one
-	# budget for the whole API, a tighter one for sign-in and order placement. Over the limit the
-	# answer is 429 with Retry-After. Limits are per minute, from .env; the server keeps its own
-	# per-user limits as well. Mobile networks put many people behind one address, so stay generous.
-	rate_limit {
-		zone api {
-			match {
-				path /api/* /oauth2/*
-			}
-			key {client_ip}
-			events {$FOODSTACK_RATE_LIMIT_API:1200}
-			window 1m
-		}
-		zone auth {
-			match {
-				path /api/v1/auth/*
-			}
-			key {client_ip}
-			events {$FOODSTACK_RATE_LIMIT_SIGN_IN:60}
-			window 1m
-		}
-		zone orders {
-			match {
-				method POST
-				path /api/v1/orders
-			}
-			key {client_ip}
-			events {$FOODSTACK_RATE_LIMIT_ORDERS:20}
-			window 1m
-		}
-	}
+	# No per-address rate limits on one server (ilyas, 2026-11-07): the FoodStack server limits
+	# sign-in, email codes, coupon checks and order placement itself. Kubernetes adds edge limits.
 
 	# The API (sign-in included) and the token keys: the FoodStack server (every module local).
 	@server path /api/* /oauth2/* /.well-known/* /actuator/health/*
