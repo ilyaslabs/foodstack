@@ -1,0 +1,21 @@
+{{- /* Edge token check (TDD 9.1): the gateways reject forged or expired access tokens before any
+       pod sees them. Requests without a token pass; the server decides what needs a sign-in. */ -}}
+{{- if and .Values.gateway.enabled .Values.gateway.jwt.enabled (eq .Values.gateway.className "istio") }}
+apiVersion: security.istio.io/v1
+kind: RequestAuthentication
+metadata:
+  name: {{ include "foodstack.fullname" . }}-edge-jwt
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  targetRefs:
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: {{ include "foodstack.gatewayName" . }} }
+    - { group: gateway.networking.k8s.io, kind: Gateway, name: {{ include "foodstack.internalGatewayName" . }} }
+  jwtRules:
+    - issuer: {{ include "foodstack.url" (list . .Values.hosts.api) | quote }}
+      # istiod fetches the keys through the internal gateway, so no public DNS is needed
+      jwksUri: {{ default (printf "http://%s-%s.%s.svc.cluster.local/oauth2/jwks" (include "foodstack.internalGatewayName" .) .Values.gateway.className .Release.Namespace) .Values.gateway.jwt.jwksUri | quote }}
+      # the server checks the token again (revocation, roles), so pass it on unchanged
+      forwardOriginalToken: true
+      fromHeaders:
+        - { name: Authorization, prefix: "Bearer " }
+{{- end }}

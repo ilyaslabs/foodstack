@@ -1,0 +1,190 @@
+{{- /* In-cluster datastores for trials and tests (values-dev.yaml): single nodes, small heaps.
+       Production uses managed or operator-run clusters (TDD 18.4). */ -}}
+{{- if .Values.dev.enabled }}
+{{- $root := . }}
+{{- $fn := include "foodstack.fullname" . }}
+{{- $ds := include "foodstack.datastoreSecretName" . }}
+{{- $dev := .Values.dev }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $fn }}-datastore
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+automountServiceAccountToken: false
+{{- /* name, image, ports (name:port), storage, mount path, container spec extras */}}
+{{- $stores := list
+  (dict "name" "mongodb" "image" $dev.mongodb.image "ports" (dict "mongodb" 27017) "storage" $dev.mongodb.storage "mount" "/data/db" "headless" true)
+  (dict "name" "redis" "image" $dev.redis.image "ports" (dict "redis" 6379) "storage" $dev.redis.storage "mount" "/data")
+  (dict "name" "kafka" "image" $dev.kafka.image "ports" (dict "kafka" 9092) "storage" $dev.kafka.storage "mount" "/var/lib/kafka/data")
+  (dict "name" "elasticsearch" "image" $dev.elasticsearch.image "ports" (dict "http" 9200) "storage" $dev.elasticsearch.storage "mount" "/usr/share/elasticsearch/data")
+  (dict "name" "storage" "image" $dev.storage.image "ports" (dict "s3" 9000) "storage" $dev.storage.storage "mount" "/data")
+  (dict "name" "mailpit" "image" $dev.mailpit.image "ports" (dict "smtp" 1025 "ui" 8025) "storage" "" "mount" "")
+}}
+{{- range $s := $stores }}
+{{- $labels := dict "app.kubernetes.io/name" (printf "foodstack-%s" $s.name) "app.kubernetes.io/instance" $root.Release.Name "app.kubernetes.io/component" "datastore" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fn }}-{{ $s.name }}
+  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+spec:
+  {{- if $s.headless }}
+  clusterIP: None
+  publishNotReadyAddresses: true
+  {{- end }}
+  selector: {{- toYaml $labels | nindent 4 }}
+  ports:
+    {{- range $pn, $p := $s.ports }}
+    - { name: {{ $pn }}, port: {{ $p }}, targetPort: {{ $p }}{{ if eq $pn "http" "s3" "ui" }}, appProtocol: http{{ end }} }
+    {{- end }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fn }}-{{ $s.name }}
+  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+spec:
+  serviceName: {{ $fn }}-{{ $s.name }}
+  replicas: 1
+  selector:
+    matchLabels: {{- toYaml $labels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml $labels | nindent 8 }}
+        {{- include "foodstack.podMeshLabels" $root | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $fn }}-datastore
+      automountServiceAccountToken: false
+      securityContext:
+        fsGroup: {{ if eq $s.name "elasticsearch" }}1000{{ else if eq $s.name "kafka" }}1000{{ else if eq $s.name "mongodb" }}999{{ else if eq $s.name "redis" }}999{{ else }}10001{{ end }}
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: {{ $s.name }}
+          image: {{ $s.image }}
+          ports:
+            {{- range $pn, $p := $s.ports }}
+            - { name: {{ $pn }}, containerPort: {{ $p }} }
+            {{- end }}
+          {{- if eq $s.name "mongodb" }}
+          command:
+            - bash
+            - -c
+            - install -m 400 -o mongodb -g mongodb /etc/mongo/keyfile.src /tmp/keyfile && exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile
+          env:
+            - { name: MONGO_INITDB_ROOT_USERNAME, value: foodstack }
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $ds }}, key: MONGO_PASSWORD } }
+            - { name: MEMBER, value: "{{ $fn }}-mongodb-0.{{ $fn }}-mongodb.{{ $root.Release.Namespace }}.svc.cluster.local:27017" }
+          readinessProbe:
+            # initiates the one-member replica set on first start, then reports ready once primary
+            exec:
+              command:
+                - bash
+                - -c
+                - >-
+                  mongosh --quiet -u foodstack -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval
+                  "try { rs.status() } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: process.env.MEMBER}]}) }; db.hello().isWritablePrimary"
+                  | grep -q true
+            periodSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 60
+          resources:
+            requests: { cpu: 200m, memory: 512Mi }
+            limits: { memory: 1Gi }
+          {{- else if eq $s.name "redis" }}
+          command: [sh, -c, 'exec redis-server --appendonly yes --requirepass "$REDIS_PASSWORD"']
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $ds }}, key: REDIS_PASSWORD } }
+          readinessProbe:
+            exec: { command: [sh, -c, 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning ping | grep -q PONG'] }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          {{- else if eq $s.name "kafka" }}
+          env:
+            - { name: KAFKA_NODE_ID, value: "1" }
+            - { name: KAFKA_PROCESS_ROLES, value: "broker,controller" }
+            - { name: KAFKA_LISTENERS, value: "PLAINTEXT://:9092,CONTROLLER://:9093" }
+            - { name: KAFKA_ADVERTISED_LISTENERS, value: "PLAINTEXT://{{ $fn }}-kafka:9092" }
+            - { name: KAFKA_CONTROLLER_LISTENER_NAMES, value: CONTROLLER }
+            - { name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT" }
+            - { name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@localhost:9093" }
+            - { name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1" }
+            - { name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1" }
+            - { name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1" }
+            - { name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "false" }
+            - { name: KAFKA_LOG_DIRS, value: /var/lib/kafka/data/logs }
+            - { name: KAFKA_HEAP_OPTS, value: "-Xmx512m -Xms512m" }
+            - { name: CLUSTER_ID, value: {{ printf "%s-%s" $root.Release.Name $root.Release.Namespace | sha256sum | trunc 22 | quote }} }
+          readinessProbe:
+            exec: { command: [sh, -c, '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1'] }
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 30
+          resources:
+            requests: { cpu: 200m, memory: 768Mi }
+            limits: { memory: 1Gi }
+          {{- else if eq $s.name "elasticsearch" }}
+          env:
+            - { name: discovery.type, value: single-node }
+            - { name: xpack.security.enabled, value: "true" }
+            - { name: xpack.security.http.ssl.enabled, value: "false" }
+            - { name: node.store.allow_mmap, value: "false" }
+            - { name: ES_JAVA_OPTS, value: "-Xms{{ $root.Values.dev.elasticsearch.heap }} -Xmx{{ $root.Values.dev.elasticsearch.heap }}" }
+            - name: ELASTIC_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ $ds }}, key: ELASTICSEARCH_PASSWORD } }
+          readinessProbe:
+            exec: { command: [sh, -c, 'curl -fsS -u "elastic:$ELASTIC_PASSWORD" http://localhost:9200/_cluster/health > /dev/null'] }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          resources:
+            requests: { cpu: 200m, memory: 1536Mi }
+            limits: { memory: 2Gi }
+          {{- else if eq $s.name "storage" }}
+          env:
+            - { name: RUSTFS_ACCESS_KEY, value: foodstack }
+            - name: RUSTFS_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: {{ $ds }}, key: S3_SECRET_KEY } }
+          readinessProbe:
+            httpGet: { path: /health, port: 9000 }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          {{- else if eq $s.name "mailpit" }}
+          readinessProbe:
+            httpGet: { path: /livez, port: 8025 }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          {{- end }}
+          volumeMounts:
+            {{- if $s.mount }}
+            - { name: data, mountPath: {{ $s.mount }} }
+            {{- end }}
+            {{- if eq $s.name "mongodb" }}
+            - { name: keyfile, mountPath: /etc/mongo/keyfile.src, subPath: MONGO_KEYFILE, readOnly: true }
+            {{- end }}
+      {{- if eq $s.name "mongodb" }}
+      volumes:
+        - name: keyfile
+          secret: { secretName: {{ $ds }}, defaultMode: 0400 }
+      {{- end }}
+  {{- if $s.storage }}
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with $root.Values.dev.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources: { requests: { storage: {{ $s.storage }} } }
+  {{- end }}
+{{- end }}
+{{- end }}

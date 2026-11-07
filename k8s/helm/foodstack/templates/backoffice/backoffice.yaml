@@ -1,0 +1,2 @@
+{{- /* The back office: static files under /admin/ with a runtime config.json. */ -}}
+{{ include "foodstack.frontend" (list . "backoffice" 8080 (dict "FOODSTACK_API_URL" "") "/admin/config.json" 101) }}

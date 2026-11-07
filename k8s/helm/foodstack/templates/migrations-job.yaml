@@ -1,0 +1,73 @@
+{{- /* Migrations once per install and upgrade, before the new pods start (TDD 6.4): every module
+       local, each with its own datastore override, so every module database is migrated. */ -}}
+{{- if eq (include "foodstack.migrationsJob" .) "true" }}
+{{- $full := printf "%s-migrations" (include "foodstack.fullname" .) }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $full }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  annotations: {{- include "foodstack.hookAnnotations" . | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $full }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: foodstack-migrations
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        {{- include "foodstack.podMeshLabels" . | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $full }}
+      automountServiceAccountToken: false
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: {{ include "foodstack.image" (list . .Values.server.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["--foodstack.migrate-only=true"]
+          env:
+            - { name: JAVA_TOOL_OPTIONS, value: "-XX:MaxRAMPercentage=75 --enable-native-access=ALL-UNNAMED" }
+            {{- range $k, $v := (include "foodstack.serverConfig" . | fromYaml) }}
+            - { name: {{ $k }}, value: {{ $v | quote }} }
+            {{- end }}
+            {{- include "foodstack.datastoreEnv" . | nindent 12 }}
+            {{- range $module, $d := .Values.server.moduleDatastores }}
+            - name: FOODSTACK_MODULES_{{ upper $module }}_MONGODB_URI
+              valueFrom: { secretKeyRef: { name: {{ $d.mongodbUriSecret }}, key: MONGODB_URI } }
+            {{- end }}
+          {{- with .Values.server.envFromSecrets }}
+          envFrom:
+            {{- range . }}
+            - secretRef: { name: {{ . }} }
+            {{- end }}
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+          resources: {{- toYaml .Values.migrations.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

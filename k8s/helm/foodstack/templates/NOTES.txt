@@ -1,0 +1,26 @@
+FoodStack {{ .Chart.AppVersion }} is installing in namespace {{ .Release.Namespace }} (topology: {{ .Values.topology }}).
+{{- $deployments := include "foodstack.deployments" . | fromYaml }}
+
+Server Deployments:
+{{- range $name, $d := $deployments }}
+  {{ include "foodstack.serverName" (list $ $name) }}: {{ join ", " $d.modules }} (Kafka listener threads per module: {{ $d.kafkaConcurrency }})
+{{- end }}
+
+Open:
+  Storefront:   {{ include "foodstack.url" (list . .Values.hosts.web) }}/
+  Back office:  {{ include "foodstack.url" (list . .Values.hosts.admin) }}/admin/
+  API:          {{ include "foodstack.url" (list . .Values.hosts.api) }}/api/v1/
+
+First sign-in: {{ .Values.secrets.adminEmail }}, password:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "foodstack.secretName" . }} -o jsonpath='{.data.FOODSTACK_ADMIN_PASSWORD}' | base64 -d; echo
+
+Point the hostnames at the gateway's address:
+  kubectl -n {{ .Release.Namespace }} get gateway {{ include "foodstack.gatewayName" . }} -o jsonpath='{.status.addresses[0].value}'; echo
+{{- if .Values.dev.enabled }}
+
+This is a trial install: datastores run in the cluster without backups. Emails go to Mailpit:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "foodstack.fullname" . }}-mailpit 8025:8025   (then http://localhost:8025)
+{{- end }}
+
+The Secret {{ include "foodstack.secretName" . }} holds the token signing key and the personal-data key.
+Back it up: without it, stored personal data cannot be read. helm uninstall keeps it.

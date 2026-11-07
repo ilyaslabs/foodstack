@@ -1,0 +1,46 @@
+# A trial or test cluster: every datastore in the cluster (single nodes, small heaps), emails to
+# Mailpit, plain HTTP on foodstack.localhost names, one replica of everything.
+#   helm install foodstack k8s/helm/foodstack -n foodstack --create-namespace -f k8s/helm/foodstack/values-dev.yaml
+# Not for real data: no backups, no high availability.
+dev:
+  enabled: true
+
+scheme: http
+hosts:
+  web: foodstack.localhost
+  admin: admin.foodstack.localhost
+  api: foodstack.localhost
+
+secrets:
+  adminEmail: admin@foodstack.localhost
+
+server:
+  defaults:
+    replicas: 1
+    autoscaling: { enabled: false }
+    pdb: null
+    resources:
+      requests: { cpu: 250m, memory: 1Gi }
+      limits: { memory: 1Gi }
+  env:
+    GEOCODING_PROVIDER: nominatim
+    ROUTING_PROVIDER: none
+    PAYMENT_GATEWAY: sandbox
+    PAYMENT_SANDBOX_SECRET: trial-sandbox-secret
+
+web:
+  replicas: 1
+  autoscaling: { enabled: false }
+  pdb: null
+backoffice:
+  replicas: 1
+  pdb: null
+
+datastores:
+  kafka:
+    topicPartitions: 6
+
+gateway:
+  autoscaling: { min: 1, max: 2, targetCPU: 80 }
+  rateLimit:
+    replicas: 1

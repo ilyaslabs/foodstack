@@ -1,0 +1,179 @@
+{{- /*
+  Istio ambient (TDD 18.3). Every pod of the release joins the mesh by its own label, so ztunnel
+  encrypts and authenticates every connection with the pod's service account. Port 8081
+  (module-to-module) only from FoodStack server service accounts; public ports only from the
+  gateways and the web app; datastores only from the server. The management port (health,
+  metrics) also takes plain connections, so a Prometheus outside the mesh can scrape it.
+*/ -}}
+{{- if .Values.mesh.enabled }}
+{{- $root := . }}
+{{- $fn := include "foodstack.fullname" . }}
+{{- $ns := .Release.Namespace }}
+{{- $servers := fromJsonArray (include "foodstack.serverPrincipals" .) }}
+{{- $gateways := list (include "foodstack.principal" (list . (include "foodstack.gatewaySa" .))) (include "foodstack.principal" (list . (include "foodstack.internalGatewaySa" .))) }}
+{{- $waypoint := list }}
+{{- if .Values.mesh.waypoint.enabled }}{{ $waypoint = list (include "foodstack.principal" (list . (include "foodstack.waypointName" .))) }}{{ end }}
+{{- $web := include "foodstack.principal" (list . (printf "%s-web" $fn)) }}
+{{- $deployments := include "foodstack.deployments" . | fromYaml }}
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: {{ $fn }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/instance: {{ .Release.Name }} }
+  mtls: { mode: {{ .Values.mesh.mtls }} }
+---
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: {{ $fn }}-server-management
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: foodstack-server, app.kubernetes.io/instance: {{ .Release.Name }} }
+  mtls: { mode: {{ .Values.mesh.mtls }} }
+  portLevelMtls:
+    8082: { mode: PERMISSIVE }
+---
+# L4, enforced by ztunnel on the server pods.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ $fn }}-server
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: foodstack-server, app.kubernetes.io/instance: {{ .Release.Name }} }
+  action: ALLOW
+  rules:
+    - from:
+        - source: { principals: {{ concat $gateways (list $web) $servers $waypoint | toJson }} }
+      to:
+        - operation: { ports: ["8080"] }
+    - from:
+        - source: { principals: {{ concat $servers $waypoint | toJson }} }
+      to:
+        - operation: { ports: ["8081"] }
+    - to:
+        - operation: { ports: ["8082"] }
+{{- if .Values.mesh.waypoint.enabled }}
+---
+# L7, enforced by the waypoint, where the caller's own identity is known even though ztunnel sees
+# the waypoint: module calls (8081) only from server service accounts.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ $fn }}-server-waypoint
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  targetRefs:
+    {{- range $name, $_ := $deployments }}
+    - { kind: Service, group: "", name: {{ include "foodstack.serverName" (list $root $name) }} }
+    {{- end }}
+  action: ALLOW
+  rules:
+    - from:
+        - source: { principals: {{ concat $gateways (list $web) $servers | toJson }} }
+      to:
+        - operation: { ports: ["8080"] }
+    - from:
+        - source: { principals: {{ $servers | toJson }} }
+      to:
+        - operation: { ports: ["8081"] }
+    - to:
+        - operation: { ports: ["8082"] }
+---
+# The namespace waypoint: per-request (least request) balancing to the server pods, so long-lived
+# keep-alive connections never pin traffic to one pod.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "foodstack.waypointName" . }}
+  labels:
+    {{- include "foodstack.labels" . | nindent 4 }}
+    istio.io/waypoint-for: service
+spec:
+  gatewayClassName: istio-waypoint
+  listeners:
+    - { name: mesh, port: 15008, protocol: HBONE }
+{{- range $name, $_ := $deployments }}
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: {{ include "foodstack.serverName" (list $root $name) }}
+  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+spec:
+  host: {{ include "foodstack.serverHost" (list $root $name) }}
+  trafficPolicy:
+    loadBalancer: { simple: LEAST_REQUEST }
+{{- end }}
+{{- end }}
+{{- range $app := list "web" "backoffice" }}
+---
+# Istio selectors take only matchLabels: one policy per front-end.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ $fn }}-{{ $app }}
+  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: foodstack-{{ $app }}, app.kubernetes.io/instance: {{ $root.Release.Name }} }
+  action: ALLOW
+  rules:
+    - from:
+        - source: { principals: {{ $gateways | toJson }} }
+{{- end }}
+{{- if and .Values.gateway.enabled .Values.gateway.rateLimit.enabled }}
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ $fn }}-ratelimit
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: foodstack-ratelimit, app.kubernetes.io/instance: {{ .Release.Name }} }
+  action: ALLOW
+  rules:
+    - from:
+        - source: { principals: [{{ include "foodstack.principal" (list . (include "foodstack.gatewaySa" .)) | quote }}] }
+      to:
+        - operation: { ports: ["8081"] }
+{{- end }}
+{{- if .Values.dev.enabled }}
+---
+# Trial datastores: only the server, the migrations Job and the rate-limit service (Redis); object
+# storage also from the gateways (images and presigned uploads); each datastore may reach itself.
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ $fn }}-datastores
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/component: datastore, app.kubernetes.io/instance: {{ .Release.Name }} }
+  action: ALLOW
+  rules:
+    - from:
+        - source: { principals: {{ concat $servers (list (include "foodstack.principal" (list . (printf "%s-ratelimit" $fn))) (include "foodstack.principal" (list . (printf "%s-datastore" $fn)))) | toJson }} }
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ $fn }}-storage-public
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: foodstack-storage, app.kubernetes.io/instance: {{ .Release.Name }} }
+  action: ALLOW
+  rules:
+    - from:
+        - source: { principals: {{ $gateways | toJson }} }
+      to:
+        - operation: { ports: ["9000"] }
+{{- end }}
+{{- end }}

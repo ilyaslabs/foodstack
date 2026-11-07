@@ -15,6 +15,7 @@ import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +54,24 @@ class SigningKeysTest {
         assertThat(keys.getKeys()).hasSize(2);
         assertThat(SigningKeys.fromConfiguration(List.of(first)).getKeys().getFirst().getKeyID())
             .isEqualTo(keys.getKeys().getFirst().getKeyID());
+    }
+
+    @Test
+    @DisplayName("reads a SEC1 key on one line, as the Helm chart generates it, as the same key as its PKCS#8 form")
+    void sec1() throws Exception {
+        // given
+        KeyPair pair = keyPair();
+        byte[] sec1 = PrivateKeyInfo.getInstance(pair.getPrivate().getEncoded()).parsePrivateKey().toASN1Primitive().getEncoded();
+        String pem = "-----BEGIN EC PRIVATE KEY-----" + Base64.getEncoder().encodeToString(sec1) + "-----END EC PRIVATE KEY-----";
+
+        // when
+        ECKey key = SigningKeys.fromConfiguration(List.of(pem)).getKeys().getFirst().toECKey();
+
+        // then
+        assertThat(key.toECPublicKey().getW()).isEqualTo(((ECPublicKey) pair.getPublic()).getW());
+        assertThat(key.getKeyID()).isEqualTo(SigningKeys
+            .fromConfiguration(List.of(Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded())))
+            .getKeys().getFirst().getKeyID());
     }
 
     @Test

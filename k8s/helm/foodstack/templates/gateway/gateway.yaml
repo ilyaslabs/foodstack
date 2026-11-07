@@ -1,0 +1,98 @@
+{{- /* The public Gateway (TLS, every host) and the internal one the web app's server-side
+       rendering uses: same routes, cluster-internal Service, no edge rate limits. */ -}}
+{{- if .Values.gateway.enabled }}
+{{- $https := eq .Values.scheme "https" }}
+{{- $tlsSecret := default (printf "%s-tls" (include "foodstack.fullname" .)) .Values.gateway.tls.secretName }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "foodstack.gatewayName" . }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  gatewayClassName: {{ .Values.gateway.className }}
+  infrastructure:
+    labels:
+      app.kubernetes.io/part-of: foodstack
+    annotations:
+      {{- with .Values.gateway.annotations }}{{ toYaml . | nindent 6 }}{{ end }}
+      {{- if .Values.gateway.trustedProxies }}
+      proxy.istio.io/config: '{"gatewayTopology":{"numTrustedProxies":{{ .Values.gateway.trustedProxies }}}}'
+      {{- end }}
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes: { namespaces: { from: Same } }
+    {{- if $https }}
+    {{- range $i, $host := fromJsonArray (include "foodstack.hostnames" .) }}
+    - name: https-{{ $i }}
+      hostname: {{ $host | quote }}
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs: [{ kind: Secret, name: {{ $tlsSecret }} }]
+      allowedRoutes: { namespaces: { from: Same } }
+    {{- end }}
+    {{- end }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "foodstack.internalGatewayName" . }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  annotations:
+    networking.istio.io/service-type: ClusterIP
+spec:
+  gatewayClassName: {{ .Values.gateway.className }}
+  infrastructure:
+    labels:
+      app.kubernetes.io/part-of: foodstack
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes: { namespaces: { from: Same } }
+{{- if and $https .Values.gateway.tls.certManager.issuer }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "foodstack.fullname" . }}
+  labels: {{- include "foodstack.labels" . | nindent 4 }}
+spec:
+  secretName: {{ $tlsSecret }}
+  issuerRef: { kind: ClusterIssuer, name: {{ .Values.gateway.tls.certManager.issuer }} }
+  dnsNames: {{- fromJsonArray (include "foodstack.hostnames" .) | toYaml | nindent 4 }}
+{{- end }}
+{{- if eq .Values.gateway.className "istio" }}
+{{- range $gw := list (include "foodstack.gatewayName" .) (include "foodstack.internalGatewayName" .) }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $gw }}
+  labels: {{- include "foodstack.labels" $ | nindent 4 }}
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: {{ $gw }}-istio }
+  minReplicas: {{ $.Values.gateway.autoscaling.min }}
+  maxReplicas: {{ $.Values.gateway.autoscaling.max }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: {{ $.Values.gateway.autoscaling.targetCPU }} }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $gw }}
+  labels: {{- include "foodstack.labels" $ | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: {{ $gw }}
+{{- end }}
+{{- end }}
+{{- end }}

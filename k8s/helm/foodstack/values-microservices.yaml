@@ -1,0 +1,21 @@
+# topology=microservices (TDD 18.2): one Deployment per module (15). Same image, same data; each
+# module can later get its own database (server.moduleDatastores).
+topology: microservices
+server:
+  defaults:
+    replicas: 2
+    autoscaling: { enabled: true, min: 2, max: 6 }
+    resources:
+      requests: { cpu: 250m, memory: 768Mi }
+      limits: { memory: 768Mi }
+  overrides:
+    order:
+      autoscaling: { enabled: true, min: 3, max: 20 }
+      pdb: { minAvailable: 2 }
+      resources:
+        requests: { cpu: 500m, memory: 1Gi }
+        limits: { memory: 1Gi }
+    dispatch:
+      autoscaling: { enabled: true, min: 2, max: 10 }
+    search:
+      autoscaling: { enabled: true, min: 2, max: 8 }

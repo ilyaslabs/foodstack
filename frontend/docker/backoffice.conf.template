@@ -8,15 +8,25 @@ server {
     location = /admin/config.json {
         default_type application/json;
         add_header Cache-Control "no-store";
-        return 200 '{"apiUrl":"${FOODSTACK_API_URL}","issuer":"${FOODSTACK_ISSUER}","clientId":"foodstack-backoffice"}';
+        return 200 '{"apiUrl":"${FOODSTACK_API_URL}","mapTiles":"${MAP_TILE_URL}","mapAttribution":"${MAP_ATTRIBUTION}"}';
     }
 
-    # Hashed bundles never change; cache them for a year.
-    location ~ ^/admin/(sw\.js|manifest\.webmanifest)$ {
+    # The map worker has a fixed name, so revalidate it; module workers need a JavaScript type.
+    location ~* ^/admin/.+\.mjs$ {
+        types { }
+        default_type text/javascript;
         add_header Cache-Control "no-cache";
         try_files $uri =404;
     }
 
+    # The service worker (rider app offline shell and push) and the app manifest keep fixed names.
+    location ~ ^/admin/(sw\.js|manifest\.webmanifest)$ {
+        add_header Cache-Control "no-cache";
+        add_header Service-Worker-Allowed "/admin/";
+        try_files $uri =404;
+    }
+
+    # Hashed bundles never change; cache them for a year.
     location ~* ^/admin/.+\.(js|css|woff2?|png|svg|ico|webp)$ {
         add_header Cache-Control "public, max-age=31536000, immutable";
         try_files $uri =404;
@@ -25,7 +35,7 @@ server {
     # Client-side routes fall back to the app shell.
     location /admin/ {
         add_header Cache-Control "no-cache";
-        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'";
+        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: ${MAP_TILE_ORIGIN}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${MAP_TILE_ORIGIN} https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com; worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'none'";
         try_files $uri $uri/ /admin/index.html;
     }
 }
