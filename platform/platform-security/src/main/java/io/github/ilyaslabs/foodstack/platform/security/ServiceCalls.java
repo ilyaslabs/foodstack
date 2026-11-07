@@ -33,6 +33,14 @@ public class ServiceCalls {
         this.decoder = decoder;
     }
 
+    /**
+     * For a run without a web server ({@code foodstack.migrate-only}): modules that take this
+     * class can still be built, but nothing may run as the platform there.
+     */
+    static ServiceCalls unavailable() {
+        return new ServiceCalls(null, null);
+    }
+
     public void run(Runnable work) {
         call(() -> {
             work.run();
@@ -45,6 +53,9 @@ public class ServiceCalls {
         if (current != null && current.isAuthenticated()
                 && !(current instanceof org.springframework.security.authentication.AnonymousAuthenticationToken)) {
             return work.get();
+        }
+        if (this.tokens == null) {
+            throw new IllegalStateException("No calls as the platform in a run without a web server (migrate-only)");
         }
         String token = this.tokens.accessToken();
         SecurityContext previousSecurity = SecurityContextHolder.getContext();

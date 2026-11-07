@@ -13,7 +13,7 @@ import io.github.ilyaslabs.foodstack.identity.core.application.SessionService.Se
 import io.github.ilyaslabs.foodstack.identity.core.application.SignInSettingsService;
 import io.github.ilyaslabs.foodstack.identity.core.application.TwoFactorService;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
-import io.github.ilyaslabs.foodstack.identity.core.persistence.SignInSettingsDocument;
+import io.github.ilyaslabs.foodstack.identity.core.application.SignInProviders;
 import io.github.ilyaslabs.foodstack.identity.core.security.ChallengeTokens;
 import io.github.ilyaslabs.foodstack.identity.web.dto.CodeRequest;
 import io.github.ilyaslabs.foodstack.identity.web.dto.EnrollmentResponse;
@@ -133,7 +133,7 @@ class AuthController {
     /** Which social sign-in buttons to show (public). */
     @GetMapping("/providers")
     ResponseEntity<SignInProvidersResponse> providers() {
-        SignInSettingsDocument settings = this.signInSettings.get();
+        SignInProviders settings = this.signInSettings.get();
         return ResponseEntity.ok()
             .cacheControl(CacheControl.maxAge(Duration.ofMinutes(5)).cachePublic())
             .body(new SignInProvidersResponse(settings.googleClientIds(), settings.appleClientIds()));
@@ -143,7 +143,7 @@ class AuthController {
     @PutMapping(value = "/providers", consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAuthority('settings:manage')")
     SignInProvidersResponse updateProviders(@RequestBody SignInProvidersRequest request) {
-        SignInSettingsDocument saved = this.signInSettings.update(request.googleClientIds(), request.appleClientIds(),
+        SignInProviders saved = this.signInSettings.update(request.googleClientIds(), request.appleClientIds(),
                 CurrentUser.id());
         return new SignInProvidersResponse(saved.googleClientIds(), saved.appleClientIds());
     }

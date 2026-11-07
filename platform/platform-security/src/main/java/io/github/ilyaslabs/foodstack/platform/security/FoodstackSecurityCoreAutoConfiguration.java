@@ -54,4 +54,15 @@ public final class FoodstackSecurityCoreAutoConfiguration {
     PiiCipher piiCipher(FoodstackSecurityProperties properties) {
         return new PiiCipher(properties.getPiiKey());
     }
+
+    /**
+     * A migrate-only run has no web server, so {@link FoodstackSecurityAutoConfiguration} and its
+     * {@link ServiceCalls} are off; module services that take one are still built there.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "true")
+    ServiceCalls foodstackServiceCallsUnavailable() {
+        return ServiceCalls.unavailable();
+    }
 }
