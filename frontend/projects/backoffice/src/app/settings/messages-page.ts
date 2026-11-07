@@ -297,11 +297,7 @@ const GROUPS: MessageInfo['group'][] = ['Customers', 'Stores', 'Riders', 'Accoun
                   <div class="mail-subject" [attr.dir]="rtl() ? 'rtl' : 'ltr'">
                     <span class="muted small">Subject</span> {{ p.subject }}
                   </div>
-                  <iframe
-                    title="Email preview"
-                    sandbox=""
-                    [attr.srcdoc]="previewHtml()"
-                  ></iframe>
+                  <iframe title="Email preview" sandbox="" [attr.srcdoc]="previewHtml()"></iframe>
                 </div>
               } @else {
                 <mat-progress-bar mode="indeterminate" />
