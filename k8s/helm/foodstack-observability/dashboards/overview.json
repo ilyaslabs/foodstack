@@ -63,6 +63,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -117,6 +118,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
+          "noValue": "No traffic",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -179,6 +181,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s",
+          "noValue": "No traffic",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -241,6 +244,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [

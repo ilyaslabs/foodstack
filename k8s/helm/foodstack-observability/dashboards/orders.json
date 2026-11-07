@@ -63,6 +63,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -117,6 +118,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -171,6 +173,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -233,6 +236,7 @@
       "fieldConfig": {
         "defaults": {
           "unit": "s",
+          "noValue": "No deliveries",
           "thresholds": {
             "mode": "absolute",
             "steps": [
