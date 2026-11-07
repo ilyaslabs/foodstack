@@ -49,6 +49,7 @@ import io.github.ilyaslabs.foodstack.rider.api.RiderView;
 import io.github.ilyaslabs.foodstack.settings.api.DeliveryView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+import io.micrometer.core.instrument.Metrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -714,12 +715,27 @@ public class DispatchService {
             return changed;
         });
         if (after != null) {
+            measure(job, to, now);
             this.live.publish(after.id(), after.pickupLat(), after.pickupLng(), after.status(), after.riderId(), "job");
             if (job.riderId() != null && !job.riderId().equals(after.riderId())) {
                 this.live.publish(after.id(), after.pickupLat(), after.pickupLng(), after.status(), job.riderId(), "job");
             }
         }
         return after;
+    }
+
+    /** Dispatch meters (TDD 18.5): jobs per step, and how long finding a rider and delivering take. */
+    private static void measure(JobDocument job, DeliveryStatus to, Instant now) {
+        Metrics.counter("foodstack.dispatch.jobs", "status", to.name()).increment();
+        if (job.createdAt() == null) {
+            return;
+        }
+        if (to == DeliveryStatus.ASSIGNED && job.assignedAt() == null) {
+            Metrics.timer("foodstack.dispatch.assign.time").record(java.time.Duration.between(job.createdAt(), now));
+        }
+        else if (to == DeliveryStatus.DELIVERED) {
+            Metrics.timer("foodstack.dispatch.delivery.time").record(java.time.Duration.between(job.createdAt(), now));
+        }
     }
 
     private static ActiveJobDocument active(JobDocument j) {

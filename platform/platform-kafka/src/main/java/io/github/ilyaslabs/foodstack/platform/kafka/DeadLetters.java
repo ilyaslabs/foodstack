@@ -16,7 +16,20 @@ import org.springframework.util.backoff.ExponentialBackOff;
  */
 public final class DeadLetters {
 
+    /** Header of a replayed dead letter: the consumer group meant to handle it again (see {@link ReplayFilter}). */
+    public static final String REPLAY_FOR = "foodstack-replay-for";
+
     private DeadLetters() {
+    }
+
+    /** Whether {@code topic} is a dead-letter topic. */
+    public static boolean isDeadLetterTopic(String topic) {
+        return topic.endsWith(".dlt");
+    }
+
+    /** {@code foodstack.store.events.dlt} becomes {@code foodstack.store.events}. */
+    public static String originalTopic(String deadLetterTopic) {
+        return deadLetterTopic.substring(0, deadLetterTopic.length() - ".dlt".length());
     }
 
     /** {@code foodstack.store.events} becomes {@code foodstack.store.events.dlt} (see {@link ModuleTopics}). */

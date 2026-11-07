@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.platform.kafka;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -11,9 +13,13 @@ import java.util.concurrent.TimeUnit;
 
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
-import org.apache.kafka.clients.producer.ProducerRecord;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.bson.Document;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -61,6 +67,14 @@ public class OutboxRelay implements SmartLifecycle {
 
     private volatile boolean running;
 
+    private volatile Backlog backlog = new Backlog(0, 0, Instant.EPOCH);
+
+    private Counter published;
+
+    /** Pending rows and the age of the oldest, read at most every 10 s however often it is scraped. */
+    private record Backlog(long pending, double oldestSeconds, Instant readAt) {
+    }
+
     private Thread worker;
 
     public OutboxRelay(ModuleMongo mongo, String topic, KafkaTemplate<String, String> kafka,
@@ -74,6 +88,52 @@ public class OutboxRelay implements SmartLifecycle {
         this.jsonMapper = jsonMapper;
         this.settings = properties.getRelay();
         this.clock = clock;
+    }
+
+    /**
+     * Meters of this module's outbox (TDD 18.5): {@code foodstack.outbox.pending} and
+     * {@code foodstack.outbox.oldest.age} (seconds) are the same in every replica, so dashboards take
+     * the max; {@code foodstack.outbox.published} counts what this replica sent.
+     */
+    public void bindTo(MeterRegistry meters) {
+        Tags tags = Tags.of("module", this.module);
+        Gauge.builder("foodstack.outbox.pending", this, (relay) -> relay.backlog().pending())
+            .description("Outbox rows not yet published to Kafka")
+            .tags(tags)
+            .register(meters);
+        Gauge.builder("foodstack.outbox.oldest.age", this, (relay) -> relay.backlog().oldestSeconds())
+            .description("Seconds the oldest unpublished outbox row has waited")
+            .baseUnit("seconds")
+            .tags(tags)
+            .register(meters);
+        this.published = Counter.builder("foodstack.outbox.published")
+            .description("Events this replica published from the outbox")
+            .tags(tags)
+            .register(meters);
+    }
+
+    private Backlog backlog() {
+        Backlog current = this.backlog;
+        Instant now = this.clock.instant();
+        if (Duration.between(current.readAt(), now).toSeconds() < 10) {
+            return current;
+        }
+        try {
+            Query pending = Query.query(Criteria.where("status").is(OutboxWriter.STATUS_NEW));
+            long count = this.template.count(pending.limit(100_000), this.collection);
+            Document oldest = (count == 0) ? null
+                    : this.template.findOne(Query.query(Criteria.where("status").is(OutboxWriter.STATUS_NEW))
+                        .with(Sort.by("_id")), Document.class, this.collection);
+            Date occurredAt = (oldest != null) ? oldest.getDate("occurredAt") : null;
+            double age = (occurredAt != null) ? Math.max(0, Duration.between(occurredAt.toInstant(), now).toMillis() / 1000.0)
+                    : 0;
+            current = new Backlog(count, age, now);
+            this.backlog = current;
+        }
+        catch (RuntimeException ex) {
+            // keep the last reading; the database being down shows elsewhere
+        }
+        return current;
     }
 
     @Override
@@ -165,6 +225,9 @@ public class OutboxRelay implements SmartLifecycle {
                 logger.warn("Could not publish event " + failedId + " of module '" + this.module + "'", ex);
                 break;
             }
+        }
+        if (!sent.isEmpty() && this.published != null) {
+            this.published.increment(sent.size());
         }
         if (!sent.isEmpty()) {
             this.template.updateMulti(Query.query(Criteria.where("_id").in(sent)),

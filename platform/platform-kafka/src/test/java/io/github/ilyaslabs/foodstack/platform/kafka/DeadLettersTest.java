@@ -10,6 +10,7 @@ import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.DisplayName;
@@ -38,6 +39,26 @@ class DeadLettersTest {
 
     @Autowired
     KafkaTestApplication.FailingListener listener;
+
+    @Autowired
+    KafkaTestApplication.OtherListener other;
+
+    @Test
+    @DisplayName("a replayed dead letter reaches only the group that failed on it")
+    void replayReachesOneGroup() throws Exception {
+        // given
+        ProducerRecord<String, String> replay = new ProducerRecord<>("foodstack.dltest.events", "key-2", "replayed");
+        replay.headers().add(DeadLetters.REPLAY_FOR, "dltest".getBytes(StandardCharsets.UTF_8));
+
+        // when
+        this.kafka.send(replay).get();
+        this.kafka.send("foodstack.dltest.events", "key-2", "after-replay").get();
+
+        // then
+        await().atMost(Duration.ofSeconds(30)).until(() -> this.listener.handled.contains("replayed"));
+        await().atMost(Duration.ofSeconds(30)).until(() -> this.other.handled.contains("after-replay"));
+        assertThat(this.other.handled).doesNotContain("replayed");
+    }
 
     @Test
     @DisplayName("a record that keeps failing is tried 3 times, then lands in <topic>.dlt and the next record is handled")
