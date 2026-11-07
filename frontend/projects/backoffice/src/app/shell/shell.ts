@@ -5,7 +5,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { map } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatListModule } from '@angular/material/list';
+import { MatRippleModule } from '@angular/material/core';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSidenavModule } from '@angular/material/sidenav';
 
@@ -32,7 +32,7 @@ interface NavItem {
     RouterLinkActive,
     MatButtonModule,
     MatDividerModule,
-    MatListModule,
+    MatRippleModule,
     MatMenuModule,
     MatSidenavModule,
     BrandHeader,

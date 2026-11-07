@@ -40,22 +40,24 @@
 <mat-sidenav-container class="shell" autosize>
   <mat-sidenav #drawer class="nav" [mode]="compact() ? 'over' : 'side'" [opened]="!compact()">
     <nav aria-label="Main">
-      <mat-nav-list>
+      <ul class="nav-list">
         @for (item of nav(); track item.path) {
-          <a
-            mat-list-item
-            [routerLink]="item.path"
-            routerLinkActive
-            #link="routerLinkActive"
-            [routerLinkActiveOptions]="{ exact: item.exact }"
-            [activated]="link.isActive"
-            (click)="compact() && drawer.close()"
-          >
-            <fs-icon matListItemIcon [name]="item.icon" />
-            <span matListItemTitle>{{ item.label }}</span>
-          </a>
+          <li>
+            <a
+              class="nav-item"
+              matRipple
+              [routerLink]="item.path"
+              routerLinkActive="active"
+              ariaCurrentWhenActive="page"
+              [routerLinkActiveOptions]="{ exact: item.exact }"
+              (click)="compact() && drawer.close()"
+            >
+              <fs-icon [name]="item.icon" />
+              <span>{{ item.label }}</span>
+            </a>
+          </li>
         }
-      </mat-nav-list>
+      </ul>
     </nav>
   </mat-sidenav>
   <mat-sidenav-content class="content">
