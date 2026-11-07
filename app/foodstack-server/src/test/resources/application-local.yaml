@@ -11,6 +11,10 @@ foodstack:
     # A fixed development key so encrypted test data survives restarts. Not a secret.
     pii-key: ZGV2ZWxvcG1lbnQta2V5LW5vdC1mb3ItcHJvZHVjdGlvbiEhISE=
   identity:
+    # the shared test accounts below would lock each other out if their roles required an
+    # authenticator app; two-step sign-in stays optional here (Account menu > Two-step sign-in)
+    totp:
+      required-roles: []
     bootstrap-admin:
       email: admin@local.foodstack.local
       password: foodstack-local

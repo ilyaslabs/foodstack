@@ -10,6 +10,9 @@ describe('SignIn', () => {
     loginWithPassword: ReturnType<typeof vi.fn>;
     requestCode: ReturnType<typeof vi.fn>;
     loginWithCode: ReturnType<typeof vi.fn>;
+    completeTwoStep: ReturnType<typeof vi.fn>;
+    startEnrollment: ReturnType<typeof vi.fn>;
+    confirmEnrollment: ReturnType<typeof vi.fn>;
   };
 
   function render() {
@@ -17,6 +20,12 @@ describe('SignIn', () => {
       loginWithPassword: vi.fn().mockResolvedValue(undefined),
       requestCode: vi.fn().mockResolvedValue(undefined),
       loginWithCode: vi.fn().mockResolvedValue(undefined),
+      completeTwoStep: vi.fn().mockResolvedValue(undefined),
+      startEnrollment: vi.fn().mockResolvedValue({
+        secret: 'JBSWY3DPEHPK3PXP',
+        uri: 'otpauth://totp/x?secret=JBSWY3DPEHPK3PXP',
+      }),
+      confirmEnrollment: vi.fn().mockResolvedValue(['abcde-fghjk', 'mnpqr-stuvw']),
     };
     TestBed.configureTestingModule({
       imports: [SignIn],
@@ -94,5 +103,69 @@ describe('SignIn', () => {
     // then
     expect(auth.requestCode).toHaveBeenCalledWith('a@example.com', 'LOGIN');
     expect(auth.loginWithCode).toHaveBeenCalledWith('a@example.com', '123456');
+  });
+
+  async function signInWithPassword(fixture: ReturnType<typeof render>) {
+    const element = fixture.nativeElement as HTMLElement;
+    type(element, 'input[type=email]', 'admin@example.com');
+    type(element, 'input[type=password]', 'correct horse');
+    element.querySelector<HTMLButtonElement>('button[type=submit]')!.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  it('asks for the authenticator code when the account has two-step sign-in', async () => {
+    // given
+    const fixture = render();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    auth.loginWithPassword.mockResolvedValue({ next: 'TOTP', challenge: 'ch', expiresIn: 300 });
+    const element = fixture.nativeElement as HTMLElement;
+
+    // when
+    await signInWithPassword(fixture);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(element.querySelector('h1')?.textContent).toContain('Two-step sign-in');
+    type(element, 'input[autocomplete=one-time-code]', '654321');
+    element.querySelector<HTMLButtonElement>('button[type=submit]')!.click();
+    await fixture.whenStable();
+
+    // then
+    expect(auth.completeTwoStep).toHaveBeenCalledWith('ch', '654321');
+    expect(navigate).toHaveBeenCalledWith('/', { replaceUrl: true });
+  });
+
+  it('sets up the authenticator app when the role requires it, then shows the recovery codes', async () => {
+    // given
+    const fixture = render();
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    auth.loginWithPassword.mockResolvedValue({
+      next: 'TOTP_ENROLL',
+      challenge: 'ch',
+      expiresIn: 300,
+    });
+    const element = fixture.nativeElement as HTMLElement;
+
+    // when
+    await signInWithPassword(fixture);
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(element.querySelector('fs-qr-code svg path')?.getAttribute('d')).toMatch(/^M/);
+    expect(element.textContent).toContain('JBSW Y3DP EHPK 3PXP');
+    type(element, 'input[autocomplete=one-time-code]', '123456');
+    element.querySelector<HTMLButtonElement>('button[type=submit]')!.click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // then
+    expect(auth.startEnrollment).toHaveBeenCalledWith('ch');
+    expect(auth.confirmEnrollment).toHaveBeenCalledWith('ch', '123456');
+    expect(element.querySelector('h1')?.textContent).toContain('Save your recovery codes');
+    expect(element.querySelectorAll('.codes li')).toHaveLength(2);
+    expect(navigate).not.toHaveBeenCalled();
+    [...element.querySelectorAll<HTMLButtonElement>('button')]
+      .find((b) => b.textContent?.includes('continue'))!
+      .click();
+    await fixture.whenStable();
+    expect(navigate).toHaveBeenCalledWith('/', { replaceUrl: true });
   });
 });

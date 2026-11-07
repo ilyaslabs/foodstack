@@ -33,6 +33,20 @@ interface TokenResponse {
 export type CodePurpose = 'LOGIN' | 'PASSWORD_RESET';
 
 /**
+ * The first step proved who the user is, and the account needs a second one (PRD ID-5): a code
+ * from the authenticator app (`TOTP`), or setting one up first (`TOTP_ENROLL`). No tokens yet.
+ */
+export interface SecondStep {
+  next: 'TOTP' | 'TOTP_ENROLL';
+  challenge: string;
+  /** Seconds the challenge stays valid. */
+  expiresIn: number;
+}
+
+/** A Google or Apple sign-in the app did itself; FoodStack checks the provider's ID token. */
+export type SocialProvider = 'google' | 'apple';
+
+/**
  * Stateless sign-in against the identity module's auth API (TDD 9.1). The access token lives in
  * memory only, for 10 minutes. The refresh token is an httpOnly, SameSite=Strict cookie that
  * scripts never see, sent only to the refresh endpoint; each refresh rotates it. A reload or a new
@@ -108,12 +122,59 @@ export class AuthService {
     await this.router.navigate(['/sign-in'], { queryParams });
   }
 
-  loginWithPassword(email: string, password: string): Promise<void> {
+  /** Signs in, or answers the second step the account still has to take. */
+  loginWithPassword(email: string, password: string): Promise<SecondStep | null> {
     return this.start('/login', { client: 'web', email, password });
   }
 
-  loginWithCode(email: string, code: string): Promise<void> {
+  loginWithCode(email: string, code: string): Promise<SecondStep | null> {
     return this.start('/login', { client: 'web', email, code });
+  }
+
+  /** Signs in with the ID token Google or Apple gave this page (PRD ID-2). */
+  loginWithSocial(
+    provider: SocialProvider,
+    idToken: string,
+    displayName?: string,
+  ): Promise<SecondStep | null> {
+    const body: Record<string, string> = { client: 'web', provider, idToken };
+    if (displayName) body['displayName'] = displayName;
+    return this.start('/social', body);
+  }
+
+  /** Which social sign-in buttons to show; the client id each provider's script needs. */
+  providers(): Promise<{ googleClientIds: string[]; appleClientIds: string[] }> {
+    return firstValueFrom(
+      this.http.get<{ googleClientIds: string[]; appleClientIds: string[] }>(
+        this.url('/providers'),
+      ),
+    );
+  }
+
+  /** The second step: a code from the authenticator app, or a recovery code. */
+  async completeTwoStep(challenge: string, code: string): Promise<void> {
+    const next = await this.start('/two-step', { challenge, code });
+    if (next) throw new Error('Unexpected second step');
+  }
+
+  /** A role that requires two-step sign-in: the secret for the authenticator app. */
+  startEnrollment(challenge: string): Promise<{ secret: string; uri: string }> {
+    return firstValueFrom(
+      this.http.post<{ secret: string; uri: string }>(this.url('/two-step/enroll'), { challenge }),
+    );
+  }
+
+  /** Confirms the new app with a code from it and signs in; the recovery codes are shown once. */
+  async confirmEnrollment(challenge: string, code: string): Promise<string[]> {
+    const response = await firstValueFrom(
+      this.http.post<TokenResponse & { recoveryCodes: string[] }>(
+        this.url('/two-step/confirm'),
+        { challenge, code },
+        { withCredentials: true },
+      ),
+    );
+    this.keep(response);
+    return response.recoveryCodes;
   }
 
   /** Emails a 6-digit code; the answer is the same whether or not the email has an account. */
@@ -122,14 +183,14 @@ export class AuthService {
   }
 
   /** Sets a new password with an emailed reset code, and signs in. */
-  resetPassword(email: string, code: string, newPassword: string): Promise<void> {
+  resetPassword(email: string, code: string, newPassword: string): Promise<SecondStep | null> {
     return this.start('/reset', { client: 'web', email, code, newPassword });
   }
 
   /** Creates a customer account and signs in with it. */
-  async register(email: string, password: string, displayName: string): Promise<void> {
+  async register(email: string, password: string, displayName: string): Promise<SecondStep | null> {
     await firstValueFrom(this.http.post(this.url('/register'), { email, password, displayName }));
-    await this.loginWithPassword(email, password);
+    return this.loginWithPassword(email, password);
   }
 
   /** Ends this sign-in on the server too, then reloads the app signed out. */
@@ -151,11 +212,13 @@ export class AuthService {
     this.navigation.assign(this.document.baseURI);
   }
 
-  private async start(path: string, body: Record<string, string>): Promise<void> {
+  private async start(path: string, body: Record<string, string>): Promise<SecondStep | null> {
     const response = await firstValueFrom(
-      this.http.post<TokenResponse>(this.url(path), body, { withCredentials: true }),
+      this.http.post<TokenResponse | SecondStep>(this.url(path), body, { withCredentials: true }),
     );
+    if ('challenge' in response) return response;
     this.keep(response);
+    return null;
   }
 
   private async renewOnce(): Promise<boolean> {

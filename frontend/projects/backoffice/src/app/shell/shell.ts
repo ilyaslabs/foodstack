@@ -171,6 +171,13 @@ export class Shell {
       permission: 'settings:manage',
     },
     {
+      path: '/settings/sign-in',
+      label: 'Sign-in options',
+      icon: 'key',
+      exact: false,
+      permission: 'settings:manage',
+    },
+    {
       path: '/settings/ordering',
       label: 'Ordering',
       icon: 'shopping_bag',
