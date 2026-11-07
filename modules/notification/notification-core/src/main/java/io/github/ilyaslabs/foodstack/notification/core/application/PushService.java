@@ -15,9 +15,9 @@ import io.github.ilyaslabs.foodstack.notification.core.persistence.DeviceDocumen
 import io.github.ilyaslabs.foodstack.notification.core.push.PushTransport;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;

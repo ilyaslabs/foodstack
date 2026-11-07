@@ -12,6 +12,7 @@ import io.github.ilyaslabs.foodstack.notification.core.application.InboxService;
 import io.github.ilyaslabs.foodstack.notification.core.application.NotificationService;
 import io.github.ilyaslabs.foodstack.notification.core.application.OrderMessages;
 import io.github.ilyaslabs.foodstack.notification.core.application.PushService;
+import io.github.ilyaslabs.foodstack.notification.core.application.TemplateEditor;
 import io.github.ilyaslabs.foodstack.notification.core.application.Templates;
 import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport;
 import io.github.ilyaslabs.foodstack.notification.core.channel.SmtpMailTransport;
@@ -80,8 +81,14 @@ public class NotificationConfiguration {
     }
 
     @Bean
-    Templates notificationTemplates(JsonMapper jsonMapper) {
-        return new Templates(jsonMapper);
+    Templates notificationTemplates(JsonMapper jsonMapper, ModuleMongo notificationMongo) {
+        return new Templates(jsonMapper, notificationMongo.template());
+    }
+
+    @Bean
+    TemplateEditor notificationTemplateEditor(Templates notificationTemplates, ModuleMongo notificationMongo,
+            SettingsApi settingsApi, Clock clock) {
+        return new TemplateEditor(notificationTemplates, notificationMongo.template(), settingsApi, clock);
     }
 
     @Bean

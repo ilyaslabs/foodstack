@@ -11,8 +11,8 @@ import java.util.concurrent.Semaphore;
 
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
-import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport.MailFailure;
 import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport;
+import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport.MailFailure;
 import io.github.ilyaslabs.foodstack.notification.core.persistence.DeliveryDocument;
 import io.github.ilyaslabs.foodstack.notification.core.persistence.InboxDocument;
 import io.github.ilyaslabs.foodstack.notification.core.persistence.PreferencesDocument;
@@ -21,9 +21,9 @@ import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;

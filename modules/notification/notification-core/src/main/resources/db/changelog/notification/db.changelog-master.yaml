@@ -67,3 +67,10 @@ databaseChangeLog:
             collectionName: notification_deliveries
             keys: '{ "userId": 1 }'
             options: '{ "name": "user" }'
+  - changeSet:
+      id: notification-5
+      author: foodstack
+      comment: "M4 template editor (PRD NO-2): the operator's own wording per message and language, _id = template:language; a few dozen documents, so unsharded"
+      changes:
+        - createCollection:
+            collectionName: notification_templates
