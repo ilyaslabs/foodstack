@@ -2,16 +2,23 @@ package io.github.ilyaslabs.foodstack.notification.core.application;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.time.format.FormatStyle;
+import java.util.Locale;
 
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
+import io.github.ilyaslabs.foodstack.identity.api.events.AccountDeletionScheduled;
 import io.github.ilyaslabs.foodstack.identity.api.events.EmailCodeIssued;
 import io.github.ilyaslabs.foodstack.identity.api.events.UserRegistered;
 import io.github.ilyaslabs.foodstack.notification.core.application.NotificationService.Message;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
+import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 
 /** Messages about the account itself: welcome, sign-in codes and password reset codes. */
@@ -66,6 +73,32 @@ public class AccountMessages {
         this.notifications.send(new Message(eventId, issued.userId(), null, template, this.settings.getLocale().defaultLanguage(),
                 Templates.params("brand", brand(), "code", this.pii.decrypt(issued.codeCipher()), "minutes", minutes), null, false,
                 false, true, true));
+    }
+
+    /**
+     * Tells a customer when their account will be deleted and that signing in cancels it (PRD
+     * ID-7). Required: sent whatever the email preferences.
+     */
+    public void onDeletionScheduled(String eventId, AccountDeletionScheduled scheduled) {
+        UserView user = this.serviceCalls.call(() -> this.identity.getUser(scheduled.userId()));
+        if (user == null || scheduled.deleteAfter() == null) {
+            return;
+        }
+        LocaleView locale = this.settings.getLocale();
+        String language = locale.defaultLanguage();
+        ZoneId zone;
+        try {
+            zone = (locale.timezone() != null) ? ZoneId.of(locale.timezone()) : ZoneOffset.UTC;
+        }
+        catch (java.time.DateTimeException ex) {
+            zone = ZoneOffset.UTC;
+        }
+        String date = DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)
+            .withLocale(Locale.forLanguageTag(language))
+            .format(scheduled.deleteAfter().atZone(zone));
+        this.notifications.send(new Message(eventId, user.id(), null, "account-deletion-scheduled", language,
+                Templates.params("brand", brand(), "name", (user.displayName() != null) ? user.displayName() : "", "date", date),
+                null, false, false, true, true));
     }
 
     String brand() {

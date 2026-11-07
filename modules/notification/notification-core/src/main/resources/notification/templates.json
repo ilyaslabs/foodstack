@@ -94,6 +94,11 @@
     "ar": { "title": "يستلم {{store}} مدفوعات البطاقات مجددًا", "body": "عاد {{store}} ضمن حد الائتمان، لذا تذهب مدفوعات البطاقات إلى حسابه مجددًا.", "subject": "يستلم {{store}} مدفوعات البطاقات مجددًا" },
     "ur": { "title": "{{store}} دوبارہ کارڈ کی ادائیگیاں وصول کر رہا ہے", "body": "{{store}} دوبارہ کریڈٹ کی حد کے اندر ہے، اس لیے کارڈ کی ادائیگیاں پھر سے اس کے اپنے اکاؤنٹ میں جائیں گی۔", "subject": "{{store}} دوبارہ کارڈ کی ادائیگیاں وصول کر رہا ہے" }
   },
+  "account-deletion-scheduled": {
+    "en": { "title": "Your account will be deleted", "body": "Hi {{name}}, as you asked, your {{brand}} account and personal details will be deleted on {{date}}. Past orders stay for the records without your name, phone or address. Changed your mind? Just sign in before then and nothing is deleted.", "subject": "Your {{brand}} account will be deleted on {{date}}" },
+    "ar": { "title": "سيتم حذف حسابك", "body": "أهلاً {{name}}، بناءً على طلبك سيتم حذف حسابك في {{brand}} وبياناتك الشخصية في {{date}}. تبقى الطلبات السابقة في السجلات دون اسمك أو هاتفك أو عنوانك. غيّرت رأيك؟ سجّل الدخول قبل ذلك ولن يُحذف شيء.", "subject": "سيتم حذف حسابك في {{brand}} في {{date}}" },
+    "ur": { "title": "آپ کا اکاؤنٹ ڈیلیٹ کر دیا جائے گا", "body": "السلام علیکم {{name}}، آپ کی درخواست پر آپ کا {{brand}} اکاؤنٹ اور ذاتی معلومات {{date}} کو ڈیلیٹ کر دی جائیں گی۔ پچھلے آرڈرز ریکارڈ کے لیے آپ کے نام، فون یا پتے کے بغیر رہیں گے۔ ارادہ بدل گیا؟ اس سے پہلے سائن اِن کر لیں، کچھ ڈیلیٹ نہیں ہوگا۔", "subject": "آپ کا {{brand}} اکاؤنٹ {{date}} کو ڈیلیٹ ہو جائے گا" }
+  },
   "phrases": {
     "en": { "refund": "{{amount}} will be refunded to your card.", "delivery": "delivery", "pickup": "pickup", "noAnswer": "The restaurant did not answer in time.", "button": "View order", "deliveryCode": "Your delivery code is {{code}}. Give it to the rider when your order arrives." },
     "ar": { "refund": "سيتم رد {{amount}} إلى بطاقتك.", "delivery": "توصيل", "pickup": "استلام", "noAnswer": "لم يرد المطعم في الوقت المحدد.", "button": "عرض الطلب", "deliveryCode": "رمز التسليم الخاص بك هو {{code}}. أعطه للمندوب عند وصول طلبك." },

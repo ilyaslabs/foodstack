@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.notification.web;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.foodstack.notification.core.application.CustomerNotificationData;
 import io.github.ilyaslabs.foodstack.notification.core.application.InboxService;
 import io.github.ilyaslabs.foodstack.notification.core.application.NotificationService;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
@@ -28,9 +29,19 @@ class NotificationsController {
 
     private final NotificationService notifications;
 
-    NotificationsController(InboxService inbox, NotificationService notifications) {
+    private final CustomerNotificationData data;
+
+    NotificationsController(InboxService inbox, NotificationService notifications, CustomerNotificationData data) {
         this.inbox = inbox;
         this.notifications = notifications;
+        this.data = data;
+    }
+
+    /** The user's notification data, for their data export (PRD ID-7). */
+    @GetMapping("/api/v1/notifications/mine/export")
+    @PreAuthorize("isAuthenticated()")
+    CustomerNotificationData.Export export() {
+        return this.data.export(CurrentUser.id());
     }
 
     record PreferencesRequest(Boolean orderEmails, Boolean marketingEmails) {

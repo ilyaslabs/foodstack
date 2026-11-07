@@ -55,9 +55,9 @@ import { Stars } from './stars';
           @for (review of items(); track review.id) {
             <li class="review">
               <div class="head">
-                <span class="avatar" aria-hidden="true">{{ review.customerName.charAt(0) }}</span>
+                <span class="avatar" aria-hidden="true">{{ name(review).charAt(0) }}</span>
                 <div>
-                  <strong>{{ review.customerName }}</strong>
+                  <strong>{{ name(review) }}</strong>
                   <span class="when">{{ date(review.createdAt) }}</span>
                 </div>
                 <app-stars [value]="review.rating" />
@@ -262,6 +262,11 @@ export class StoreReviews {
       const id = this.storeId();
       untracked(() => void this.load(id, null));
     });
+  }
+
+  /** A customer who deleted their account is stored as "Deleted user"; say it in the page's language. */
+  protected name(review: Review): string {
+    return review.customerName === 'Deleted user' ? this.ui.t('deletedUser') : review.customerName;
   }
 
   protected countLabel(n: number): string {

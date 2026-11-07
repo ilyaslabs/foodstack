@@ -80,7 +80,14 @@ class MeController {
                 this.addressBook.list(userId).stream().map(AddressesController::toResponse).toList());
     }
 
-    record DeletionResponse(long deleteAfter, long graceDays) {
+    record DeletionResponse(Long deleteAfter, long graceDays) {
+    }
+
+    /** How deletion works here: the grace period, so the account screen can say it before anyone asks. */
+    @GetMapping("/deletion")
+    DeletionResponse deletion() {
+        CurrentUser.id();
+        return new DeletionResponse(null, this.accountDeletion.grace().toDays());
     }
 
     /**

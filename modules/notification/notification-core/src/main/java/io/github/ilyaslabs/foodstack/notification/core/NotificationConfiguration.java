@@ -5,6 +5,7 @@ import java.time.Duration;
 
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.notification.core.application.AccountMessages;
+import io.github.ilyaslabs.foodstack.notification.core.application.CustomerNotificationData;
 import io.github.ilyaslabs.foodstack.notification.core.application.DispatchMessages;
 import io.github.ilyaslabs.foodstack.notification.core.application.FinanceMessages;
 import io.github.ilyaslabs.foodstack.notification.core.application.InboxService;
@@ -159,6 +160,11 @@ public class NotificationConfiguration {
     }
 
     @Bean
+    CustomerNotificationData notificationCustomerData(ModuleMongo notificationMongo, NotificationService notificationService) {
+        return new CustomerNotificationData(notificationMongo.template(), notificationService);
+    }
+
+    @Bean
     InboxService notificationInboxService(ModuleMongo notificationMongo, Clock clock) {
         return new InboxService(notificationMongo.template(), clock);
     }
@@ -184,8 +190,8 @@ public class NotificationConfiguration {
     @Bean
     @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
     IdentityNotificationsListener notificationIdentityListener(AccountMessages notificationAccountMessages,
-            JsonMapper jsonMapper) {
-        return new IdentityNotificationsListener(notificationAccountMessages, jsonMapper);
+            CustomerNotificationData notificationCustomerData, JsonMapper jsonMapper) {
+        return new IdentityNotificationsListener(notificationAccountMessages, notificationCustomerData, jsonMapper);
     }
 
     @Bean

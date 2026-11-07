@@ -21,8 +21,12 @@ import { AddressBook, addressIcon, addressTitle } from '../addresses/address-boo
 import { AddressEditor } from '../addresses/address-editor';
 import { Ui, UiKey } from '../i18n';
 import { LocationStore } from '../location-store';
+import { DeleteAccountDialog } from './delete-account-dialog';
 
-/** Saved addresses (PRD ID-6), email choices (PRD NO-3) and password (TDD 9.1). */
+/**
+ * Saved addresses (PRD ID-6), email choices (PRD NO-3), password (TDD 9.1), and the customer's
+ * data export and account deletion (PRD ID-7).
+ */
 @Component({
   selector: 'app-account-page',
   imports: [
@@ -159,6 +163,27 @@ import { LocationStore } from '../location-store';
           {{ ui.t('signOutEverywhere') }}
         </button>
       </section>
+
+      <section class="card data" id="your-data">
+        <h2>{{ ui.t('yourData') }}</h2>
+        <p class="muted">{{ ui.t('yourDataIntro') }}</p>
+        <div class="row">
+          <button mat-stroked-button type="button" (click)="download()" [disabled]="downloading()">
+            <fs-icon name="download" /> {{ ui.t('downloadData') }}
+          </button>
+          @if (downloadFailed()) {
+            <span class="error" role="alert">{{ ui.t('downloadFailed') }}</span>
+          }
+        </div>
+        <div class="danger-zone">
+          <p class="muted">
+            {{ ui.t('deleteAccountIntro', { days: ui.number(graceDays()) }) }}
+          </p>
+          <button mat-stroked-button type="button" class="danger" (click)="deleteAccount()">
+            <fs-icon name="delete" /> {{ ui.t('deleteAccount') }}
+          </button>
+        </div>
+      </section>
     </div>
   `,
   styles: `
@@ -292,6 +317,28 @@ import { LocationStore } from '../location-store';
     .error {
       color: var(--mat-sys-error);
     }
+    .muted {
+      margin: 0;
+      color: var(--mat-sys-on-surface-variant);
+      font: var(--mat-sys-body-medium);
+    }
+    .data .row {
+      flex-wrap: wrap;
+      margin-block: 12px 0;
+    }
+    .danger-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+      margin-block-start: 20px;
+      padding-block-start: 20px;
+      border-block-start: 1px solid var(--mat-sys-outline-variant);
+    }
+    .danger {
+      --mat-button-outlined-label-text-color: var(--mat-sys-error);
+      --mat-button-outlined-outline-color: var(--mat-sys-error);
+    }
   `,
 })
 export class AccountPage {
@@ -310,10 +357,17 @@ export class AccountPage {
   protected readonly busy = signal(false);
   protected current = '';
   protected next = '';
+  protected readonly downloading = signal(false);
+  protected readonly downloadFailed = signal(false);
+  protected readonly graceDays = signal(14);
 
   constructor() {
     afterNextRender(async () => {
       void this.book.load(true);
+      this.me.deletionPolicy().subscribe({
+        next: (policy) => this.graceDays.set(policy.graceDays),
+        error: () => undefined,
+      });
       this.preferences.set(await firstValueFrom(this.notifications.preferences()));
     });
   }
@@ -394,5 +448,41 @@ export class AccountPage {
     } finally {
       await this.auth.signOut();
     }
+  }
+
+  /** Saves everything FoodStack keeps about the customer as a JSON file (PRD ID-7). */
+  protected async download(): Promise<void> {
+    this.downloading.set(true);
+    this.downloadFailed.set(false);
+    try {
+      const data = await firstValueFrom(this.me.exportData());
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `my-data-${data.exportedAt.slice(0, 10)}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      this.downloadFailed.set(true);
+    } finally {
+      this.downloading.set(false);
+    }
+  }
+
+  protected deleteAccount(): void {
+    this.dialogs
+      .open(DeleteAccountDialog, {
+        data: { graceDays: this.graceDays() },
+        width: '460px',
+        maxWidth: 'calc(100vw - 32px)',
+        autoFocus: false,
+      })
+      .afterClosed()
+      .subscribe((scheduled) => {
+        if (scheduled) {
+          void this.auth.signOut();
+        }
+      });
   }
 }

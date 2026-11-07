@@ -148,6 +148,9 @@ class IdentityControllersTest {
             .andExpect(status().isAccepted())
             .andExpect(jsonPath("$.deleteAfter").value(1_800_000_000L))
             .andExpect(jsonPath("$.graceDays").value(14));
+        this.mvc.perform(get("/api/v1/me/deletion").with(jwt().jwt((t) -> t.subject("u1"))))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.graceDays").value(14));
         this.mvc.perform(post("/api/v1/me/deletion").with(jwt().jwt((t) -> t.subject("staff"))))
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.code").value("ACCOUNT_HAS_STAFF_ROLES"));
