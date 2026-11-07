@@ -2,7 +2,7 @@
 
 These pages show what the code on `main` **actually does today**, traced from the source, not what the design intends. Where the code and the [TDD](../TDD.md) differ, the difference is listed in [Code vs design](05-code-vs-design.md).
 
-State described: after M4 (modules `identity`, `settings`, `media`, `geo`, `store`, `search`, `promotion`, `cart`, `payment`, `order`, `notification`, `rider`, `dispatch`, `ledger`, `review`).
+State described: after M5 (Kubernetes chart, two-step and social sign-in, failed events; modules `identity`, `settings`, `media`, `geo`, `store`, `search`, `promotion`, `cart`, `payment`, `order`, `notification`, `rider`, `dispatch`, `ledger`, `review`).
 
 All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHub.
 
@@ -19,6 +19,7 @@ All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHu
 | [7. Delivery flows](07-delivery-flows.md) | The delivery job's life, how dispatch finds and offers a rider, the rider accepting, live position and tracking, pickup and handover with the code, support reassigning or handing back, stores that deliver themselves, push devices, saved addresses |
 | [8. How FoodStack scales out](08-scaling.md) | The scaled-out picture, how requests, events, background work, live updates, data, cache and search are split between machines, what happens when a replica joins or dies, the growth stages and what each one changes, and the limits more machines do not lift |
 | [9. Money, reviews and privacy](09-money-and-trust-flows.md) | Ledger postings for a finished order, roll-ups, payouts and settlement, stores that collect card payments themselves and their credit limit, card fields inside the app and saved cards, reviews and moderation, data export and account deletion, the operator's message editor |
+| [10. Kubernetes, sign-in security and failed events](10-kubernetes.md) | What the Helm chart installs and which pod may call which port, a signed-in request at the edge, two-step sign-in, continuing with Google or Apple, a failing event and its replay, where metrics, logs and traces go |
 
 ## Quick answer: which store does each action touch?
 

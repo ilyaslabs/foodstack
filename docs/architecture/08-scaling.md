@@ -4,7 +4,7 @@
 
 FoodStack grows by adding machines and changing configuration, never by changing code. One server runs exactly the same code as a national deployment. This page shows how each kind of load is split between machines, what you change at each stage, and the few things that do not grow with more machines.
 
-Where a step needs the Kubernetes chart, it is marked **(M5)**: the chart is planned and not built yet ([Code vs design 5.3](05-code-vs-design.md#53-designed-but-not-built-yet-by-plan)). Everything else is built (PR #7) and tested: CI runs every repository test against a two-shard MongoDB, and every integration journey twice, as a monolith and as microservices.
+Steps marked **(M5)** use the Kubernetes chart, built in M5 and drawn in [10](10-kubernetes.md). The rest was built in PR #7. All of it is tested: CI runs every repository test against a two-shard MongoDB, and every integration journey twice, as a monolith and as microservices; the chart was installed on a test cluster in every topology.
 
 ## 8.1 The scaled-out picture
 
@@ -16,7 +16,7 @@ flowchart TB
     B["Back-office and rider PWA"] --> GW
     CDN --> GW
 
-    subgraph K8s["Kubernetes (M5)"]
+    subgraph K8s["Kubernetes"]
         GW["Gateway: Envoy ×N<br/>TLS, routing by path, per-IP rate limits, JWT check"]
         RL["Envoy rate-limit service ×2"]
         GW --- RL

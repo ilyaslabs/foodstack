@@ -4,7 +4,7 @@
 
 ## 1.1 What runs where (single server, the unit deployer)
 
-This is what `install.sh` starts today (`deploy/unit-deployer/src/main/dist/docker-compose.yml`). The Kubernetes chart is planned for M5 and does not exist yet.
+This is what `install.sh` starts today (`deploy/unit-deployer/src/main/dist/docker-compose.yml`). The Kubernetes chart (M5) is drawn in [10.1](10-kubernetes.md#101-what-the-chart-installs).
 
 ```mermaid
 flowchart LR
@@ -207,7 +207,7 @@ These are published to Kafka today but nothing reads them yet.
 
 | Topic | Events | Expected reader |
 |---|---|---|
-| `foodstack.identity.events` | `UserTokensRevoked` | Gateway token cache (M5) |
+| `foodstack.identity.events` | `UserTokensRevoked` | — (each server reads the revocation floor in Redis; the gateway checks only signature and expiry) |
 | `foodstack.settings.events` | `SettingsChanged` | Caches in other replicas |
 | `foodstack.media.events` | `MediaReady` | — |
 | `foodstack.promotion.events` | `CouponRedeemed`, `CouponReleased` | Reports and ledger (M4) |
