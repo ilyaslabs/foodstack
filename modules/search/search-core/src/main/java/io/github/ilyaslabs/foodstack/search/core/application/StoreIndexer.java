@@ -73,7 +73,7 @@ public class StoreIndexer {
             return;
         }
         if (listing.status() != StoreStatus.LIVE || listing.location() == null) {
-            this.engine.delete(storeId);
+            this.engine.delete(storeId, listing.version());
             return;
         }
         StoreRating rating = rating(storeId);

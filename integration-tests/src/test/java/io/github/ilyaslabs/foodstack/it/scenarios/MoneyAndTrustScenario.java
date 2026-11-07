@@ -42,9 +42,12 @@ class MoneyAndTrustScenario {
 
         // given: cards are typed in the app and may be kept for next time
         ordering(admin, Map.of("cardStyle", "EMBEDDED", "savedCardsEnabled", true));
-        Response options = this.platform.client().get("/api/v1/payments/options");
-        assertThat(options.<String>path("cardStyle")).isEqualTo("EMBEDDED");
-        assertThat(options.<Boolean>path("savedCards")).isTrue();
+        // (split into services, payment keeps the settings it read for up to 30 seconds)
+        await().atMost(Duration.ofSeconds(45)).pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
+            Response options = this.platform.client().get("/api/v1/payments/options");
+            assertThat(options.<String>path("cardStyle")).isEqualTo("EMBEDDED");
+            assertThat(options.<Boolean>path("savedCards")).isTrue();
+        });
         Store store = Stores.live(admin, "Tikka House", "Johar Town");
         ApiClient owner = Stores.owner(this.platform, admin, store.id());
         ApiClient customer = Stores.customer(this.platform, "Sara Customer").client();
@@ -128,6 +131,10 @@ class MoneyAndTrustScenario {
             .then().statusCode(204);
         assertThat(customer.get("/api/v1/payments/cards").<List<Object>>path("$")).isEmpty();
         ordering(admin, Map.of("cardStyle", "HOSTED_PAGE", "savedCardsEnabled", false));
+        // (and the scenarios after this one see the hosted page again)
+        await().atMost(Duration.ofSeconds(45)).pollInterval(Duration.ofSeconds(1))
+            .untilAsserted(() -> assertThat(this.platform.client().get("/api/v1/payments/options").<String>path("cardStyle"))
+                .isEqualTo("HOSTED_PAGE"));
     }
 
     @Test

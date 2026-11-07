@@ -218,6 +218,27 @@ class ElasticsearchStoreSearchEngineTest {
     }
 
     @Test
+    @DisplayName("a draft branch removed several times before it goes live is still indexed when it does")
+    void deletesBeforeFirstIndex() throws Exception {
+        // given: each change while the branch is a draft removes it from the index
+        for (int i = 0; i < 5; i++) {
+            this.engine.delete("draft-then-live", 1);
+        }
+
+        // when: it goes live at version 2
+        this.engine.index(withVersion(store("draft-then-live", "dtl", "Draft Kitchen", null, List.of("bbq"),
+                new GeoPoint(31.5, 74.3), List.of(), Map.of(), false), "Draft Kitchen", 2));
+        this.client.indices().refresh((r) -> r.index(this.engine.alias()));
+
+        // and a late read of the draft does not remove it again
+        this.engine.delete("draft-then-live", 1);
+        this.client.indices().refresh((r) -> r.index(this.engine.alias()));
+
+        // then
+        assertThat(this.engine.storeIdsOfBrand("dtl")).containsExactly("draft-then-live");
+    }
+
+    @Test
     @DisplayName("delivery search stays within the discovery radius even when a far branch's zone covers the customer")
     void discoveryRadius() throws Exception {
         // given: a branch 12 km away (straight line) whose big zone reaches the customer

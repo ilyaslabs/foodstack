@@ -232,6 +232,27 @@ public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
     }
 
     @Override
+    public void delete(String storeId, long version) {
+        try {
+            // external version, like index(): an unversioned delete of a missing document leaves a
+            // tombstone one version higher each time, which refused the branch's first listing
+            this.client.delete((d) -> d.index(alias()).id(storeId).version(version).versionType(VersionType.ExternalGte));
+        }
+        catch (ElasticsearchException ex) {
+            if (ex.status() == 409) {
+                log.debug("Kept the newer indexed version of branch {}", storeId);
+                return;
+            }
+            if (ex.status() != 404) {
+                throw unavailable(ex);
+            }
+        }
+        catch (IOException ex) {
+            throw unavailable(ex);
+        }
+    }
+
+    @Override
     public List<String> storeIdsOfBrand(String brandId) {
         return idsWhere("brandId", brandId);
     }

@@ -101,7 +101,7 @@ class StoreIndexerTest {
         this.indexer.refresh("s1");
         this.indexer.refresh("s2");
 
-        verify(this.engine).delete("s1");
+        verify(this.engine).delete("s1", 4);
         verify(this.engine).delete("s2");
         verify(this.engine, never()).index(any());
         verify(this.geo, never()).deliveryArea(any());
