@@ -15,10 +15,13 @@ hosts:
 # https for real installs; http only for a trial cluster without certificates.
 scheme: https
 
+# The three FoodStack images live in one repository, told apart by tag:
+# docker.io/ilyasdotdev/ilyaslabs-foodstack:server-1.0.0, :web-1.0.0, :backoffice-1.0.0
+# (also on ghcr.io/ilyaslabs/foodstack with the same tags).
 image:
   registry: docker.io
-  repository: ilyaslabs
-  # Defaults to the chart's appVersion.
+  repository: ilyasdotdev/ilyaslabs-foodstack
+  # The version part of the tag; defaults to the chart's appVersion.
   tag: ""
   pullPolicy: IfNotPresent
   pullSecrets: []
@@ -27,7 +30,7 @@ image:
 # Server: the same image in every Deployment; each Deployment runs a group of modules.
 # ---------------------------------------------------------------------------------------------
 server:
-  image: foodstack-server
+  image: server                 # tag prefix: server-<version>
   # Settings every Deployment starts from. A Deployment may override any of them under
   # server.overrides.<name> (any topology) or in its server.deployments entry (custom).
   defaults:
@@ -85,7 +88,7 @@ migrations:
     limits: { memory: 1Gi }
 
 web:
-  image: foodstack-web
+  image: web
   replicas: 2
   autoscaling: { enabled: true, min: 2, max: 6, targetCPU: 70 }
   pdb: { minAvailable: 1 }
@@ -96,7 +99,7 @@ web:
   env: {}
 
 backoffice:
-  image: foodstack-backoffice
+  image: backoffice
   replicas: 2
   autoscaling: { enabled: false, min: 2, max: 4, targetCPU: 70 }
   pdb: { minAvailable: 1 }

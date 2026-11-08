@@ -55,7 +55,7 @@ istio.io/dataplane-mode: ambient
 
 {{- define "foodstack.image" -}}
 {{- $root := index . 0 -}}{{- $name := index . 1 -}}
-{{- printf "%s/%s/%s:%s" $root.Values.image.registry $root.Values.image.repository $name (default $root.Chart.AppVersion $root.Values.image.tag) -}}
+{{- printf "%s/%s:%s-%s" $root.Values.image.registry $root.Values.image.repository $name (default $root.Chart.AppVersion $root.Values.image.tag) -}}
 {{- end -}}
 
 {{- define "foodstack.secretName" -}}
