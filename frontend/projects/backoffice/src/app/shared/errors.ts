@@ -17,6 +17,8 @@ const CONFLICTS: Record<string, string> = {
   STORE_NOT_READY: 'The branch is not ready to go live yet.',
   CANNOT_BLOCK_SELF: 'You cannot block your own account.',
   LAST_ADMIN: 'This is the last active admin. Make someone else an admin first.',
+  EMAIL_TAKEN: 'An account with this email already exists. Find it in the list instead.',
+  PASSWORD_WRONG: 'Your current password is not correct.',
 };
 
 /** A sentence for the person from an API error, using field errors when the server sent them. */

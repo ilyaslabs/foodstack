@@ -273,12 +273,16 @@ Steps
 1. Change the password with a wrong current password.
 2. Change it with the right current password to `qa-password-3`.
 
+3. In the back office as `qa.finance@example.test` (USER-02), open the account menu (your initials, top right) and **Change password**. Try two different new passwords, then a wrong current password, then do it properly.
+
 Expect
 1. "The current password is not correct."
 2. "Your password is changed." The next sign-in needs the new password.
+3. "The two new passwords are not the same." without asking the server, then "Your current password is not correct.", then "Your password is changed. Use the new one next time you sign in."
 
 Check
 - `identity_users`: `passwordHash` changed.
+- Network: `PUT /api/v1/me/password` answers 204, or 400 `PASSWORD_WRONG`.
 
 ### AUTH-18 Blocked account
 

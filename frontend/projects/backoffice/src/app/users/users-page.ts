@@ -25,6 +25,7 @@ import {
 import { Icon } from '@foodstack/ui';
 
 import { confirmAction } from '../shared/confirm-dialog';
+import { NewUserDialog } from './new-user-dialog';
 import { describeError } from '../shared/errors';
 import { Session } from '../shared/session';
 
@@ -32,8 +33,11 @@ export const ROLE_LABELS: Record<Role, string> = {
   ADMIN: 'Admin',
   FINANCE: 'Finance',
   SUPPORT: 'Support',
-  STORE_OWNER: 'Store owner',
+  BRAND_OWNER: 'Brand owner',
+  STORE_OWNER: 'Branch manager',
   STORE_STAFF: 'Store staff',
+  RIDER: 'Rider',
+  STORE_RIDER: 'Store rider',
   CUSTOMER: 'Customer',
 };
 
@@ -61,12 +65,19 @@ interface Filters {
     Icon,
   ],
   template: `
-    <header class="fs-page-header">
-      <h1>Users</h1>
-      <p>
-        Everyone with an account: customers, restaurant owners and your staff. Block an account to
-        end its sessions at once.
-      </p>
+    <header class="fs-page-header with-action">
+      <div>
+        <h1>Users</h1>
+        <p>
+          Everyone with an account: customers, restaurant owners and your staff. Block an account to
+          end its sessions at once.
+        </p>
+      </div>
+      @if (canManage()) {
+        <button mat-flat-button type="button" (click)="create()">
+          <fs-icon name="add" /> New staff account
+        </button>
+      }
     </header>
 
     <mat-card appearance="outlined" class="list-card">
@@ -185,6 +196,16 @@ interface Filters {
   `,
   styleUrls: ['../shared/page.scss'],
   styles: `
+    .with-action {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .with-action > div {
+      flex: 1 1 320px;
+    }
     .toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -305,6 +326,8 @@ export class UsersPage {
   /** Accounts changed on this page (blocked or unblocked), shown without reloading. */
   private readonly changed = signal<Record<string, UserAccount>>({});
   protected readonly loading = signal(true);
+  /** Accounts made on this page, listed first until the next search. */
+  private readonly created = signal<UserAccount[]>([]);
 
   private readonly firstPage = toSignal(
     combineLatest([
@@ -339,7 +362,11 @@ export class UsersPage {
       return undefined;
     }
     const changed = this.changed();
-    return [...page.items, ...this.extra()].map((user) => changed[user.id] ?? user);
+    const created = this.created();
+    const loaded = [...page.items, ...this.extra()].filter(
+      (user) => !created.some((made) => made.id === user.id),
+    );
+    return [...created, ...loaded].map((user) => changed[user.id] ?? user);
   });
 
   protected readonly cursor = computed(() => {
@@ -369,6 +396,20 @@ export class UsersPage {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  /** Makes an Admin, Finance or Support account and shows it at the top of the list. */
+  protected async create(): Promise<void> {
+    const user = await firstValueFrom(
+      this.dialog
+        .open<NewUserDialog, void, UserAccount>(NewUserDialog, { width: '520px', maxWidth: '94vw' })
+        .afterClosed(),
+    );
+    if (!user) {
+      return;
+    }
+    this.created.update((users) => [user, ...users]);
+    this.snackBar.open(`${user.displayName} can sign in now`, undefined, { duration: 4000 });
   }
 
   protected async block(user: UserAccount): Promise<void> {

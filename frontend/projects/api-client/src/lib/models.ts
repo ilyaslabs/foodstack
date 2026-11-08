@@ -29,7 +29,19 @@ export interface LocaleSettings {
   version: number;
 }
 
-export type Role = 'ADMIN' | 'FINANCE' | 'SUPPORT' | 'STORE_OWNER' | 'STORE_STAFF' | 'CUSTOMER';
+export type Role =
+  | 'ADMIN'
+  | 'FINANCE'
+  | 'SUPPORT'
+  | 'BRAND_OWNER'
+  | 'STORE_OWNER'
+  | 'STORE_STAFF'
+  | 'RIDER'
+  | 'STORE_RIDER'
+  | 'CUSTOMER';
+
+/** The roles an administrator gives on the Users page; owners and riders are added from their own pages. */
+export type StaffRole = 'ADMIN' | 'FINANCE' | 'SUPPORT';
 
 export interface Me {
   id: string;

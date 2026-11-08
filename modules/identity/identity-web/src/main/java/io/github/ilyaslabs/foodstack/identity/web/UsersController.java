@@ -1,5 +1,9 @@
 package io.github.ilyaslabs.foodstack.identity.web;
 
+import java.util.EnumSet;
+import java.util.Map;
+import java.util.Set;
+
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
 import io.github.ilyaslabs.foodstack.identity.core.application.NewUser;
@@ -10,6 +14,7 @@ import io.github.ilyaslabs.foodstack.identity.web.dto.CreateUserRequest;
 import io.github.ilyaslabs.foodstack.identity.web.dto.UserListResponse;
 import io.github.ilyaslabs.foodstack.identity.web.dto.UserResponse;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
+import io.github.ilyaslabs.moduleswitch.ModuleException;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
@@ -27,6 +32,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/users")
 class UsersController {
+
+    /** The roles an administrator gives on the Users page; owners and riders come from their own pages. */
+    static final Set<Role> STAFF_ROLES = EnumSet.of(Role.ADMIN, Role.FINANCE, Role.SUPPORT);
 
     private final UserService userService;
 
@@ -69,6 +77,11 @@ class UsersController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('identity:users:manage')")
     UserResponse create(@Valid @RequestBody CreateUserRequest request) {
+        if (!STAFF_ROLES.containsAll(request.roles())) {
+            // owners and riders need a brand, a branch or a rider profile: they are added from those pages
+            throw new ModuleException.BadRequest("Only Admin, Finance and Support accounts are made here",
+                    "USER_ROLES_INVALID", Map.of("errors", Map.of("roles", "use Admin, Finance or Support")));
+        }
         return IdentityWebMapper.toResponse(this.userService.create(
                 new NewUser(request.email(), request.password(), request.displayName(), request.roles()), CurrentUser.id()));
     }
