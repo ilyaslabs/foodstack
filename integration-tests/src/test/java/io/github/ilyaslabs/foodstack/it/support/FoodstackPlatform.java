@@ -8,6 +8,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 
 import io.github.ilyaslabs.foodstack.FoodstackApplication;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
@@ -82,6 +83,8 @@ public final class FoodstackPlatform {
     public ApiClient client() {
         return new ApiClient(this);
     }
+
+    private static int nextPort = 20_000 + ThreadLocalRandom.current().nextInt(10_000);
 
     private static FoodstackPlatform start(Topology topology) {
         String namespace = FoodstackContainers.uniqueName();
@@ -201,12 +204,24 @@ public final class FoodstackPlatform {
             .run(args);
     }
 
-    private static int freePort() {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            return socket.getLocalPort();
+    /**
+     * A free port below the ephemeral range (32768 and up on Linux, 49152 and up on macOS and
+     * Windows). The modules start one after another; a port taken from the ephemeral range could
+     * meanwhile be given to an earlier module's outgoing connection, and the later module would then
+     * fail with "Address already in use".
+     */
+    private static synchronized int freePort() {
+        for (int tries = 0; tries < 2_000; tries++) {
+            int port = nextPort;
+            nextPort = (nextPort >= 32_000) ? 20_000 : nextPort + 1;
+            try (ServerSocket socket = new ServerSocket(port)) {
+                socket.setReuseAddress(false);
+                return port;
+            }
+            catch (IOException ex) {
+                // taken, try the next one
+            }
         }
-        catch (IOException ex) {
-            throw new UncheckedIOException(ex);
-        }
+        throw new UncheckedIOException(new IOException("No free port between 20000 and 32000"));
     }
 }

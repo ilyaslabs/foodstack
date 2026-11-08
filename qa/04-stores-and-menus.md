@@ -149,6 +149,7 @@ Check
 - `store_price_changes`: after step 2, `status: "PENDING"`, `currentMinor: 65000`, `proposedMinor: 70000`, `requestedBy`. After step 3, `status: "APPROVED"` with `decidedBy` and `decidedAt`. Step 4 ends `REJECTED`.
 - `store_item_overrides` for Model Town: `priceOverrideMinor: 70000` after step 3.
 - With approval off, a branch price applies at once and no `store_price_changes` document is made.
+- On Kubernetes with the modules split (`split` or `microservices`), **Price approvals** lists the change and approving answers 200, not 404 (`/api/v1/price-changes` is routed to the store module).
 
 ## Hours and closing
 

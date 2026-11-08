@@ -19,7 +19,7 @@ public final class ModuleRoutes {
         prefixes.put("settings", List.of("/api/v1/settings"));
         prefixes.put("media", List.of("/api/v1/media"));
         prefixes.put("geo", List.of("/api/v1/geo", "/api/v1/zones"));
-        prefixes.put("store", List.of("/api/v1/stores", "/api/v1/brands"));
+        prefixes.put("store", List.of("/api/v1/stores", "/api/v1/brands", "/api/v1/price-changes"));
         prefixes.put("search", List.of("/api/v1/search"));
         prefixes.put("promotion", List.of("/api/v1/promotions", "/api/v1/coupons"));
         prefixes.put("cart", List.of("/api/v1/carts"));
