@@ -246,5 +246,5 @@ FoodStack $(cat "$target/VERSION") is running.
   Password     : $admin_password   ($([[ $local_trial == true ]] && echo "fixed for --local trials" || echo "shown once"); also in $target/.env as FOODSTACK_ADMIN_PASSWORD)
 
 Back up $target/.env now (password manager): it holds the PII key, which cannot be recovered.
-Next: ./status.sh, ./logs.sh, and the first-login checklist in the deployment guide (3.4).
+Next: ./status.sh, then the Operator handbook from guide 13 (email): https://github.com/ilyaslabs/foodstack/tree/main/docs/handbook
 DONE
