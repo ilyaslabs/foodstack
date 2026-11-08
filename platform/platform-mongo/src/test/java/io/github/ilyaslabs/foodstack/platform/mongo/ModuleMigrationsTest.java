@@ -71,6 +71,29 @@ class ModuleMigrationsTest {
     }
 
     @Test
+    @DisplayName("shards a collection that already holds data, as when a replica set becomes a sharded cluster")
+    void shardsPopulatedCollection(@Autowired ModuleMongoFactory factory, @Autowired FoodstackMongoProperties properties) {
+        // given: rows written before sharding, with no index on the shard key
+        var things = this.testmodMongo.template().getCollection("testmod_late");
+        things.insertMany(List.of(new Document("_id", "a").append("storeId", "s1"),
+                new Document("_id", "b").append("storeId", "s2")));
+        ModuleMigrations later = new ModuleMigrations(this.testmodMongo, factory.connectionString("testmod"),
+                ShardKeys.builder().hashed("testmod_late", "storeId"), properties);
+
+        // when
+        later.applyShardKeys();
+
+        // then
+        Document config = this.testmodMongo.databaseFactory().getMongoDatabase("config")
+            .getCollection("collections")
+            .find(new Document("_id", this.testmodMongo.databaseName() + ".testmod_late"))
+            .first();
+        assertThat(config).isNotNull();
+        assertThat(config.get("key", Document.class)).isEqualTo(new Document("storeId", "hashed"));
+        assertThat(things.countDocuments()).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("running the migrations again changes nothing")
     void idempotent() throws Exception {
         // when

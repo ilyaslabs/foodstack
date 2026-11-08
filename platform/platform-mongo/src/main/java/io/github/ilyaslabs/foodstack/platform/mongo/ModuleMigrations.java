@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.platform.mongo;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.mongodb.MongoCommandException;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
@@ -95,7 +96,11 @@ public class ModuleMigrations implements InitializingBean {
         return keys;
     }
 
-    /** Shards each declared collection that is not sharded yet. Requires {@code mongos}. */
+    /**
+     * Shards each declared collection that is not sharded yet. Requires {@code mongos}. A collection
+     * that already holds rows (a replica set turned into a sharded cluster) needs an index on the
+     * key first; MongoDB makes one by itself only for an empty collection, so it is created here.
+     */
     public void applyShardKeys() {
         Map<String, Document> keys = allShardKeys();
         String db = this.mongo.databaseName();
@@ -108,9 +113,22 @@ public class ModuleMigrations implements InitializingBean {
                 .find(new Document("_id", namespace).append("unsplittable", new Document("$ne", true)))
                 .first() != null;
             if (!sharded) {
+                createShardKeyIndex(collection, key);
                 admin.runCommand(new Document("shardCollection", namespace).append("key", key));
                 logger.info("Sharded " + namespace + " on " + key.toJson());
             }
         });
+    }
+
+    private void createShardKeyIndex(String collection, Document key) {
+        try {
+            this.mongo.template().getCollection(collection).createIndex(key);
+        }
+        catch (MongoCommandException ex) {
+            // 85: the same keys are already indexed under another name, which serves as well
+            if (ex.getErrorCode() != 85) {
+                throw ex;
+            }
+        }
     }
 }

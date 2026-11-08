@@ -12,5 +12,8 @@ public interface UserRepository extends MongoRepository<UserDocument, String> {
     /** Back-office listing; scatter-gather is fine for this rare admin query (TDD 6.3). */
     List<UserDocument> findByRolesInOrderByIdDesc(List<Role> roles, Limit limit);
 
+    /** The oldest accounts with a role first: the personal-data key check reads the first administrator. */
+    List<UserDocument> findByRolesInOrderByIdAsc(List<Role> roles, Limit limit);
+
     boolean existsByRolesContaining(Role role);
 }
