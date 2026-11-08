@@ -51,7 +51,7 @@ Check
 Who: admin · Where: back office, **Settings > Ordering**
 
 Steps
-1. Set a service fee of Rs 50, tax 5 %, turn tips on, and save.
+1. Set **Service fee (PKR)** to 50, leave **Service fee (% of food)** empty, set **Tax (%)** to 5, turn tips on, and save.
 2. In the customer app, add a dish to the cart and open checkout.
 3. Turn **Cash** off and save, then reload checkout.
 4. Turn **Cash** back on.
@@ -62,7 +62,7 @@ Expect
 - Step 3: cash is no longer offered.
 
 Check
-- `settings_settings` `_id: "ordering"`: `serviceFeeMinor: 5000`, `taxBasisPoints: 500`, `tipsEnabled: true`, `cashEnabled`, `cardEnabled`, `acceptTimeoutSeconds`, `priceApprovalRequired`, `directCollectionEnabled`, `creditLimitMinor`, `cardStyle` (`HOSTED_PAGE` or `EMBEDDED`), `savedCardsEnabled`.
+- `settings_settings` `_id: "ordering"`: `serviceFeeMinor: 5000`, `serviceFeeBasisPoints: 0`, `taxBasisPoints: 500`, `tipsEnabled: true`, `cashEnabled`, `cardEnabled`, `acceptTimeoutSeconds`, `priceApprovalRequired`, `directCollectionEnabled`, `creditLimitMinor`, `cardStyle` (`HOSTED_PAGE` or `EMBEDDED`), `savedCardsEnabled`.
 
 ### SET-04 Store answer time
 

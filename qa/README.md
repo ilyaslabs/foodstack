@@ -25,7 +25,7 @@ Work through the files in this order. Later files use the stores, users and orde
 | [11-reviews.md](11-reviews.md) | Rating stores and riders, replies, moderation | REV |
 | [12-finance.md](12-finance.md) | Ledger, payouts, settlements, credit limits, exports | FIN |
 | [13-privacy.md](13-privacy.md) | Data export, account deletion | PRIV |
-| [14-operations.md](14-operations.md) | Install, health, failed events, search rebuild, backup and restore, upgrade, monitoring | OPS |
+| [14-operations.md](14-operations.md) | Install, health, failed events, search rebuild, backup and restore (also onto a new server), upgrade, monitoring, sharding existing data | OPS |
 | [15-regression-pass.md](15-regression-pass.md) | A one-hour pass over the most important cases, for every release | — |
 
 ## The test environment

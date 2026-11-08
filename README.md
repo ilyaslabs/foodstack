@@ -6,12 +6,14 @@ The backend is a Spring Boot 4 / Java 25 modular monolith built on [Module-Switc
 
 ## Status
 
-Milestones M0 to M5 are built: ordering, payments, delivery, money and trust, and production
-hardening. That last step added the Kubernetes chart for every topology, two-step and Google or
-Apple sign-in, failed-event replay, search ranking, and the observability chart. M6 (the
-operator handbook) and the v1.0 release are next. What each milestone does differently from the
-design is in [TDD sections 21 to 27](docs/TDD.md#27-m5-implementation-notes); how the code works
-today is drawn in [docs/architecture](docs/architecture/README.md).
+Milestones M0 to M6 are built: ordering, payments, delivery, money and trust, production
+hardening (the Kubernetes chart for every topology, two-step and Google or Apple sign-in,
+failed-event replay, search ranking, the observability chart), and the
+[Operator handbook](docs/handbook/README.md) with a [manual QA suite](qa/README.md). The v1.0
+release is next, once someone who did not write the handbook has followed it end to end. What
+each milestone does differently from the design is in
+[TDD sections 21 to 28](docs/TDD.md#28-m6-implementation-notes); how the code works today is
+drawn in [docs/architecture](docs/architecture/README.md).
 
 ## Repository
 
@@ -26,6 +28,8 @@ today is drawn in [docs/architecture](docs/architecture/README.md).
 | `k8s/helm/foodstack` | Helm chart: any topology, Gateway API, Istio ambient, edge rate limits ([deployment guide 4](docs/deployment-guide.md#4-kubernetes-helm)) |
 | `k8s/helm/foodstack-observability` | Prometheus, Grafana dashboards and alerts, Loki, Tempo, OpenTelemetry Collector |
 | `tools/k6/` | Load test of customer browsing |
+| `tools/migrate/` | One-off data scripts for the runbooks (image addresses after moving photos) |
+| `qa/` | Manual QA test cases, one file per area, with the database records to check |
 
 ## Build and run
 
@@ -87,6 +91,8 @@ MongoDB and Redis have no password. Their ports are picked by Docker (`docker ps
 - [Technical Design (TDD)](docs/TDD.md)
 - [Architecture and flows](docs/architecture/README.md): diagrams of how the built system works today
 - [Deployment Guide](docs/deployment-guide.md)
+- [Operator handbook](docs/handbook/README.md): step-by-step setup, day-to-day running and scaling runbooks for operators
+- [Manual QA](qa/README.md): test cases for the whole application
 - [Testing Strategy](docs/testing-strategy.md)
 
 ## License

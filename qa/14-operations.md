@@ -138,10 +138,30 @@ Expect
 - Step 1: "Backup done: …/backups/<timestamp>" with `mongodb.archive.gz`, `storage.tar.gz` and `config.tar.gz`. The folder is readable only by its owner.
 - Step 3: "Restore done." after stopping and starting the application.
 - Step 4: everything is as it was at the backup: the old store name, the photo back, the later order gone. Signing in still works, and customers' emails and phone numbers still read correctly.
-- Search finds the store again within a minute (it is rebuilt from the restored data).
+- Step 3 prints "Clearing caches and the search index" before "Starting". Search finds the store again within a few minutes (the index is recreated and filled from the restored data).
 
 Check
 - `config.tar.gz` holds `.env`, `config/` and `VERSION`. Without the `.env` from the same install (its `FOODSTACK_PII_KEY`), restored personal data cannot be read: keep it in a password manager.
+- Redis: a key you set before step 3 (`redis-cli -a … set qa:stale 1`) is gone after it.
+- Elasticsearch: `_cat/indices/foodstack_search_stores_v*?h=index,creation.date.string` shows a creation time after step 3.
+
+### OPS-07b Restore onto a new server, and a wrong key
+
+Who: tester · Where: two trial installs, one after the other (handbook guide 20, "Restore on a new server")
+
+Steps
+1. On install A, `./backup.sh` and copy the backup folder somewhere else. `./uninstall.sh --yes`.
+2. Install B in a new folder. Copy the backup into its `backups/`. Copy **only** `FOODSTACK_PII_KEY` and `FOODSTACK_SIGNING_KEYS` from A's `.env` (`tar -xzf backups/<ts>/config.tar.gz -O .env`) into B's `.env`.
+3. `./restart.sh server`, then `./restore.sh backups/<ts>`.
+4. Sign in with A's administrator password.
+5. Put a new random `FOODSTACK_PII_KEY` in `.env` (`openssl rand -base64 32`) and `./restart.sh server`. Then put the right one back and restart again.
+
+Expect
+- Step 3 and 4: A's data is there and A's administrator signs in.
+- Step 5: the server does not become healthy, and `./logs.sh server` says "FOODSTACK_PII_KEY does not open the accounts already stored". With the right key it is healthy again.
+
+Check
+- `identity_users` holds exactly one `ADMIN` per administrator of A: the wrong key did not make a new first administrator.
 
 ### OPS-08 Upgrade and roll back
 
@@ -230,3 +250,21 @@ Expect
 - Step 3: the order funnel moves, and the failed events show on the events dashboard. In Prometheus, the alert `FoodStackDeadLetters` fires.
 - Step 4: `FoodStackPodDown` fires.
 - In Explore, Loki has the server's logs as JSON lines, and a line's trace id opens the trace in Tempo, from the request through Kafka to the consumer.
+
+### OPS-14 Kubernetes: shard a database that already has data
+
+Who: tester · Where: a cluster install (OPS-11) on a MongoDB replica set with a few stores and orders, and a sharded MongoDB to move to (handbook runbook 44)
+
+Steps
+1. Convert the replica set into a sharded cluster with two shards (provider console, or MongoDB's "convert a replica set to a sharded cluster").
+2. Point `MONGODB_URI` at `mongos`, set `datastores.mongodb.sharding: true`, and `helm upgrade`.
+3. Place an order and open past orders.
+
+Expect
+- The migrations job finishes; every server pod becomes ready.
+- Past orders, stores and users are all there; the new order goes through.
+
+Check
+- The migrations job's log (or the first server pod's) has "Sharded foodstack_… on {…}" lines and no "Please create an index that starts with the proposed shard key".
+- `db.getSiblingDB('config').collections.countDocuments({ _id: /^foodstack_/, unsplittable: { $ne: true } })` is above 50.
+- `db.getSiblingDB('foodstack_order').order_orders.getIndexes()` includes the shard key's index (`{ _id: 'hashed' }`).

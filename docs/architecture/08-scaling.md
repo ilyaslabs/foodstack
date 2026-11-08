@@ -127,12 +127,12 @@ flowchart LR
 
 | Stage | When | What you change | Guide |
 |---|---|---|---|
-| 1. One server | Launch, one city | Nothing: `install.sh` | [Deployment guide 3](../deployment-guide.md#3-single-server-unit-deployer) |
+| 1. One server | Launch, one city | Nothing: `install.sh` | [Deployment guide 3](../deployment-guide.md#3-single-server-unit-deployer), [handbook 10 to 18](../handbook/README.md#start-here-your-first-launch) |
 | 2. Kubernetes, monolith (M5) | The server's CPU stays busy at peak, or you need no downtime on upgrades | Move the data once, install the chart, raise `replicas` | [5](../deployment-guide.md#5-moving-from-a-single-server-to-kubernetes), [4.6](../deployment-guide.md#46-scaling-and-topologies) |
 | 3. Split modules (M5) | One part (ordering at lunch, live maps) needs far more than the rest | `topology: split` or `custom` | [4.6](../deployment-guide.md#46-scaling-and-topologies), [TDD 18.2](../TDD.md#182-module-topology-one-setting-any-shape) |
 | 4. Shards and clusters | MongoDB primary or Redis memory is the bottleneck, search is slow under load | Connection strings, `sh.shardCollection` with the keys in TDD 6.3, `auto_expand_replicas`, brokers | [4.6a](../deployment-guide.md#46a-growing-the-other-datastores), [4.8](../deployment-guide.md#48-growing-mongodb-replicas-and-shards) |
 
-Step-by-step runbooks for each stage, written for people without an operations background, are planned as milestone **M6 Operator handbook** ([PRD 7](../PRD.md#7-release-plan)).
+Step-by-step runbooks for each stage, written for people without an operations background, are in the [Operator handbook](../handbook/README.md#growing) (M6); [knowing when to grow](../handbook/30-when-to-grow.md) maps each signal to its runbook. What the move and the sharding step do underneath is drawn in [11](11-operations.md).
 
 ## 8.4 Limits that more machines do not lift
 

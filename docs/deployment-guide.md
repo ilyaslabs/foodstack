@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Status | v1. Single server since M0; Kubernetes (Helm) since M5, checked on a test cluster in every topology ([TDD](TDD.md) sections 17, 18 and 27) |
-| Audience | The operator's DevOps or whoever installs and runs FoodStack |
+| Audience | The operator's DevOps or whoever installs and runs FoodStack. For step-by-step guides written for people without an operations background, see the [Operator handbook](handbook/README.md) |
 
 ## 1. Choose your path
 
@@ -80,7 +80,7 @@ sudo ./install.sh /opt/foodstack \
 5. Copies the application, web apps and configuration.
 6. Starts the datastores, waits for them to be healthy, runs database migrations once, then starts the application and the web apps.
 7. Optionally installs a systemd unit so FoodStack starts on boot (`--systemd`).
-8. Prints the first administrator's email and generated password once (also kept in `.env` as `FOODSTACK_ADMIN_PASSWORD`). A password-change screen arrives with the notification module.
+8. Prints the first administrator's email and generated password once (also kept in `.env` as `FOODSTACK_ADMIN_PASSWORD`). Change it after the first sign-in (account menu, **Change password**).
 
 For a quick trial on your own computer (Linux, or macOS/Windows with Docker Desktop), without DNS, certificates or sudo: `./install.sh ~/foodstack --local`, then open `http://foodstack.localhost:8080/admin/` and sign in as `admin@foodstack.localhost` / `foodstack-local` (fixed for trials; a `--domain` install generates a random password).
 
@@ -112,16 +112,18 @@ Everything else (branding, languages, currency, timezone, fees, commission, feat
 
 ### 3.4 First login checklist
 
-1. Open `https://admin.example.com`, set the admin password, and enable two-factor login.
-2. **Settings → Branding:** name, logos, colours, font.
-3. **Settings → Locale:** languages, default language, currency, timezone.
+Step by step: [handbook guides 16 to 18](handbook/README.md#start-here-your-first-launch).
+
+1. Open `https://admin.example.com/admin/`, set up the authenticator app (required for administrators), then **Change password** in the account menu. Make your team's accounts under **Users**, **New staff account**.
+2. **Branding:** name, tagline, logo, colour.
+3. **Languages:** languages, default language, currency, timezone.
 4. **Ordering:** cash and card (on the gateway's page or in card fields inside the app, and whether customers may save a card), service fee, tax, tips and how long stores have to accept an order.
 5. **Messages:** reword any email, notification or push message in each of your languages, with a preview; a field left empty keeps FoodStack's text.
-6. **Settings → Features:** pickup, operator rider service, card payments, saved cards, store direct payment collection.
-7. **Email log:** sign in once with "Email me a sign-in code" and check that the email shows as Sent (push notifications arrive with M3).
-8. **Delivery:** if you run your own riders, switch on the operator rider service and set operator delivery pricing and rider pay; otherwise stores deliver themselves.
+6. **Cities**, and per branch: pickup, and whether the platform's riders deliver for it (the branch's **Delivery** tab). Card payment, saved cards and branches collecting card payments themselves are on **Ordering**.
+7. **Email log:** sign in once with "Email me a sign-in code" and check that the email shows as Sent.
+8. **Delivery pricing** and **Rider pay**, if you run your own riders; otherwise stores deliver themselves.
 9. **Stores:** onboard the first store and choose whether it may use operator delivery; let the owner set delivery mode, hours, zones and menu.
-10. Place a test order end to end, then delete it from the admin panel.
+10. Place a test order end to end, then cancel it (**Cancel order** on the order, with a reason).
 
 ### 3.5 Day-to-day operations
 
@@ -138,16 +140,16 @@ Everything else (branding, languages, currency, timezone, fees, commission, feat
 ### 3.6 Backups and restore
 
 - `backup.sh` writes `backups/<timestamp>/` with a MongoDB dump (all `foodstack_*` databases), a copy of the media storage, and the configuration including `.env`.
-- Schedule it daily with cron or the systemd timer installed by `--systemd`, and **copy backups off the server** (for example to S3 or another machine). Keep the PII key and `.env` in a password manager as well.
+- Schedule it daily with cron (`--systemd` only starts FoodStack at boot; it installs no backup timer), and **copy backups off the server** (for example to S3 or another machine). Keep the PII key and `.env` in a password manager as well. [Handbook guide 20](handbook/20-backups.md) has the cron line, the off-server copy and the restore onto a new server.
 - Kafka, Redis and Elasticsearch need no backup: events are delivered from MongoDB's outbox, Redis is a cache, and search is rebuilt from the data.
-- Restore: `./restore.sh backups/<timestamp>` stops the application, restores MongoDB and media, rebuilds search, and starts again.
+- Restore: `./restore.sh backups/<timestamp>` stops the application, restores MongoDB and media, clears Redis and the search index (both only copies), and starts again; search refills on start. It does not restore `.env`: on a new server, install first, then copy `FOODSTACK_PII_KEY` and `FOODSTACK_SIGNING_KEYS` (not the whole file: the datastore passwords differ) from the old `.env` before restoring.
 - Test a restore on a spare server at least once before going live.
 
 ### 3.7 Upgrades
 
 1. Read the release notes for the new version.
 2. `./upgrade.sh unit-deployer-<new>.zip` takes a backup, replaces the application, web apps and compose file, runs migrations, and restarts with a short downtime (usually under a minute).
-3. If something goes wrong: `./upgrade.sh --rollback` restores the previous files and the pre-upgrade backup.
+3. If something goes wrong: `./upgrade.sh --rollback` restores the previous version's files (not the data; the pre-upgrade backup stays in `backups/` for `restore.sh` if the release notes require it).
 
 Migrations are always backward compatible with the previous release, so a rollback of the application does not require a data restore unless the release notes say so.
 
@@ -288,7 +290,7 @@ It searches, opens stores and reads menus and delivery quotes with 50 users at t
 
 ### 4.6 Scaling and topologies
 
-How the load is split between machines, and the stages of growth, are drawn in [architecture 8](architecture/08-scaling.md). Step-by-step runbooks for each step are planned for milestone M6 (Operator handbook).
+How the load is split between machines, and the stages of growth, are drawn in [architecture 8](architecture/08-scaling.md). Step-by-step runbooks for each step are in the [Operator handbook](handbook/README.md#growing), starting with [knowing when to grow](handbook/30-when-to-grow.md).
 
 | Goal | Change |
 |---|---|
@@ -321,7 +323,7 @@ Only when the shared cluster is the bottleneck or you need isolation.
 3. Create a secret with the new URI and set it for that module:
    ```yaml
    server:
-     moduleDefaults:
+     moduleDatastores:
        order: { mongodbUriSecret: order-mongodb }
    ```
 4. `helm upgrade`. Only the Deployment running `order` restarts.
@@ -330,7 +332,7 @@ Only when the shared cluster is the bottleneck or you need isolation.
 ### 4.8 Growing MongoDB: replicas and shards
 
 - **More replicas:** add members to the replica set; no FoodStack change.
-- **Sharding:** convert the replica set into the first shard of a sharded cluster, point `MONGODB_URI` at `mongos`, then shard each collection with the key listed in [TDD 6.3](TDD.md#63-designed-for-sharding). FoodStack's CI already tests every query against a sharded cluster.
+- **Sharding:** convert the replica set into the first shard of a sharded cluster, point `MONGODB_URI` at `mongos`, and set `datastores.mongodb.sharding: true`. On the next `helm upgrade` the migrations job indexes and shards each collection on the key listed in [TDD 6.3](TDD.md#63-designed-for-sharding), including collections that already hold data. FoodStack's CI already tests every query against a sharded cluster. Steps: [handbook runbook 44](handbook/44-mongodb-sharding.md).
 
 ### 4.9 Observability
 
@@ -392,13 +394,16 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 
 ## 5. Moving from a single server to Kubernetes
 
-1. Prepare the cluster and datastores (sections 4.1 and 4.2) and install FoodStack with **the same JWT keys and PII key** from `/opt/foodstack/.env`, so existing logins and encrypted data keep working.
-2. Announce a short maintenance window. On the single server: `./stop.sh server web backoffice` (datastores keep running).
-3. `mongodump` all `foodstack_*` databases and restore them into the new MongoDB.
-4. Copy media: any S3 sync tool (for example `aws s3 sync` or `rclone`) from the server's storage (`https://<admin-domain>/foodstack-public/…` or the `foodstack_storage` Docker volume) to your S3 buckets.
-5. `helm upgrade` with `--set maintenance.reindex=true` to rebuild search indices.
-6. Switch DNS to the cluster's Gateway address.
-7. Keep the old server stopped but intact for a week as a fallback.
+Step by step, with every command: [handbook runbook 40](handbook/40-move-to-kubernetes.md). In short:
+
+1. Prepare the cluster and datastores (sections 4.1 and 4.2). Put **the same signing key and PII key** from `/opt/foodstack/.env` into a Secret (with new `FOODSTACK_INTERNAL_TOKEN`, `FOODSTACK_SERVICE_CLIENT_SECRET` and `FOODSTACK_ADMIN_PASSWORD`) and name it in `secrets.existingSecret`, so existing logins and encrypted data keep working.
+2. Announce a short maintenance window. On the single server: `./stop.sh proxy web backoffice server` (datastores keep running), then `./backup.sh`.
+3. `mongorestore --nsInclude 'foodstack_*.*'` the backup's `mongodb.archive.gz` into the new MongoDB.
+4. Copy media from the server's storage to your buckets with an S3 sync tool (rclone in a container on the `foodstack` Docker network, source `http://storage:9000` with the `.env` S3 keys).
+5. Brands, menu items and orders store their image URLs, so rewrite the old base (`<S3_PUBLIC_ENDPOINT>/foodstack-public`) to the new one with `tools/migrate/rewrite-media-urls.js` (mongosh, `DRY_RUN=true` first).
+6. `helm install` the **same version** the server runs. Migrations find nothing to do; search is empty in the new Elasticsearch, so the server creates the index and fills it on start.
+7. Test through your hosts file, then switch DNS to the cluster's Gateway address.
+8. Keep the old server stopped but intact for a week as a fallback.
 
 ## 6. Troubleshooting
 
@@ -413,6 +418,7 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 | Kubernetes: every signed-in request answers 401 "Jwt verification fails" | istiod could not fetch the token keys while FoodStack was starting. Run istiod with `PILOT_JWT_ENABLE_REMOTE_JWKS=envoy` (section 4.1); until then, restarting istiod fetches them again |
 | Kubernetes: 503 "remote connection failure" after a node restarted | Pods that started before Istio's CNI agent was ready are not in the mesh: `kubectl -n foodstack rollout restart deploy,statefulset` |
 | Kubernetes: Prometheus shows the server pods down ("EOF") | Prometheus is outside the mesh, and the mesh only takes mutual TLS. Keep the observability chart's `ambient: true`, or label your Prometheus pod `istio.io/dataplane-mode: ambient` |
-| Search results stale or empty | Only live branches with a delivery area (or pickup) appear. To rebuild the index, call `POST /api/v1/search/reindex` as an admin (a button arrives with the maintenance screen), or restart the server: it rebuilds on start |
-| Elasticsearch will not start on a single server | `logs elasticsearch`; usually too little memory for `ES_HEAP`; rerun `install.sh --check` |
+| Search results stale or empty | Only live branches with a delivery area (or pickup) appear. Every branch is re-read once a day; to rebuild now, call `POST /api/v1/search/reindex` with an admin token (202), or delete the `foodstack_search_stores_v*` index and restart: a missing index is created and filled on start |
+| Elasticsearch will not start on a single server | `./logs.sh elasticsearch`; usually too little memory for `ES_HEAP`: lower it in `.env` and `./restart.sh elasticsearch` |
 | Disk full | `status.sh` shows usage; prune old backups and logs, then extend the disk |
+| More symptoms, in plain language | [Handbook troubleshooting](handbook/90-troubleshooting.md) |
