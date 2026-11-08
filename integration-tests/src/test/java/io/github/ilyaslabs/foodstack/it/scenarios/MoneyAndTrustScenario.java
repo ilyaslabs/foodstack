@@ -208,15 +208,12 @@ class MoneyAndTrustScenario {
             .then().log().ifValidationFails().statusCode(201);
     }
 
-    private static void ordering(ApiClient admin, Map<String, Object> changes) {
-        Response current = admin.get("/api/v1/settings/ordering");
-        Map<String, Object> body = new LinkedHashMap<>(current.jsonPath().getMap("$"));
-        body.remove("version");
+    private void ordering(ApiClient admin, Map<String, Object> changes) {
+        Map<String, Object> body = new LinkedHashMap<>();
         body.put("cashEnabled", true);
         body.put("cardEnabled", true);
         body.putAll(changes);
-        admin.request("/api/v1/settings/ordering").header("If-Match", current.header("ETag")).contentType(ContentType.JSON)
-            .body(body).put("/api/v1/settings/ordering").then().log().ifValidationFails().statusCode(200);
+        CouponsAndRefundsScenario.Settings.ordering(this.platform, admin, body);
     }
 
     private static String cardOrder(ApiClient customer, Store store, String key) {
