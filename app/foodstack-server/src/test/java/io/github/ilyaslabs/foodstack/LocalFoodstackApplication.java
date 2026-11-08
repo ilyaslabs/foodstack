@@ -35,5 +35,14 @@ public final class LocalFoodstackApplication {
         application.setAdditionalProfiles("local", "test-seed");
         application.run(args);
         System.out.println("Emails sent by this run: " + FoodstackContainers.mailpitUrl());
+        // What the manual QA checks (qa/README.md) open to look at the stored records
+        System.out.println("MongoDB shell: docker exec -it " + FoodstackContainers.mongo().getContainerId().substring(0, 12)
+                + " mongosh --port 27017");
+        System.out.println("Redis shell: docker exec -it " + FoodstackContainers.redis().getContainerId().substring(0, 12)
+                + " redis-cli");
+        System.out.println("Kafka: " + FoodstackContainers.kafka().getBootstrapServers() + " (container "
+                + FoodstackContainers.kafka().getContainerId().substring(0, 12) + ")");
+        System.out.println("Elasticsearch: http://" + FoodstackContainers.elasticsearch().getHttpHostAddress()
+                + " (user elastic, password " + FoodstackContainers.ELASTICSEARCH_PASSWORD + ")");
     }
 }
