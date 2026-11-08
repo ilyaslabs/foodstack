@@ -1,5 +1,5 @@
-# ilyaslabs/foodstack-server: the FoodStack server for Kubernetes (TDD 18). Build after
-# `mvn package`:  docker build -t ilyaslabs/foodstack-server app/foodstack-server
+# ilyasdotdev/ilyaslabs-foodstack:server-<version>: the FoodStack server for Kubernetes (TDD 18).
+# Build after `mvn package`:  docker build -t ilyasdotdev/ilyaslabs-foodstack:server-dev app/foodstack-server
 FROM eclipse-temurin:25-jre AS layers
 WORKDIR /build
 COPY target/foodstack-server-*-exec.jar app.jar

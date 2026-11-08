@@ -1,6 +1,8 @@
 name: Images
 
-# Builds the unit deployer zip and the images, and pushes the images to Docker Hub and GHCR.
+# Builds the unit deployer zip and the images, and pushes the images to Docker Hub
+# (ilyasdotdev/ilyaslabs-foodstack) and GHCR (ghcr.io/ilyaslabs/foodstack), one repository each with
+# the part in the tag: server-1.0.0, web-1.0.0, backoffice-1.0.0 (and -1.0, -latest).
 # Called by release.yml (the version tags). Nothing is published on a merge to main.
 on:
   workflow_call:
@@ -61,13 +63,13 @@ jobs:
             local name=$1; shift
             local args=()
             for tag in $TAGS; do
-              args+=(-t "ilyaslabs/$name:$tag" -t "ghcr.io/ilyaslabs/$name:$tag")
+              args+=(-t "ilyasdotdev/ilyaslabs-foodstack:$name-$tag" -t "ghcr.io/ilyaslabs/foodstack:$name-$tag")
             done
             docker buildx build --platform linux/amd64,linux/arm64 --push "${args[@]}" "$@"
           }
-          push foodstack-server app/foodstack-server
-          push foodstack-web -f frontend/docker/web.Dockerfile frontend
-          push foodstack-backoffice -f frontend/docker/backoffice.Dockerfile frontend
+          push server app/foodstack-server
+          push web -f frontend/docker/web.Dockerfile frontend
+          push backoffice -f frontend/docker/backoffice.Dockerfile frontend
       - name: Attach the unit deployer to the release
         if: inputs.attach-to-release != ''
         env:
