@@ -538,7 +538,7 @@ frontend/
 | Workflow | Trigger | Does |
 |---|---|---|
 | `pr-checks.yml` | Pull request | Calls `ilyaslabs/cicd/.github/workflows/mvn-pr-checks.yml@main`; frontend lint, test and build; Helm lint and `kubeconform`; `ModuleRules.verify`; Trivy filesystem scan |
-| `snapshot-release.yml` | Push to `main` | Calls `mvn-snapshot-release.yml`; pushes `:edge` images |
+| (none) | Push to `main` | Nothing is published on a merge (ilyas, 2026-11-08). Maven Central, Docker Hub, GHCR and the charts are published only by `release.yml` |
 | `release.yml` | GitHub release `vX.Y.Z` | Calls `mvn-release.yml` (Maven Central); builds, signs and pushes images to Docker Hub and GHCR; builds `unit-deployer-<version>.zip` and attaches it to the GitHub release; packages the Helm chart and pushes it to GHCR as an OCI artifact |
 | `e2e.yml` | Nightly and before release | Unit deployer install on a fresh VM-like runner (`install.sh`, `restart.sh`, `upgrade.sh`); kind cluster installs of the `monolith`, `split` and `microservices` topologies, Playwright suite, k6 smoke test |
 
