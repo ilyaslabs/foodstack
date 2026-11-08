@@ -11,7 +11,8 @@
 |---|---|---|
 | Best for | Launch, pilots, one city, up to about 200 orders per hour | Growth, high availability, several cities, independent scaling |
 | You need | One Linux server with Docker | A Kubernetes cluster, plus managed or operator-run datastores |
-| Datastores | Included and installed for you (MongoDB, Kafka, Redis, Elasticsearch, RustFS for media) | Bring your own (recommended) or run them in-cluster for trials |
+| Datastores | Included and installed for you (MongoDB, Kafka, Redis, Elasticsearch) | Bring your own (recommended) or run them in-cluster for trials |
+| Photos and files | Your own S3-compatible buckets (Amazon S3, Cloudflare R2, Backblaze B2) | The same |
 | Topologies | Monolith | `monolith`, `split`, `microservices` or `custom`, switchable at any time |
 | High availability | No (one machine) | Yes (replicas across nodes and zones) |
 | Effort to run | Low | Medium |
@@ -28,8 +29,8 @@ Start on a single server. Moving to Kubernetes later is a data copy plus configu
 | SMTP account | Email notifications, login codes | Any provider; TLS on port 587 recommended |
 | Firebase Cloud Messaging project | Push notifications | Service-account JSON key |
 | Payment gateway account | Card payments | Only if cards are enabled; hosted payment page recommended at launch |
-| Map services | Address search, routing, ETAs | Public OpenStreetMap services are for demos only; for production self-host Nominatim and OSRM for your region, or use the Google Maps adapter with an API key |
-| S3-compatible storage (Kubernetes only) | Images | AWS S3 or any compatible provider; the single server includes RustFS |
+| Map services | Address search, map tiles, optional road distances | **Required.** Google Maps Platform (Geocoding API, Routes API) or any Nominatim-compatible search, plus any `{z}/{x}/{y}` tile service; OSRM optional for road distances. OpenStreetMap's public servers are allowed only in a `--local` trial ([handbook guide 13](handbook/13-maps.md)) |
+| S3-compatible storage | Images, rider documents | **Required.** Two buckets (one readable by everyone), an access key with read and write on both, and a CORS rule for your two sites. Amazon S3, Cloudflare R2 and Backblaze B2 are tested ([handbook guide 12](handbook/12-storage.md)). The server checks them on every start and refuses to start until they work |
 
 ### 2.2 Secrets you will hold
 
@@ -40,7 +41,7 @@ Generated for you on a single server; created by you on Kubernetes.
 | JWT signing key pair (ES256) | Signs login tokens. Rotating it keeps the previous key valid until old tokens expire |
 | PII encryption key (32 random bytes) | Encrypts emails and phone numbers at rest. **Back it up separately; losing it makes that data unreadable** |
 | Module-Switch internal token | Protects module-to-module calls |
-| Datastore passwords | MongoDB, Redis, Elasticsearch, RustFS or S3, Kafka (if secured) |
+| Datastore passwords | MongoDB, Redis, Elasticsearch, S3 access key, Kafka (if secured) |
 | SMTP, FCM, payment gateway and maps credentials | External providers |
 
 ## 3. Single server (unit deployer)
@@ -63,19 +64,23 @@ Generated for you on a single server; created by you on Kubernetes.
 curl -LO https://github.com/ilyaslabs/foodstack/releases/download/v1.0.0/unit-deployer-1.0.0.zip
 unzip unit-deployer-1.0.0.zip && cd unit-deployer-1.0.0
 
-# 2. Install into a directory of your choice (data, logs and backups live there)
+# 2. Install into a directory of your choice (data, logs and backups live there), with the
+#    settings file holding your buckets and map provider (handbook guides 12 and 13)
 sudo ./install.sh /opt/foodstack \
   --domain example.com \
   --admin-domain admin.example.com \
   --api-domain api.example.com \
-  --admin-email ops@example.com
+  --admin-email ops@example.com \
+  --settings ~/foodstack-settings.env
 ```
+
+The settings file holds `KEY=VALUE` lines: `S3_ENDPOINT`, `S3_REGION`, `S3_PUBLIC_BUCKET`, `S3_PRIVATE_BUCKET`, `S3_PUBLIC_BASE_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `GEOCODING_PROVIDER` (and `GEOCODING_URL` or `GOOGLE_MAPS_API_KEY`), `GEOCODING_COUNTRY_CODES`, `MAP_TILE_URL`, `MAP_ATTRIBUTION`, and optionally `ROUTING_PROVIDER` / `ROUTING_URL`. Values can also come from the environment, or as answers when the installer asks for what is missing.
 
 `install.sh`:
 
 1. Checks Docker, Compose, CPU, memory, disk and that ports 80 and 443 are free.
 2. Elasticsearch (store search) is part of the stack and runs without memory-mapped files, so no kernel setting is needed. When run as root on Linux, `install.sh` also raises `vm.max_map_count` to 262144, which Elasticsearch prefers for large indices.
-3. Creates `/opt/foodstack/{logs,config,backups}`. Service data lives in named Docker volumes (`foodstack_mongodb`, `foodstack_storage`, …), so no folder ownership setup is needed.
+3. Creates `/opt/foodstack/{logs,config,backups}`. Service data lives in named Docker volumes (`foodstack_mongodb`, `foodstack_kafka`, …), so no folder ownership setup is needed.
 4. Generates strong passwords, the JWT key pair, the PII key and the internal token into `/opt/foodstack/.env` (permissions 600).
 5. Copies the application, web apps and configuration.
 6. Starts the datastores, waits for them to be healthy, runs database migrations once, then starts the application and the web apps.
@@ -100,9 +105,10 @@ Edit `/opt/foodstack/.env`, then run `./restart.sh server`. The main settings:
 | `FOODSTACK_IDENTITY_DELETION_GRACE` | `P14D` | How long after a customer asks to delete their account it is deleted; signing in again before then cancels it. Orders stay without the customer's name, phone or address, and reviews show "Deleted user" |
 | `FOODSTACK_WEB_URL` | `https://example.com` | Set by `install.sh`. Where customers come back to after paying, and the links in emails |
 | `FCM_SERVICE_ACCOUNT`, `FCM_WEB_CONFIG`, `FCM_VAPID_KEY` | `/config/push/fcm.json`, `{"apiKey":"…","projectId":"…","messagingSenderId":"…","appId":"…"}`, `BK…` | Push to riders (new jobs) and customers (order updates). Create a Firebase project, save its service account key as `/opt/foodstack/config/push/fcm.json` (the server sees it as `/config/push/fcm.json`), and copy the web app config (one line) and the Web Push key pair from the Firebase console. While `FCM_SERVICE_ACCOUNT` is empty nothing is pushed and everyone still sees updates in the app |
-| `ROUTING_PROVIDER`, `ROUTING_URL` | `none` or `osrm`, `http://osrm.internal:5000` | Road distance and driving time for delivery charges, dispatch and live ETAs. `none` uses the straight-line distance times a road factor; `osrm` asks an OSRM server you run |
-| `GEOCODING_PROVIDER`, `GEOCODING_URL`, `GEOCODING_COUNTRY_CODES` | `nominatim`, `https://nominatim.openstreetmap.org`, `pk` | Address search for customers and store onboarding. The public Nominatim allows about one request a second; use your own instance or a hosted one for real traffic. `none` turns address search off (customers then use their device location) |
-| `MAP_TILE_URL`, `MAP_TILE_ORIGIN`, `MAP_ATTRIBUTION` | `https://tile.openstreetmap.org/{z}/{x}/{y}.png`, `https://tile.openstreetmap.org`, `© OpenStreetMap contributors` | Map tiles in the back office, where stores draw their delivery zones. OpenStreetMap's public tiles allow light use only (see their tile usage policy); with many stores, use your own tile server or a hosted provider. `MAP_TILE_ORIGIN` must be the scheme and host of `MAP_TILE_URL`, because the page's security policy only loads tiles from there |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_PATH_STYLE`, `S3_PUBLIC_BUCKET`, `S3_PRIVATE_BUCKET`, `S3_PUBLIC_BASE_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | `https://s3.eu-west-1.amazonaws.com`, `eu-west-1`, `false`, …, `https://cdn.example.com` | Your buckets (set by `install.sh` from `--settings`). `S3_PUBLIC_BASE_URL` is where browsers load the public bucket's files. On start the server writes a test file to each bucket, reads the public one anonymously and checks CORS for your two sites, and stops with "Storage check failed: …" naming what to fix. `MEDIA_ORIGINS` (derived) lets the back office load and upload there |
+| `ROUTING_PROVIDER`, `ROUTING_URL` | `none`, `osrm` or `google`, `http://osrm.internal:5000` | Road distance and driving time for delivery charges, dispatch and live ETAs. `none` uses the straight-line distance times a road factor; `osrm` asks an OSRM server you run; `google` uses the Routes API with `GOOGLE_MAPS_API_KEY` |
+| `GEOCODING_PROVIDER`, `GEOCODING_URL`, `GEOCODING_COUNTRY_CODES`, `GOOGLE_MAPS_API_KEY` | `google` or `nominatim`, `https://search.example-provider.com`, `pk`, `AIza…` | Address search for customers and store onboarding, limited to your country. `google` uses the Geocoding API; `nominatim` any Nominatim-compatible service at `GEOCODING_URL`. The public OpenStreetMap Nominatim is used only by `--local` trials |
+| `MAP_TILE_URL`, `MAP_TILE_ORIGIN`, `MAP_ATTRIBUTION` | `https://tiles.example-provider.com/{z}/{x}/{y}.png?key=…`, `https://tiles.example-provider.com`, `© Provider © OpenStreetMap contributors` | Map tiles in the back office (delivery zones) and live tracking, from a hosted provider or your own tile server. `install.sh` derives `MAP_TILE_ORIGIN`; if you change the host later, set it to the scheme and host of `MAP_TILE_URL`, because the page's security policy only loads tiles from there |
 | `ELASTICSEARCH_URIS`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD` | set by `install.sh` | Point at an external Elasticsearch 9 cluster if you run one; the index is rebuilt from store data on start |
 | `JAVA_HEAP`, `ES_HEAP` | `4g`, `2g` | Sized by `install.sh` from server memory |
 | `FOODSTACK_REFRESH_COOKIE_SECURE` | `true` | Keep `true`. Only a plain-HTTP trial (`--local`) sets `false`, or browsers would drop the sign-in cookie |
@@ -112,7 +118,7 @@ Everything else (branding, languages, currency, timezone, fees, commission, feat
 
 ### 3.4 First login checklist
 
-Step by step: [handbook guides 16 to 18](handbook/README.md#start-here-your-first-launch).
+Step by step: [handbook guides 17 to 19](handbook/README.md#start-here-your-first-launch).
 
 1. Open `https://admin.example.com/admin/`, set up the authenticator app (required for administrators), then **Change password** in the account menu. Make your team's accounts under **Users**, **New staff account**.
 2. **Branding:** name, tagline, logo, colour.
@@ -139,10 +145,10 @@ Step by step: [handbook guides 16 to 18](handbook/README.md#start-here-your-firs
 
 ### 3.6 Backups and restore
 
-- `backup.sh` writes `backups/<timestamp>/` with a MongoDB dump (all `foodstack_*` databases), a copy of the media storage, and the configuration including `.env`.
+- `backup.sh` writes `backups/<timestamp>/` with a MongoDB dump (all `foodstack_*` databases) and the configuration including `.env`. Photos and files live in your buckets: turn on bucket versioning at your provider instead.
 - Schedule it daily with cron (`--systemd` only starts FoodStack at boot; it installs no backup timer), and **copy backups off the server** (for example to S3 or another machine). Keep the PII key and `.env` in a password manager as well. [Handbook guide 20](handbook/20-backups.md) has the cron line, the off-server copy and the restore onto a new server.
 - Kafka, Redis and Elasticsearch need no backup: events are delivered from MongoDB's outbox, Redis is a cache, and search is rebuilt from the data.
-- Restore: `./restore.sh backups/<timestamp>` stops the application, restores MongoDB and media, clears Redis and the search index (both only copies), and starts again; search refills on start. It does not restore `.env`: on a new server, install first, then copy `FOODSTACK_PII_KEY` and `FOODSTACK_SIGNING_KEYS` (not the whole file: the datastore passwords differ) from the old `.env` before restoring.
+- Restore: `./restore.sh backups/<timestamp>` stops the application, restores MongoDB, clears Redis and the search index (both only copies), and starts again; search refills on start. It does not restore `.env`: on a new server, install first, then copy `FOODSTACK_PII_KEY` and `FOODSTACK_SIGNING_KEYS` (not the whole file: the datastore passwords differ) from the old `.env` before restoring.
 - Test a restore on a spare server at least once before going live.
 
 ### 3.7 Upgrades
@@ -244,17 +250,33 @@ datastores:
   redis: { url: "rediss://:…@redis.example.com:6380" }
   kafka: { bootstrap: "kafka-1:9092,kafka-2:9092,kafka-3:9092", replicationFactor: 3 }
   elasticsearch: { uris: "https://es.example.com:9200", password: "…" }
-  s3: { accessKey: "…", secretKey: "…", publicEndpoint: "https://cdn.example.com" }
+  # Your own buckets (handbook guide 12); the server checks them on start and refuses to start
+  # when a bucket is missing, not public, not writable or has no CORS rule for your two sites.
+  s3:
+    endpoint: https://s3.eu-west-1.amazonaws.com
+    region: eu-west-1
+    pathStyle: false                         # Amazon S3; true for R2 and B2
+    publicBaseUrl: https://foodstack-public.s3.eu-west-1.amazonaws.com   # or your CDN
+    accessKey: "…"
+    secretKey: "…"
+    publicBucket: foodstack-public
+    privateBucket: foodstack-private
 # ...or the credentials in an existing Secret (keys MONGODB_URI, REDIS_URL,
-# ELASTICSEARCH_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY), with kafka.bootstrap and
-# elasticsearch.uris still given above:
+# ELASTICSEARCH_PASSWORD, S3_ACCESS_KEY, S3_SECRET_KEY), with kafka.bootstrap,
+# elasticsearch.uris and the s3 addresses still given above:
 #   datastores: { existingSecret: foodstack-datastores, … }
+
+# Required (handbook guide 13); OpenStreetMap's public servers are refused.
+maps:
+  geocoding: { provider: google, countryCodes: pk }     # or nominatim with url
+  routing: { provider: google }                         # none, osrm with url, or google
+  tiles: { url: "https://tiles.example.com/{z}/{x}/{y}.png?key=…", attribution: "© Example © OpenStreetMap contributors" }
 
 server:
   env:
     PAYMENT_GATEWAY: stripe
-    GEOCODING_PROVIDER: nominatim
-  # Secrets loaded whole into every server pod: the settings of section 3.3 (SMTP_*, STRIPE_*, FCM_*, maps)
+  # Secrets loaded whole into every server pod: the settings of section 3.3 (SMTP_*, STRIPE_*,
+  # FCM_*, GOOGLE_MAPS_API_KEY)
   envFromSecrets: [foodstack-providers]
 ```
 
@@ -264,6 +286,7 @@ kubectl -n foodstack create secret generic foodstack-providers \
   --from-literal=SMTP_HOST=smtp.example.com --from-literal=SMTP_USERNAME=… --from-literal=SMTP_PASSWORD=… \
   --from-literal=SMTP_AUTH=true --from-literal=SMTP_STARTTLS=true --from-literal=SMTP_FROM=orders@example.com \
   --from-literal=STRIPE_SECRET_KEY=… --from-literal=STRIPE_WEBHOOK_SECRET=… \
+  --from-literal=GOOGLE_MAPS_API_KEY=… \
   --from-file=FCM_SERVICE_ACCOUNT=fcm.json   # the key file's JSON itself; a path works on one server only
 ```
 
@@ -399,11 +422,9 @@ Step by step, with every command: [handbook runbook 40](handbook/40-move-to-kube
 1. Prepare the cluster and datastores (sections 4.1 and 4.2). Put **the same signing key and PII key** from `/opt/foodstack/.env` into a Secret (with new `FOODSTACK_INTERNAL_TOKEN`, `FOODSTACK_SERVICE_CLIENT_SECRET` and `FOODSTACK_ADMIN_PASSWORD`) and name it in `secrets.existingSecret`, so existing logins and encrypted data keep working.
 2. Announce a short maintenance window. On the single server: `./stop.sh proxy web backoffice server` (datastores keep running), then `./backup.sh`.
 3. `mongorestore --nsInclude 'foodstack_*.*'` the backup's `mongodb.archive.gz` into the new MongoDB.
-4. Copy media from the server's storage to your buckets with an S3 sync tool (rclone in a container on the `foodstack` Docker network, source `http://storage:9000` with the `.env` S3 keys).
-5. Brands, menu items and orders store their image URLs, so rewrite the old base (`<S3_PUBLIC_ENDPOINT>/foodstack-public`) to the new one with `tools/migrate/rewrite-media-urls.js` (mongosh, `DRY_RUN=true` first).
-6. `helm install` the **same version** the server runs. Migrations find nothing to do; search is empty in the new Elasticsearch, so the server creates the index and fills it on start.
-7. Test through your hosts file, then switch DNS to the cluster's Gateway address.
-8. Keep the old server stopped but intact for a week as a fallback.
+4. `helm install`, with `datastores.s3` and `maps` holding the same values as the server's `.env`: the buckets stay where they are, so photos need no copy. the **same version** the server runs. Migrations find nothing to do; search is empty in the new Elasticsearch, so the server creates the index and fills it on start.
+5. Test through your hosts file, then switch DNS to the cluster's Gateway address.
+6. Keep the old server stopped but intact for a week as a fallback.
 
 ## 6. Troubleshooting
 

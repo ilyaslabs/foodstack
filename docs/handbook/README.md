@@ -24,13 +24,14 @@ Do these in order. Set aside a day for the whole list; most guides take 10 to 30
 |---|---|---|
 | 1 | [Rent a server](10-server.md) | A Linux computer on the internet, and a way to type commands on it |
 | 2 | [Point your domain at it](11-domain-and-dns.md) | `example.com`, `admin.example.com` and `api.example.com` lead to your server |
-| 3 | [Install FoodStack](12-install.md) | The marketplace running, with secure `https://` addresses |
-| 4 | [Email](13-email.md) | Order updates, sign-in codes and password resets reach people |
-| 5 | [Maps and addresses](14-maps.md) | Address search, map tiles and road distances you are allowed to use at scale |
-| 6 | [Card payments](15-card-payments.md) | Customers can pay by card (optional; cash works without it) |
-| 7 | [First sign-in and your team](16-first-sign-in.md) | Your own password, two-step sign-in, and accounts for your staff |
-| 8 | [Your brand and rules](17-branding-and-rules.md) | Name, logo, colours, languages, fees, tax and delivery prices |
-| 9 | [Your first restaurant](18-first-store.md) | A live restaurant, a test order end to end |
+| 3 | [Storage for photos and files](12-storage.md) | Two buckets at a storage provider (Amazon S3, Cloudflare R2 or Backblaze B2) where FoodStack keeps every photo and file |
+| 4 | [Maps and addresses](13-maps.md) | Address search, map tiles and road distances you are allowed to use at scale |
+| 5 | [Install FoodStack](14-install.md) | The marketplace running, with secure `https://` addresses |
+| 6 | [Email](15-email.md) | Order updates, sign-in codes and password resets reach people |
+| 7 | [Card payments](16-card-payments.md) | Customers can pay by card (optional; cash works without it) |
+| 8 | [First sign-in and your team](17-first-sign-in.md) | Your own password, two-step sign-in, and accounts for your staff |
+| 9 | [Your brand and rules](18-branding-and-rules.md) | Name, logo, colours, languages, fees, tax and delivery prices |
+| 10 | [Your first restaurant](19-first-store.md) | A live restaurant, a test order end to end |
 
 ## Running it day to day
 

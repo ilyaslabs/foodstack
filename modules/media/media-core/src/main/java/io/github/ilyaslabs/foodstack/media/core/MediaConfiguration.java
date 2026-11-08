@@ -8,6 +8,7 @@ import io.github.ilyaslabs.foodstack.media.core.persistence.MediaAssetRepository
 import io.github.ilyaslabs.foodstack.media.core.processing.ImageProcessor;
 import io.github.ilyaslabs.foodstack.media.core.storage.ObjectStorage;
 import io.github.ilyaslabs.foodstack.media.core.storage.S3ObjectStorage;
+import io.github.ilyaslabs.foodstack.media.core.storage.StorageCheck;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -19,6 +20,8 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
+import org.springframework.beans.factory.SmartInitializingSingleton;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -65,6 +68,19 @@ public class MediaConfiguration {
             storage.ensureBuckets(properties.getPublicBucket(), properties.getPrivateBucket());
         }
         return storage;
+    }
+
+    /** Not in a migrate-only run, which only updates the databases. */
+    @Bean
+    @ConditionalOnProperty(name = "foodstack.migrate-only", havingValue = "false", matchIfMissing = true)
+    SmartInitializingSingleton mediaStorageCheck(S3Client mediaS3Client, S3Presigner mediaS3Presigner,
+            MediaStorageProperties properties, ObjectStorage mediaObjectStorage) {
+        return () -> {
+            if (properties.isCheckOnStart()) {
+                new StorageCheck(mediaS3Client, mediaS3Presigner).check(properties.getPublicBucket(),
+                        properties.getPrivateBucket(), properties.getPublicBaseUrl(), properties.getCheckOrigins());
+            }
+        };
     }
 
     @Bean

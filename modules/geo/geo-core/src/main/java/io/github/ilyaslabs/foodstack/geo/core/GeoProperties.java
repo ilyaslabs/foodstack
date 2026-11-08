@@ -22,6 +22,12 @@ public class GeoProperties {
     /** How long zones and the operator's pricing stay in Redis; changes evict them at once. 0 turns the cache off. */
     private Duration quoteCacheTtl = Duration.ofMinutes(10);
 
+    /**
+     * Google Maps Platform key for {@code google} address search (Geocoding API) and road distances
+     * (Routes API).
+     */
+    private String googleApiKey = "";
+
     private final Geocoding geocoding = new Geocoding();
 
     private final Routing routing = new Routing();
@@ -34,6 +40,14 @@ public class GeoProperties {
         this.quoteCacheTtl = quoteCacheTtl;
     }
 
+    public String getGoogleApiKey() {
+        return this.googleApiKey;
+    }
+
+    public void setGoogleApiKey(String googleApiKey) {
+        this.googleApiKey = googleApiKey;
+    }
+
     public Routing getRouting() {
         return this.routing;
     }
@@ -41,13 +55,13 @@ public class GeoProperties {
     /** Road distance and driving time (TDD 14.1): quotes, rider dispatch and live ETAs. */
     public static class Routing {
 
-        /** {@code osrm}, or {@code none} for the straight-line estimate (the default). */
+        /** {@code osrm}, {@code google}, or {@code none} for the straight-line estimate (the default). */
         private String provider = "none";
 
         /** OSRM base URL, for example {@code http://osrm:5000}. */
         private String url = "";
 
-        /** OSRM profile the server was built with. */
+        /** OSRM profile the server was built with; for Google, the travel mode ({@code driving}, {@code two_wheeler}, {@code cycling}). */
         private String profile = "driving";
 
         /** Average urban speed for the straight-line estimate. */
@@ -130,7 +144,7 @@ public class GeoProperties {
     /** Address search and reverse lookup of a map pin (PRD SE-6). */
     public static class Geocoding {
 
-        /** {@code nominatim} (OpenStreetMap, the default) or {@code none}. */
+        /** {@code nominatim} (OpenStreetMap, the default), {@code google} or {@code none}. */
         private String provider = "nominatim";
 
         /**

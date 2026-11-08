@@ -35,7 +35,7 @@ server {
     # Client-side routes fall back to the app shell.
     location /admin/ {
         add_header Cache-Control "no-cache";
-        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: ${MAP_TILE_ORIGIN}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${MAP_TILE_ORIGIN} https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com; worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'none'";
+        add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: ${MAP_TILE_ORIGIN} ${MEDIA_ORIGINS}; style-src 'self' 'unsafe-inline'; connect-src 'self' ${MAP_TILE_ORIGIN} ${MEDIA_ORIGINS} https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com; worker-src 'self' blob:; manifest-src 'self'; frame-ancestors 'none'";
         try_files $uri $uri/ /admin/index.html;
     }
 }

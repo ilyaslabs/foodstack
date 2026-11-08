@@ -8,6 +8,7 @@ The technical words in this handbook, in plain terms.
 |---|---|
 | **Back office** | FoodStack's website for staff, restaurants and riders, at `https://admin.example.com/admin/` |
 | **Backup** | A copy of your data, made with `./backup.sh` ([guide 20](20-backups.md)) |
+| **Bucket** | A folder at a storage provider (Amazon S3, Cloudflare R2, Backblaze B2) that holds files. FoodStack uses two: a public one for photos and a private one ([guide 12](12-storage.md)) |
 | **Branch** | One location of a restaurant. Every restaurant is a **brand** with one or more branches |
 | **Broker** | One machine of Kafka |
 | **CDN** | Content delivery network: servers around the world that keep copies of images and pages near customers ([runbook 49](49-cdn.md)) |
@@ -17,6 +18,7 @@ The technical words in this handbook, in plain terms.
 | **Container** | A packaged program that runs the same everywhere. Each FoodStack service is one container; Docker runs them |
 | **Cron** | Linux's timer for jobs, such as the nightly backup (`crontab -e`) |
 | **Deployment** | On Kubernetes, a group of identical copies (pods) of a program, such as `foodstack-core` |
+| **CORS** | A rule on a bucket that lets web pages on your addresses send files to it. Without it, uploads from the browser fail ([guide 12](12-storage.md)) |
 | **DNS** | The internet's address book: turns `example.com` into your server's IP address ([guide 11](11-domain-and-dns.md)) |
 | **Docker** | The program that runs the containers on a single server |
 | **`.env`** | The settings file of a single-server install, `/opt/foodstack/.env`. Holds passwords and the keys: keep a copy safe |
@@ -24,12 +26,14 @@ The technical words in this handbook, in plain terms.
 | **Event** | A message from one part of FoodStack to the others, such as "order accepted". Sent through Kafka |
 | **Failed event** | An event that could not be handled after several tries. Waits on the **Failed events** page to be replayed |
 | **Gateway** | On Kubernetes, the front door that receives every request and sends it to the right Deployment. On one server, the `proxy` service (Caddy) does this |
+| **Geocoding** | Turning a typed address into a place on the map, and back. Google or a Nominatim service does it ([guide 13](13-maps.md)) |
 | **Helm** | The installer for Kubernetes. `helm upgrade` applies changes to `my-values.yaml` |
 | **Index** | A sorted list a database keeps so it can find things fast. Also, in Elasticsearch, the collection of restaurants it searches |
 | **Kafka** | The service that carries events between FoodStack's parts, in order, without losing them |
 | **Kubernetes** | Software that runs programs on a cluster of machines, restarts them when they fail, and adds copies when busy |
 | **Ledger** | FoodStack's record of every money movement: what each restaurant and rider earned and is owed |
 | **Logs** | What a program writes about what it is doing. `./logs.sh server` shows them |
+| **Map tiles** | The small square pictures a map is made of, loaded from a tile provider ([guide 13](13-maps.md)) |
 | **Migration** | An update to the database's layout that a new version brings. Runs by itself during an upgrade |
 | **Module** | One part of FoodStack, such as `order`, `store` or `dispatch`. All run together at first; they can be split ([runbook 42](42-split-modules.md)) |
 | **MongoDB** | The database that holds everything that lasts: users, restaurants, orders, money |
@@ -39,20 +43,21 @@ The technical words in this handbook, in plain terms.
 | **Personal-data key** | `FOODSTACK_PII_KEY`: the key that locks customers' emails, phones and addresses in the database. Lose it and they cannot be read again |
 | **Pod** | On Kubernetes, one running copy of a program |
 | **Primary** | The member of a replica set that takes the writes |
-| **Recovery codes** | Ten one-time codes for signing in without your phone ([guide 16](16-first-sign-in.md)) |
+| **Recovery codes** | Ten one-time codes for signing in without your phone ([guide 17](17-first-sign-in.md)) |
 | **Redis** | A fast memory store for short-lived data: caches, limits, live updates, riders' positions |
 | **Replica** | A copy: of a program (more copies share the load) or of data (more copies keep it safe) |
 | **Replica set** | Three or more MongoDB machines holding the same data, so one can fail |
 | **Restore** | Putting a backup back, with `./restore.sh` |
 | **Rollback** | Going back to the version before an upgrade |
 | **Secret** | On Kubernetes, a safe place for passwords and keys, such as `foodstack-secrets` |
+| **Settings file** | `~/foodstack-settings.env`: your bucket and map lines, read once by the installer (`--settings`) and then kept in `.env` |
 | **Shard** | One part of a database split across machines; each shard is a replica set ([runbook 44](44-mongodb-sharding.md)) |
 | **Shard key** | The field that decides which shard a record goes to, such as the order id |
 | **Signing key** | `FOODSTACK_SIGNING_KEYS`: the key that proves a sign-in is real. A new one signs everyone out |
-| **SMTP** | The way programs send email through an email service ([guide 13](13-email.md)) |
+| **SMTP** | The way programs send email through an email service ([guide 15](15-email.md)) |
 | **SSH** | The secure way to type commands on your server from your computer ([guide 10](10-server.md)) |
 | **Topic** | A named stream of events in Kafka, one per FoodStack part, such as `foodstack.order.events` |
 | **TTL** | Time to live: how long DNS answers are remembered. Lower it before moving a site |
-| **Two-step sign-in** | A password plus a code from an authenticator app ([guide 16](16-first-sign-in.md)) |
+| **Two-step sign-in** | A password plus a code from an authenticator app ([guide 17](17-first-sign-in.md)) |
 | **Volume** | Where Docker keeps a service's data on the server, so it survives restarts |
 | **Webhook** | An address another service (Stripe) calls to report something, such as a payment |

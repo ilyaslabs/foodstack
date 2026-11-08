@@ -186,7 +186,7 @@ sequenceDiagram
     participant Mc as MediaController (media-web)
     participant Ms as MediaService (media-core)
     participant Mo as MongoDB foodstack_media
-    participant S3 as Object storage (RustFS / S3)
+    participant S3 as Operator's S3 bucket
     participant Ow as Owning module<br/>(store or settings)
 
     Ap->>Mc: POST /api/v1/media/uploads {purpose, contentType, size} (media:upload)

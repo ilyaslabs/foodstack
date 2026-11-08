@@ -1,4 +1,4 @@
-# 18 Your first restaurant
+# 19 Your first restaurant
 
 [Back to the handbook](README.md)
 
@@ -8,7 +8,7 @@ Every restaurant on FoodStack is a **branch** of a **brand**. The brand holds th
 
 ## What you need
 
-- Your brand and rules set ([guide 17](17-branding-and-rules.md)), with at least the city the restaurant is in.
+- Your brand and rules set ([guide 18](18-branding-and-rules.md)), with at least the city the restaurant is in.
 - From the restaurant: its name and branch name, legal name and tax number, the cuisines, the street address, the owner's email, the commission you agreed (for example 15 %), the menu with prices, and a square logo (at least 512 px) and a wide cover photo (at least 1600 px).
 - The restaurant's position on a map. Open the address in any map app, press and hold on the entrance, and copy the two numbers (latitude and longitude, such as `31.4834, 74.3256`).
 - About 45 minutes, most of it on the menu.
@@ -45,7 +45,7 @@ If you switched on price approval on **Ordering**, changes to branch prices wait
 9. On the **Hours** tab, set the hours for each day and any holidays, and click **Save hours**. The branch's time zone comes from its position.
 10. On the **Delivery** tab, choose who delivers:
     - **The restaurant delivers itself**: draw one or more zones on the map (or a circle with a radius), each with its own delivery charge, minimum order and "free above" amount. Click **Save zones**. Customers outside every zone see "Out of area".
-    - **Your riders deliver**: switch on **Platform riders deliver for this branch** and save. Customers then pay your delivery price ([guide 17](17-branding-and-rules.md), Delivery pricing). You need riders: add them under **Riders**.
+    - **Your riders deliver**: switch on **Platform riders deliver for this branch** and save. Customers then pay your delivery price ([guide 18](18-branding-and-rules.md), Delivery pricing). You need riders: add them under **Riders**.
 
     Pickup can be switched on as well, or instead of delivery.
 

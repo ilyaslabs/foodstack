@@ -1,4 +1,4 @@
-# 17 Your brand and rules
+# 18 Your brand and rules
 
 [Back to the handbook](README.md)
 
@@ -6,7 +6,7 @@ Make the marketplace yours: name, logo and colours, languages and currency, what
 
 ## What you need
 
-- Signed in as an administrator ([guide 16](16-first-sign-in.md)).
+- Signed in as an administrator ([guide 17](17-first-sign-in.md)).
 - Your logo as a PNG or SVG with a transparent background, and your main brand colour (for example `#B71C1C`).
 - Your decisions on fees, tax and delivery prices. Change them any time later; new orders use the new rules.
 - About 30 minutes.
@@ -18,7 +18,7 @@ Every page below has a **Save** button. After saving, each says when it takes ef
 1. **Branding** (menu on the left): the marketplace's name, a short tagline, the logo and the main colour. Customers see them in the header, the browser tab, emails and buttons. The page checks that text stays readable on your colour.
 2. **Languages**: the languages customers can choose (English, Arabic, Urdu and others), the default one for new visitors, the currency and the time zone. Arabic and Urdu switch the whole app to right-to-left.
 3. **Ordering**:
-   - **Payment methods**: cash, card ([guide 15](15-card-payments.md)), and whether customers may save a card.
+   - **Payment methods**: cash, card ([guide 16](16-card-payments.md)), and whether customers may save a card.
    - **Fees and tax**: a service fee (a fixed amount, a percent of the food, or both) and tax (percent of the food after discounts).
    - **Tips and timing**: whether customers can tip the rider (all of it goes to the rider), and **Time to accept**: how long a restaurant has to accept a new order before it is rejected and refunded (3 minutes is a good start).
    - **Menu prices**: whether restaurants' price changes need your approval first.
@@ -32,7 +32,7 @@ Every page below has a **Save** button. After saving, each says when it takes ef
 ## Check it worked
 
 - Open `https://example.com/` in a private window: your name, logo and colour are there, in your default language.
-- Put a dish in a cart once you have a restaurant ([guide 18](18-first-store.md)): checkout shows your fee and tax, and the total adds up.
+- Put a dish in a cart once you have a restaurant ([guide 19](19-first-store.md)): checkout shows your fee and tax, and the total adds up.
 
 ## Undo
 

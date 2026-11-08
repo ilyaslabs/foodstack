@@ -219,16 +219,77 @@ S3_CREATE_BUCKETS: "true"
 SMTP_HOST: {{ printf "%s-mailpit" (include "foodstack.fullname" .) | quote }}
 SMTP_PORT: "1025"
 SMTP_FROM: no-reply@{{ .Values.hosts.web }}
+S3_CHECK_ORIGINS: ""
 {{- else }}
-S3_ENDPOINT: {{ $ds.s3.endpoint | quote }}
-S3_PUBLIC_ENDPOINT: {{ default (include "foodstack.url" (list . .Values.hosts.api)) $ds.s3.publicEndpoint | quote }}
+S3_ENDPOINT: {{ required "datastores.s3.endpoint: your bucket provider's S3 endpoint (handbook guide 12)" $ds.s3.endpoint | quote }}
+S3_REGION: {{ required "datastores.s3.region: the buckets' region (auto for Cloudflare R2)" $ds.s3.region | quote }}
+S3_PATH_STYLE: {{ $ds.s3.pathStyle | quote }}
+S3_PUBLIC_ENDPOINT: {{ default $ds.s3.endpoint $ds.s3.publicEndpoint | quote }}
+S3_PUBLIC_BASE_URL: {{ required "datastores.s3.publicBaseUrl: where browsers load the public bucket's files" $ds.s3.publicBaseUrl | quote }}
 S3_CREATE_BUCKETS: {{ $ds.s3.createBuckets | quote }}
 {{- end }}
 S3_PUBLIC_BUCKET: {{ $ds.s3.publicBucket | quote }}
 S3_PRIVATE_BUCKET: {{ $ds.s3.privateBucket | quote }}
+{{- include "foodstack.mapsConfig" . }}
 {{- range $k, $v := .Values.server.env }}
 {{ $k }}: {{ $v | quote }}
 {{- end }}
+{{- end -}}
+
+{{/* Address search and road distances for the server; outside the trial values a real provider
+     is required (handbook guide 13). */}}
+{{- define "foodstack.mapsConfig" -}}
+{{- $m := .Values.maps -}}
+{{- $provider := lower (default "" $m.geocoding.provider) -}}
+{{- if not .Values.dev.enabled }}
+{{- if not (has $provider (list "google" "nominatim")) }}
+{{- fail "maps.geocoding.provider: google or nominatim (handbook guide 13)" }}
+{{- end }}
+{{- if and (eq $provider "nominatim") (not $m.geocoding.url) }}
+{{- fail "maps.geocoding.url: your Nominatim-compatible provider's URL" }}
+{{- end }}
+{{- if contains "nominatim.openstreetmap.org" (default "" $m.geocoding.url) }}
+{{- fail "maps.geocoding.url: OpenStreetMap's public server allows light use only; use a hosted provider or your own" }}
+{{- end }}
+{{- $_ := required "maps.geocoding.countryCodes: your country's two-letter code" $m.geocoding.countryCodes }}
+{{- end }}
+GEOCODING_PROVIDER: {{ $provider | quote }}
+GEOCODING_URL: {{ default "" $m.geocoding.url | quote }}
+GEOCODING_COUNTRY_CODES: {{ default "" $m.geocoding.countryCodes | quote }}
+ROUTING_PROVIDER: {{ default "none" $m.routing.provider | quote }}
+ROUTING_URL: {{ default "" $m.routing.url | quote }}
+{{- end -}}
+
+{{/* Map tiles for the web apps: required outside the trial values. */}}
+{{- define "foodstack.tileEnv" -}}
+{{- $t := .Values.maps.tiles -}}
+{{- if not .Values.dev.enabled }}
+{{- $_ := required "maps.tiles.url: your tile provider's {z}/{x}/{y} URL (handbook guide 13)" $t.url }}
+{{- $_ := required "maps.tiles.attribution: the credit your tile provider asks for" $t.attribution }}
+{{- if contains "tile.openstreetmap.org" $t.url }}
+{{- fail "maps.tiles.url: OpenStreetMap's public tiles allow light use only; use a hosted provider or your own" }}
+{{- end }}
+{{- end }}
+{{- $u := urlParse $t.url -}}
+{{- toJson (dict "MAP_TILE_URL" $t.url "MAP_ATTRIBUTION" $t.attribution "MAP_TILE_ORIGIN" (printf "%s://%s" $u.scheme $u.host)) -}}
+{{- end -}}
+
+{{/* Where the back office page loads images from and sends uploads to (its security policy). */}}
+{{- define "foodstack.mediaOrigins" -}}
+{{- $s3 := .Values.datastores.s3 -}}
+{{- if .Values.dev.enabled -}}
+{{- else -}}
+{{- $out := list -}}
+{{- $base := urlParse $s3.publicBaseUrl -}}
+{{- $out = append $out (printf "%s://%s" $base.scheme $base.host) -}}
+{{- $up := urlParse (default $s3.endpoint $s3.publicEndpoint) -}}
+{{- $out = append $out (printf "%s://%s" $up.scheme $up.host) -}}
+{{- if not $s3.pathStyle -}}
+{{- $out = append $out (printf "%s://%s.%s" $up.scheme $s3.publicBucket $up.host) -}}
+{{- $out = append $out (printf "%s://%s.%s" $up.scheme $s3.privateBucket $up.host) -}}
+{{- end -}}
+{{- uniq $out | join " " -}}
+{{- end -}}
 {{- end -}}
 
 {{/* Secrets exist before the migrations hook Job runs, and survive helm uninstall. */}}

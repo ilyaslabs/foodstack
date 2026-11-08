@@ -22,30 +22,33 @@ flowchart LR
         R[("Redis 8.2")]
         K[("Kafka 4.1")]
         E[("Elasticsearch 9.4")]
-        O[("RustFS<br/>S3 compatible")]
     end
 
-    N["Nominatim<br/>(OpenStreetMap geocoding)"]
-    T["Map tiles<br/>(OpenStreetMap by default)"]
+    O[("Operator's S3 buckets<br/>Amazon S3, R2, B2")]
+    N["Address search<br/>Google or Nominatim-compatible"]
+    RT["Road distances (optional)<br/>Google Routes or OSRM"]
+    T["Map tiles<br/>{z}/{x}/{y} provider"]
 
     C --> P
     B --> P
     P -- "/api/*, /oauth2/*, /.well-known/*" --> S
-    P -- "/foodstack-public/*, /foodstack-private/*" --> O
     P -- "/admin*" --> BO
     P -- "everything else" --> W
     S --> M
     S --> R
     S --> K
     S --> E
-    S --> O
+    S -- "StorageCheck on start,<br/>writes, signed links" --> O
+    C -- "images, signed uploads" --> O
+    B -- "images, signed uploads" --> O
     S -. "address search,<br/>cache miss only" .-> N
+    S -. "routes" .-> RT
     C -. "map tiles" .-> T
     B -. "map tiles" .-> T
 ```
 
 - The browser apps call the API on the same origin, so there is no CORS between the apps and the server.
-- Images are served straight from object storage through Caddy, never through the Java server.
+- Images are served straight from the operator's public bucket (or a CDN in front of it), never through the Java server; browsers upload with presigned PUT links, allowed by the bucket's CORS rule. The server refuses to start until `StorageCheck` passes. A `--local` trial instead runs a local S3 stand-in behind Caddy (`docker-compose.trial-storage.yml`) and OpenStreetMap's public maps.
 - The server's internal Module-Switch port is not used in this topology: every module is `local` in one JVM.
 - The same code runs on many machines: see [8. How FoodStack scales out](08-scaling.md) for the scaled-out picture and the growth stages.
 

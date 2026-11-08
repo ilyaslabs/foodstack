@@ -2,27 +2,36 @@
 
 [Back to the handbook](README.md)
 
-A backup is a copy of everything you cannot get back otherwise: orders, users, menus, money records, photos and settings. Make one every night, keep copies **off the server**, and practise a restore once before you open, so you know it works on the day you need it.
+A backup is a copy of everything on the server you cannot get back otherwise: orders, users, menus, money records and settings. Photos and files are not on the server: they are in your buckets ([guide 12](12-storage.md)), and your provider keeps them (see [Photos](#photos)). Make one every night, keep copies **off the server**, and practise a restore once before you open, so you know it works on the day you need it.
 
 This guide is for a single-server install. On Kubernetes, see [Kubernetes](#kubernetes) at the end.
 
 ## What is in a backup
 
-`./backup.sh` makes a folder `backups/<date and time>/` in `/opt/foodstack` with three files:
+`./backup.sh` makes a folder `backups/<date and time>/` in `/opt/foodstack` with two files:
 
 | File | What it holds |
 |---|---|
 | `mongodb.archive.gz` | The database: every order, user, menu, payment and ledger entry |
-| `storage.tar.gz` | Uploaded photos and files |
-| `config.tar.gz` | Your settings: `.env` (with the keys), the `config` folder and the version |
+| `config.tar.gz` | Your settings: `.env` (with the keys, bucket and map settings), the `config` folder and the version |
+
+A trial on your own computer (`--local`) keeps photos on the computer, so its backups also have `storage.tar.gz`.
 
 Nothing else needs a backup. The event stream (Kafka), the cache (Redis) and store search (Elasticsearch) are rebuilt from the database.
 
 Backups contain personal data and your keys. Only you can read them on the server; keep the copies just as safe.
 
+### Photos
+
+Turn on **versioning** for both buckets at your provider, so a deleted or overwritten photo can be brought back:
+
+- Amazon S3: the bucket, **Properties**, **Bucket Versioning**, **Enable**. Add a lifecycle rule that deletes noncurrent versions after 30 days.
+- Cloudflare R2: R2 keeps no old versions. For a second copy, copy both buckets to another provider every night with rclone, the same way as [the backups](#copy-backups-off-the-server).
+- Backblaze B2: on by default ("Keep all versions"); set **Lifecycle Settings** to "Keep prior versions for 30 days".
+
 ## What you need
 
-- FoodStack installed ([guide 12](12-install.md)).
+- FoodStack installed ([guide 14](14-install.md)).
 - Somewhere else to keep copies: your own computer, or a storage bucket (Amazon S3, Backblaze B2, Cloudflare R2, Wasabi, or similar).
 - About 20 minutes, plus an hour once for the practice restore.
 
@@ -77,13 +86,13 @@ Use this when data was lost or damaged but the server works. **Everything since 
    ```bash
    ./restore.sh backups/<date and time>
    ```
-   The site goes offline, the database and photos are put back, the cache and search are cleared, and everything starts again. Allow a few minutes; store search fills again a few minutes after the server is up.
+   The site goes offline, the database is put back, the cache and search are cleared, and everything starts again. Allow a few minutes; store search fills again a few minutes after the server is up.
 
 ### Restore on a new server (disaster recovery)
 
 Use this when the server itself is gone.
 
-6. Rent a new server, point your domain at it, and install FoodStack with the **same domains** ([guides 10](10-server.md), [11](11-domain-and-dns.md) and [12](12-install.md)). Do not sign in yet.
+6. Rent a new server, point your domain at it, and install FoodStack with the **same domains** and the **same buckets and map settings** ([guides 10](10-server.md), [11](11-domain-and-dns.md) and [14](14-install.md)). For the settings file, copy the `S3_`, `GEOCODING_`, `GOOGLE_MAPS_API_KEY`, `MAP_` and `ROUTING_` lines from the old `.env` (in your password manager) into `~/foodstack-settings.env`. Do not sign in yet.
 7. Copy the backup folder onto the new server (from your computer or your bucket), into `/opt/foodstack/backups/`. For example, from your computer:
    ```bash
    rsync -av ~/foodstack-backups/<date and time> <your name>@<new server IP>:/opt/foodstack/backups/
@@ -93,7 +102,7 @@ Use this when the server itself is gone.
    FOODSTACK_PII_KEY=...
    FOODSTACK_SIGNING_KEYS=...
    ```
-   Also copy your own additions (the `SMTP_`, `STRIPE_`, map and push lines). **Do not copy the whole old file**: the new install's database passwords are different, and the old ones would stop it from starting.
+   Also copy your own later additions (the `SMTP_`, `STRIPE_` and push lines). **Do not copy the whole old file**: the new install's database passwords are different, and the old ones would stop it from starting.
 9. Restore:
    ```bash
    cd /opt/foodstack
@@ -128,7 +137,7 @@ Use this when the server itself is gone.
 The chart does not take backups for you. Use your provider's tools:
 
 - **MongoDB**: the provider's continuous backup with point-in-time restore (MongoDB Atlas and most managed services offer it), or a nightly `mongodump` of every `foodstack_*` database.
-- **Photos**: turn on versioning in your bucket, and copy it to another region.
+- **Photos**: turn on versioning in your buckets ([Photos](#photos)), and copy them to another region if you want a second copy.
 - **Keys**: copy the Secret `foodstack-secrets` into your password manager after the first install: `kubectl -n foodstack get secret foodstack-secrets -o yaml`.
 
 Restore: put the database back with the provider's tool, then `kubectl -n foodstack rollout restart deploy`. Practise it every three months.
