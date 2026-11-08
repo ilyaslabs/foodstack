@@ -51,6 +51,9 @@ class CatalogueScenario {
             .put("/api/v1/settings/locale").then().log().ifValidationFails().statusCode(200);
         assertThat(this.platform.client().get("/api/v1/settings/locale").<List<String>>path("rtlLanguages"))
             .contains("ar", "ur");
+        // split into services, the others keep the settings they read for up to 30 s (an earlier
+        // journey may just have read them)
+        CouponsAndRefundsScenario.Settings.settle(this.platform);
 
         // and the operator onboards a restaurant
         Response onboarded = admin.postJson("/api/v1/stores", onboarding());

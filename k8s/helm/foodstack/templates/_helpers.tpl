@@ -10,7 +10,7 @@ identity: [/api/v1/auth, /api/v1/me, /api/v1/users, /api/v1/audit, /oauth2, /.we
 settings: [/api/v1/settings]
 media: [/api/v1/media]
 geo: [/api/v1/geo, /api/v1/zones]
-store: [/api/v1/stores, /api/v1/brands]
+store: [/api/v1/stores, /api/v1/brands, /api/v1/price-changes]
 search: [/api/v1/search]
 promotion: [/api/v1/promotions, /api/v1/coupons]
 cart: [/api/v1/carts]
