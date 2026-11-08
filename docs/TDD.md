@@ -56,7 +56,7 @@
  Admin desktop ─────┤    │                      └─► foodstack-server (Spring Boot, all modules)      │
  Future mobile app ─┘    │                              │  ▲ module-switch http (internal :8081)     │
                          │                              ▼  │   when split into several Deployments   │
-                         │   MongoDB   Redis   Kafka   Elasticsearch   S3 (RustFS on one server)         
+                         │   MongoDB   Redis   Kafka   Elasticsearch   S3 (operator's buckets)           
                          └──────────────────────────────────────────────────────────────────────────┘
  External: payment gateway, SMTP, FCM, map tiles / geocoding / routing
 ```
@@ -480,14 +480,14 @@ Redis is a cache and coordination store only; losing it never loses business dat
 
 - `geo` owns store delivery zones (GeoJSON polygons, `geo_zones`), each belonging to one store with a fixed charge, minimum order and free-delivery threshold, and the **operator delivery pricing** (base + per km of road distance, maximum distance, optional peak multiplier, optional city override). `quote` uses the store's zones for self-delivery stores and the operator pricing for operator-delivery stores. `geo` also holds cities.
 - The delivery mode is snapshotted on the order at placement, so the price the customer saw and the party paid always match. `ledger` credits the delivery charge to the store (self-delivery) or the operator (operator delivery), and posts operator rider pay as a percentage of the operator charge (optional minimum) plus tips. If support hands an operator-delivery order back to the store, the charge is re-credited to the store.
-- Provider SPI: `GeocodingProvider`, `RoutingProvider`, `TileConfig`. Default adapter: Nominatim and OSRM (operator self-hosts or uses a hosted provider; public instances are only for demos). Optional Google Maps adapter.
+- Provider SPI: `GeocodingProvider`, `RoutingProvider`, `TileConfig`. Adapters: Nominatim (any compatible service) and Google Geocoding for search; OSRM and Google Routes for road distances, or none (straight line times a road factor). A real install must name a search and tile provider; the public OpenStreetMap servers are used only in `--local` trials (ilyas, 2026-11-08).
 - ETA = prep estimate + routing duration × city traffic factor (configurable). Quotes read a branch's zones and the operator pricing from Redis caches (10 minutes, generation keys, section 10).
 - **Time zones:** every branch has its own IANA zone (`store_stores.timezone`), found from its location when it is created or moved, among the zones of the deployment's country (offline: IANA `zone.tab`, and timeshape boundaries for countries with several zones), and editable by the owner. Opening hours, open-now, closures, operator peak hours, kitchen tickets and order times are in the branch's zone. Branches saved before this use the deployment's zone until next saved.
 
 ## 13. Media storage (S3)
 
 - The `media` module owns uploads. Other modules store only media IDs; `media` resolves them to URLs.
-- Storage goes through an `ObjectStorage` SPI. The default adapter uses the AWS SDK v2 S3 client, so it works with AWS S3 and with S3-compatible stores (RustFS in the unit deployer, local development and tests, and other providers).
+- Storage goes through an `ObjectStorage` SPI. The default adapter uses the AWS SDK v2 S3 client, so it works with AWS S3 and with S3-compatible stores. Every real install (single server or Kubernetes) uses the operator's own buckets (Amazon S3, Cloudflare R2 and Backblaze B2 are documented and tested); a local S3 stand-in (RustFS) runs only in `--local` trials, local development and tests (ilyas, 2026-11-08). Before taking traffic the server runs `StorageCheck`: a test write to both buckets, an anonymous read through `S3_PUBLIC_BASE_URL`, and a CORS preflight per bucket from each site that uploads; any failure stops the start with what to fix.
 - Upload flow: the client asks `POST /api/v1/media/uploads` (type, size, purpose) → receives a short-lived presigned `PUT` URL for `<bucket>/<owningModule>/<entityId>/<uuid>` → uploads directly → calls `complete`. The server never streams large files through the JVM.
 - Processing (on `complete`, on virtual threads): check magic bytes and size limits, strip EXIF/metadata, auto-rotate, resize to fixed variants (`thumb` 160 px, `card` 480 px, `detail` 1080 px), encode as WebP (quality about 80) and optionally AVIF, then delete the raw upload unless keeping originals is switched on. Processing is pure Java (ImageIO, metadata-extractor for EXIF orientation, webp-imageio for WebP, which bundles native libwebp), so it runs in plain `mvn test` and in the JRE image without system packages. AVIF and libvips are follow-ups if throughput needs them.
 - Buckets: `public` (menu, store and branding images; served with `Cache-Control: public, max-age=31536000, immutable` and content-hashed names, so a CDN can sit in front) and `private` (rider documents; access only through 5-minute signed `GET` URLs).
@@ -601,7 +601,7 @@ All services share one Docker network, `foodstack`. Only the reverse proxy publi
 | `kafka` | Apache Kafka | Single node, KRaft mode |
 | `redis` | Redis | Password, AOF persistence |
 | `elasticsearch` | Elasticsearch | Single node, security on, heap sized from `.env` |
-| `storage` | RustFS | S3-compatible storage for media (MinIO no longer publishes images) |
+| `storage` (`--local` trials only) | RustFS | Local S3 stand-in, from `docker-compose.trial-storage.yml`; a real install uses the operator's buckets |
 | `nominatim`, `osrm` (optional) | Nominatim, OSRM | Self-hosted address search and routing for the operator's region; enabled with a Compose profile when not using a hosted maps provider |
 
 Every service has a healthcheck; `server` starts only when its dependencies are healthy. All data and logs are bind-mounted under the install directory, and every service uses `restart: unless-stopped` with log rotation.
@@ -747,7 +747,10 @@ foodstack:
   identity:
     refresh-cookie-secure: true             # false only for a plain-HTTP trial
   storage:
-    endpoint: ${S3_ENDPOINT:}               # empty = AWS S3; RustFS URL on one server
+    endpoint: ${S3_ENDPOINT:}               # the operator's S3-compatible endpoint
+    region: ${S3_REGION:}
+    public-base-url: ${S3_PUBLIC_BASE_URL:} # where browsers load public images (bucket URL or CDN)
+    check-on-start: true                    # StorageCheck before taking traffic
     public-bucket: foodstack-public
     private-bucket: foodstack-private
   migrate-only: false
@@ -937,6 +940,10 @@ M6 is the [Operator handbook](handbook/README.md): nine launch guides, four for 
 | Integration test ports | The harness took free ports from the system's ephemeral range before starting the modules one by one, so an earlier module's outgoing connection could take a later module's port ("Address already in use", seen now and then) | Ports come from 20000 to 32000, below the ephemeral range | None |
 | Settings in the journeys | `CatalogueScenario` turned on Arabic and searched at once; it passed only while no earlier journey had made the split services read the settings (they keep them 30 s) | Journeys that change settings wait out the 30 s when split into services, and not in the monolith | None |
 | Publishing | Every merge to `main` published snapshots to Maven Central and `:edge` images | Nothing is published on a merge; only a GitHub release publishes (Maven Central, Docker Hub, GHCR, charts), ilyas 2026-11-08 | None |
+| Media storage | A single server ran RustFS beside the app and served photos through Caddy; on Kubernetes the back-office page's security policy blocked images and uploads from the bucket | Every real install needs the operator's own S3-compatible buckets; `StorageCheck` (media-core) tests write, public read and CORS on start and stops with what to fix; the installer takes `--settings <file>` (or asks), and the local stand-in runs only for `--local` (ilyas, 2026-11-08). `MEDIA_ORIGINS` adds the bucket addresses to the back office's `img-src` and `connect-src`. Older installs keep their local storage (`FOODSTACK_TRIAL_STORAGE=true`) until moved (handbook guide 12) | None |
+| Maps | The public OpenStreetMap servers were the default for every install | A real install needs a provider: `GoogleGeocodingProvider` (Geocoding API) or any Nominatim-compatible service, any `{z}/{x}/{y}` tile service, and optional `GoogleRoutingProvider` (Routes API `computeRoutes`) or OSRM; `GOOGLE_MAPS_API_KEY`. The installer and the chart refuse the public OSM hosts outside trials | Google tiles (they need a session token, not `{z}/{x}/{y}`) |
+| Backups | `backup.sh` sourced `.env`, and the three-domain `FOODSTACK_SITES` value ran part of itself as a command, so backups failed on a real install | `.env` is no longer sourced; photos are not in backups (bucket versioning instead), except a trial's local store | None |
+| Handbook order | Install came before storage and maps | Guides renumbered: 12 storage (new), 13 maps, 14 install, 15 email, 16 card payments, 17 first sign-in, 18 branding, 19 first store | None |
 
 Checked on a fresh single-server install in this environment: install, backup, restore (later data gone, Redis empty, search index recreated), upgrade to a repackaged release and rollback, the nightly cron line, a full restore onto a new install with the two keys copied, and a wrong key stopping the server. The Kubernetes runbooks are written against the chart and checked with `helm template`; the conversions that need a provider's console (MongoDB sharding, Redis Cluster, more Kafka partitions, a CDN) were not run here. The PRD exit check, someone without an operations background following every guide end to end, is still to do.
 

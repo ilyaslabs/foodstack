@@ -1,4 +1,4 @@
-# 16 First sign-in and your team
+# 17 First sign-in and your team
 
 [Back to the handbook](README.md)
 
@@ -6,9 +6,9 @@ Sign in to the back office for the first time, protect your account, and make ac
 
 ## What you need
 
-- The address, email and password the installer printed ([guide 12](12-install.md)).
+- The address, email and password the installer printed ([guide 14](14-install.md)).
 - Your phone with an **authenticator app** (Google Authenticator, Microsoft Authenticator, 1Password, Authy or similar).
-- Email working ([guide 13](13-email.md)), so your staff can reset forgotten passwords.
+- Email working ([guide 15](15-email.md)), so your staff can reset forgotten passwords.
 - About 15 minutes.
 
 ## Steps
@@ -39,7 +39,7 @@ Sign in to the back office for the first time, protect your account, and make ac
    Give each person the smallest role that lets them do their job.
 9. Click **Make account**, and give them the first password in person or through your password manager's sharing. Ask them to change it at their first sign-in (step 5). Finance and Admin staff set up their authenticator app on their first sign-in, as you did.
 
-Restaurant owners and riders are **not** made here: you add them from the restaurant's page ([guide 18](18-first-store.md)) and from **Riders**.
+Restaurant owners and riders are **not** made here: you add them from the restaurant's page ([guide 19](19-first-store.md)) and from **Riders**.
 
 ## Check it worked
 

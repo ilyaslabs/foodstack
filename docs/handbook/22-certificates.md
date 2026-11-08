@@ -39,7 +39,7 @@ There is nothing to do while it works. To check a certificate:
 
 ### Moving to another domain
 
-5. The addresses are in `/opt/foodstack/.env`, in the lines `FOODSTACK_DOMAIN`, `FOODSTACK_ADMIN_DOMAIN`, `FOODSTACK_API_DOMAIN`, `FOODSTACK_SITES`, `FOODSTACK_HOSTNAMES`, `FOODSTACK_ADMIN_ROOT_HOST`, `FOODSTACK_PUBLIC_URL`, `FOODSTACK_WEB_URL` and `FOODSTACK_ADMIN_URL`. Point the new domain at the server first ([guide 11](11-domain-and-dns.md)), change the old name to the new one on every one of those lines, and run `./restart.sh` (everything restarts, about a minute offline). Then update the Stripe webhook address ([guide 15](15-card-payments.md)) and the Google and Apple sign-in settings, which name your domain too.
+5. The addresses are in `/opt/foodstack/.env`, in the lines `FOODSTACK_DOMAIN`, `FOODSTACK_ADMIN_DOMAIN`, `FOODSTACK_API_DOMAIN`, `FOODSTACK_SITES`, `FOODSTACK_HOSTNAMES`, `FOODSTACK_ADMIN_ROOT_HOST`, `FOODSTACK_PUBLIC_URL`, `FOODSTACK_WEB_URL` and `FOODSTACK_ADMIN_URL`. Point the new domain at the server first ([guide 11](11-domain-and-dns.md)), change the old name to the new one on every one of those lines, and run `./restart.sh` (everything restarts, about a minute offline). Then update the Stripe webhook address ([guide 16](16-card-payments.md)) and the Google and Apple sign-in settings, which name your domain too.
 
 ## Check it worked
 

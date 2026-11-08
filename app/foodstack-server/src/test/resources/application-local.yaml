@@ -20,6 +20,8 @@ foodstack:
       password: foodstack-local
   storage:
     create-buckets: true
+    # The dev servers upload straight to the local storage, which allows these two origins.
+    check-origins: http://localhost:4200,http://localhost:4300
   payment:
     gateway: sandbox
   order:

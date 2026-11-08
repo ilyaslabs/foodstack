@@ -10,12 +10,14 @@ import io.github.ilyaslabs.foodstack.geo.core.events.GeoCacheListener;
 import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricingService;
 import io.github.ilyaslabs.foodstack.geo.core.application.QuoteService;
 import io.github.ilyaslabs.foodstack.geo.core.application.RoutingService;
+import io.github.ilyaslabs.foodstack.geo.core.routing.GoogleRoutingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.routing.OsrmRoutingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.routing.RoutingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.routing.StraightLineRoutingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.application.ZoneService;
 import io.github.ilyaslabs.foodstack.geo.core.geocoding.DisabledGeocodingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.geocoding.GeocodingProvider;
+import io.github.ilyaslabs.foodstack.geo.core.geocoding.GoogleGeocodingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.geocoding.NominatimGeocodingProvider;
 import io.github.ilyaslabs.foodstack.geo.core.persistence.CityRepository;
 import io.github.ilyaslabs.foodstack.geo.core.persistence.OperatorPricingRepository;
@@ -123,12 +125,16 @@ public class GeoConfiguration {
         StraightLineRoutingProvider estimate = new StraightLineRoutingProvider(properties.getRoadFactor(),
                 routing.getEstimateSpeedKmh());
         RoutingProvider provider = null;
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(routing.getTimeout());
+        requestFactory.setReadTimeout(routing.getTimeout());
         if ("osrm".equalsIgnoreCase(routing.getProvider()) && routing.getUrl() != null && !routing.getUrl().isBlank()) {
-            SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-            requestFactory.setConnectTimeout(routing.getTimeout());
-            requestFactory.setReadTimeout(routing.getTimeout());
             provider = new OsrmRoutingProvider(RestClient.builder().requestFactory(requestFactory), routing.getUrl(),
                     routing.getProfile());
+        }
+        else if ("google".equalsIgnoreCase(routing.getProvider())) {
+            provider = new GoogleRoutingProvider(RestClient.builder().requestFactory(requestFactory), routing.getUrl(),
+                    googleKey(properties, "ROUTING_PROVIDER=google"), routing.getProfile());
         }
         return new RoutingService(provider, estimate, redis, namespace, routing.getCacheTtl());
     }
@@ -151,15 +157,34 @@ public class GeoConfiguration {
     @Bean
     GeocodingProvider geoGeocodingProvider(GeoProperties properties) {
         GeoProperties.Geocoding geocoding = properties.getGeocoding();
-        if (!"nominatim".equalsIgnoreCase(geocoding.getProvider())) {
+        boolean google = "google".equalsIgnoreCase(geocoding.getProvider());
+        if (!google && !"nominatim".equalsIgnoreCase(geocoding.getProvider())) {
             return new DisabledGeocodingProvider();
         }
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(geocoding.getTimeout());
         requestFactory.setReadTimeout(geocoding.getTimeout());
         RestClient.Builder builder = RestClient.builder().requestFactory(requestFactory);
+        if (google) {
+            String url = geocoding.getUrl();
+            // the Nominatim default is not Google's address
+            if (url != null && url.contains("nominatim")) {
+                url = null;
+            }
+            return new GoogleGeocodingProvider(builder, url, googleKey(properties, "GEOCODING_PROVIDER=google"),
+                    geocoding.getCountryCodes());
+        }
         return new NominatimGeocodingProvider(builder, geocoding.getUrl(), geocoding.getUserAgent(),
                 geocoding.getCountryCodes());
+    }
+
+    private static String googleKey(GeoProperties properties, String setting) {
+        String key = properties.getGoogleApiKey();
+        if (key == null || key.isBlank()) {
+            throw new IllegalStateException(setting + " needs GOOGLE_MAPS_API_KEY (a Google Maps Platform key with the "
+                    + "Geocoding API and the Routes API turned on)");
+        }
+        return key.strip();
     }
 
     @Bean

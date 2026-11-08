@@ -6,7 +6,7 @@ What the operator's tools do, traced from the unit deployer scripts (`deploy/uni
 
 ## 11.1 Backup and restore on one server
 
-`backup.sh` copies only what cannot be rebuilt. `restore.sh` puts it back and clears the copies that would otherwise be newer than the data.
+`backup.sh` copies only what cannot be rebuilt and lives on the server. Photos and files are in the operator's own buckets (versioned at the provider), so a real install backs up only MongoDB and the settings; a `--local` trial (`FOODSTACK_TRIAL_STORAGE=true`) also tars its local storage stand-in. `restore.sh` puts it back and clears the copies that would otherwise be newer than the data.
 
 ```mermaid
 sequenceDiagram
@@ -14,7 +14,7 @@ sequenceDiagram
     actor Op as Operator (cron or by hand)
     participant B as backup.sh / restore.sh
     participant M as mongodb
-    participant S as storage (RustFS)
+    participant S as storage (trial only)
     participant R as redis
     participant E as elasticsearch
     participant App as proxy, web, backoffice, server
@@ -23,15 +23,19 @@ sequenceDiagram
     Op->>B: ./backup.sh
     B->>M: mongodump --archive --gzip (every database)
     M-->>B: backups/<ts>/mongodb.archive.gz
-    B->>S: tar /data
-    S-->>B: backups/<ts>/storage.tar.gz
+    opt FOODSTACK_TRIAL_STORAGE=true
+        B->>S: tar /data
+        S-->>B: backups/<ts>/storage.tar.gz
+    end
     B->>B: tar .env, config, VERSION → config.tar.gz, then chmod go-rwx
 
     Note over Op,App: Restore
     Op->>B: ./restore.sh backups/<ts>
     B->>App: compose stop proxy web backoffice server
     B->>M: mongorestore --drop --nsInclude foodstack_*.*
-    B->>S: delete /data, untar, restart storage
+    opt trial and storage.tar.gz present
+        B->>S: delete /data, untar, restart storage
+    end
     B->>R: FLUSHALL (caches, leases, limits, live channels)
     B->>E: DELETE foodstack_search_stores_v* (by name)
     B->>App: compose up -d
@@ -74,15 +78,14 @@ sequenceDiagram
     Op->>K: Secret foodstack-keys: old FOODSTACK_SIGNING_KEYS and FOODSTACK_PII_KEY, new internal tokens
     Op->>Old: stop.sh proxy web backoffice server, backup.sh
     Old->>NM: mongorestore foodstack_*.* from mongodb.archive.gz
-    Old->>NS: rclone copy from storage:9000 on the foodstack Docker network
-    Op->>NM: rewrite-media-urls.js: OLD_BASE → NEW_BASE in every foodstack_* collection
-    Op->>K: helm install (same version, secrets.existingSecret)
+    Op->>K: helm install (same version, secrets.existingSecret,<br/>datastores.s3 and maps copied from the old .env)
+    K->>NS: StorageCheck: same buckets, CORS already allows the same two sites
     K->>NM: migrations Job: change sets already applied, nothing to do
     K->>K: server pods start, empty Elasticsearch → index created and filled
     Op->>Op: test through the hosts file, then switch DNS
 ```
 
-Image URLs are copied into brands, menu items and orders when they are written (`logoUrls`, `coverUrls` and the like), so a move of the photos also needs the stored URLs rewritten. `tools/migrate/rewrite-media-urls.js` walks every document of every `foodstack_*` database, replaces strings that start with the old base, and keeps BSON types (dates, longs, decimals, ids) as they are.
+The buckets stay where they are, so photos are not copied and stored image URLs stay valid. Image URLs are copied into brands, menu items and orders when they are written (`logoUrls`, `coverUrls` and the like), so a change of `S3_PUBLIC_BASE_URL` (a CDN, or an old install moving its photos off the server, handbook guide 12) needs the stored URLs rewritten. `tools/migrate/rewrite-media-urls.js` walks every document of every `foodstack_*` database, replaces strings that start with the old base, and keeps BSON types (dates, longs, decimals, ids) as they are.
 
 ## 11.4 Sharding a database that already has data
 

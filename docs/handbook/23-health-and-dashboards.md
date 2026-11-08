@@ -21,7 +21,7 @@ A short routine that catches problems before customers or restaurants call you: 
    ```
    Every service should say `running`, and those with a health check `(healthy)`. The last line gives the disk use; a warning appears above 80 %.
 2. **Did any event fail?** In the back office, **Failed events**. FoodStack passes work between its parts as events (an order was placed, so tell the restaurant). If one keeps failing it waits here instead of being lost. "No failed events. Everything was handled." is what you want. If there are some, see [Failed events](#failed-events) below.
-3. **Did the emails go out?** **Email log**: yesterday's emails show as sent. Failed ones show the error and a **Send again** button ([guide 13](13-email.md)).
+3. **Did the emails go out?** **Email log**: yesterday's emails show as sent. Failed ones show the error and a **Send again** button ([guide 15](15-email.md)).
 4. **Are orders flowing?** **Orders** shows yesterday's orders. Many **Rejected** orders with "did not answer in time" mean a restaurant is not watching **Live orders**. If you run riders, **Dispatch** lists deliveries no rider took.
 5. **Backups**: last night's folder is in `ls backups` ([guide 20](20-backups.md)).
 

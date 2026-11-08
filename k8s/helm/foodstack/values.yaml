@@ -63,9 +63,8 @@ server:
   # Extra environment for every server pod (plain values) and Secrets to load whole (SMTP_*,
   # STRIPE_*, FCM_*: see the deployment guide).
   env:
-    GEOCODING_PROVIDER: nominatim
-    ROUTING_PROVIDER: none
     PAYMENT_GATEWAY: none
+  # GOOGLE_MAPS_API_KEY (maps.geocoding.provider or maps.routing.provider google) belongs in one of these.
   envFromSecrets: []
   # JVM heap as a share of the container memory limit.
   maxRamPercentage: 75
@@ -93,9 +92,8 @@ web:
   resources:
     requests: { cpu: 200m, memory: 256Mi }
     limits: { memory: 512Mi }
-  env:
-    MAP_TILE_URL: https://tile.openstreetmap.org/{z}/{x}/{y}.png
-    MAP_ATTRIBUTION: © OpenStreetMap contributors
+  # Extra environment; the map tiles come from maps.tiles.
+  env: {}
 
 backoffice:
   image: foodstack-backoffice
@@ -105,10 +103,8 @@ backoffice:
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { memory: 128Mi }
-  env:
-    MAP_TILE_URL: https://tile.openstreetmap.org/{z}/{x}/{y}.png
-    MAP_TILE_ORIGIN: https://tile.openstreetmap.org
-    MAP_ATTRIBUTION: © OpenStreetMap contributors
+  # Extra environment; the map tiles and the buckets' addresses come from maps.tiles and datastores.s3.
+  env: {}
 
 # ---------------------------------------------------------------------------------------------
 # Secrets. Generated on first install and kept on upgrades (looked up in the cluster), unless an
@@ -141,14 +137,36 @@ datastores:
     username: elastic
     password: ""
     replicas: 1
+  # Your S3-compatible buckets (Amazon S3, Cloudflare R2, Backblaze B2, ...: handbook guide 12),
+  # checked by the server on start. Required outside the trial values.
   s3:
-    endpoint: ""                 # empty = AWS S3
-    publicEndpoint: ""           # where browsers load images: a CDN or the bucket URL
+    endpoint: ""                 # https://s3.eu-west-1.amazonaws.com, https://<account>.r2.cloudflarestorage.com
+    region: ""                   # eu-west-1; auto for Cloudflare R2
+    pathStyle: true              # false for Amazon S3 (bucket name in the host)
+    publicEndpoint: ""           # where browsers send uploads; empty = endpoint
+    publicBaseUrl: ""            # where browsers load images: the public bucket's URL or your CDN
     accessKey: ""
     secretKey: ""
     publicBucket: foodstack-public
     privateBucket: foodstack-private
     createBuckets: false
+
+# ---------------------------------------------------------------------------------------------
+# Maps (handbook guide 13). Required outside the trial values; OpenStreetMap's public servers are
+# refused, as their rules allow light use only. GOOGLE_MAPS_API_KEY goes in a Secret listed in
+# server.envFromSecrets.
+# ---------------------------------------------------------------------------------------------
+maps:
+  geocoding:
+    provider: ""                 # google, or nominatim (any Nominatim-compatible service)
+    url: ""                      # nominatim only: your provider's URL
+    countryCodes: ""             # your country, such as pk
+  routing:
+    provider: none               # none (straight-line estimate), osrm or google
+    url: ""                      # osrm only
+  tiles:
+    url: ""                      # https://tiles.example.com/{z}/{x}/{y}.png?key=...
+    attribution: ""              # the credit your tile provider asks for
 
 # ---------------------------------------------------------------------------------------------
 # Gateway API: the public entry (TLS, path routing to the module that owns each prefix, edge JWT

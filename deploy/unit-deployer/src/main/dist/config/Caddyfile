@@ -32,12 +32,9 @@
 		}
 	}
 
-	# Media buckets: presigned uploads and public images go straight to object storage. The Host
-	# header is passed unchanged, so upload signatures made for this hostname stay valid.
-	@storage path /foodstack-public/* /foodstack-private/*
-	handle @storage {
-		reverse_proxy storage:9000
-	}
+	# Photos and files: in the operator's buckets, which browsers reach directly. A --local trial
+	# routes its bucket paths to the storage on this machine here (written by install.sh).
+	import storage.caddy
 
 	# The back office; on its own hostname the root opens it.
 	handle /admin* {

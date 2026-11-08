@@ -1,2 +1,3 @@
 {{- /* The back office: static files under /admin/ with a runtime config.json. */ -}}
-{{ include "foodstack.frontend" (list . "backoffice" 8080 (dict "FOODSTACK_API_URL" "") "/admin/config.json" 101) }}
+{{- $env := merge (dict "FOODSTACK_API_URL" "" "MEDIA_ORIGINS" (include "foodstack.mediaOrigins" .)) (include "foodstack.tileEnv" . | fromJson) -}}
+{{ include "foodstack.frontend" (list . "backoffice" 8080 $env "/admin/config.json" 101) }}

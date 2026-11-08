@@ -1,4 +1,4 @@
-# 12 Install FoodStack
+# 14 Install FoodStack
 
 [Back to the handbook](README.md)
 
@@ -8,6 +8,7 @@ One command installs everything on your server: the customer app, the back offic
 
 - The server from [guide 10](10-server.md), signed in as your own user.
 - Your three names pointing at it ([guide 11](11-domain-and-dns.md)). Check with `nslookup` first: the installer needs them to get certificates.
+- The settings file `~/foodstack-settings.env` with your storage buckets ([guide 12](12-storage.md)) and map provider ([guide 13](13-maps.md)).
 - An email address for the first administrator account (yours).
 - A password manager open, to save what the installer prints.
 - About 15 minutes.
@@ -21,18 +22,20 @@ One command installs everything on your server: the customer app, the back offic
    unzip unit-deployer-<version>.zip
    cd unit-deployer-<version>
    ```
-2. **Run the installer**, with your names and email:
+2. **Run the installer**, with your names, email and settings file:
    ```bash
    sudo ./install.sh /opt/foodstack \
      --domain example.com \
      --admin-domain admin.example.com \
      --api-domain api.example.com \
      --admin-email you@example.com \
+     --settings ~/foodstack-settings.env \
      --systemd
    ```
    - `/opt/foodstack` is where FoodStack lives: its settings, logs and backups. Keep this folder; every other guide uses it.
+   - `--settings` reads your buckets and map provider. If a line is missing, the installer asks for it (secrets are not shown as you type). Without the file it asks for everything.
    - `--systemd` makes FoodStack start again by itself when the server restarts.
-   - It checks the server first, then works for a few minutes (downloading takes most of it). It asks you nothing.
+   - It checks the server and your settings first, then works for a few minutes (downloading takes most of it). Before it says it is running, FoodStack tests your buckets; if they are not right, it stops and says what to fix.
 3. **Save what it prints at the end**, in your password manager:
    ```
    FoodStack 1.0.0 is running.
@@ -46,7 +49,7 @@ One command installs everything on your server: the customer app, the back offic
    ```bash
    sudo cat /opt/foodstack/.env
    ```
-   Copy everything it shows into a secure note named "FoodStack .env".
+   Copy everything it shows into a secure note named "FoodStack .env". It now holds your bucket and map settings too, so you can delete `~/foodstack-settings.env`: `rm ~/foodstack-settings.env`.
 5. **Let your user run the FoodStack scripts** without `sudo` (the folder belongs to root because of step 2):
    ```bash
    sudo chown -R $USER /opt/foodstack
@@ -65,8 +68,9 @@ Then, in your browser:
 
 - `https://example.com/` shows the customer app asking for a location, with a padlock in the address bar.
 - `https://admin.example.com/admin/` shows the sign-in page.
+- After you sign in, a restaurant logo you add shows, and its address starts with your `S3_PUBLIC_BASE_URL`.
 
-Continue with [Email](13-email.md), then [First sign-in](16-first-sign-in.md).
+Continue with [Email](15-email.md), then [First sign-in](17-first-sign-in.md).
 
 ## Undo
 
@@ -75,11 +79,11 @@ cd /opt/foodstack
 ./uninstall.sh
 ```
 
-Type `delete` when asked. This removes FoodStack and **all its data** (orders, users, photos). The `backups` folder is kept; delete it yourself when you no longer need it: `sudo rm -rf /opt/foodstack`.
+Type `delete` when asked. This removes FoodStack and **all its data on the server** (orders, users). Photos stay in your buckets; empty them at your provider if you want them gone. The `backups` folder is kept; delete it yourself when you no longer need it: `sudo rm -rf /opt/foodstack`.
 
 ## Try it on your own computer first
 
-If you want to look around before renting a server, install a trial on your laptop. It needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Mac or Windows) or Docker (Linux), and no domain:
+If you want to look around before renting a server, install a trial on your laptop. It needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Mac or Windows) or Docker (Linux), and no domain, buckets or map provider (photos stay on your computer and maps use OpenStreetMap's public servers, which is fine for a look around):
 
 ```bash
 ./install.sh ~/foodstack --local
@@ -91,6 +95,9 @@ Then open `http://foodstack.localhost:8080/admin/` and sign in as `admin@foodsta
 
 | Message | What to do |
 |---|---|
+| "Missing settings: …" | Those lines are not in your settings file. Add them ([guide 12](12-storage.md), [guide 13](13-maps.md)) and run the same command again |
+| "… must start with https://", "OpenStreetMap's public servers …", "MAP_TILE_URL must contain {z}, {x} and {y}" | Fix that line in your settings file ([guide 13](13-maps.md)) and run the same command again |
+| "Storage check failed: …" | The buckets are not ready. The message says what; [guide 12](12-storage.md#if-something-goes-wrong) lists each fix. Then run the same command again |
 | "Port 80 is already in use" | Another web server runs on this machine. Stop it (`sudo systemctl disable --now apache2` or `nginx`), or use a fresh server |
 | "Docker is not installed" or "Cannot reach Docker" | Go back to [guide 10](10-server.md), step 7 |
 | "… already holds an installation" | FoodStack is already installed there. Use [Upgrades](21-upgrades.md) to update it |

@@ -4,13 +4,13 @@
 source "$(dirname "$0")/lib/common.sh"
 require_install_dir
 if [[ "${1:-}" != --yes ]]; then
-  printf 'This deletes all FoodStack data on this machine (orders, users, media). Backups in %s/backups are kept.\nType "delete" to continue: ' "$FOODSTACK_HOME"
+  printf 'This deletes all FoodStack data on this machine (orders, users; photos only on a trial; your buckets are not touched). Backups in %s/backups are kept.\nType "delete" to continue: ' "$FOODSTACK_HOME"
   read -r answer
   [[ "$answer" == delete ]] || fail "Cancelled."
 fi
 info "Removing containers and data volumes"
 compose --profile search down -v --remove-orphans
-rm -rf "${FOODSTACK_HOME:?}"/{.env,.installed,.previous,app,config,lib,logs,docker-compose.yml,.env.example,VERSION,README.md}
+rm -rf "${FOODSTACK_HOME:?}"/{.env,.installed,.previous,app,config,lib,logs,docker-compose.yml,docker-compose.trial-storage.yml,.env.example,VERSION,README.md}
 rm -f "$FOODSTACK_HOME"/{start,stop,restart,status,logs,backup,restore,upgrade}.sh
 if [[ -f /etc/systemd/system/foodstack.service ]]; then
   info "Removing the systemd unit (needs root)"

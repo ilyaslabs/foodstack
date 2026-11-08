@@ -1,6 +1,8 @@
 # FoodStack on one server (TDD 17). Started by the scripts in this folder; settings live in .env.
 # Only the proxy publishes ports. Data lives in named Docker volumes (foodstack_*), so no host
 # folder permissions are needed on Linux or Docker Desktop; logs are under ./logs.
+# Photos and files live in the operator's S3 buckets (S3_* in .env, handbook guide 12); only a
+# --local trial adds storage on this machine (docker-compose.trial-storage.yml).
 
 name: foodstack
 
@@ -25,6 +27,7 @@ services:
       FOODSTACK_ADMIN_ROOT_HOST: ${FOODSTACK_ADMIN_ROOT_HOST}
     volumes:
       - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./config/storage.caddy:/etc/caddy/storage.caddy:ro
       - caddy:/data
     depends_on:
       server:
@@ -43,8 +46,6 @@ services:
       MONGODB_URI: mongodb://foodstack:${MONGODB_PASSWORD}@mongodb:27017/?replicaSet=rs0&authSource=admin
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       KAFKA_BOOTSTRAP: kafka:9092
-      S3_ENDPOINT: http://storage:9000
-      S3_CREATE_BUCKETS: "true"
       ELASTICSEARCH_URIS: http://elasticsearch:9200
       ELASTICSEARCH_USERNAME: elastic
       LOGGING_FILE_NAME: /logs/server.log
@@ -66,8 +67,6 @@ services:
       redis:
         condition: service_healthy
       kafka:
-        condition: service_healthy
-      storage:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
@@ -103,6 +102,8 @@ services:
       MAP_TILE_URL: ${MAP_TILE_URL:-https://tile.openstreetmap.org/{z}/{x}/{y}.png}
       MAP_TILE_ORIGIN: ${MAP_TILE_ORIGIN:-https://tile.openstreetmap.org}
       MAP_ATTRIBUTION: ${MAP_ATTRIBUTION:-© OpenStreetMap contributors}
+      # Where the page loads images and sends uploads (the buckets' addresses), for its security policy.
+      MEDIA_ORIGINS: ${MEDIA_ORIGINS:-}
     volumes:
       - ./app/backoffice:/usr/share/nginx/html/admin:ro
       - ./config/backoffice.conf.template:/etc/nginx/templates/default.conf.template:ro
@@ -184,21 +185,6 @@ services:
       retries: 30
       start_period: 20s
 
-  storage:
-    <<: *service
-    # S3-compatible object storage for media (Apache-2.0).
-    image: rustfs/rustfs:1.0.4
-    environment:
-      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
-      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
-    volumes:
-      - storage:/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health > /dev/null || wget -qO- http://localhost:9000/health > /dev/null"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-
   elasticsearch:
     <<: *service
     # Store search (M1). The official image from Docker Hub.
@@ -223,7 +209,6 @@ volumes:
   mongodb:
   redis:
   kafka:
-  storage:
   elasticsearch:
   caddy:
 

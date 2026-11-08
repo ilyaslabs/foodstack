@@ -161,28 +161,41 @@ foodstack:
     # Keep true; false only for a plain-HTTP trial in a browser that refuses Secure cookies there.
     refresh-cookie-secure: ${FOODSTACK_REFRESH_COOKIE_SECURE:true}
   geo:
-    # Address search and reverse geocoding (OpenStreetMap Nominatim by default, "none" to switch off).
+    # Google Maps Platform key, for GEOCODING_PROVIDER=google and ROUTING_PROVIDER=google.
+    google-api-key: ${GOOGLE_MAPS_API_KEY:}
+    # Address search and reverse geocoding: "nominatim" (any Nominatim-compatible service at
+    # GEOCODING_URL), "google", or "none". The public OpenStreetMap server is for trials only.
     geocoding:
       provider: ${GEOCODING_PROVIDER:nominatim}
       url: ${GEOCODING_URL:https://nominatim.openstreetmap.org}
       user-agent: FoodStack (${FOODSTACK_PUBLIC_URL:http://localhost:8080})
       country-codes: ${GEOCODING_COUNTRY_CODES:}
-    # Road distance and driving time for quotes, dispatch and live ETAs: "osrm" with ROUTING_URL, or
-    # "none" for the straight-line estimate (distance x road factor at an urban average speed).
+    # Road distance and driving time for quotes, dispatch and live ETAs: "osrm" with ROUTING_URL,
+    # "google", or "none" for the straight-line estimate (distance x road factor at an urban average speed).
     routing:
       provider: ${ROUTING_PROVIDER:none}
       url: ${ROUTING_URL:}
   search:
     index-prefix: ${SEARCH_INDEX_PREFIX:foodstack_}
     replicas: ${SEARCH_REPLICAS:0}
+  # Media: the operator's S3-compatible buckets (Amazon S3, Cloudflare R2, Backblaze B2, ...),
+  # checked on start (handbook guide 12). Only trials and tests run their own storage.
   storage:
     endpoint: ${S3_ENDPOINT:http://localhost:9000}
-    public-endpoint: ${S3_PUBLIC_ENDPOINT:${FOODSTACK_PUBLIC_URL:http://localhost:9000}}
+    region: ${S3_REGION:us-east-1}
+    path-style: ${S3_PATH_STYLE:true}
+    # Where browsers send uploads (signed links); usually the same as S3_ENDPOINT.
+    public-endpoint: ${S3_PUBLIC_ENDPOINT:${S3_ENDPOINT:http://localhost:9000}}
+    # Where browsers load images from the public bucket: its public address or a CDN.
+    public-base-url: ${S3_PUBLIC_BASE_URL:}
     access-key: ${S3_ACCESS_KEY:}
     secret-key: ${S3_SECRET_KEY:}
     public-bucket: ${S3_PUBLIC_BUCKET:foodstack-public}
     private-bucket: ${S3_PRIVATE_BUCKET:foodstack-private}
     create-buckets: ${S3_CREATE_BUCKETS:false}
+    check-on-start: ${S3_CHECK_ON_START:true}
+    # The sites that upload from the browser; the check makes sure the buckets allow them (CORS).
+    check-origins: ${S3_CHECK_ORIGINS:${FOODSTACK_WEB_URL:},${FOODSTACK_ADMIN_URL:}}
   order:
     # Where the customer app lives: card payment pages send the customer back to <web-url>/orders/<id>.
     web-url: ${FOODSTACK_WEB_URL:${FOODSTACK_PUBLIC_URL:http://localhost:8080}}

@@ -2,20 +2,24 @@
 # Installs FoodStack on this server (TDD 17.3, deployment guide 3.2).
 #
 #   ./install.sh <folder> --domain example.com [--admin-domain admin.example.com] [--api-domain api.example.com]
-#       [--admin-email ops@example.com] [--http] [--http-port 80] [--https-port 443] [--systemd]
+#       [--admin-email ops@example.com] [--settings my-settings.env] [--http] [--http-port 80] [--https-port 443] [--systemd]
 #   ./install.sh <folder> --local     (trial on this computer: http://foodstack.localhost:8080, no certificates)
 #
-# Needs only Docker. Use sudo only for a folder you can't write to (like /opt) or for --systemd.
+# A real install needs your storage buckets and map provider (handbook guides 12 and 13): put the
+# S3_*, GEOCODING_*, MAP_* (and GOOGLE_MAPS_API_KEY, ROUTING_*) lines in a settings file, set them
+# in the environment, or answer the questions. Needs only Docker. Use sudo only for a folder you
+# can't write to (like /opt) or for --systemd.
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 source "$here/lib/common.sh"
 
-usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+usage() { sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 
 target=""; domain=""; admin_domain=""; api_domain=""; admin_email=""; scheme=https; local_trial=false
-http_port=80; https_port=443; systemd=false
+http_port=80; https_port=443; systemd=false; settings_file=""
 while (( $# )); do
   case "$1" in
+    --settings) settings_file=$2; shift 2 ;;
     --domain) domain=$2; shift 2 ;;
     --admin-domain) admin_domain=$2; shift 2 ;;
     --api-domain) api_domain=$2; shift 2 ;;
@@ -36,7 +40,99 @@ api_domain=${api_domain:-$domain}
 admin_email=${admin_email:-admin@$domain}
 [[ "$admin_email" == *@*.* ]] || admin_email="admin@${domain}.local"
 
-# --- 1. Checks -------------------------------------------------------------------------------
+# --- 1. Storage and maps ----------------------------------------------------------------------
+# Real installs: the operator's buckets and map provider, from --settings, the environment or
+# questions. A --local trial keeps photos on this machine and uses OpenStreetMap's public servers.
+settings_keys=(S3_ENDPOINT S3_REGION S3_ACCESS_KEY S3_SECRET_KEY S3_PUBLIC_BUCKET S3_PRIVATE_BUCKET S3_PUBLIC_BASE_URL
+  S3_PUBLIC_ENDPOINT S3_PATH_STYLE GEOCODING_PROVIDER GEOCODING_URL GEOCODING_COUNTRY_CODES GOOGLE_MAPS_API_KEY
+  MAP_TILE_URL MAP_ATTRIBUTION ROUTING_PROVIDER ROUTING_URL)
+if [[ -n "$settings_file" ]]; then
+  [[ -f "$settings_file" ]] || fail "No settings file at $settings_file"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line=${line%$'\r'}
+    [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+    key=${line%%=*}; value=${line#*=}
+    key=$(echo "$key" | tr -d '[:space:]')
+    value=${value#\"}; value=${value%\"}; value=${value#\'}; value=${value%\'}
+    for known in "${settings_keys[@]}"; do
+      [[ "$key" == "$known" ]] && { printf -v "$key" '%s' "$value"; export "${key?}"; }
+    done
+  done < "$settings_file"
+fi
+ask() {  # ask <variable> <question> [secret]
+  local name=$1 question=$2 secret=${3:-} answer
+  [[ -n "${!name:-}" ]] && return 0
+  [[ -t 0 ]] || return 0
+  if [[ -n "$secret" ]]; then read -r -s -p "$question: " answer; echo; else read -r -p "$question: " answer; fi
+  printf -v "$name" '%s' "$answer"
+}
+origin_of() { echo "$1" | sed -E 's#^(https?://[^/]+).*#\1#'; }
+if [[ $local_trial != true ]]; then
+  info "Storage buckets (handbook guide 12)"
+  ask S3_ENDPOINT "S3 endpoint (for example https://s3.eu-west-1.amazonaws.com, https://<account>.r2.cloudflarestorage.com)"
+  case "${S3_ENDPOINT:-}" in
+    *.amazonaws.com*) S3_REGION=${S3_REGION:-$(echo "$S3_ENDPOINT" | sed -nE 's#.*s3[.-]([a-z0-9-]+)\.amazonaws\.com.*#\1#p')}
+      S3_PATH_STYLE=${S3_PATH_STYLE:-false} ;;
+    *.r2.cloudflarestorage.com*) S3_REGION=${S3_REGION:-auto} ;;
+    *.backblazeb2.com*) S3_REGION=${S3_REGION:-$(echo "$S3_ENDPOINT" | sed -nE 's#.*s3\.([a-z0-9-]+)\.backblazeb2\.com.*#\1#p')} ;;
+  esac
+  ask S3_REGION "Bucket region (for example eu-west-1; auto for Cloudflare R2)"
+  ask S3_PUBLIC_BUCKET "Public bucket (images anyone may see)"
+  ask S3_PRIVATE_BUCKET "Private bucket (rider papers and other private files)"
+  ask S3_PUBLIC_BASE_URL "Address where the public bucket's files are served (its public URL or your CDN)"
+  ask S3_ACCESS_KEY "Access key id"
+  ask S3_SECRET_KEY "Secret access key" secret
+  info "Maps (handbook guide 13)"
+  ask GEOCODING_PROVIDER "Address search provider: google, or nominatim (any Nominatim-compatible service)"
+  GEOCODING_PROVIDER=$(echo "${GEOCODING_PROVIDER:-}" | tr '[:upper:]' '[:lower:]')
+  if [[ "$GEOCODING_PROVIDER" == nominatim ]]; then
+    ask GEOCODING_URL "Nominatim-compatible address search URL from your provider"
+  fi
+  if [[ "$GEOCODING_PROVIDER" == google || "${ROUTING_PROVIDER:-}" == google ]]; then
+    ask GOOGLE_MAPS_API_KEY "Google Maps Platform API key (Geocoding API and Routes API on)" secret
+  fi
+  ask GEOCODING_COUNTRY_CODES "Your country's two-letter code (for example pk)"
+  ask MAP_TILE_URL "Map tiles URL with {z}/{x}/{y} (and your key)"
+  ask MAP_ATTRIBUTION "Map credit your tile provider asks for (for example © Provider © OpenStreetMap contributors)"
+
+  missing=()
+  for key in S3_ENDPOINT S3_REGION S3_ACCESS_KEY S3_SECRET_KEY S3_PUBLIC_BUCKET S3_PRIVATE_BUCKET S3_PUBLIC_BASE_URL \
+    GEOCODING_PROVIDER GEOCODING_COUNTRY_CODES MAP_TILE_URL MAP_ATTRIBUTION; do
+    [[ -n "${!key:-}" ]] || missing+=("$key")
+  done
+  [[ "${GEOCODING_PROVIDER:-}" != nominatim || -n "${GEOCODING_URL:-}" ]] || missing+=(GEOCODING_URL)
+  if [[ "${GEOCODING_PROVIDER:-}" == google || "${ROUTING_PROVIDER:-}" == google ]]; then
+    [[ -n "${GOOGLE_MAPS_API_KEY:-}" ]] || missing+=(GOOGLE_MAPS_API_KEY)
+  fi
+  (( ${#missing[@]} == 0 )) || fail "Missing settings: ${missing[*]}. A real install needs your storage buckets and map provider: see handbook guides 12 and 13, then pass --settings <file>."
+  for key in "${settings_keys[@]}"; do
+    [[ "${!key:-}" != *"'"* ]] || fail "$key may not contain a single quote."
+  done
+  [[ "$GEOCODING_PROVIDER" == google || "$GEOCODING_PROVIDER" == nominatim ]] \
+    || fail "GEOCODING_PROVIDER must be google or nominatim."
+  [[ "${ROUTING_PROVIDER:-none}" =~ ^(none|osrm|google)$ ]] || fail "ROUTING_PROVIDER must be none, osrm or google."
+  [[ "${ROUTING_PROVIDER:-none}" != osrm || -n "${ROUTING_URL:-}" ]] || fail "ROUTING_PROVIDER=osrm needs ROUTING_URL."
+  for url in "$S3_ENDPOINT" "$S3_PUBLIC_BASE_URL" "$MAP_TILE_URL" ${GEOCODING_URL:+"$GEOCODING_URL"}; do
+    [[ "$url" == https://* ]] || fail "$url must start with https://"
+  done
+  if [[ "${GEOCODING_URL:-}" == *nominatim.openstreetmap.org* || "$MAP_TILE_URL" == *tile.openstreetmap.org* ]]; then
+    fail "OpenStreetMap's public servers allow only light use and are for --local trials. Use a hosted provider or your own (handbook guide 13)."
+  fi
+  [[ "$MAP_TILE_URL" == *"{z}"*"{x}"*"{y}"* ]] || fail "MAP_TILE_URL must contain {z}, {x} and {y}."
+  S3_PATH_STYLE=${S3_PATH_STYLE:-true}
+  S3_PUBLIC_ENDPOINT=${S3_PUBLIC_ENDPOINT:-$S3_ENDPOINT}
+  MAP_TILE_ORIGIN=$(origin_of "$MAP_TILE_URL")
+  # The back office page may load images from, and send uploads to, these addresses.
+  upload_origin=$(origin_of "$S3_PUBLIC_ENDPOINT")
+  media_origins="$(origin_of "$S3_PUBLIC_BASE_URL") $upload_origin"
+  if [[ "$S3_PATH_STYLE" == false ]]; then
+    host=${upload_origin#https://}
+    media_origins="$media_origins https://$S3_PUBLIC_BUCKET.$host https://$S3_PRIVATE_BUCKET.$host"
+  fi
+  MEDIA_ORIGINS=$(echo "$media_origins" | tr ' ' '\n' | awk 'NF && !seen[$0]++' | paste -sd' ' -)
+fi
+
+# --- 1b. Checks ------------------------------------------------------------------------------
 info "Checking the server"
 command -v docker > /dev/null || fail "Docker is not installed (Docker Engine 27+ with Compose v2 is required)."
 docker compose version > /dev/null 2>&1 || fail "Docker Compose v2 is not available (docker compose)."
@@ -118,6 +214,57 @@ fi
 mem_mb=$(( mem_gb * 1024 ))
 java_heap=$(( mem_mb >= 30000 ? 6 : (mem_mb >= 15000 ? 4 : 2) ))g
 
+# A value in single quotes: docker compose reads it as it is (no $ expansion), and so does bash.
+q() {
+  [[ "$1" != *"'"* ]] || fail "Settings may not contain a single quote: $1"
+  printf "'%s'" "$1"
+}
+
+storage_and_maps() {
+  if [[ $local_trial == true ]]; then
+    cat << TRIAL
+# Trial: photos on this machine (docker-compose.trial-storage.yml) and OpenStreetMap's public map
+# servers, which allow light use only. A real install uses your buckets and map provider.
+FOODSTACK_TRIAL_STORAGE=true
+S3_ACCESS_KEY=foodstack-$(secret 6)
+S3_SECRET_KEY=$(secret)
+S3_PUBLIC_BUCKET=foodstack-public
+S3_PRIVATE_BUCKET=foodstack-private
+S3_PUBLIC_ENDPOINT=$(url "$admin_domain")
+GEOCODING_PROVIDER=nominatim
+GEOCODING_URL=https://nominatim.openstreetmap.org
+GEOCODING_COUNTRY_CODES=
+ROUTING_PROVIDER=none
+ROUTING_URL=
+TRIAL
+  else
+    cat << REAL
+# Photos and files: your buckets (handbook guide 12). Checked every time the server starts.
+S3_ENDPOINT=$(q "$S3_ENDPOINT")
+S3_REGION=$(q "$S3_REGION")
+S3_PATH_STYLE=$(q "$S3_PATH_STYLE")
+S3_PUBLIC_ENDPOINT=$(q "$S3_PUBLIC_ENDPOINT")
+S3_PUBLIC_BASE_URL=$(q "$S3_PUBLIC_BASE_URL")
+S3_ACCESS_KEY=$(q "$S3_ACCESS_KEY")
+S3_SECRET_KEY=$(q "$S3_SECRET_KEY")
+S3_PUBLIC_BUCKET=$(q "$S3_PUBLIC_BUCKET")
+S3_PRIVATE_BUCKET=$(q "$S3_PRIVATE_BUCKET")
+MEDIA_ORIGINS=$(q "$MEDIA_ORIGINS")
+# Maps (handbook guide 13)
+GEOCODING_PROVIDER=$(q "$GEOCODING_PROVIDER")
+GEOCODING_URL=$(q "${GEOCODING_URL:-}")
+GEOCODING_COUNTRY_CODES=$(q "$GEOCODING_COUNTRY_CODES")
+GOOGLE_MAPS_API_KEY=$(q "${GOOGLE_MAPS_API_KEY:-}")
+MAP_TILE_URL=$(q "$MAP_TILE_URL")
+MAP_TILE_ORIGIN=$(q "$MAP_TILE_ORIGIN")
+MAP_ATTRIBUTION=$(q "$MAP_ATTRIBUTION")
+# Road distances: none (straight-line estimate), osrm with ROUTING_URL, or google
+ROUTING_PROVIDER=$(q "${ROUTING_PROVIDER:-none}")
+ROUTING_URL=$(q "${ROUTING_URL:-}")
+REAL
+  fi
+}
+
 umask 077
 cat > "$target/.env" << ENV
 # Generated by install.sh on $(date -u +%Y-%m-%dT%H:%M:%SZ). See .env.example for every setting.
@@ -147,11 +294,7 @@ KAFKA_CLUSTER_ID=$kafka_cluster_id
 ELASTICSEARCH_PASSWORD=$(secret)
 KAFKA_TOPIC_PARTITIONS=24
 KAFKA_REPLICATION_FACTOR=1
-S3_ACCESS_KEY=foodstack-$(secret 6)
-S3_SECRET_KEY=$(secret)
-S3_PUBLIC_BUCKET=foodstack-public
-S3_PRIVATE_BUCKET=foodstack-private
-S3_PUBLIC_ENDPOINT=$(url "$admin_domain")
+$(storage_and_maps)
 # Email: fill these in to send order updates and sign-in codes (see .env.example), then ./restart.sh server
 SMTP_HOST=
 SMTP_PORT=587
@@ -164,9 +307,6 @@ SMTP_FROM=
 FCM_SERVICE_ACCOUNT=
 FCM_WEB_CONFIG=
 FCM_VAPID_KEY=
-# Road distances: none (straight-line estimate) or osrm with ROUTING_URL
-ROUTING_PROVIDER=none
-ROUTING_URL=
 # Card payments: none (cash only) or stripe with STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET (see .env.example)
 PAYMENT_GATEWAY=none
 STRIPE_SECRET_KEY=
@@ -185,7 +325,9 @@ umask 022
 info "Copying the application"
 cp -a "$here/app/." "$target/app/"
 cp -a "$here/config/Caddyfile" "$here/config/backoffice.conf.template" "$target/config/"
-cp -a "$here/docker-compose.yml" "$here/.env.example" "$here/VERSION" "$here/README.md" "$target/"
+write_storage_route "$target" "$local_trial"
+cp -a "$here/docker-compose.yml" "$here/docker-compose.trial-storage.yml" "$here/.env.example" "$here/VERSION" \
+  "$here/README.md" "$target/"
 cp -a "$here/lib/." "$target/lib/"
 for script in start stop restart status logs backup restore upgrade uninstall; do
   cp -a "$here/$script.sh" "$target/"
@@ -201,6 +343,7 @@ if $macos && [[ -n ${SUDO_USER:-} ]]; then
     sudo -H -u "$SUDO_USER" docker pull -q "$image" > /dev/null 2>&1 || true
   done
 fi
+if trial_storage; then datastores+=(storage); fi
 info "Starting the datastores"
 compose up -d "${datastores[@]}"
 for service in "${datastores[@]}"; do wait_healthy "$service" 300; done
@@ -210,7 +353,13 @@ compose run --rm --no-deps server java -jar /app/foodstack-server.jar --foodstac
 
 info "Starting FoodStack"
 compose up -d
-for service in server web backoffice; do wait_healthy "$service" 300; done
+# The server checks the buckets before it starts; say plainly what to fix when they don't work.
+if ! (wait_healthy server 300); then
+  problem=$(compose logs --no-log-prefix server 2> /dev/null | grep -o 'Storage check failed.*' | tail -1 || true)
+  [[ -z "$problem" ]] || fail "$problem Fix it (handbook guide 12) and run install.sh again."
+  fail "The server did not start; see ./logs.sh server."
+fi
+for service in web backoffice; do wait_healthy "$service" 300; done
 
 # --- 6. Start on boot ------------------------------------------------------------------------
 if $systemd; then
@@ -246,5 +395,5 @@ FoodStack $(cat "$target/VERSION") is running.
   Password     : $admin_password   ($([[ $local_trial == true ]] && echo "fixed for --local trials" || echo "shown once"); also in $target/.env as FOODSTACK_ADMIN_PASSWORD)
 
 Back up $target/.env now (password manager): it holds the PII key, which cannot be recovered.
-Next: ./status.sh, then the Operator handbook from guide 13 (email): https://github.com/ilyaslabs/foodstack/tree/main/docs/handbook
+Next: ./status.sh, then the Operator handbook from guide 15 (email): https://github.com/ilyaslabs/foodstack/tree/main/docs/handbook
 DONE

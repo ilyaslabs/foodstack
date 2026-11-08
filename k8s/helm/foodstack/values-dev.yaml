@@ -23,8 +23,6 @@ server:
       requests: { cpu: 250m, memory: 1Gi }
       limits: { memory: 1Gi }
   env:
-    GEOCODING_PROVIDER: nominatim
-    ROUTING_PROVIDER: none
     PAYMENT_GATEWAY: sandbox
     PAYMENT_SANDBOX_SECRET: trial-sandbox-secret
 
@@ -39,6 +37,15 @@ backoffice:
 datastores:
   kafka:
     topicPartitions: 6
+
+# OpenStreetMap's public servers: light use only, fine for a trial.
+maps:
+  geocoding:
+    provider: nominatim
+    url: https://nominatim.openstreetmap.org
+  tiles:
+    url: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+    attribution: © OpenStreetMap contributors
 
 gateway:
   autoscaling: { min: 1, max: 2, targetCPU: 80 }

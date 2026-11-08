@@ -8,9 +8,16 @@ info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
 fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 
+# Whether this install keeps photos on this machine: --local trials, and installs made before
+# real buckets were required (handbook guide 12 moves them).
+trial_storage() {
+  grep -qx 'FOODSTACK_TRIAL_STORAGE=true' "$FOODSTACK_HOME/.env" 2> /dev/null
+}
+
 compose() {
-  docker compose --project-directory "$FOODSTACK_HOME" --env-file "$FOODSTACK_HOME/.env" \
-    -f "$FOODSTACK_HOME/docker-compose.yml" "$@"
+  local files=(-f "$FOODSTACK_HOME/docker-compose.yml")
+  if trial_storage; then files+=(-f "$FOODSTACK_HOME/docker-compose.trial-storage.yml"); fi
+  docker compose --project-directory "$FOODSTACK_HOME" --env-file "$FOODSTACK_HOME/.env" "${files[@]}" "$@"
 }
 
 require_install_dir() {
@@ -33,5 +40,22 @@ wait_healthy() {
   fail "$service did not become healthy within ${timeout}s"
 }
 
-datastores=(mongodb redis kafka storage)
+# The proxy's route for a trial's bucket paths, or nothing for a real install.
+write_storage_route() {  # write_storage_route <install dir> <true|false>
+  if [[ $2 == true ]]; then
+    cat > "$1/config/storage.caddy" << 'ROUTE'
+# Trial storage on this machine: presigned uploads and public images go to it. The Host header is
+# passed unchanged, so upload signatures made for this hostname stay valid.
+@storage path /foodstack-public/* /foodstack-private/*
+handle @storage {
+	reverse_proxy storage:9000
+}
+ROUTE
+  else
+    echo "# Photos and files are in your buckets (handbook guide 12); browsers reach them directly." > "$1/config/storage.caddy"
+  fi
+}
+
+datastores=(mongodb redis kafka)
+if trial_storage; then datastores+=(storage); fi
 apps=(server web backoffice proxy)

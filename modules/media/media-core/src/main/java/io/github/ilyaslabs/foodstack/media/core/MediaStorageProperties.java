@@ -1,6 +1,9 @@
 package io.github.ilyaslabs.foodstack.media.core;
 
+import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -35,6 +38,15 @@ public class MediaStorageProperties {
 
     /** Create the buckets (and the public read policy) at startup. */
     private boolean createBuckets;
+
+    /** Check the buckets before the server takes traffic, and refuse to start when they don't work. */
+    private boolean checkOnStart = true;
+
+    /**
+     * Sites whose pages upload straight to the buckets (the customer app and the back office); the
+     * check makes sure the buckets' CORS rules let them. Empty when uploads go through the same site.
+     */
+    private List<String> checkOrigins = new ArrayList<>();
 
     /** Keep the original upload after processing. */
     private boolean keepOriginals;
@@ -126,6 +138,31 @@ public class MediaStorageProperties {
 
     public void setCreateBuckets(boolean createBuckets) {
         this.createBuckets = createBuckets;
+    }
+
+    public boolean isCheckOnStart() {
+        return this.checkOnStart;
+    }
+
+    public void setCheckOnStart(boolean checkOnStart) {
+        this.checkOnStart = checkOnStart;
+    }
+
+    /** Origins, without paths or blanks, each once. */
+    public List<String> getCheckOrigins() {
+        return this.checkOrigins.stream()
+            .map(String::strip)
+            .filter((o) -> !o.isEmpty())
+            .map((o) -> {
+                URI uri = URI.create(o);
+                return uri.getScheme() + "://" + uri.getRawAuthority();
+            })
+            .distinct()
+            .toList();
+    }
+
+    public void setCheckOrigins(List<String> checkOrigins) {
+        this.checkOrigins = (checkOrigins != null) ? new ArrayList<>(checkOrigins) : new ArrayList<>();
     }
 
     public boolean isKeepOriginals() {

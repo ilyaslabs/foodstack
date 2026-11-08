@@ -24,7 +24,7 @@ Expect
 Check
 - `~/foodstack/.env` exists with permission `-rw-------` (600) and holds generated passwords and keys. `FOODSTACK_ENVIRONMENT=production`, `PAYMENT_GATEWAY=none`.
 - `~/foodstack/config/mongodb-keyfile` is read-only for its owner (400).
-- `docker volume ls` shows `foodstack_mongodb`, `foodstack_storage` and the other data volumes.
+- `docker volume ls` shows `foodstack_mongodb`, `foodstack_storage` (the trial's local photo store) and the other data volumes. `.env` has `FOODSTACK_TRIAL_STORAGE=true`.
 - No demo data: only the administrator exists in `identity_users`.
 
 ### OPS-02 The installer refuses what would break things
@@ -42,6 +42,44 @@ Expect
 2. "FoodStack is already installed on this machine in …. Run …/uninstall.sh first."
 3. "Port 8080 is already in use. Pick another with --http-port / --https-port."
 4. "Removing an unfinished earlier install", then it finishes normally.
+
+### OPS-02b Install for real with your own buckets and map provider
+
+Who: operator · Where: a server with the three names pointing at it (handbook guides 10 and 11), buckets made as in handbook guide 12 (do it once each with Amazon S3, Cloudflare R2 and Backblaze B2 before a release), and a map provider (guide 13: once with Google, once with a Nominatim-compatible provider)
+
+Steps
+1. Write `~/foodstack-settings.env` with the `S3_*`, `GEOCODING_*` (and `GOOGLE_MAPS_API_KEY`), `MAP_*` and `ROUTING_*` lines, then run the install of handbook guide 14 with `--settings ~/foodstack-settings.env`.
+2. Run it again on a fresh server with the file missing two lines (for example `S3_SECRET_KEY` and `MAP_ATTRIBUTION`), from a terminal.
+3. Sign in to the back office, add a brand logo and a dish photo, and open a branch's **Delivery** tab.
+4. In the customer app, search for a street, and get a delivery quote on a store page.
+
+Expect
+- Step 1 asks nothing and ends with "FoodStack … is running.".
+- Step 2 asks for the two missing values (the secret is not shown as you type), then installs.
+- Step 3: the photos upload and show; their address starts with `S3_PUBLIC_BASE_URL`. The map shows the provider's tiles and its credit.
+- Step 4: suggestions appear, only in `GEOCODING_COUNTRY_CODES`. With `ROUTING_PROVIDER=google` the quote's distance follows the roads.
+
+Check
+- `docker volume ls` has no `foodstack_storage`; `docker compose ps` has no `storage` service. `.env` has the S3 and map lines, quoted, and a `MEDIA_ORIGINS` line.
+- `./logs.sh server` shows "Storage check passed: buckets … and …, images at …".
+- In each bucket, no `_foodstack-check/` file is left behind.
+- Browser F12, Console: no blocked image, upload or tile address in the back office.
+
+### OPS-02c Missing or wrong buckets and maps stop the install
+
+Who: tester · Where: a server as in OPS-02b, or any computer with Docker for steps 1 to 3 (they stop before anything starts)
+
+Steps
+1. `./install.sh ~/fs --domain example.com` with no settings file, input not from a terminal (`< /dev/null`).
+2. A settings file with `MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png`; then one with `GEOCODING_PROVIDER=google` and no key; then one with `S3_ENDPOINT=http://…`.
+3. A settings file with `MAP_TILE_URL` without `{z}`.
+4. On a server as in OPS-02b, install once each with: a bucket name mistyped; a wrong secret key; the public bucket not public; the CORS rule removed from the private bucket.
+
+Expect
+1. "Missing settings: S3_ENDPOINT … A real install needs your storage buckets and map provider: see handbook guides 12 and 13, then pass --settings <file>." Nothing is created.
+2. "OpenStreetMap's public servers allow only light use and are for --local trials. …"; "Missing settings: GOOGLE_MAPS_API_KEY …"; "http://… must start with https://".
+3. "MAP_TILE_URL must contain {z}, {x} and {y}."
+4. The install stops with "Storage check failed: …" and what to fix, in order: "the bucket '…' does not exist …"; "the access key may not write to the bucket '…' … Check S3_ACCESS_KEY and S3_SECRET_KEY …"; "a test file in the public bucket is not readable by everyone at … (HTTP 403) …"; "the bucket '…' does not allow uploads from https://admin.example.com (CORS …)". After the fix, the same command installs.
 
 ### OPS-03 Health checks
 
@@ -126,7 +164,7 @@ Check
 
 ### OPS-07 Back up and restore
 
-Who: tester · Where: a trial install (OPS-01) with a store, an order and a dish photo
+Who: tester · Where: a trial install (OPS-01) with a store, an order and a dish photo. On a real install (OPS-02b) the same, without `storage.tar.gz`: photos are in the buckets
 
 Steps
 1. `./backup.sh`.
@@ -181,6 +219,18 @@ Check
 - `backups/` has a new folder from the upgrade. `.previous/` holds the files of the version before.
 - The migration logs in `foodstack_<module>.<module>_databasechangelog` have the new change sets.
 
+### OPS-08b Upgrade an install that kept photos on the server
+
+Who: tester · Where: an install made with a release from before buckets were required, with a dish photo
+
+Steps
+1. `./upgrade.sh <new zip>`.
+2. Follow handbook guide 12, "Move photos from this server", to buckets of your own.
+
+Expect
+- Step 1 warns "Photos are still kept on this server" and points to guide 12; the site keeps working with the photos where they were (`.env` gains `FOODSTACK_TRIAL_STORAGE=true`).
+- Step 2: the photo shows from the bucket's address; `docker volume ls` no longer has `foodstack_storage`, and backups no longer have `storage.tar.gz`.
+
 ### OPS-09 Production refuses unsafe settings
 
 Who: tester · Where: a trial install's `.env`
@@ -221,6 +271,7 @@ Expect
 - Step 4: Deployments change one at a time, and the app keeps working during the change. No data moves.
 
 Check
+- `helm template` without `values-dev.yaml` and without `datastores.s3` or `maps` stops with a message naming the missing value (for example "datastores.s3.endpoint: your bucket provider's S3 endpoint (handbook guide 12)"), and with `maps.tiles.url` on `tile.openstreetmap.org` it refuses the public server.
 - `kubectl -n foodstack get gateway,httproute,hpa` shows the routes and autoscalers.
 - An API call without a token to a signed-in route answers 401 from the gateway; a forged token too.
 - Every pod is in the mesh: `kubectl -n foodstack get pods -L istio.io/dataplane-mode` shows `ambient` for each FoodStack pod.

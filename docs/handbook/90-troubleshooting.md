@@ -27,23 +27,23 @@ Most problems show in one of these. When you ask the FoodStack team for help, se
 
 | What you see | Likely cause | What to do |
 |---|---|---|
-| "That email and password do not match." | Wrong password, or the wrong account | "Forgot password?" on the sign-in page (needs email, [guide 13](13-email.md)) |
-| The authenticator code is refused | The phone's clock is off | Automatic date and time on the phone ([guide 16](16-first-sign-in.md)) |
+| "That email and password do not match." | Wrong password, or the wrong account | "Forgot password?" on the sign-in page (needs email, [guide 15](15-email.md)) |
+| The authenticator code is refused | The phone's clock is off | Automatic date and time on the phone ([guide 17](17-first-sign-in.md)) |
 | A staff member lost their phone and codes | | **Users**, their row, **Reset two-step sign-in**, after checking it is them |
 | Signed out again and again on the customer app | The app and the API are on different sites, or the cookie is blocked | Keep `example.com` and `api.example.com` on the same domain; `FOODSTACK_REFRESH_COOKIE_SECURE=true` in `.env` with HTTPS |
 | "Too many tries" | Ten wrong passwords in 15 minutes | Wait 15 minutes |
-| No sign-in code email | Email not set up, or in spam | **Email log** ([guide 13](13-email.md)) |
+| No sign-in code email | Email not set up, or in spam | **Email log** ([guide 15](15-email.md)) |
 
 ## Orders and restaurants
 
 | What you see | Likely cause | What to do |
 |---|---|---|
-| Orders are rejected by themselves | Nobody accepted within **Time to accept** | The restaurant keeps **Live orders** open with **Turn on sound** ([guide 18](18-first-store.md)) |
-| A restaurant does not appear for customers | Not live, closed now, or the customer is outside its zones | The branch page's status and readiness box, **Hours**, and **Delivery** ([guide 18](18-first-store.md)) |
-| Card orders stay "Waiting for payment" | Stripe's reports do not reach FoodStack | Webhook address and secret ([guide 15](15-card-payments.md)) |
-| Checkout shows no card option | Card is off, or Stripe is not set up | **Ordering**, and `PAYMENT_GATEWAY=stripe` ([guide 15](15-card-payments.md)) |
-| Totals look wrong | A fee, tax or delivery price setting | **Ordering** and **Delivery pricing** ([guide 17](17-branding-and-rules.md)) |
-| No rider takes deliveries | No riders online nearby, or the search radius is small | **Dispatch** lists them; **Rider pay** sets how far to look ([guide 17](17-branding-and-rules.md)) |
+| Orders are rejected by themselves | Nobody accepted within **Time to accept** | The restaurant keeps **Live orders** open with **Turn on sound** ([guide 19](19-first-store.md)) |
+| A restaurant does not appear for customers | Not live, closed now, or the customer is outside its zones | The branch page's status and readiness box, **Hours**, and **Delivery** ([guide 19](19-first-store.md)) |
+| Card orders stay "Waiting for payment" | Stripe's reports do not reach FoodStack | Webhook address and secret ([guide 16](16-card-payments.md)) |
+| Checkout shows no card option | Card is off, or Stripe is not set up | **Ordering**, and `PAYMENT_GATEWAY=stripe` ([guide 16](16-card-payments.md)) |
+| Totals look wrong | A fee, tax or delivery price setting | **Ordering** and **Delivery pricing** ([guide 18](18-branding-and-rules.md)) |
+| No rider takes deliveries | No riders online nearby, or the search radius is small | **Dispatch** lists them; **Rider pay** sets how far to look ([guide 18](18-branding-and-rules.md)) |
 | A restaurant was told late, or a customer email came late | Events are waiting | **Failed events**; on Kubernetes, the **FoodStack events** dashboard ([guide 23](23-health-and-dashboards.md)) |
 | Search shows old results or none | The search index is behind or empty | Restaurants must be live with a delivery area or pickup. Changes arrive within seconds and a full re-read runs every 24 hours; if a change is stuck, look in **Failed events** |
 
@@ -51,12 +51,14 @@ Most problems show in one of these. When you ask the FoodStack team for help, se
 
 | What you see | Likely cause | What to do |
 |---|---|---|
-| **Email log**: "Email is not set up (SMTP_HOST)" | `SMTP_HOST` or `SMTP_FROM` empty, or not restarted | [Guide 13](13-email.md) |
-| **Email log**: "Authentication failed" or "timed out" | Wrong SMTP details, or port 587 blocked by the provider | [Guide 13](13-email.md) |
-| "Address search is not available right now." | The search service cannot be reached | [Guide 14](14-maps.md) |
-| The map is grey | Tile address and origin do not match | [Guide 14](14-maps.md) |
+| **Email log**: "Email is not set up (SMTP_HOST)" | `SMTP_HOST` or `SMTP_FROM` empty, or not restarted | [Guide 15](15-email.md) |
+| **Email log**: "Authentication failed" or "timed out" | Wrong SMTP details, or port 587 blocked by the provider | [Guide 15](15-email.md) |
+| "Address search is not available right now." | The search service cannot be reached | [Guide 13](13-maps.md) |
+| The map is grey | Tile address and origin do not match | [Guide 13](13-maps.md) |
 | A photo upload is refused | Over 10 MB, or not PNG, JPEG, WebP or SVG | Make it smaller |
-| Photos broken after moving to Kubernetes or a CDN | Stored image addresses still name the old place | [Runbook 40](40-move-to-kubernetes.md) step 8, [runbook 49](49-cdn.md) step 4 |
+| Photos broken after moving them to your buckets or a CDN | Stored image addresses still name the old place | [Guide 12](12-storage.md#move-photos-from-this-server), [runbook 49](49-cdn.md) step 4 |
+| The server does not start: "Storage check failed: …" | A bucket is missing, not public, not writable, or has no CORS rule for your two sites | [Guide 12](12-storage.md#if-something-goes-wrong) |
+| The server does not start: "… needs GOOGLE_MAPS_API_KEY" | Google is chosen for maps but the key is missing | [Guide 13](13-maps.md) |
 
 ## The server and its services
 

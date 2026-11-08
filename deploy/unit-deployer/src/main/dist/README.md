@@ -5,10 +5,16 @@ Docker Compose and the scripts below. Full instructions: `docs/deployment-guide.
 
 ```bash
 sudo ./install.sh /opt/foodstack --domain example.com --admin-domain admin.example.com \
-  --api-domain api.example.com --admin-email ops@example.com
+  --api-domain api.example.com --admin-email ops@example.com --settings ~/foodstack-settings.env
 ```
 
-For a quick trial on your own computer, no sudo needed: `./install.sh ~/foodstack --local`, then open
+A real install needs your own S3-compatible buckets (Amazon S3, Cloudflare R2, Backblaze B2) and a map
+provider (Google, or any Nominatim-compatible search plus a `{z}/{x}/{y}` tile service): the settings file
+holds their `S3_*`, `GEOCODING_*`, `GOOGLE_MAPS_API_KEY`, `MAP_*` and `ROUTING_*` lines (handbook guides
+12 and 13), and the installer asks for anything missing. The server checks the buckets on start.
+
+For a quick trial on your own computer, no sudo needed and no buckets or map provider (photos stay on the
+computer, maps use OpenStreetMap's public servers): `./install.sh ~/foodstack --local`, then open
 `http://foodstack.localhost:8080/admin/`. `sudo` is only needed for a folder you can't write to (like `/opt`) or `--systemd`.
 If an install stops part way, fix the cause and run the same command again: it cleans up and starts over.
 
@@ -19,11 +25,12 @@ If an install stops part way, fix the cause and run the same command again: it c
 | `restart.sh [service]` | Restart everything or one service |
 | `status.sh` | Health of every service and disk usage |
 | `logs.sh [service]` | Follow logs |
-| `backup.sh` | MongoDB dump, media and configuration into `backups/<timestamp>` |
+| `backup.sh` | MongoDB dump and configuration into `backups/<timestamp>` (photos are in your buckets; a trial's local photos too) |
 | `restore.sh <backup-dir>` | Restore a backup |
 | `upgrade.sh <zip>` / `--rollback` | Back up, replace the application, migrate, restart / go back to the previous files |
 | `uninstall.sh [--yes]` | Remove the containers and all data volumes (asks first); backups are kept |
 
 Services: `proxy` (Caddy), `server` (Temurin 25 JRE with the mounted jar), `web` (Node, SSR),
 `backoffice` (nginx-unprivileged), `mongodb` (single-node replica set), `kafka` (KRaft),
-`redis`, `storage` (RustFS, S3-compatible), and `elasticsearch` (store search). Data lives in named Docker volumes `foodstack_<service>`; `backup.sh` covers what needs backing up.
+`redis` and `elasticsearch` (store search); a `--local` trial adds `storage`, a local S3 stand-in
+(`docker-compose.trial-storage.yml`). Data lives in named Docker volumes `foodstack_<service>`; `backup.sh` covers what needs backing up.
