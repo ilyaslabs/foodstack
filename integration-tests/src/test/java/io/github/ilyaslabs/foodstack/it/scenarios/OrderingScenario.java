@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
-import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
 import io.github.ilyaslabs.foodstack.it.support.Mailbox;
 import io.github.ilyaslabs.foodstack.it.support.PlatformEvents;
@@ -25,8 +24,7 @@ import static org.awaitility.Awaitility.await;
  * pays by card on the gateway's page; the store sees it on its board, accepts it and hands it over.
  * A double tap places one order; a store can reject a cash order; a blocked customer cannot order.
  */
-@BothTopologies
-class OrderingScenario {
+abstract class OrderingScenario {
 
     private final FoodstackPlatform platform;
 

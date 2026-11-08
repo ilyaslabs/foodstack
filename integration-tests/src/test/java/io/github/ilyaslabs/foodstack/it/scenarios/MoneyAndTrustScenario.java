@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
-import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
 import io.github.ilyaslabs.foodstack.it.support.Mailbox;
 import io.github.ilyaslabs.foodstack.it.support.Topology;
@@ -26,8 +25,7 @@ import static org.awaitility.Awaitility.await;
  * it and the store replies. A customer downloads their data and deletes their account, getting
  * the operator's own wording of the email, and their name leaves the store's records.
  */
-@BothTopologies
-class MoneyAndTrustScenario {
+abstract class MoneyAndTrustScenario {
 
     private final FoodstackPlatform platform;
 
@@ -42,7 +40,7 @@ class MoneyAndTrustScenario {
 
         // given: cards are typed in the app and may be kept for next time
         ordering(admin, Map.of("cardStyle", "EMBEDDED", "savedCardsEnabled", true));
-        // (split into services, payment keeps the settings it read for up to 30 seconds)
+        // (split into services, payment keeps the settings it read for a short while)
         await().atMost(Duration.ofSeconds(45)).pollInterval(Duration.ofSeconds(1)).untilAsserted(() -> {
             Response options = this.platform.client().get("/api/v1/payments/options");
             assertThat(options.<String>path("cardStyle")).isEqualTo("EMBEDDED");

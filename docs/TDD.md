@@ -33,7 +33,7 @@
 | D11 | Maps | Provider SPI; default OpenStreetMap stack (MapLibre, Nominatim, OSRM); Google Maps adapter |
 | D12 | Front-end | Angular workspace, two apps (`web`, `backoffice`), Angular Material 3 with design tokens, no micro-frontends |
 | D13 | Repository | Monorepo: backend, frontend, `k8s/helm`, docs |
-| D14 | Artifacts | Maven `io.github.ilyaslabs:foodstack-*`; images `ilyaslabs/foodstack-server`, `ilyaslabs/foodstack-web`, and `ilyaslabs/foodstack-backoffice` on Docker Hub, mirrored to GHCR |
+| D14 | Artifacts | Maven `io.github.ilyaslabs:foodstack-*`; images in one Docker Hub repository, `ilyasdotdev/ilyaslabs-foodstack`, told apart by tag (`server-<version>`, `web-<version>`, `backoffice-<version>`), mirrored to `ghcr.io/ilyaslabs/foodstack` |
 | D15 | Kubernetes | **Optional.** Helm chart; managed datastores in production, in-cluster datastores with `values-dev.yaml`; one `topology` value (`monolith` default, `split`, `microservices`, `custom`) generates every Deployment, route and Module-Switch setting (section 18.2) |
 | D16 | Service mesh | Istio ambient mode (ztunnel mTLS, waypoints for L7), Gateway API for ingress |
 | D17 | Observability | OpenTelemetry; optional Prometheus, Grafana, Tempo and Loki stack |
@@ -523,7 +523,7 @@ frontend/
 
 ### 14.3 Images
 
-`ilyaslabs/foodstack-web` runs the SSR Node server; `ilyaslabs/foodstack-backoffice` is static assets on `nginx-unprivileged`. Both are non-root with read-only filesystems.
+`ilyasdotdev/ilyaslabs-foodstack:web-<version>` runs the SSR Node server; `…:backoffice-<version>` is static assets on `nginx-unprivileged`. Both are non-root with read-only filesystems.
 
 ## 15. Build, CI/CD and releases
 
@@ -944,6 +944,7 @@ M6 is the [Operator handbook](handbook/README.md): nine launch guides, four for 
 | Maps | The public OpenStreetMap servers were the default for every install | A real install needs a provider: `GoogleGeocodingProvider` (Geocoding API) or any Nominatim-compatible service, any `{z}/{x}/{y}` tile service, and optional `GoogleRoutingProvider` (Routes API `computeRoutes`) or OSRM; `GOOGLE_MAPS_API_KEY`. The installer and the chart refuse the public OSM hosts outside trials | Google tiles (they need a session token, not `{z}/{x}/{y}`) |
 | Backups | `backup.sh` sourced `.env`, and the three-domain `FOODSTACK_SITES` value ran part of itself as a command, so backups failed on a real install | `.env` is no longer sourced; photos are not in backups (bucket versioning instead), except a trial's local store | None |
 | Handbook order | Install came before storage and maps | Guides renumbered: 12 storage (new), 13 maps, 14 install, 15 email, 16 card payments, 17 first sign-in, 18 branding, 19 first store | None |
+| Test run time | `mvn test` took about 23 minutes here (25+ on a laptop): every module started its own containers, the two integration passes ran one after the other, and journeys that change settings waited 31 s each for the services' settings cache | One set of containers for the whole build (Testcontainers reuse, set by the root POM), `mvn -T 1C` builds modules side by side, `MonolithLane` and `MicroservicesLane` run together (JUnit parallel, platform starts kept one at a time because Liquibase cannot migrate two namespaces at once in one process), and the tests set the services' settings cache to 1 s (`foodstack.settings.remote-cache-ttl`). The integration tests take 2 min 18 s instead of 8 min; the whole run about 9 min (8 min 55 s from cold, 8 min 47 s with the containers kept). Kept containers hold earlier runs' data, so every test names its databases, indexes and mailboxes freshly (a search test and the SMTP test did not, and were fixed) | None |
 
 Checked on a fresh single-server install in this environment: install, backup, restore (later data gone, Redis empty, search index recreated), upgrade to a repackaged release and rollback, the nightly cron line, a full restore onto a new install with the two keys copied, and a wrong key stopping the server. The Kubernetes runbooks are written against the chart and checked with `helm template`; the conversions that need a provider's console (MongoDB sharding, Redis Cluster, more Kafka partitions, a CDN) were not run here. The PRD exit check, someone without an operations background following every guide end to end, is still to do.
 

@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
-import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
 import io.github.ilyaslabs.foodstack.it.support.Topology;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
@@ -25,8 +24,7 @@ import static org.awaitility.Awaitility.await;
  * list, with the module and consumer named; replaying it sends it to that consumer only, and a
  * replay that fails again comes back as a new entry; an operator can dismiss one.
  */
-@BothTopologies
-class DeadLetterScenario {
+abstract class DeadLetterScenario {
 
     private final FoodstackPlatform platform;
 

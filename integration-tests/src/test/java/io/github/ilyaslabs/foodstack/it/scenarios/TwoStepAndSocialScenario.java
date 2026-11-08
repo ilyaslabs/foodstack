@@ -7,7 +7,6 @@ import java.util.Set;
 
 import io.github.ilyaslabs.foodstack.identity.core.security.Totp;
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
-import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
 import io.github.ilyaslabs.foodstack.it.support.SocialProviderStub;
 import io.github.ilyaslabs.foodstack.it.support.Topology;
@@ -22,8 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * first sign-in, then signs in with codes or a recovery code; an administrator removes it after a
  * lost phone. A customer signs in with Google, and the same Google account finds the same customer.
  */
-@BothTopologies
-class TwoStepAndSocialScenario {
+abstract class TwoStepAndSocialScenario {
 
     private final FoodstackPlatform platform;
 

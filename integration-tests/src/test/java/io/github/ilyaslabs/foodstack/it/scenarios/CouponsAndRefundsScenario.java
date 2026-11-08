@@ -12,7 +12,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import io.github.ilyaslabs.foodstack.it.scenarios.MoneyAndTrustScenario.Store;
 import io.github.ilyaslabs.foodstack.it.scenarios.MoneyAndTrustScenario.Stores;
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
-import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
 import io.github.ilyaslabs.foodstack.it.support.PlatformEvents;
 import io.github.ilyaslabs.foodstack.it.support.Topology;
@@ -31,8 +30,7 @@ import static org.awaitility.Awaitility.await;
  * gets the coupon back; support refunds part of a finished order to the card, once charged to the
  * store and once borne by the operator, and the branch's payout follows.
  */
-@BothTopologies
-class CouponsAndRefundsScenario {
+abstract class CouponsAndRefundsScenario {
 
     private final FoodstackPlatform platform;
 
@@ -203,14 +201,16 @@ class CouponsAndRefundsScenario {
         }
 
         /**
-         * Split into services, other modules keep the settings they read for up to 30 seconds; in
-         * one process they read them directly.
+         * Split into services, other modules keep the settings they read for a while
+         * ({@link FoodstackPlatform#SETTINGS_CACHE}, 30 s in production); in one process they read
+         * them directly.
          */
         static void settle(FoodstackPlatform platform) {
             if (platform.topology() == Topology.MONOLITH) {
                 return;
             }
-            await().pollDelay(Duration.ofSeconds(31)).atMost(Duration.ofSeconds(40)).until(() -> true);
+            Duration cache = FoodstackPlatform.SETTINGS_CACHE;
+            await().pollDelay(cache.plusMillis(500)).atMost(cache.plusSeconds(5)).until(() -> true);
         }
     }
 }

@@ -93,7 +93,7 @@ class ElasticsearchStoreSearchEngineTest {
     void earlyWrite() throws Exception {
         // given: an older version let a write auto-create a plain index under the alias name
         ElasticsearchStoreSearchEngine early = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
-                new SearchProperties("early_", 0, 15_000, null));
+                new SearchProperties(FoodstackContainers.uniqueName() + "_early_", 0, 15_000, null));
         this.client.indices().create((c) -> c.index(early.alias()));
 
         // when: a catalogue event arrives before the bootstrap ran
@@ -114,7 +114,7 @@ class ElasticsearchStoreSearchEngineTest {
     void openFirstAcrossPages() throws Exception {
         // given: a closed branch right next to the customer and an open one further away
         ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
-                new SearchProperties("openfirst_", 0, 15_000, null));
+                new SearchProperties(FoodstackContainers.uniqueName() + "_openfirst_", 0, 15_000, null));
         assertThat(engine.ensureIndex()).isTrue();
         IndexedStore open = store("open-far", "open", "Open Kitchen", null, List.of("bbq"), new GeoPoint(LAT + 0.02, LNG),
                 ring(LAT, LNG, 2), Map.of(), false);
@@ -143,7 +143,7 @@ class ElasticsearchStoreSearchEngineTest {
     void ratingAndBoost() throws Exception {
         // given: three open branches 1.5 to 2 km away; one well rated with many reviews, one poorly
         ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
-                new SearchProperties("ranking_", 0, 15_000, null));
+                new SearchProperties(FoodstackContainers.uniqueName() + "_ranking_", 0, 15_000, null));
         assertThat(engine.ensureIndex()).isTrue();
         IndexedStore loved = rated(store("loved", "loved", "Loved Grill", null, List.of("bbq"),
                 new GeoPoint(LAT + 0.018, LNG), ring(LAT, LNG, 3), Map.of(), false), 120, 4.8, 0);
@@ -191,7 +191,7 @@ class ElasticsearchStoreSearchEngineTest {
     void mappingUpgrade() throws Exception {
         // given: an index of the previous version holding the alias
         ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
-                new SearchProperties("upgrade_", 0, 15_000, null));
+                new SearchProperties(FoodstackContainers.uniqueName() + "_upgrade_", 0, 15_000, null));
         String old = engine.alias() + "_v1";
         this.client.indices().create((c) -> c.index(old).aliases(engine.alias(), (a) -> a.isWriteIndex(true)));
 
@@ -291,7 +291,7 @@ class ElasticsearchStoreSearchEngineTest {
     void discoveryRadius() throws Exception {
         // given: a branch 12 km away (straight line) whose big zone reaches the customer
         ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
-                new SearchProperties("radius_", 0, 15_000, null));
+                new SearchProperties(FoodstackContainers.uniqueName() + "_radius_", 0, 15_000, null));
         engine.index(store("far-big-zone", "far", "Far Kitchen", null, List.of("bbq"), new GeoPoint(LAT + 0.108, LNG),
                 ring(LAT + 0.108, LNG, 5), Map.of(), false));
         engine.index(store("near", "near", "Near Kitchen", null, List.of("bbq"), new GeoPoint(LAT + 0.01, LNG),
@@ -314,7 +314,7 @@ class ElasticsearchStoreSearchEngineTest {
     void versionedWrites() throws Exception {
         // given
         ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
-                new SearchProperties("versions_", 0, 15_000, null));
+                new SearchProperties(FoodstackContainers.uniqueName() + "_versions_", 0, 15_000, null));
         IndexedStore base = store("v-1", "ver", "Version Kitchen", null, List.of("bbq"), new GeoPoint(LAT, LNG),
                 ring(LAT, LNG, 2), Map.of(), false);
 
@@ -333,7 +333,7 @@ class ElasticsearchStoreSearchEngineTest {
     @DisplayName("lists every branch of a brand, past one page of ids")
     void allIdsOfABrand() throws Exception {
         ElasticsearchStoreSearchEngine engine = new ElasticsearchStoreSearchEngine(this.client, this.jsonMapper,
-                new SearchProperties("ids_", 0, 15_000, null));
+                new SearchProperties(FoodstackContainers.uniqueName() + "_ids_", 0, 15_000, null));
         engine.ensureIndex();
         co.elastic.clients.elasticsearch.core.BulkRequest.Builder bulk = new co.elastic.clients.elasticsearch.core.BulkRequest.Builder();
         int count = ElasticsearchStoreSearchEngine.ID_PAGE + 5;

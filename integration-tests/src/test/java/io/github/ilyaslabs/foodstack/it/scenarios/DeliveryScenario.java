@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
-import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
 import io.github.ilyaslabs.foodstack.it.support.PlatformEvents;
 import io.github.ilyaslabs.foodstack.it.support.Topology;
@@ -24,8 +23,7 @@ import static org.awaitility.Awaitility.await;
  * it up and hands it over with the customer's code. The customer sees the rider and the code, and
  * the rider's earnings show the job.
  */
-@BothTopologies
-class DeliveryScenario {
+abstract class DeliveryScenario {
 
     private static final Map<String, Object> STORE = Map.of("lat", 31.5132, "lng", 74.3465);
     private static final Map<String, Object> HOME = Map.of("lat", 31.5204, "lng", 74.3587);

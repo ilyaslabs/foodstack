@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.it.support;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.ServerSocket;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -53,6 +54,17 @@ public final class FoodstackPlatform {
         this.contexts = contexts;
     }
 
+    /**
+     * How long a service keeps the settings it read from the settings service. Production keeps
+     * them 30 s; a journey that changes settings waits this long when split into services.
+     */
+    public static final Duration SETTINGS_CACHE = Duration.ofSeconds(1);
+
+    /**
+     * The running platform of the topology, started on first use. Starts are one at a time, even
+     * when the two lanes ask together: Liquibase cannot migrate two namespaces at once in one
+     * process (its change log lock is shared), so the second lane waits for the first to start.
+     */
     public static synchronized FoodstackPlatform of(Topology topology) {
         return RUNNING.computeIfAbsent(topology, FoodstackPlatform::start);
     }
@@ -161,6 +173,7 @@ public final class FoodstackPlatform {
         properties.put("spring.kafka.consumer.properties.metadata.max.age.ms", "3000");
         properties.put("foodstack.security.pii-key", PII_KEY);
         properties.put("foodstack.security.revocation-cache-ttl", "1s");
+        properties.put("foodstack.settings.remote-cache-ttl", SETTINGS_CACHE.toMillis() + "ms");
         // Service tokens for background work where identity is not local (microservices topology)
         properties.put("foodstack.security.service-client-secret", "integration-service-secret");
         properties.put("foodstack.identity.bootstrap-admin.email", ADMIN_EMAIL);
@@ -172,6 +185,8 @@ public final class FoodstackPlatform {
         properties.put("foodstack.storage.public-bucket", bucketPrefix + "-public");
         properties.put("foodstack.storage.private-bucket", bucketPrefix + "-private");
         properties.put("foodstack.storage.create-buckets", "true");
+        // The buckets are checked on start as on a real install; no browser uploads here, so no CORS step.
+        properties.put("foodstack.storage.check-origins", "");
         properties.put("spring.elasticsearch.uris", "http://" + FoodstackContainers.elasticsearch().getHttpHostAddress());
         properties.put("spring.elasticsearch.username", "elastic");
         properties.put("spring.elasticsearch.password", FoodstackContainers.ELASTICSEARCH_PASSWORD);

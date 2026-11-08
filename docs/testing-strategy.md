@@ -69,14 +69,16 @@ integration-tests/
 
 ### 3.2 Every scenario runs in both topologies
 
-Each scenario class is annotated `@BothTopologies`, which runs it twice:
+Each scenario is an abstract `*Scenario` class taking the topology. `Lane` lists every scenario as a nested class, and its two subclasses run them all, once per topology:
 
 | Run | What starts | How |
 |---|---|---|
-| `MONOLITH` | One application context, every module `local` | The production configuration of the unit deployer |
-| `MICROSERVICES` | One application context **per module** (14), each with only its own module `local`, every other module `http` to the owning context on a random internal port | The same configuration the Helm chart generates for `topology: microservices` |
+| `MonolithLane` (`MONOLITH`) | One application context, every module `local` | The production configuration of the unit deployer |
+| `MicroservicesLane` (`MICROSERVICES`) | One application context **per module** (15), each with only its own module `local`, every other module `http` to the owning context on a random internal port | The same configuration the Helm chart generates for `topology: microservices` |
 
-- Both runs share the same containers (MongoDB, Kafka, Redis, RustFS, and from later milestones Elasticsearch, Mailpit and WireMock) but use fresh databases, topics and buckets, so they never see each other's data.
+- Both runs share the same containers (MongoDB, Kafka, Redis, an S3 stand-in, Elasticsearch, Mailpit) but use fresh databases, topics and buckets, so they never see each other's data. That lets the two lanes run **side by side** (JUnit parallel execution, `junit-platform.properties`), while the journeys inside a lane run one at a time, because some change settings the others read.
+- `LanesTest` fails when a `*Scenario` class is missing from `Lane`.
+- Split into services, a module keeps the settings it read for 30 s in production; the tests shorten that to 1 s (`foodstack.settings.remote-cache-ttl`), so a journey that changes settings waits about 1.5 s instead of half a minute.
 - In the microservices run, the test client routes each REST path to the context that owns it, using the same module → path map the gateway uses. This also proves the routing map is complete.
 - Asynchronous outcomes (notifications, ledger entries, search indexing) are awaited with Awaitility, with a short timeout.
 - Both runs must pass on every pull request.
@@ -126,7 +128,8 @@ Each scenario class is annotated `@BothTopologies`, which runs it twice:
 
 ## 8. Containers
 
-- One shared set of containers per test run (singleton containers), reused between local runs with Testcontainers reuse for speed.
+- One shared set of containers for every module's tests (singleton containers with Testcontainers reuse, turned on for the build by the root POM's `TESTCONTAINERS_REUSE_ENABLE`): the first module starts them, every later module and the next run find them running. They keep running after the build; `-Dtestcontainers.reuse=false` gives every module its own, removed at the end.
+- Modules build and test side by side with `mvn -T 1C` (one thread per CPU core); with shared containers that costs little extra memory.
 - Isolation by name, not by container: each test class gets its own database names (`test_<random>_<module>`), Kafka topic prefix, Redis key prefix and bucket names.
 - Docker is the only prerequisite to run every test locally.
 

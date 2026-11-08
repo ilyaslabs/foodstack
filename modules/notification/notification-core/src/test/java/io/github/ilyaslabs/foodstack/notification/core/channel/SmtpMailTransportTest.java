@@ -35,7 +35,7 @@ class SmtpMailTransportTest {
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
             String found = http.send(HttpRequest.newBuilder(URI.create(FoodstackContainers.mailpitUrl() + "/api/v1/search?query=to:"
                     + to)).build(), HttpResponse.BodyHandlers.ofString()).body();
-            assertThat(found).contains("\"total\":1").contains("آرڈر 7F3A-91C2 قبول ہو گیا").contains("Lahore Eats");
+            assertThat(found).contains("\"messages_count\":1").contains("آرڈر 7F3A-91C2 قبول ہو گیا").contains("Lahore Eats");
         });
     }
 
