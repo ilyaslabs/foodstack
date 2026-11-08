@@ -213,6 +213,25 @@ public class UserService {
         return findByEmail(email).isPresent();
     }
 
+    /**
+     * Whether the personal-data key opens the stored accounts: true when there is no administrator
+     * yet, or the first one's email decrypts. A different key (a restore on a new server without
+     * the old key, say) would read nothing and make a second first administrator.
+     */
+    public boolean piiKeyOpensStoredData() {
+        List<UserDocument> admins = this.users.findByRolesInOrderByIdAsc(List.of(Role.ADMIN), Limit.of(1));
+        if (admins.isEmpty() || admins.getFirst().getEmailCipher() == null) {
+            return true;
+        }
+        try {
+            this.pii.decrypt(admins.getFirst().getEmailCipher());
+            return true;
+        }
+        catch (IllegalStateException ex) {
+            return false;
+        }
+    }
+
     /** Back-office users, newest first. */
     public List<UserAccount> listBackOffice(int limit) {
         List<Role> roles = List.of(Role.ADMIN, Role.FINANCE, Role.SUPPORT, Role.STORE_OWNER, Role.STORE_STAFF, Role.RIDER,

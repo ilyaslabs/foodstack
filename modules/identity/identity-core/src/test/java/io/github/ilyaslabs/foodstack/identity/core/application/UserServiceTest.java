@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
+import java.util.List;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Optional;
@@ -380,5 +381,31 @@ class UserServiceTest {
         // when / then
         assertThatThrownBy(() -> this.service.cancelDeletion("u1")).isInstanceOf(ModuleException.Unauthorized.class);
         verify(this.users, never()).save(any(UserDocument.class));
+    }
+
+    @Test
+    @DisplayName("the personal-data key check passes with no administrator, or when the stored email decrypts")
+    void piiKeyOpensStoredData() {
+        // given
+        UserDocument admin = new UserDocument();
+        admin.setEmailCipher(this.pii.encrypt("admin@example.com"));
+        given(this.users.findByRolesInOrderByIdAsc(any(), any())).willReturn(List.of(), List.of(admin));
+
+        // then
+        assertThat(this.service.piiKeyOpensStoredData()).isTrue();
+        assertThat(this.service.piiKeyOpensStoredData()).isTrue();
+    }
+
+    @Test
+    @DisplayName("the personal-data key check fails when the stored email was written with another key")
+    void piiKeyDoesNotOpenStoredData() {
+        // given
+        PiiCipher other = new PiiCipher(Base64.getEncoder().encodeToString("another key of thirty-two bytes!".getBytes()));
+        UserDocument admin = new UserDocument();
+        admin.setEmailCipher(other.encrypt("admin@example.com"));
+        given(this.users.findByRolesInOrderByIdAsc(any(), any())).willReturn(List.of(admin));
+
+        // then
+        assertThat(this.service.piiKeyOpensStoredData()).isFalse();
     }
 }
