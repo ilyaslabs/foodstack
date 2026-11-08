@@ -236,6 +236,8 @@ GEOCODING_URL=https://nominatim.openstreetmap.org
 GEOCODING_COUNTRY_CODES=
 ROUTING_PROVIDER=none
 ROUTING_URL=
+# Search keeps working on a nearly full laptop disk
+ES_DISK_WATERMARK=false
 TRIAL
   else
     cat << REAL
@@ -352,9 +354,9 @@ info "Running database migrations"
 compose run --rm --no-deps server java -jar /app/foodstack-server.jar --foodstack.migrate-only=true
 
 info "Starting FoodStack"
-compose up -d
 # The server checks the buckets before it starts; say plainly what to fix when they don't work.
-if ! (wait_healthy server 300); then
+# (compose up itself fails when the server never becomes healthy, as web and backoffice wait for it.)
+if ! compose up -d || ! (wait_healthy server 300); then
   problem=$(compose logs --no-log-prefix server 2> /dev/null | grep -o 'Storage check failed.*' | tail -1 || true)
   [[ -z "$problem" ]] || fail "$problem Fix it (handbook guide 12) and run install.sh again."
   fail "The server did not start; see ./logs.sh server."
