@@ -34,28 +34,29 @@ Expect
 
 ### USER-02 Create a Finance or Support account
 
-Who: admin · Where: terminal
+Who: admin · Where: back office, **Users**
 
-The back office has no **Add user** button yet: Finance, Support and Admin accounts are made through the API. Owners and riders are made from their own pages (USER-03, DLV-01).
+Owners and riders are not made here: they are added from their branch page and from **Riders** (USER-03, DLV-01).
 
 Steps
-1. Sign in as admin in the back office. In F12, Network, copy the `accessToken` from the answer to `/api/v1/auth/login` or `/refresh`.
-2. Run:
-   ```bash
-   curl -s -X POST http://localhost:8080/api/v1/users -H "Authorization: Bearer <token>" \
-     -H 'Content-Type: application/json' \
-     -d '{"email":"qa.finance@example.test","password":"qa-finance-pass-1","displayName":"QA Finance","roles":["FINANCE"]}'
-   ```
-3. Sign in to the back office as `qa.finance@example.test`.
+1. Click **New staff account**.
+2. Click **Make account** with the fields empty, then with a first password of 5 characters.
+3. Fill in **Full name** `QA Finance`, **Email** `qa.finance@example.test`, **First password** `qa-finance-pass-1`, pick **Finance** under **Role**, and click **Make account**.
+4. Do it again with the same email.
+5. Sign in to the back office as `qa.finance@example.test` and change the password (AUTH-17, step 3).
 
 Expect
-- Step 2 answers with the new user, `roles: ["FINANCE"]`.
-- Step 3: the side menu shows Overview, Finance and Users, and nothing else.
+- The dialog says "For your own team. Restaurant owners are added on their branch page, and riders on Riders." Each role says what it may do.
+- Step 2: "Fill in the name and the email.", then "The first password needs at least 10 characters."
+- Step 3: "QA Finance can sign in now". The account is at the top of the list as **Finance**.
+- Step 4: "An account with this email already exists. Find it in the list instead."
+- Step 5: the side menu shows Overview, Finance and Users, and nothing else. On a real install, the first sign-in asks to set up an authenticator app (Finance needs two-step sign-in).
+- As support, the **New staff account** button is not there.
 
 Check
-- `identity_users`: `roles: ["FINANCE"]`, `createdBy` = the admin's id (not the user's own id as at sign-up).
+- `identity_users`: `roles: ["FINANCE"]`, `createdBy` = the admin's id (not the user's own id as at sign-up), `passwordHash` an Argon2id hash.
 - `identity_outbox`: `UserRegistered` with `createdBy` = the admin.
-- The same call made with a support user's token answers 403.
+- Network: `POST /api/v1/users` answers 201. With a support user's token it answers 403. With `"roles":["BRAND_OWNER"]` (or `RIDER`, `CUSTOMER`) it answers 400 `USER_ROLES_INVALID`. An email in use answers 409 `EMAIL_TAKEN`.
 
 ### USER-03 Add a store owner from the branch page
 

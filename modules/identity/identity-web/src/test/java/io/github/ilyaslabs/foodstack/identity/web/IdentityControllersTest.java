@@ -195,6 +195,13 @@ class IdentityControllersTest {
             .content(body))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.roles[0]").value("SUPPORT"));
+        // owners and riders are added from their own pages, never as a bare account
+        this.mvc.perform(post("/api/v1/users").with(jwt().jwt((t) -> t.subject("u1"))
+            .authorities(List.of(new SimpleGrantedAuthority("identity:users:manage"))))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(body.replace("SUPPORT", "BRAND_OWNER")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("USER_ROLES_INVALID"));
     }
 
     @Test

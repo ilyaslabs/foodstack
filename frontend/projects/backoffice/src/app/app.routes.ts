@@ -130,6 +130,10 @@ export const routes: Routes = [
         loadComponent: () => import('./account/security-page').then((m) => m.SecurityPage),
       },
       {
+        path: 'account/password',
+        loadComponent: () => import('./account/password-page').then((m) => m.PasswordPage),
+      },
+      {
         path: 'settings/branding',
         loadComponent: () => import('./settings/branding-page').then((m) => m.BrandingPage),
       },

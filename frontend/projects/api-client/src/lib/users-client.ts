@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { Role } from './models';
+import { Role, StaffRole } from './models';
 import { RUNTIME_CONFIG } from './runtime-config';
 
 export type UserStatus = 'ACTIVE' | 'BLOCKED';
@@ -36,6 +36,15 @@ export interface UserQuery {
   limit?: number;
 }
 
+/** A back-office account an administrator makes: Admin, Finance or Support. */
+export interface NewStaffUser {
+  email: string;
+  /** The first password, 10 to 128 characters; the person changes it after signing in. */
+  password: string;
+  displayName: string;
+  roles: StaffRole[];
+}
+
 /** Every account on the platform, for staff with `identity:users:read` (PRD ID-4). */
 @Injectable({ providedIn: 'root' })
 export class UsersClient {
@@ -50,6 +59,11 @@ export class UsersClient {
       }
     }
     return this.http.get<UserPage>(`${this.config.apiUrl}/api/v1/users`, { params });
+  }
+
+  /** Makes an Admin, Finance or Support account (needs `identity:users:manage`). */
+  create(user: NewStaffUser): Observable<UserAccount> {
+    return this.http.post<UserAccount>(`${this.config.apiUrl}/api/v1/users`, user);
   }
 
   /** Blocks sign-in and ends every session of the account at once. */
