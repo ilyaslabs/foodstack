@@ -1,10 +1,15 @@
 package io.github.ilyaslabs.foodstack.platform.kafka;
 
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import com.github.dockerjava.api.model.ExposedPort;
+import com.github.dockerjava.api.model.PortBinding;
+import com.github.dockerjava.api.model.Ports;
 import io.github.ilyaslabs.foodstack.platform.core.Buckets;
 import io.github.ilyaslabs.foodstack.platform.test.FoodstackContainers;
 import org.junit.jupiter.api.AfterAll;
@@ -27,27 +32,37 @@ import static org.awaitility.Awaitility.await;
  */
 class RedisClusterLiveTest {
 
-    private static final int PORT = 17_379;
-
     private static GenericContainer<?> cluster;
 
     private static LettuceConnectionFactory connectionFactory;
 
     @BeforeAll
     static void startCluster() throws Exception {
-        cluster = new GenericContainer<>(FoodstackContainers.REDIS_IMAGE).withNetworkMode("host")
-            .withCommand("redis-server", "--port", String.valueOf(PORT), "--cluster-enabled", "yes", "--save", "",
-                    "--appendonly", "no")
+        // The node tells clients its own address and port (CLUSTER SLOTS), so it listens on the same
+        // port inside and outside the container and names 127.0.0.1. A published port works on Linux
+        // and on Docker Desktop alike; host networking reaches only Docker Desktop's own VM.
+        int port = freePort();
+        cluster = new GenericContainer<>(FoodstackContainers.REDIS_IMAGE).withExposedPorts(port)
+            .withCreateContainerCmdModifier((cmd) -> cmd.getHostConfig()
+                .withPortBindings(new PortBinding(Ports.Binding.bindPort(port), new ExposedPort(port))))
+            .withCommand("redis-server", "--port", String.valueOf(port), "--cluster-enabled", "yes", "--cluster-announce-ip",
+                    "127.0.0.1", "--save", "", "--appendonly", "no")
             .waitingFor(Wait.forLogMessage(".*Ready to accept connections.*", 1));
         cluster.start();
-        cluster.execInContainer("redis-cli", "-p", String.valueOf(PORT), "cluster", "addslotsrange", "0", "16383");
+        cluster.execInContainer("redis-cli", "-p", String.valueOf(port), "cluster", "addslotsrange", "0", "16383");
         await().atMost(Duration.ofSeconds(30)).until(() -> cluster
-            .execInContainer("redis-cli", "-p", String.valueOf(PORT), "cluster", "info")
+            .execInContainer("redis-cli", "-p", String.valueOf(port), "cluster", "info")
             .getStdout()
             .contains("cluster_state:ok"));
-        connectionFactory = new LettuceConnectionFactory(new RedisClusterConfiguration(List.of("127.0.0.1:" + PORT)));
+        connectionFactory = new LettuceConnectionFactory(new RedisClusterConfiguration(List.of("127.0.0.1:" + port)));
         connectionFactory.afterPropertiesSet();
         connectionFactory.start();
+    }
+
+    private static int freePort() throws IOException {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
     }
 
     @AfterAll
