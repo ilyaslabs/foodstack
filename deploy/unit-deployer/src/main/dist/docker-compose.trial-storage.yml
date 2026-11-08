@@ -22,8 +22,9 @@ services:
     environment:
       S3_ENDPOINT: http://storage:9000
       S3_CREATE_BUCKETS: "true"
-      # Browsers reach the buckets through the proxy on the trial's own address, so no CORS.
-      S3_CHECK_ORIGINS: ""
+      # The stand-in makes its own buckets, and browsers reach it through the proxy on the trial's
+      # address, which the server cannot reach from inside its container: no bucket check.
+      S3_CHECK_ON_START: "false"
     depends_on:
       storage:
         condition: service_healthy

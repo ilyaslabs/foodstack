@@ -195,6 +195,9 @@ services:
       xpack.security.http.ssl.enabled: "false"
       # No memory-mapped store: works without raising vm.max_map_count, so no root step is needed
       node.store.allow_mmap: "false"
+      # Disk watermarks stop shard allocation on a nearly full disk; a --local trial turns them off,
+      # since laptops often run close to full and the index is small.
+      cluster.routing.allocation.disk.threshold_enabled: ${ES_DISK_WATERMARK:-true}
       ELASTIC_PASSWORD: ${ELASTICSEARCH_PASSWORD}
       ES_JAVA_OPTS: -Xms${ES_HEAP:-1g} -Xmx${ES_HEAP:-1g}
     volumes:
