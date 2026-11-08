@@ -36,13 +36,19 @@ drawn in [docs/architecture](docs/architecture/README.md).
 Prerequisites: Java 25, Maven, Docker; Node 24 and pnpm for the front-end.
 
 ```bash
-mvn test                                  # every test, including both integration topologies
+mvn -T 1C test                            # every test, including both integration topologies,
+                                          # one module per CPU core side by side
 mvn -pl app/foodstack-server -am install -DskipTests
 # Run the server with containers: LocalFoodstackApplication (app/foodstack-server/src/test) from the IDE,
 # or: mvn -pl app/foodstack-server spring-boot:test-run   (server on http://localhost:8080), then
 cd frontend && pnpm install && pnpm start:backoffice   # http://localhost:4300/admin/
 pnpm start:web                                          # http://localhost:4200/ (storefront)
 ```
+
+Tests share one set of Docker containers (MongoDB, Kafka, Redis, Elasticsearch, S3 stand-in, Mailpit),
+which stay running after the build so the next run starts in seconds. Stop them with
+`docker rm -f $(docker ps -q --filter label=org.testcontainers.hash)`, or build with
+`-Dtestcontainers.reuse=false` to have them removed at the end of each run.
 
 To try the full stack on one machine: `mvn -pl deploy/unit-deployer -am package -DskipTests`, unzip
 `deploy/unit-deployer/target/unit-deployer-*.zip` and run `./install.sh ~/foodstack --local`

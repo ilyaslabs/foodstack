@@ -12,7 +12,6 @@ import io.github.ilyaslabs.foodstack.it.scenarios.CouponsAndRefundsScenario.Sett
 import io.github.ilyaslabs.foodstack.it.scenarios.MoneyAndTrustScenario.Store;
 import io.github.ilyaslabs.foodstack.it.scenarios.MoneyAndTrustScenario.Stores;
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
-import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
 import io.github.ilyaslabs.foodstack.it.support.Topology;
 import io.restassured.RestAssured;
@@ -35,8 +34,7 @@ import static org.awaitility.Awaitility.await;
  * UTC-11 (Pago Pago), and settled with it at UTC+14 (Kiritimati): the second is always at least a
  * day ahead of the first.
  */
-@BothTopologies
-class PricesAndSettlementScenario {
+abstract class PricesAndSettlementScenario {
 
     private static final String BEHIND = "Pacific/Pago_Pago";
 

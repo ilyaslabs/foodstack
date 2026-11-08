@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
-import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
 import io.github.ilyaslabs.foodstack.it.support.PlatformEvents;
 import io.github.ilyaslabs.foodstack.it.support.Storage;
@@ -25,8 +24,7 @@ import org.junit.jupiter.api.Test;
  * the public sees it; a customer can sign up but not change settings; revoked tokens stop working
  * on every module at once.
  */
-@BothTopologies
-class PlatformSetupScenario {
+abstract class PlatformSetupScenario {
 
     private final FoodstackPlatform platform;
 

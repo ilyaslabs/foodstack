@@ -78,6 +78,7 @@
         <rest-assured.version>6.3.0</rest-assured.version>
 
         <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
+        <testcontainers.reuse>true</testcontainers.reuse>
         <node.version>v24.22.2</node.version>
         <pnpm.version>10.28.0</pnpm.version>
 
@@ -507,6 +508,13 @@
                         <!-- Mockito attaches its agent at runtime on JDK 25 unless told otherwise. -->
                         <argLine>@{argLine} -XX:+EnableDynamicAgentLoading -Xshare:off</argLine>
                         <trimStackTrace>false</trimStackTrace>
+                        <environmentVariables>
+                            <!-- Every module's tests share one set of containers (FoodstackContainers asks
+                                 for reuse), and the next run finds them already running. They keep
+                                 running after the build: see the README to stop them, or pass
+                                 -Dtestcontainers.reuse=false. -->
+                            <TESTCONTAINERS_REUSE_ENABLE>${testcontainers.reuse}</TESTCONTAINERS_REUSE_ENABLE>
+                        </environmentVariables>
                     </configuration>
                 </plugin>
             </plugins>

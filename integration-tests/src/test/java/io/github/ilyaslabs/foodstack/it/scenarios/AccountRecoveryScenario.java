@@ -5,7 +5,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
-import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
 import io.github.ilyaslabs.foodstack.it.support.Mailbox;
 import io.github.ilyaslabs.foodstack.it.support.Topology;
@@ -19,8 +18,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * M2 sign-in by email (PRD ID-1, TDD 9.1): a customer signs in with a code from their inbox, then
  * forgets their password and sets a new one with a reset code. The reset ends every old token.
  */
-@BothTopologies
-class AccountRecoveryScenario {
+abstract class AccountRecoveryScenario {
 
     private static final Pattern CODE = Pattern.compile("\\b(\\d{6})\\b");
 

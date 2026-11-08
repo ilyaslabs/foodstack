@@ -1,9 +1,12 @@
 package io.github.ilyaslabs.foodstack;
 
+import java.time.Duration;
+
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
 
 /**
  * The FoodStack server. Every module is on the classpath; Module-Switch configuration decides
@@ -16,9 +19,11 @@ import org.springframework.context.annotation.Bean;
 @SpringBootApplication
 public class FoodstackApplication {
 
+    /** {@code foodstack.settings.remote-cache-ttl}: how long a service keeps another service's settings (30 s). */
     @Bean
-    static RemoteSettingsCache remoteSettingsCache() {
-        return new RemoteSettingsCache();
+    static RemoteSettingsCache remoteSettingsCache(Environment environment) {
+        return new RemoteSettingsCache(environment.getProperty("foodstack.settings.remote-cache-ttl", Duration.class,
+                RemoteSettingsCache.DEFAULT_TTL));
     }
 
     public static void main(String[] args) {

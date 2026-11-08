@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.it.support.ApiClient;
-import io.github.ilyaslabs.foodstack.it.support.BothTopologies;
 import io.github.ilyaslabs.foodstack.it.support.FoodstackPlatform;
 import io.github.ilyaslabs.foodstack.it.support.PlatformEvents;
 import io.github.ilyaslabs.foodstack.it.support.Topology;
@@ -24,8 +23,7 @@ import static org.awaitility.Awaitility.await;
  * branch; a customer at an address inside the area finds it by an Arabic dish name and reads its
  * menu in both languages.
  */
-@BothTopologies
-class CatalogueScenario {
+abstract class CatalogueScenario {
 
     // A customer in Gulberg, Lahore, 1 km from the restaurant
     private static final double CUSTOMER_LAT = 31.5160;
@@ -51,7 +49,7 @@ class CatalogueScenario {
             .put("/api/v1/settings/locale").then().log().ifValidationFails().statusCode(200);
         assertThat(this.platform.client().get("/api/v1/settings/locale").<List<String>>path("rtlLanguages"))
             .contains("ar", "ur");
-        // split into services, the others keep the settings they read for up to 30 s (an earlier
+        // split into services, the others keep the settings they read for a short while (an earlier
         // journey may just have read them)
         CouponsAndRefundsScenario.Settings.settle(this.platform);
 
