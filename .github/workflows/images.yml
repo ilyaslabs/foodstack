@@ -1,7 +1,7 @@
 name: Images
 
 # Builds the unit deployer zip and the images, and pushes the images to Docker Hub and GHCR.
-# Called by snapshot-release.yml (tag "edge") and release.yml (the version tags).
+# Called by release.yml (the version tags). Nothing is published on a merge to main.
 on:
   workflow_call:
     inputs:
