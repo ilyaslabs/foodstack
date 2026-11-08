@@ -45,6 +45,8 @@ class OrderingScenario {
             .body(Map.of("cashEnabled", true, "cardEnabled", true, "serviceFeeMinor", 5_000, "serviceFeeBasisPoints", 0,
                     "taxBasisPoints", 0, "tipsEnabled", true, "acceptTimeoutSeconds", 600))
             .put("/api/v1/settings/ordering").then().log().ifValidationFails().statusCode(200);
+        // split into services, the others keep the settings they read for up to 30 s
+        CouponsAndRefundsScenario.Settings.settle(this.platform);
         assertThat(this.platform.client().get("/api/v1/payments/options").<Boolean>path("card")).isTrue();
         Store store = liveStore(admin);
         String ownerEmail = "owner-" + System.nanoTime() + "@it.foodstack.local";
