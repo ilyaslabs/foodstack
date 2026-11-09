@@ -276,6 +276,26 @@ Check
 - An API call without a token to a signed-in route answers 401 from the gateway; a forged token too.
 - Every pod is in the mesh: `kubectl -n foodstack get pods -L istio.io/dataplane-mode` shows `ambient` for each FoodStack pod.
 
+### OPS-11b Kubernetes playground: every topology on one computer
+
+Who: tester · Where: a computer with Docker (8 GB of memory for it), kubectl, helm, Java 25 and Maven; no cluster needed
+
+Steps
+1. `playground/k8s/up.sh`.
+2. Open the back office at the printed address and sign in with the printed password. Onboard a store with a photo (STORE-01) and place an order (ORD-03) in the customer app.
+3. `playground/k8s/up.sh --topology split --skip-build`, then `--topology microservices --skip-build`. Place another order after each.
+4. `playground/k8s/down.sh`.
+
+Expect
+- Step 1 ends with the three addresses and the administrator's password; `docker ps` shows the `fsplay-*` datastores and Floci, and `KUBECONFIG=playground/k8s/.state/kubeconfig kubectl -n foodstack get pods` shows only FoodStack's pods (and the gateway's).
+- Step 2: the photo shows (it loads from `localhost:4566`), and the order's emails are at http://localhost:8025.
+- Step 3: the Deployments change to the new topology; the store and the first order are still there.
+- Step 4: no `fsplay-*` or `floci-aws-*` containers and no `foodstack-playground` network remain.
+
+Check
+- `PLAYGROUND_CLUSTER=kind playground/k8s/up.sh` works the same with kind.
+- Without `maps.allowPublicOpenStreetMap: true`, `helm template` with the playground values refuses OpenStreetMap's public servers (OPS-11 Check).
+
 ### OPS-12 Kubernetes: edge rate limits
 
 Who: tester · Where: terminal, against the cluster of OPS-11

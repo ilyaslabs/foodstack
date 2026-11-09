@@ -97,6 +97,7 @@ MongoDB and Redis have no password. Their ports are picked by Docker (`docker ps
 - [Technical Design (TDD)](docs/TDD.md)
 - [Architecture and flows](docs/architecture/README.md): diagrams of how the built system works today
 - [Deployment Guide](docs/deployment-guide.md)
+- [Kubernetes playground](playground/k8s/README.md): FoodStack on a local Kubernetes cluster in any topology, with the datastores in Docker
 - [Operator handbook](docs/handbook/README.md): step-by-step setup, day-to-day running and scaling runbooks for operators
 - [Manual QA](qa/README.md): test cases for the whole application
 - [Testing Strategy](docs/testing-strategy.md)

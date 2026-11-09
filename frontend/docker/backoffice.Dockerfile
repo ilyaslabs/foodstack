@@ -1,5 +1,5 @@
-# ilyaslabs/foodstack-backoffice: the back office as static files under /admin/ (TDD 14.3).
-# Build after `pnpm build`:  docker build -f docker/backoffice.Dockerfile -t ilyaslabs/foodstack-backoffice frontend
+# ilyasdotdev/ilyaslabs-foodstack:backoffice-<version>: the back office as static files under /admin/ (TDD 14.3).
+# Build after `pnpm build`:  docker build -f docker/backoffice.Dockerfile -t ilyasdotdev/ilyaslabs-foodstack:backoffice-dev frontend
 # FOODSTACK_API_URL (empty = same origin) and the map tile settings are written into /admin/config.json at start;
 # MEDIA_ORIGINS (the buckets' addresses) joins the page's security policy.
 FROM nginxinc/nginx-unprivileged:1.29-alpine

@@ -224,6 +224,8 @@ helm install foodstack oci://ghcr.io/ilyaslabs/charts/foodstack --version 1.0.0 
 
 The notes printed at the end give the gateway address, the first administrator's password and the Mailpit command. Point `foodstack.localhost` and `admin.foodstack.localhost` at the gateway address in your hosts file, then open `http://admin.foodstack.localhost/admin/`.
 
+No cluster yet? The [Kubernetes playground](../playground/k8s/README.md) makes one on your own computer (an EKS cluster on Floci, or kind), runs the datastores and S3 as Docker containers beside it, and installs FoodStack from the source tree in any topology: `playground/k8s/up.sh --topology split`.
+
 ### 4.4 Values for a real install
 
 The chart generates the token signing key, the personal-data key, the internal Module-Switch token and the first administrator's password into the Secret `foodstack-secrets` on the first install, and keeps them on every upgrade. **Back that Secret up**: without it the stored personal data cannot be read. To bring your own (for example from a secret manager, or the keys of a single server you are moving from), create a Secret with the same keys and name it in `secrets.existingSecret`.

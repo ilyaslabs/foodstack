@@ -49,6 +49,7 @@ jobs:
         run: |
           helm lint k8s/helm/foodstack -f k8s/helm/foodstack/values-dev.yaml
           helm lint k8s/helm/foodstack -f k8s/helm/foodstack/ci/production-values.yaml
+          helm lint k8s/helm/foodstack -f playground/k8s/values-playground.yaml
           helm lint k8s/helm/foodstack-observability
       - name: Validate the rendered objects
         run: |
@@ -62,6 +63,9 @@ jobs:
             helm template fs k8s/helm/foodstack -n foodstack -f k8s/helm/foodstack/values-dev.yaml --set topology=$topology | check
           done
           helm template fs k8s/helm/foodstack -n foodstack -f k8s/helm/foodstack/ci/production-values.yaml --set topology=split | check
+          for topology in monolith split microservices; do
+            helm template foodstack k8s/helm/foodstack -n foodstack -f playground/k8s/values-playground.yaml --set topology=$topology | check
+          done
           helm template obs k8s/helm/foodstack-observability -n foodstack-observability --set alertmanager.enabled=true | check
 
   # The release artefacts still build: the unit deployer zip and the images (not pushed).

@@ -1,0 +1,104 @@
+# The playground's values for the FoodStack chart: the cluster runs only FoodStack; MongoDB, Redis,
+# Kafka, Elasticsearch, Mailpit and Floci's S3 run as Docker containers beside it, on the fixed
+# addresses in lib.sh. up.sh adds --set topology=... and the image tag. Not for real data.
+
+scheme: http
+publicPort: 8080            # up.sh forwards http://*.localhost:8080 to the gateway
+hosts:
+  web: foodstack.localhost
+  admin: admin.foodstack.localhost
+  api: foodstack.localhost
+
+secrets:
+  adminEmail: admin@foodstack.localhost
+
+image:
+  tag: playground
+  pullPolicy: Never         # up.sh builds the images and loads them into the cluster
+
+server:
+  # Small pods, one of each, so microservices (12 Deployments) fits on a laptop.
+  defaults:
+    replicas: 1
+    autoscaling: { enabled: false }
+    pdb: null
+    resources:
+      requests: { cpu: 50m, memory: 640Mi }
+      limits: { memory: 640Mi }
+    kafkaConcurrency: 1
+  overrides:
+    core:
+      resources:
+        requests: { cpu: 100m, memory: 1280Mi }
+        limits: { memory: 1280Mi }
+  env:
+    # Cash on delivery only: the test card gateway is refused outside a development install.
+    PAYMENT_GATEWAY: none
+    SMTP_HOST: 10.213.0.14
+    SMTP_PORT: "1025"
+    SMTP_FROM: no-reply@foodstack.localhost
+    # The pods reach Floci at 10.213.0.5, but the public bucket's address (localhost:4566) is
+    # only reachable from your browser, so the start-up check of the buckets is skipped.
+    S3_CHECK_ON_START: "false"
+  logFormat: ""
+
+migrations:
+  resources:
+    requests: { cpu: 100m, memory: 768Mi }
+    limits: { memory: 768Mi }
+
+web:
+  replicas: 1
+  autoscaling: { enabled: false }
+  pdb: null
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 384Mi }
+backoffice:
+  replicas: 1
+  pdb: null
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 128Mi }
+
+datastores:
+  mongodb:
+    uri: mongodb://10.213.0.10:27017/foodstack?replicaSet=rs0
+  redis:
+    url: redis://10.213.0.11:6379
+  kafka:
+    bootstrap: 10.213.0.12:9092
+    topicPartitions: 6
+    replicationFactor: 1
+  elasticsearch:
+    uris: http://10.213.0.13:9200
+    username: elastic
+    password: playground
+    replicas: 0
+  s3:
+    endpoint: http://10.213.0.5:4566            # Floci, from the pods
+    publicEndpoint: http://localhost:4566       # Floci, from your browser (uploads)
+    publicBaseUrl: http://localhost:4566/foodstack-public
+    region: us-east-1
+    pathStyle: true
+    accessKey: playground
+    secretKey: playground-secret
+
+# OpenStreetMap's public servers: light use only, fine on your own computer.
+maps:
+  allowPublicOpenStreetMap: true
+  geocoding:
+    provider: nominatim
+    url: https://nominatim.openstreetmap.org
+    countryCodes: pk
+  tiles:
+    url: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+    attribution: © OpenStreetMap contributors
+
+gateway:
+  # No cloud load balancer here: up.sh port-forwards to the gateway's Service.
+  annotations:
+    networking.istio.io/service-type: ClusterIP
+  autoscaling: { min: 1, max: 1, targetCPU: 80 }
+  rateLimit:
+    replicas: 1
