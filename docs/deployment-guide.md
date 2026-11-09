@@ -230,7 +230,7 @@ No cluster yet? The [Kubernetes playground](../playground/k8s/README.md) runs Fo
 
 ### 4.4 Values for a real install
 
-The chart generates the token signing key, the personal-data key, the internal Module-Switch token and the first administrator's password into the Secret `foodstack-secrets` on the first install, and keeps them on every upgrade. **Back that Secret up**: without it the stored personal data cannot be read. To bring your own (for example from a secret manager, or the keys of a single server you are moving from), create a Secret with the same keys and name it in `secrets.existingSecret`.
+You make the server's five keys once, before the first install: the token signing key, the personal-data key, the internal Module-Switch token, the service client secret and the first administrator's password. The chart does not generate them on a real install; it stops until each is given. Put them in your own Secret named in `secrets.existingSecret` (recommended; commands in [Kubernetes guide 6](kubernetes-guide.md#6-keys-and-secrets)), or in the `secrets.*` placeholders of your values file. **Keep a copy of the personal-data key outside the cluster**: without it the stored personal data cannot be read.
 
 ```yaml
 # my-values.yaml
@@ -247,6 +247,7 @@ gateway:
 
 secrets:
   adminEmail: you@example.com
+  existingSecret: foodstack-keys   # the five keys, made once (Kubernetes guide 6)
 
 # Either the connection details here (the chart keeps them in a Secret)...
 datastores:
@@ -353,7 +354,7 @@ kubectl -n foodstack get all -l foodstack.ilyaslabs.io/part=server-order     # o
 ```
 
 - Start the service that runs `identity` (`server-core` in the monolith and split topologies, `server-identity` in microservices) before the others: every service checks sign-in tokens against it. A service whose neighbours are not running yet starts, and its calls to them fail until they are; their routes answer 503 meanwhile.
-- `render.sh` reads the Secrets already in the cluster, so a render for an upgrade keeps the same keys, and it stops if FoodStack runs but its Secret is gone. Without a cluster (`--offline`) it makes new keys: only for a brand-new install. To keep `00-secrets` out of files altogether, create the Secret yourself and name it in `secrets.existingSecret` (4.4).
+- `00-secrets` holds the keys from your `secrets.*` values, the same on every render. With `secrets.existingSecret` (4.4) there is no key file at all. Only trial values generate keys; for them `render.sh` reads the Secret already in the cluster, and `--offline` makes new ones.
 - To upgrade, render again with the new chart version, run the migrations Job again, then apply the service folders in your order. A folder you have not applied yet keeps running the old version, so apply them all before you leave the install; every service is tested only together at one version.
 - An install is managed either by Helm or by `kubectl` from these folders, never both: Helm refuses objects it did not create, and `helm upgrade` would undo changes made with `kubectl`. You can still render the folders to review a Helm upgrade before you run it.
 
@@ -455,7 +456,7 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 - [ ] Gateway token check on (`gateway.jwt.enabled=true`, the default).
 - [ ] Edge rate limiting on (`gateway.rateLimit.enabled=true`, the default) and the per-address limits in `gateway.rateLimit.limits` reviewed for your traffic.
 - [ ] NetworkPolicies on (`networkPolicies.enabled=true`, the default).
-- [ ] The Secret `foodstack-secrets` backed up outside the cluster.
+- [ ] The five keys (above all the personal-data key) kept outside the cluster.
 - [ ] Datastores reachable only from the cluster, with TLS and authentication.
 - [ ] Secrets from a secret manager, not committed values files.
 - [ ] Image signatures verified (cosign) by your admission controller, if you run one.

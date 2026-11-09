@@ -10,6 +10,7 @@ hosts:
   api: foodstack.localhost
 
 secrets:
+  existingSecret: foodstack-keys     # made once by up.sh
   adminEmail: admin@foodstack.localhost
 
 

@@ -8,8 +8,8 @@
 # Every option other than the three below goes to `helm template` as it is (-n, -f, --set, ...).
 #   --out DIR       where to write (default: rendered); emptied first
 #   --release NAME  the release name, which starts every object's name (default: foodstack)
-#   --offline       do not ask the cluster for the Secrets it already has; new keys are generated
-#                   (only for a brand-new install, or with secrets.existingSecret)
+#   --offline       render without the cluster. Fine for a real install, whose keys come from your
+#                   values; trial values (values-dev.yaml) would get NEW keys this way
 #
 # Folders, in the order a first install applies them:
 #   00-secrets      token signing key, personal-data key, admin password, datastore addresses
@@ -41,12 +41,12 @@ done
 fail() { echo "render.sh: $*" >&2; exit 1; }
 command -v helm > /dev/null || fail "helm is needed (https://helm.sh/docs/intro/install/)"
 
-# With the cluster, the chart reads the Secrets already there and keeps their keys; new keys would
-# make the stored personal data and every sign-in unreadable.
+# With the cluster, trial values read the keys they generated before (a real install's keys come
+# from its values and are the same either way).
 if ! $offline; then
   command -v kubectl > /dev/null || fail "kubectl is needed, or --offline"
   kubectl get --raw /readyz > /dev/null 2>&1 \
-    || fail "kubectl cannot reach a cluster. Use --offline only for a brand-new install, or with secrets.existingSecret"
+    || fail "kubectl cannot reach a cluster; use --offline to render without it"
   args+=(--dry-run=server)
 fi
 
@@ -77,8 +77,11 @@ helm template "$release" "$chart" "${args[@]}" | awk -v out="$out" '
   END { flush() }
 '
 
-# The cluster runs this release but its Secret is gone: applying 00-secrets would make new keys.
-if ! $offline && [[ -d $out/00-secrets ]]; then
+# Trial values generate keys: if the cluster runs this release but its Secret is gone, applying
+# 00-secrets would bring new ones. (A real install's keys come from its values.)
+trial=false
+grep -rqsE 'FOODSTACK_ENVIRONMENT(:|, value:) "development"' "$out" && trial=true
+if $trial && ! $offline && [[ -d $out/00-secrets ]]; then
   for f in "$out"/00-secrets/Secret-*.yaml; do
     secret=$(basename "$f" .yaml); secret=${secret#Secret-}
     if ! kubectl -n "$namespace" get secret "$secret" > /dev/null 2>&1 \
@@ -88,8 +91,8 @@ if ! $offline && [[ -d $out/00-secrets ]]; then
     fi
   done
 fi
-if $offline && [[ -d $out/00-secrets ]]; then
-  echo "render.sh: --offline generated NEW keys in $out/00-secrets: apply them only to a brand-new install" >&2
+if $trial && $offline && [[ -d $out/00-secrets ]]; then
+  echo "render.sh: --offline generated NEW trial keys in $out/00-secrets: apply them only to a brand-new install" >&2
 fi
 
 cat > "$out/README.txt" << EOF

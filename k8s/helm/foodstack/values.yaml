@@ -112,14 +112,28 @@ backoffice:
   env: {}
 
 # ---------------------------------------------------------------------------------------------
-# Secrets. Generated on first install and kept on upgrades (looked up in the cluster), unless an
-# existing Secret is named. Keys: FOODSTACK_SIGNING_KEYS, FOODSTACK_PII_KEY, FOODSTACK_INTERNAL_TOKEN,
-# FOODSTACK_SERVICE_CLIENT_SECRET, FOODSTACK_ADMIN_PASSWORD.
+# The server's keys. You make them once, before the first install, and never change them (the
+# Kubernetes guide, section 6, has the commands). The install stops until each one is given. Put
+# them here, or in your own Secret named in existingSecret (keys FOODSTACK_SIGNING_KEYS,
+# FOODSTACK_PII_KEY, FOODSTACK_INTERNAL_TOKEN, FOODSTACK_SERVICE_CLIENT_SECRET,
+# FOODSTACK_ADMIN_PASSWORD), which keeps them out of your values file. Trial installs
+# (values-dev.yaml) generate their own.
 # ---------------------------------------------------------------------------------------------
 secrets:
   existingSecret: ""
-  # First administrator; the password is generated (kubectl get secret ... shows it, see NOTES).
+  # Token signing key, EC P-256 (PKCS#8 or SEC1, with or without the PEM lines):
+  #   openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | openssl pkcs8 -topk8 -nocrypt
+  # Changing it later signs everyone out once.
+  signingKey: ""
+  # Personal-data key, 32 random bytes in base64:  openssl rand -base64 32
+  # Keep a copy outside the cluster: without it stored emails, phones and addresses cannot be read.
+  piiKey: ""
+  # Passwords between the server's own pods:  openssl rand -hex 24  (each)
+  internalToken: ""
+  serviceClientSecret: ""
+  # First administrator, created on the first start only; change the password after signing in.
   adminEmail: admin@example.com
+  adminPassword: ""
 
 # ---------------------------------------------------------------------------------------------
 # Datastores. Production uses managed or operator-run clusters; give their addresses here, or
