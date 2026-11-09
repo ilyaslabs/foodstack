@@ -2,13 +2,13 @@
 # Runs FoodStack, in any topology, on the Kubernetes cluster your kubectl points at (an EKS cluster
 # on Floci, kind, k3s, ...), with the datastores in plain Docker containers beside it. See README.md.
 #
-#   playground/k8s/up.sh --registry <registry>/<repository>     # build, push and install (monolith)
-#   playground/k8s/up.sh --registry ... --topology split        # core + order + dispatch + search
+#   playground/k8s/up.sh --version 1.0.0                        # a release from Docker Hub (monolith)
+#   playground/k8s/up.sh --version 1.0.0 --topology split       # core + order + dispatch + search
+#   playground/k8s/up.sh --registry <registry>/<repository>     # your own build, pushed there
 #   playground/k8s/up.sh --registry ... --topology microservices --skip-build
-#   playground/k8s/up.sh --version 1.0.0 --topology split       # released images from Docker Hub
 #
-# --registry is where the cluster pulls from (Floci: the repositoryUri). --push-to is where Docker
-# pushes, when that differs (Floci on Linux: localhost:4566/000000000000/us-east-1/<repository>).
+# --registry is where the cluster pulls your build from (Floci: the ECR repositoryUri). --push-to is
+# where Docker pushes, when that differs (Floci on Linux: localhost:4566/000000000000/us-east-1/<repo>).
 # Run it again with another topology to switch: only the FoodStack release changes.
 source "$(dirname "$0")/lib.sh"
 
@@ -29,7 +29,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ $topology =~ ^(monolith|split|microservices)$ ]] || fail "--topology must be monolith, split or microservices"
-[[ -n $registry || -n $version ]] || fail "give --registry <registry>/<repository> for your own build, or --version for a release (see --help)"
+[[ -n $registry || -n $version ]] || fail "give --version for a release from Docker Hub, or --registry <registry>/<repository> for your own build (see --help)"
 
 for tool in docker kubectl helm; do
   command -v "$tool" > /dev/null || fail "$tool is needed (https://kubernetes.io/docs/tasks/tools/, https://helm.sh/docs/intro/install/)"

@@ -278,23 +278,24 @@ Check
 
 ### OPS-11b Kubernetes playground: every topology on one computer
 
-Who: tester · Where: a computer with Docker (8 GB of memory for it), the AWS CLI, kubectl, helm, Java 25 and Maven; no cloud account
+Who: tester · Where: a computer with Docker (8 GB of memory for it), the AWS CLI, kubectl and helm, on a checkout of the release under test; no cloud account
 
 Steps
-1. Follow playground/k8s/README.md step 1: start Floci, create the EKS cluster with `aws eks create-cluster`, `aws eks update-kubeconfig`, create the ECR repository and the two buckets.
-2. `playground/k8s/up.sh --registry 000000000000.dkr.ecr.us-east-1.localhost:4566/foodstack` (on Linux add `--push-to localhost:4566/000000000000/us-east-1/foodstack`).
+1. Follow playground/k8s/README.md step 1: start Floci, create the EKS cluster with `aws eks create-cluster`, `aws eks update-kubeconfig`, and the two buckets.
+2. `playground/k8s/up.sh --version <the release>`.
 3. Open the back office at the printed address and sign in with the printed password. Onboard a store with a photo (STORE-01) and place an order (ORD-03) in the customer app.
 4. Run step 2 again with `--topology split --skip-build`, then `--topology microservices --skip-build`. Place another order after each.
 5. `playground/k8s/down.sh`.
 
 Expect
 - Step 2 ends with the three addresses and the administrator's password. `kubectl -n foodstack get pods` shows only FoodStack's pods and the gateway's; `docker ps` shows the `fsplay-*` datastores.
-- `aws ecr list-images --repository-name foodstack` lists the server-, web- and backoffice-playground tags, and the pods pulled them from there.
+- The pods run `docker.io/ilyasdotdev/ilyaslabs-foodstack:server-<the release>` (and web-, backoffice-), pulled by the cluster from Docker Hub.
 - Step 3: the photo shows (it loads from `localhost:4566`), and the order's emails are at http://localhost:8025.
 - Step 4: the Deployments change to the new topology; the store and the first order are still there.
 - Step 5: the FoodStack release and the `fsplay-*` containers are gone; the cluster and Floci stay.
 
 Check
+- Your own build: with Java 25 and Maven, README step 3 (`aws ecr create-repository`, then `up.sh --registry ...`) runs the working copy's images from Floci's ECR.
 - The scripts never call Floci or the AWS CLI: `grep -rnw aws playground/k8s/*.sh playground/k8s/datastores` finds nothing.
 - Without `maps.allowPublicOpenStreetMap: true`, `helm template` with the playground values refuses OpenStreetMap's public servers (OPS-11 Check).
 
