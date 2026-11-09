@@ -6,7 +6,7 @@ runs as plain Docker containers.
 
 | What | Runs as | Address (from the pods) |
 |---|---|---|
-| Kubernetes, image registry, photo buckets | [Floci](https://floci.io) (local AWS): an EKS cluster, ECR and S3, which you set up with the usual `aws` and `kubectl` commands below | Floci at `10.213.0.5:4566` |
+| Kubernetes, photo buckets | [Floci](https://floci.io) (local AWS): an EKS cluster and S3 (plus ECR only to try your own builds), which you set up with the usual `aws` and `kubectl` commands below | Floci at `10.213.0.5:4566` |
 | MongoDB 8.2 | one-member replica set | `10.213.0.10:27017` |
 | Redis 8.2 | single node | `10.213.0.11:6379` |
 | Kafka 4.1 | one KRaft broker | `10.213.0.12:9092` |
@@ -22,9 +22,9 @@ behaves. Not for real data: no backups, nothing secured.
 
 - Docker (Docker Desktop on macOS and Windows, with at least 8 GB of memory for microservices,
   6 GB for monolith or split), the AWS CLI, `kubectl` and `helm`.
-- Java 25 and Maven, to build FoodStack from this source tree.
+- Only to try your own unreleased changes: Java 25 and Maven.
 
-## 1. Floci: cluster, registry and buckets
+## 1. Floci: cluster and buckets
 
 Floci and the datastores share one Docker network, so the pods reach them on fixed addresses:
 
@@ -53,17 +53,6 @@ aws eks update-kubeconfig --name foodstack
 kubectl get nodes
 ```
 
-A repository for the three FoodStack images. Floci's EKS pulls from its ECR as it is:
-
-```bash
-aws ecr create-repository --repository-name foodstack --query repository.repositoryUri --output text
-# 000000000000.dkr.ecr.us-east-1.localhost:4566/foodstack
-```
-
-On Linux with Docker's containerd image store (the default from Docker Engine 29), Docker can
-only push to the path form of that address (Floci's ECR guide); the cluster still pulls from the
-address above. Give `up.sh` both: `--push-to localhost:4566/000000000000/us-east-1/foodstack`.
-
 The two buckets, as an operator sets them up at Amazon (handbook guide 12): CORS for the two
 sites, and public reading on `foodstack-public`. The app reads the key `playground` /
 `playground-secret` (values-playground.yaml); Floci does not check it.
@@ -80,21 +69,22 @@ aws s3api put-bucket-policy --bucket foodstack-public --policy '{"Version":"2012
 
 ## 2. FoodStack
 
+A released version, straight from Docker Hub (`ilyasdotdev/ilyaslabs-foodstack:server-1.0.0`,
+`web-1.0.0`, `backoffice-1.0.0`). The cluster pulls the images itself; nothing is built. Run it from a checkout of the same release
+(`git checkout v1.0.0`), so the chart matches the images:
+
 ```bash
-REGISTRY=000000000000.dkr.ecr.us-east-1.localhost:4566/foodstack
-playground/k8s/up.sh --registry $REGISTRY                          # monolith
-playground/k8s/up.sh --registry $REGISTRY --topology split         # core + order + dispatch + search
-playground/k8s/up.sh --registry $REGISTRY --topology microservices # one Deployment per module
+playground/k8s/up.sh --version 1.0.0                           # monolith
+playground/k8s/up.sh --version 1.0.0 --topology split          # core + order + dispatch + search
+playground/k8s/up.sh --version 1.0.0 --topology microservices  # one Deployment per module
 ```
 
-The first run takes about 10 minutes. `up.sh`:
+`up.sh`:
 
 1. starts the datastores (`datastores/*.sh`, each can also run on its own);
 2. installs the Gateway API and Istio in ambient mode on the cluster, once, as the deployment guide does;
-3. builds FoodStack and its three images, `$REGISTRY:server-playground`, `web-playground` and
-   `backoffice-playground`, and pushes them;
-4. installs the chart in `k8s/helm/foodstack` with [values-playground.yaml](values-playground.yaml);
-5. forwards port 8080 to the gateway and prints the addresses and the administrator's password.
+3. installs the chart in `k8s/helm/foodstack` with [values-playground.yaml](values-playground.yaml);
+4. forwards port 8080 to the gateway and prints the addresses and the administrator's password.
 
 Then open:
 
@@ -102,14 +92,32 @@ Then open:
 - Back office: http://admin.foodstack.localhost:8080/admin/ (`admin@foodstack.localhost`, password printed by `up.sh`)
 - Emails: http://localhost:8025
 
-Switch topology with the same images: `up.sh --registry $REGISTRY --topology microservices --skip-build`.
-Only the FoodStack release changes; the stores and orders you made are still there. After a
-release, `up.sh --version 1.0.0 --topology split` uses the published images from Docker Hub and
-builds nothing.
+Run it again with another `--topology` to switch. Only the FoodStack release changes; the stores
+and orders you made are still there.
 
 `up.sh` works the same on any other cluster your `kubectl` reaches (kind, k3s, Docker Desktop's
-Kubernetes), as long as its pods can reach the `foodstack-playground` network and pull from the
-registry you give.
+Kubernetes), as long as its pods can reach the `foodstack-playground` network.
+
+## 3. Optional: try your own unreleased changes
+
+Images built from your working copy exist only on your computer, so the cluster cannot get them
+from Docker Hub. Push them to Floci's ECR instead, which the cluster pulls from as it is:
+
+```bash
+aws ecr create-repository --repository-name foodstack --query repository.repositoryUri --output text
+# 000000000000.dkr.ecr.us-east-1.localhost:4566/foodstack
+
+playground/k8s/up.sh --registry 000000000000.dkr.ecr.us-east-1.localhost:4566/foodstack --topology split
+playground/k8s/up.sh --registry ... --topology microservices --skip-build   # same images, another topology
+```
+
+With `--registry`, `up.sh` builds FoodStack (Maven, pnpm) and its three images
+(`server-playground`, `web-playground`, `backoffice-playground`), pushes them, and restarts the
+pods on the new build. The first run takes about 10 minutes.
+
+On Linux with Docker's containerd image store (the default from Docker Engine 29), Docker can
+only push to the path form of that address (Floci's ECR guide); the cluster still pulls from the
+address above. Add `--push-to localhost:4566/000000000000/us-east-1/foodstack`.
 
 ## Stop
 
@@ -136,7 +144,7 @@ docker rm -f floci && docker network rm foodstack-playground
 | `kubectl cannot reach a cluster` | Run `aws eks update-kubeconfig --name foodstack` again (with the eks-admin key exported) |
 | Pods stay `Pending` or are `Evicted` with "DiskPressure" | Kubernetes stops placing pods when Docker's disk is about 90% full. Free space (`docker system prune`), or give Docker Desktop a bigger disk |
 | Pods are `OOMKilled` or `Pending` for memory | Give Docker more memory, or use `--topology monolith` |
-| `ImagePullBackOff` | The images are not in the registry: run `up.sh` without `--skip-build`, and check `aws ecr list-images --repository-name foodstack` |
+| `ImagePullBackOff` | With `--version`: that version is not on Docker Hub (see the GitHub releases). With `--registry`: run without `--skip-build`, and check `aws ecr list-images --repository-name foodstack` |
 | A datastore did not start | `docker logs fsplay-<name>` (for example `fsplay-kafka`) |
 | The addresses stopped answering | The port forward ended: run `up.sh ... --skip-build` again |
 | Address `10.213.0.x` already in use | Another network uses that range: set `PLAYGROUND_SUBNET` and change the addresses in values-playground.yaml and the commands above |
