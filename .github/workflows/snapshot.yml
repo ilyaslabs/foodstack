@@ -1,0 +1,51 @@
+name: Snapshot
+
+# Every push to a branch publishes that branch's snapshot, replacing the one before (ilyas,
+# 2026-11-09). The branch name is sanitized: anything but letters, digits, '.', '_' and '-'
+# becomes '-', so feature/rider-map is feature-rider-map.
+#   Maven Central snapshots: io.github.ilyaslabs:foodstack-*:<branch>-SNAPSHOT
+#   Docker Hub and GHCR:     ilyasdotdev/ilyaslabs-foodstack:server-<branch>-snapshot (web-, backoffice-)
+# Releases are published only by release.yml; Docker Hub keeps the exact release tags
+# (server-1.2.3) immutable, while these snapshot tags stay mutable.
+on:
+  push:
+    branches: ['**']
+
+permissions:
+  contents: write
+  packages: write
+
+# One snapshot run per branch at a time; a newer push replaces a run still in progress.
+concurrency:
+  group: snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  branch:
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.branch.outputs.name }}
+    steps:
+      - id: branch
+        env:
+          BRANCH: ${{ github.ref_name }}
+        # The same rule as ilyaslabs/cicd mvn-snapshot-release.yml, so the Maven version and the
+        # image tags agree. Image tags are at most 128 characters.
+        run: |
+          name=$(printf '%s' "$BRANCH" | sed 's/[^A-Za-z0-9._-]/-/g' | cut -c1-100)
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "Snapshot for branch $BRANCH: $name-SNAPSHOT"
+
+  maven:
+    uses: ilyaslabs/cicd/.github/workflows/mvn-snapshot-release.yml@main
+    with:
+      java-version: '25'
+    secrets: inherit
+
+  images:
+    needs: branch
+    uses: ./.github/workflows/images.yml
+    with:
+      version: ${{ needs.branch.outputs.name }}-SNAPSHOT
+      tags: ${{ needs.branch.outputs.name }}-snapshot
+    secrets: inherit

@@ -3,7 +3,8 @@ name: Images
 # Builds the unit deployer zip and the images, and pushes the images to Docker Hub
 # (ilyasdotdev/ilyaslabs-foodstack) and GHCR (ghcr.io/ilyaslabs/foodstack), one repository each with
 # the part in the tag: server-1.0.0, web-1.0.0, backoffice-1.0.0 (and -1.0, -latest).
-# Called by release.yml (the version tags). Nothing is published on a merge to main.
+# Called by release.yml (the version tags) and snapshot.yml (server-<branch>-snapshot on every push
+# to a branch).
 on:
   workflow_call:
     inputs:
