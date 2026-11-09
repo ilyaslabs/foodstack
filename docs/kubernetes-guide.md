@@ -13,7 +13,7 @@ Contents
 4. [Try it first: a trial install](#4-try-it-first-a-trial-install)
 5. [Datastores, buckets and maps](#5-datastores-buckets-and-maps)
 6. [Keys and Secrets](#6-keys-and-secrets)
-7. [Write your values file](#7-write-your-values-file)
+7. [Write your values file](#7-write-your-values-file), and [your deployment repository](#74-your-deployment-repository)
 8. [Install](#8-install)
 9. [Check it works](#9-check-it-works)
 10. [Install one service at a time (optional)](#10-install-one-service-at-a-time-optional)
@@ -444,6 +444,77 @@ helm template foodstack oci://ghcr.io/ilyaslabs/charts/foodstack --version 1.0.0
 ```
 
 A missing or wrong setting stops here with a message naming it, for example `datastores.s3.publicBaseUrl: where browsers load the public bucket's files` or `maps.tiles.url: OpenStreetMap's public tiles allow light use only`. With access to the cluster, `helm install … --dry-run=server` also checks every object against the cluster's API.
+
+### 7.4 Your deployment repository
+
+Keep your install's settings in a small Git repository of your own, created once and used for the life of the install. It holds **your settings only**, never a copy of the chart: the chart comes from the registry at the version you name, so upgrading never means merging our changes into yours.
+
+```
+foodstack-deploy/
+├─ README.md            who runs it, where the cluster is, where the keys are kept
+├─ VERSION              1.0.0
+├─ my-values.yaml       section 7.1: hosts, datastores, buckets, maps, topology, sizes
+├─ values-prod.yaml     optional: only what differs per environment (replicas, hosts)
+└─ deploy.sh            the one command below
+```
+
+```bash
+#!/usr/bin/env bash
+# deploy.sh: install or upgrade, the same command every time.
+set -euo pipefail
+cd "$(dirname "$0")"
+helm upgrade --install foodstack oci://ghcr.io/ilyaslabs/charts/foodstack \
+  --version "$(cat VERSION)" -n foodstack --create-namespace \
+  -f my-values.yaml ${VALUES_EXTRA:+-f "$VALUES_EXTRA"} --wait --timeout 20m
+```
+
+How it is used:
+
+| You want to | Change | Then |
+|---|---|---|
+| Install for the first time | Write `my-values.yaml`; create the Secrets of [section 6](#6-keys-and-secrets) and [7.2](#72-provider-secrets) | `./deploy.sh` |
+| Change a setting (more replicas, another topology, a new host) | Edit `my-values.yaml` | Commit, `./deploy.sh` |
+| Upgrade FoodStack | Put the new version in `VERSION` after reading its release notes | Commit, `./deploy.sh` ([section 14](#14-upgrades-and-rollback)) |
+| Go back | `git revert` the commit | `./deploy.sh`, or `helm -n foodstack rollback foodstack` |
+| See what an upgrade would change | | `helm template` both versions and `diff`, or `render.sh` ([section 10](#10-install-one-service-at-a-time-optional)) |
+
+Rules that keep it safe:
+
+- **No secrets in Git.** The key Secret, datastore passwords and provider keys live in Kubernetes Secrets (or a secret manager through External Secrets, Vault or Sealed Secrets) and are only *named* in the values file: `secrets.existingSecret`, `datastores.existingSecret`, `server.envFromSecrets`. If passwords must sit in the values file, encrypt it (SOPS).
+- **Never edit the chart.** Everything you need is a setting ([section 18](#18-every-chart-setting)). If something is not, ask for it: a forked chart has to be merged by hand at every release.
+- **Every change is a commit**, so the history says who changed what and when, and any earlier state can be restored.
+- **Back up the key Secret outside the repository** ([section 6](#6-keys-and-secrets)): the repository can rebuild the install, but not the keys.
+
+**Applying commits automatically.** Instead of running `deploy.sh` by hand, a GitOps tool can watch the repository and apply each commit. With Argo CD, one Application pointing at the chart, with your values from the repository:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: foodstack
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: ghcr.io/ilyaslabs/charts          # OCI chart registry
+      chart: foodstack
+      targetRevision: 1.0.0                      # the version; change it to upgrade
+      helm:
+        releaseName: foodstack
+        valueFiles: [$values/my-values.yaml]
+    - repoURL: https://github.com/<you>/foodstack-deploy.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: foodstack
+  syncPolicy:
+    syncOptions: [CreateNamespace=true]
+```
+
+Argo CD renders the chart itself rather than through `helm install`, so the chart's `lookup` of existing keys does not run: always use `secrets.existingSecret` with Argo CD, or each sync would generate new keys. Flux's HelmRelease runs Helm itself and has no such limit.
+
+If you prefer to see every Kubernetes object in Git, commit the folders `render.sh` writes ([section 10](#10-install-one-service-at-a-time-optional)), without `00-secrets`, and render again on every change.
 
 ---
 
