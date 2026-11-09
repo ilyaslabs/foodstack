@@ -59,3 +59,16 @@ jobs:
             helm package "k8s/helm/$chart" --version "$VERSION" --app-version "$VERSION" -d dist
             helm push "dist/$chart-$VERSION.tgz" oci://ghcr.io/ilyaslabs/charts
           done
+
+  # Only lists what this release published (also on the run's summary page).
+  published:
+    needs: [version, charts]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Published versions and names
+        run: |
+          .github/scripts/print-published.sh "${{ needs.version.outputs.version }}" \
+            "${{ needs.version.outputs.version }} ${{ needs.version.outputs.minor }} latest" "${{ github.event.release.tag_name }}"
