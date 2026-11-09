@@ -40,6 +40,8 @@ jobs:
     uses: ilyaslabs/cicd/.github/workflows/mvn-snapshot-release.yml@main
     with:
       java-version: '25'
+      # Pull request checks already run the tests; a snapshot only publishes.
+      skip-tests: true
     secrets: inherit
 
   images:
