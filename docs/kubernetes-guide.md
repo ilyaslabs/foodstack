@@ -52,7 +52,7 @@ With the release name `foodstack` (used throughout this guide), every object's n
 | Deployment, Service, ServiceAccount, ConfigMap, HPA, PDB per server group | `foodstack-core`, and in other topologies `foodstack-order`, `foodstack-dispatch`, … | The backend. Each group runs its modules locally and calls the others over the internal port 8081 |
 | Deployment, Service, HPA, PDB | `foodstack-web`, `foodstack-backoffice` | The two apps |
 | Job (Helm hook, before install and every upgrade) | `foodstack-migrations` | Creates and updates every module's database (Liquibase), then exits |
-| Secret (Helm hook, kept on uninstall) | `foodstack-secrets` | Token signing key, personal-data key, internal token, service client secret, first admin password ([section 6](#6-keys-and-secrets)) |
+| Secret (Helm hook, kept on uninstall) | `foodstack-secrets` | The keys you give in `secrets.*`: token signing key, personal-data key, internal token, service client secret, first admin password ([section 6](#6-keys-and-secrets)). Not made with `secrets.existingSecret` |
 | Secret | `foodstack-datastores` | Datastore addresses and passwords from your values |
 | Gateway (Gateway API) | `foodstack` | The public entry: ports 80 and 443, TLS, all three host names. Istio creates its pods and the Service `foodstack-istio` (a cloud load balancer) |
 | Gateway | `foodstack-internal` | A cluster-only entry with the same routes, used by the web app's server-side rendering. No rate limits |
@@ -304,27 +304,21 @@ A real install needs a maps provider; the public OpenStreetMap servers are refus
 
 ## 6. Keys and Secrets
 
-FoodStack's server needs five values that must never change after the first install. By default **the chart generates them** into the Secret `foodstack-secrets` on the first install, reads them back on every upgrade, and keeps the Secret when you uninstall.
+FoodStack's server needs five values that you make **once, before the first install**, and never change. The chart does not make them for you on a real install: it stops with a message naming the missing value and the command that makes it. (Only the trial values of [section 4](#4-try-it-first-a-trial-install) generate throwaway keys.) Because the values come from you, every tool that installs the chart (Helm, Argo CD, Flux, `render.sh`) writes the same Secret, and nothing can replace your keys behind your back.
 
-| Key | What it is | If it is lost or changed |
-|---|---|---|
-| `FOODSTACK_PII_KEY` | 32-byte key that encrypts personal data (emails, phone numbers, addresses) | **Personal data can never be read again.** The server refuses to start rather than make a second administrator |
-| `FOODSTACK_SIGNING_KEYS` | EC P-256 key that signs sign-in tokens | Everyone is signed out once; no data is lost |
-| `FOODSTACK_INTERNAL_TOKEN` | Password between server groups (Module-Switch) | Changes on all pods together at the next rollout; harmless |
-| `FOODSTACK_SERVICE_CLIENT_SECRET` | Credential for internal service calls | Same |
-| `FOODSTACK_ADMIN_PASSWORD` | First administrator's password, used only when the first administrator is created | Nothing; change the password in the back office |
+| Value (chart setting) | Key in the Secret | What it is | Make it with | If it is lost or changed |
+|---|---|---|---|---|
+| `secrets.piiKey` | `FOODSTACK_PII_KEY` | 32-byte key that encrypts personal data (emails, phone numbers, addresses) before it is stored | `openssl rand -base64 32` | **Personal data can never be read again.** The server refuses to start rather than make a second administrator |
+| `secrets.signingKey` | `FOODSTACK_SIGNING_KEYS` | EC P-256 key that signs sign-in tokens | `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \| openssl pkcs8 -topk8 -nocrypt` | Everyone is signed out once; no data is lost |
+| `secrets.internalToken` | `FOODSTACK_INTERNAL_TOKEN` | Password between server groups (Module-Switch) | `openssl rand -hex 24` | Harmless: all pods get the new one at the next rollout |
+| `secrets.serviceClientSecret` | `FOODSTACK_SERVICE_CLIENT_SECRET` | Credential for internal service calls | `openssl rand -hex 24` | Same |
+| `secrets.adminPassword` | `FOODSTACK_ADMIN_PASSWORD` | First administrator's password, used only when the first administrator is created | at least 12 characters of your choice | Nothing; change the password in the back office |
 
-**Back the Secret up right after the first install**, outside the cluster (password manager, secret manager):
+**Keep a copy of the personal-data key outside the cluster** (password manager, secret manager) before you install. It is the one value nobody can recover.
 
-```bash
-kubectl -n foodstack get secret foodstack-secrets -o yaml > foodstack-secrets.yaml   # keep it safe, not in Git
-```
+There are two ways to hand them to the chart.
 
-The chart refuses an upgrade if the Secret has disappeared, instead of silently generating new keys.
-
-### Bring your own keys
-
-To keep the keys in a secret manager (External Secrets, Vault, Sealed Secrets) or reuse a single server's keys ([handbook 40](handbook/40-move-to-kubernetes.md)), create the Secret yourself and name it in `secrets.existingSecret`:
+**A. Your own Secret (recommended).** The keys never appear in a values file or in Git:
 
 ```bash
 kubectl create namespace foodstack
@@ -335,7 +329,30 @@ kubectl -n foodstack create secret generic foodstack-keys \
   --from-literal=FOODSTACK_INTERNAL_TOKEN="$(openssl rand -hex 24)" \
   --from-literal=FOODSTACK_SERVICE_CLIENT_SECRET="$(openssl rand -hex 24)" \
   --from-literal=FOODSTACK_ADMIN_PASSWORD="$(openssl rand -hex 12)"
+
+kubectl -n foodstack get secret foodstack-keys -o yaml > foodstack-keys.yaml   # your backup: password manager, not Git
 ```
+
+```yaml
+# my-values.yaml
+secrets:
+  existingSecret: foodstack-keys
+```
+
+The same Secret can come from a secret manager instead (External Secrets, Vault, Sealed Secrets), as long as it has these five keys.
+
+**B. In the values file.** Paste each value into its placeholder. Then the values file holds secrets: keep it encrypted (SOPS) or out of Git.
+
+```yaml
+secrets:
+  signingKey: "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg…"   # the openssl pkcs8 output, PEM lines optional
+  piiKey: "q3Jk…="
+  internalToken: "6f1c…"
+  serviceClientSecret: "a92e…"
+  adminPassword: "choose-a-long-one"
+```
+
+The chart writes them into the Secret `foodstack-secrets` (a Helm hook, created before the migrations Job and kept by `helm uninstall`).
 
 (Moving from one server: copy `FOODSTACK_SIGNING_KEYS` and `FOODSTACK_PII_KEY` from `/opt/foodstack/.env` instead of generating them.)
 
@@ -373,7 +390,7 @@ gateway:
 
 secrets:
   adminEmail: you@example.com      # first administrator
-  # existingSecret: foodstack-keys # section 6
+  existingSecret: foodstack-keys   # the five keys you made once (section 6)
 
 datastores:
   mongodb:
@@ -458,7 +475,7 @@ helm install foodstack oci://ghcr.io/ilyaslabs/charts/foodstack --version 1.0.0 
 
 What happens, in order:
 
-1. The Secrets `foodstack-secrets` and `foodstack-datastores` are created (unless you named your own).
+1. The Secrets `foodstack-secrets` (from your `secrets.*` values) and `foodstack-datastores` are created, unless you named your own.
 2. The Job `foodstack-migrations` runs every module's database changes. It needs MongoDB; a wrong address fails here. Follow it with `kubectl -n foodstack logs -f job/foodstack-migrations`.
 3. The Deployments, Services, Gateways, routes, mesh and network policies are created. Istio starts the gateway pods and the waypoint.
 4. The server pods start. On start each one checks the buckets, creates Kafka topics and Elasticsearch indexes, and the first one creates the first administrator. A pod is ready when `/actuator/health/readiness` answers.
@@ -472,11 +489,11 @@ kubectl -n foodstack get pods -w
 
 ### 8.2 The administrator's password
 
-```bash
-kubectl -n foodstack get secret foodstack-secrets -o jsonpath='{.data.FOODSTACK_ADMIN_PASSWORD}' | base64 -d; echo
-```
+It is the `adminPassword` you chose in [section 6](#6-keys-and-secrets). To read it back:
 
-(With your own Secret, read it from that one.)
+```bash
+kubectl -n foodstack get secret foodstack-keys -o jsonpath='{.data.FOODSTACK_ADMIN_PASSWORD}' | base64 -d; echo   # or foodstack-secrets
+```
 
 ### 8.3 DNS and certificates
 
@@ -566,7 +583,7 @@ kubectl -n foodstack get all -l foodstack.ilyaslabs.io/part=server-order     # o
 ```
 
 - Start the service that runs `identity` first (`server-core` in monolith and split, `server-identity` in microservices): every service checks sign-in tokens against it. A service whose neighbours are not running yet starts, and its calls to them fail until they are; their routes answer 503 meanwhile.
-- `render.sh` reads the Secrets already in the cluster, so a render for an upgrade keeps the same keys, and it stops if FoodStack runs but its Secret is gone. Without a cluster (`--offline`) it makes new keys: only for a brand-new install. To keep `00-secrets` out of files altogether, use `secrets.existingSecret` ([section 6](#6-keys-and-secrets)).
+- `00-secrets` holds the keys from your `secrets.*` values, the same on every render. With `secrets.existingSecret` ([section 6](#6-keys-and-secrets)) there is no key file at all, which is the better choice when the folders go into Git. (Only trial values generate keys; for them `render.sh` reads the Secret already in the cluster so a second render keeps it, and `--offline` makes new ones.)
 - To upgrade, render again with the new chart version, run the migrations Job again, then apply the service folders in your order. A folder not yet applied keeps running the old version, so apply them all before you leave the install: the services are tested together at one version only.
 - An install is managed either by Helm or by `kubectl` from these folders, never both: Helm refuses objects it did not create, and `helm upgrade` would undo changes made with `kubectl`. You can still render the folders to review a Helm upgrade before running it.
 - GitOps tools (Argo CD, Flux) can point at the Helm chart directly, or at the rendered folders kept in Git without `00-secrets`.
@@ -693,7 +710,6 @@ More: [handbook 23](handbook/23-health-and-dashboards.md).
 
 ```bash
 # Read the release notes first: https://github.com/ilyaslabs/foodstack/releases
-kubectl -n foodstack get secret foodstack-secrets -o yaml > foodstack-secrets-before-upgrade.yaml
 
 helm upgrade foodstack oci://ghcr.io/ilyaslabs/charts/foodstack --version 1.1.0 \
   -n foodstack -f my-values.yaml --wait --timeout 20m
@@ -718,7 +734,7 @@ A rollback is safe because the previous release understands the database as the 
 
 | What | How | Without it |
 |---|---|---|
-| `foodstack-secrets` (or your own key Secret) | Copy outside the cluster after install and before every upgrade ([section 6](#6-keys-and-secrets)) | **Personal data unreadable** |
+| The five keys (`foodstack-keys`, or `secrets.*` in your values) | A copy outside the cluster from the day you make them ([section 6](#6-keys-and-secrets)) | **Personal data unreadable** |
 | `my-values.yaml` and `foodstack-providers` | Password manager or private repository | Reinstalling means rewriting them |
 | MongoDB | The provider's continuous backup with point-in-time restore, or `mongodump` of each `foodstack_*` database on a schedule | Data loss |
 | Buckets | Versioning, and replication to another region | Lost photos and documents |
@@ -735,7 +751,7 @@ Target for the reference setup: restore point under 15 minutes old, service back
 - [ ] Gateway token check on: `gateway.jwt.enabled: true` (default).
 - [ ] Edge rate limits on (`gateway.rateLimit.enabled: true`, default), `gateway.rateLimit.limits` reviewed for your traffic, and `gateway.trustedProxies` matching what is in front of the gateway.
 - [ ] NetworkPolicies on: `networkPolicies.enabled: true` (default).
-- [ ] The key Secret backed up outside the cluster.
+- [ ] The five keys kept outside the cluster, above all the personal-data key.
 - [ ] Datastores reachable only from the cluster, with TLS and passwords.
 - [ ] No passwords in committed values files (`existingSecret`, SOPS, or a secret manager).
 - [ ] HTTPS only (`scheme: https`, default); HTTP redirects to HTTPS.
@@ -807,7 +823,8 @@ Defaults in brackets. The chart's own `values.yaml` has the same list with comme
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `secrets.existingSecret` | empty | Your own key Secret ([section 6](#6-keys-and-secrets)) |
+| `secrets.existingSecret` | empty | Your own Secret with the five keys ([section 6](#6-keys-and-secrets)); the placeholders below are then ignored |
+| `secrets.signingKey`, `piiKey`, `internalToken`, `serviceClientSecret`, `adminPassword` | empty, required | The five keys, made once ([section 6](#6-keys-and-secrets)). Only trial values generate them |
 | `secrets.adminEmail` | `admin@example.com` | First administrator |
 | `datastores.existingSecret` | empty | Your own datastore Secret |
 | `datastores.mongodb.uri`, `sharding` | empty, `false` | [5.1](#51-datastores) |
@@ -846,7 +863,7 @@ Start with `kubectl -n foodstack get pods`, then `kubectl -n foodstack describe 
 
 | What you see | Why, and what to do |
 |---|---|
-| `helm install` stops with a message about a setting | A required value is missing or refused; the message names it ([7.3](#73-check-the-file-before-installing)) |
+| `helm install` stops with a message about a setting | A required value is missing or refused; the message names it ([7.3](#73-check-the-file-before-installing)). `secrets.signingKey` and the other keys: make them as in [section 6](#6-keys-and-secrets) |
 | `helm install` times out in the migrations Job | `kubectl -n foodstack logs job/foodstack-migrations`: usually the MongoDB address, password or network access. Fix and run the install again |
 | Pods `Pending` | Not enough CPU or memory on the nodes (`describe` says `Insufficient`): add nodes or lower `resources` |
 | `ImagePullBackOff` | The version does not exist or the mirror needs `image.pullSecrets` |

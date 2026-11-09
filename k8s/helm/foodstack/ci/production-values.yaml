@@ -2,6 +2,12 @@
 # chart checks render the paths the trial values skip. Not a template for a real install.
 secrets:
   adminEmail: ops@example.com
+  # Placeholders the chart requires on a real install (CI only, not real keys).
+  signingKey: ci-signing-key
+  piiKey: Y2ktcGlpLWtleS1jaS1waWkta2V5LWNpLXBpaS1rZXk=
+  internalToken: ci-internal-token
+  serviceClientSecret: ci-service-client-secret
+  adminPassword: ci-admin-password
 datastores:
   mongodb: { uri: "mongodb+srv://foodstack:secret@mongo.example.com/", sharding: true }
   redis: { url: "rediss://:secret@redis.example.com:6380" }

@@ -31,7 +31,7 @@ done
 [[ $topology =~ ^(monolith|split|microservices)$ ]] || fail "--topology must be monolith, split or microservices"
 [[ -n $registry || -n $version ]] || fail "give --version for a release from Docker Hub, or --registry <registry>/<repository> for your own build (see --help)"
 
-for tool in docker kubectl helm; do
+for tool in docker kubectl helm openssl; do
   command -v "$tool" > /dev/null || fail "$tool is needed (https://kubernetes.io/docs/tasks/tools/, https://helm.sh/docs/intro/install/)"
 done
 docker info > /dev/null 2>&1 || fail "Docker is not running"
@@ -84,6 +84,20 @@ else
 fi
 
 # --- FoodStack ----------------------------------------------------------------------------------
+# The server's keys, made once like an operator does (Kubernetes guide, section 6), kept until
+# down.sh removes the namespace.
+kubectl create namespace foodstack --dry-run=client -o yaml | kubectl apply -f - > /dev/null
+if ! kubectl -n foodstack get secret foodstack-keys > /dev/null 2>&1; then
+  info "Making the server's keys (Secret foodstack-keys)"
+  kubectl -n foodstack create secret generic foodstack-keys \
+    --from-literal=FOODSTACK_SIGNING_KEYS="$(openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 2> /dev/null \
+      | openssl pkcs8 -topk8 -nocrypt | grep -v -- ----- | tr -d '\n')" \
+    --from-literal=FOODSTACK_PII_KEY="$(openssl rand -base64 32)" \
+    --from-literal=FOODSTACK_INTERNAL_TOKEN="$(openssl rand -hex 24)" \
+    --from-literal=FOODSTACK_SERVICE_CLIENT_SECRET="$(openssl rand -hex 24)" \
+    --from-literal=FOODSTACK_ADMIN_PASSWORD="$(openssl rand -hex 12)" > /dev/null
+fi
+
 info "Installing FoodStack ($topology)"
 upgrade=false
 helm status foodstack -n foodstack > /dev/null 2>&1 && upgrade=true
@@ -101,7 +115,7 @@ echo $! > "$STATE_DIR/port-forward.pid"
 wait_for "the gateway on port $PLAYGROUND_PORT" 60 curl -fsS -H "Host: foodstack.localhost" \
   "http://127.0.0.1:$PLAYGROUND_PORT/api/v1/settings/locale"
 
-password=$(kubectl -n foodstack get secret foodstack-secrets -o jsonpath='{.data.FOODSTACK_ADMIN_PASSWORD}' | base64 -d)
+password=$(kubectl -n foodstack get secret foodstack-keys -o jsonpath='{.data.FOODSTACK_ADMIN_PASSWORD}' | base64 -d)
 cat << EOF
 
 FoodStack is running ($topology):
