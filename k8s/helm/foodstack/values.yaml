@@ -14,6 +14,8 @@ hosts:
 
 # https for real installs; http only for a trial cluster without certificates.
 scheme: https
+# The port in the public addresses, when it is not the scheme's own (the playground's 8080).
+publicPort: ""
 
 # The three FoodStack images live in one repository, told apart by tag:
 # docker.io/ilyasdotdev/ilyaslabs-foodstack:server-1.0.0, :web-1.0.0, :backoffice-1.0.0
@@ -160,6 +162,9 @@ datastores:
 # server.envFromSecrets.
 # ---------------------------------------------------------------------------------------------
 maps:
+  # true only on your own computer (the playground in playground/k8s): lets the public OpenStreetMap
+  # servers through, which allow light use only.
+  allowPublicOpenStreetMap: false
   geocoding:
     provider: ""                 # google, or nominatim (any Nominatim-compatible service)
     url: ""                      # nominatim only: your provider's URL

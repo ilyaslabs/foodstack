@@ -68,7 +68,11 @@ istio.io/dataplane-mode: ambient
 
 {{- define "foodstack.url" -}}
 {{- $root := index . 0 -}}{{- $host := index . 1 -}}
+{{- if $root.Values.publicPort -}}
+{{- printf "%s://%s:%v" $root.Values.scheme $host $root.Values.publicPort -}}
+{{- else -}}
 {{- printf "%s://%s" $root.Values.scheme $host -}}
+{{- end -}}
 {{- end -}}
 
 {{/* The hostnames, each once. */}}
@@ -248,7 +252,7 @@ S3_PRIVATE_BUCKET: {{ $ds.s3.privateBucket | quote }}
 {{- if and (eq $provider "nominatim") (not $m.geocoding.url) }}
 {{- fail "maps.geocoding.url: your Nominatim-compatible provider's URL" }}
 {{- end }}
-{{- if contains "nominatim.openstreetmap.org" (default "" $m.geocoding.url) }}
+{{- if and (contains "nominatim.openstreetmap.org" (default "" $m.geocoding.url)) (not $m.allowPublicOpenStreetMap) }}
 {{- fail "maps.geocoding.url: OpenStreetMap's public server allows light use only; use a hosted provider or your own" }}
 {{- end }}
 {{- $_ := required "maps.geocoding.countryCodes: your country's two-letter code" $m.geocoding.countryCodes }}
@@ -266,7 +270,7 @@ ROUTING_URL: {{ default "" $m.routing.url | quote }}
 {{- if not .Values.dev.enabled }}
 {{- $_ := required "maps.tiles.url: your tile provider's {z}/{x}/{y} URL (handbook guide 13)" $t.url }}
 {{- $_ := required "maps.tiles.attribution: the credit your tile provider asks for" $t.attribution }}
-{{- if contains "tile.openstreetmap.org" $t.url }}
+{{- if and (contains "tile.openstreetmap.org" $t.url) (not .Values.maps.allowPublicOpenStreetMap) }}
 {{- fail "maps.tiles.url: OpenStreetMap's public tiles allow light use only; use a hosted provider or your own" }}
 {{- end }}
 {{- end }}

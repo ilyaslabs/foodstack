@@ -1,5 +1,5 @@
-# ilyaslabs/foodstack-web: the customer app's SSR server (TDD 14.3). Build after `pnpm build`:
-#   docker build -f docker/web.Dockerfile -t ilyaslabs/foodstack-web frontend
+# ilyasdotdev/ilyaslabs-foodstack:web-<version>: the customer app's SSR server (TDD 14.3). Build after `pnpm build`:
+#   docker build -f docker/web.Dockerfile -t ilyasdotdev/ilyaslabs-foodstack:web-dev frontend
 FROM node:24-alpine
 WORKDIR /app
 COPY --chown=node:node dist/web/ ./
