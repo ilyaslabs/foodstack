@@ -25,7 +25,7 @@ drawn in [docs/architecture](docs/architecture/README.md).
 | `integration-tests/` | Business journeys through the REST API, each run as a monolith and as one service per module |
 | `frontend/` | Angular workspace: `web` (SSR customer app), `backoffice`, shared libraries |
 | `deploy/unit-deployer/` | Docker Compose, Caddy and scripts for one server, packaged as `unit-deployer-<version>.zip` |
-| `k8s/helm/foodstack` | Helm chart: any topology, Gateway API, Istio ambient, edge rate limits ([deployment guide 4](docs/deployment-guide.md#4-kubernetes-helm)) |
+| `k8s/helm/foodstack` | Helm chart: any topology, Gateway API, Istio ambient, edge rate limits ([Kubernetes guide](docs/kubernetes-guide.md)) |
 | `k8s/helm/foodstack-observability` | Prometheus, Grafana dashboards and alerts, Loki, Tempo, OpenTelemetry Collector |
 | `tools/k6/` | Load test of customer browsing |
 | `tools/migrate/` | One-off data scripts for the runbooks (image addresses after moving photos) |
@@ -97,6 +97,7 @@ MongoDB and Redis have no password. Their ports are picked by Docker (`docker ps
 - [Technical Design (TDD)](docs/TDD.md)
 - [Architecture and flows](docs/architecture/README.md): diagrams of how the built system works today
 - [Deployment Guide](docs/deployment-guide.md)
+- [Kubernetes guide](docs/kubernetes-guide.md): installing and running FoodStack on a Kubernetes cluster, every step and every chart setting
 - [Kubernetes playground](playground/k8s/README.md): FoodStack on a local EKS cluster (Floci) in any topology, with the datastores in Docker
 - [Operator handbook](docs/handbook/README.md): step-by-step setup, day-to-day running and scaling runbooks for operators
 - [Manual QA](qa/README.md): test cases for the whole application
