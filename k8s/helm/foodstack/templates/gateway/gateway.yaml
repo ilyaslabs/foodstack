@@ -7,7 +7,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: {{ include "foodstack.gatewayName" . }}
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   gatewayClassName: {{ .Values.gateway.className }}
   infrastructure:
@@ -42,7 +42,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
   name: {{ include "foodstack.internalGatewayName" . }}
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
   annotations:
     networking.istio.io/service-type: ClusterIP
 spec:
@@ -61,7 +61,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: {{ include "foodstack.fullname" . }}
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   secretName: {{ $tlsSecret }}
   issuerRef: { kind: ClusterIssuer, name: {{ .Values.gateway.tls.certManager.issuer }} }
@@ -74,7 +74,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: {{ $gw }}
-  labels: {{- include "foodstack.labels" $ | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $ "shared") | nindent 4 }}
 spec:
   scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: {{ $gw }}-istio }
   minReplicas: {{ $.Values.gateway.autoscaling.min }}
@@ -89,7 +89,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ $gw }}
-  labels: {{- include "foodstack.labels" $ | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $ "shared") | nindent 4 }}
 spec:
   minAvailable: 1
   selector:

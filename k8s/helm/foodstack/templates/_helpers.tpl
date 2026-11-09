@@ -46,6 +46,14 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 helm.sh/chart: {{ printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" }}
 {{- end -}}
 
+{{/* The labels plus the part an object belongs to: server-<deployment>, web, backoffice, secrets,
+     migrations, datastores or shared. render.sh writes one folder per part, and
+     kubectl get all -l foodstack.ilyaslabs.io/part=server-order lists one service's objects. */}}
+{{- define "foodstack.partLabels" -}}
+{{ include "foodstack.labels" (index . 0) }}
+foodstack.ilyaslabs.io/part: {{ index . 1 }}
+{{- end -}}
+
 {{/* Pods join the ambient mesh one by one, so the namespace needs no label. */}}
 {{- define "foodstack.podMeshLabels" -}}
 {{- if .Values.mesh.enabled }}

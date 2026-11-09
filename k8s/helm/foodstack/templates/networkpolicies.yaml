@@ -9,7 +9,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ $fn }}-server
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   podSelector:
     matchLabels: { app.kubernetes.io/name: foodstack-server, app.kubernetes.io/instance: {{ $rel }} }
@@ -27,7 +27,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ $fn }}-frontends
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   podSelector:
     matchExpressions:
@@ -43,7 +43,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ $fn }}-ratelimit
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   podSelector:
     matchLabels: { app.kubernetes.io/name: foodstack-ratelimit, app.kubernetes.io/instance: {{ $rel }} }
@@ -58,7 +58,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: {{ $fn }}-datastores
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   podSelector:
     matchLabels: { app.kubernetes.io/component: datastore, app.kubernetes.io/instance: {{ $rel }} }

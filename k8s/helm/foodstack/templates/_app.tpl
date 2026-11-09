@@ -8,14 +8,14 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ $full }}
-  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $root $name) | nindent 4 }}
 automountServiceAccountToken: false
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ $full }}
-  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $root $name) | nindent 4 }}
 spec:
   selector: {{- toYaml $labels | nindent 4 }}
   ports:
@@ -25,7 +25,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ $full }}
-  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $root $name) | nindent 4 }}
 spec:
   {{- if not $v.autoscaling.enabled }}
   replicas: {{ $v.replicas }}
@@ -83,7 +83,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: {{ $full }}
-  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $root $name) | nindent 4 }}
 spec:
   scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: {{ $full }} }
   minReplicas: {{ $v.autoscaling.min }}
@@ -100,7 +100,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {{ $full }}
-  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $root $name) | nindent 4 }}
 spec:
   minAvailable: {{ $v.pdb.minAvailable }}
   selector:

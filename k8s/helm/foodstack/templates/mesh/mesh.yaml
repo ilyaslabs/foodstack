@@ -20,7 +20,7 @@ apiVersion: security.istio.io/v1
 kind: PeerAuthentication
 metadata:
   name: {{ $fn }}
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   selector:
     matchLabels: { app.kubernetes.io/instance: {{ .Release.Name }} }
@@ -31,7 +31,7 @@ apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: {{ $fn }}-server
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   selector:
     matchLabels: { app.kubernetes.io/name: foodstack-server, app.kubernetes.io/instance: {{ .Release.Name }} }
@@ -55,7 +55,7 @@ apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: {{ $fn }}-server-waypoint
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   targetRefs:
     {{- range $name, $_ := $deployments }}
@@ -81,7 +81,7 @@ kind: Gateway
 metadata:
   name: {{ include "foodstack.waypointName" . }}
   labels:
-    {{- include "foodstack.labels" . | nindent 4 }}
+    {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
     istio.io/waypoint-for: service
 spec:
   gatewayClassName: istio-waypoint
@@ -93,7 +93,7 @@ apiVersion: networking.istio.io/v1
 kind: DestinationRule
 metadata:
   name: {{ include "foodstack.serverName" (list $root $name) }}
-  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $root "shared") | nindent 4 }}
 spec:
   host: {{ include "foodstack.serverHost" (list $root $name) }}
   trafficPolicy:
@@ -107,7 +107,7 @@ apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: {{ $fn }}-{{ $app }}
-  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $root "shared") | nindent 4 }}
 spec:
   selector:
     matchLabels: { app.kubernetes.io/name: foodstack-{{ $app }}, app.kubernetes.io/instance: {{ $root.Release.Name }} }
@@ -122,7 +122,7 @@ apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: {{ $fn }}-ratelimit
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   selector:
     matchLabels: { app.kubernetes.io/name: foodstack-ratelimit, app.kubernetes.io/instance: {{ .Release.Name }} }
@@ -141,7 +141,7 @@ apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: {{ $fn }}-datastores
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   selector:
     matchLabels: { app.kubernetes.io/component: datastore, app.kubernetes.io/instance: {{ .Release.Name }} }
@@ -154,7 +154,7 @@ apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
   name: {{ $fn }}-storage-public
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   selector:
     matchLabels: { app.kubernetes.io/name: foodstack-storage, app.kubernetes.io/instance: {{ .Release.Name }} }

@@ -313,6 +313,48 @@ docker run --rm -i -e BASE_URL=https://api.example.com -e LAT=31.52 -e LNG=74.34
 
 It searches, opens stores and reads menus and delivery quotes with 50 users at the peak, and fails if more than 1 % of requests fail or a step's 95th percentile passes 300 ms.
 
+### 4.5a Installing one service at a time
+
+`helm install` starts every service together. To review the objects first and start them yourself, one service at a time in the order you choose, write them into one folder per service with `render.sh`, which comes inside the chart, and apply each folder with `kubectl`:
+
+```bash
+helm pull oci://ghcr.io/ilyaslabs/charts/foodstack --version 1.0.0 --untar
+bash foodstack/render.sh --out rendered -n foodstack -f my-values.yaml --set topology=split
+```
+
+```
+rendered/
+├─ 00-secrets      signing key, personal-data key, admin password, datastore addresses: do not commit
+├─ 02-shared       gateway, routes, rate limits, mesh and network policies
+├─ 03-migrations   the database migrations Job
+├─ server-core     Deployment, Service, ConfigMap, ServiceAccount, autoscaler and budget of one service
+├─ server-order    (one folder per server Deployment of the topology)
+├─ ...
+├─ web
+└─ backoffice
+```
+
+Nothing is applied until you apply it. The prerequisites go first, then the services in any order:
+
+```bash
+kubectl create namespace foodstack
+kubectl -n foodstack apply -f rendered/00-secrets
+kubectl -n foodstack apply -f rendered/02-shared
+kubectl -n foodstack delete job foodstack-migrations --ignore-not-found   # a new version needs a new Job
+kubectl -n foodstack apply -f rendered/03-migrations
+kubectl -n foodstack wait --for=condition=complete job/foodstack-migrations --timeout=30m
+
+kubectl -n foodstack apply -f rendered/server-core
+kubectl -n foodstack rollout status deployment/foodstack-core
+kubectl -n foodstack apply -f rendered/server-order                          # and so on, one at a time
+kubectl -n foodstack get all -l foodstack.ilyaslabs.io/part=server-order     # one service's objects
+```
+
+- Start the service that runs `identity` (`server-core` in the monolith and split topologies, `server-identity` in microservices) before the others: every service checks sign-in tokens against it. A service whose neighbours are not running yet starts, and its calls to them fail until they are; their routes answer 503 meanwhile.
+- `render.sh` reads the Secrets already in the cluster, so a render for an upgrade keeps the same keys, and it stops if FoodStack runs but its Secret is gone. Without a cluster (`--offline`) it makes new keys: only for a brand-new install. To keep `00-secrets` out of files altogether, create the Secret yourself and name it in `secrets.existingSecret` (4.4).
+- To upgrade, render again with the new chart version, run the migrations Job again, then apply the service folders in your order. A folder you have not applied yet keeps running the old version, so apply them all before you leave the install; every service is tested only together at one version.
+- An install is managed either by Helm or by `kubectl` from these folders, never both: Helm refuses objects it did not create, and `helm upgrade` would undo changes made with `kubectl`. You can still render the folders to review a Helm upgrade before you run it.
+
 ### 4.6 Scaling and topologies
 
 How the load is split between machines, and the stages of growth, are drawn in [architecture 8](architecture/08-scaling.md). Step-by-step runbooks for each step are in the [Operator handbook](handbook/README.md#growing), starting with [knowing when to grow](handbook/30-when-to-grow.md).
