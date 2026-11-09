@@ -224,7 +224,7 @@ helm install foodstack oci://ghcr.io/ilyaslabs/charts/foodstack --version 1.0.0 
 
 The notes printed at the end give the gateway address, the first administrator's password and the Mailpit command. Point `foodstack.localhost` and `admin.foodstack.localhost` at the gateway address in your hosts file, then open `http://admin.foodstack.localhost/admin/`.
 
-No cluster yet? The [Kubernetes playground](../playground/k8s/README.md) makes one on your own computer (an EKS cluster on Floci, or kind), runs the datastores and S3 as Docker containers beside it, and installs FoodStack from the source tree in any topology: `playground/k8s/up.sh --topology split`.
+No cluster yet? The [Kubernetes playground](../playground/k8s/README.md) runs FoodStack from the source tree on an EKS cluster on your own computer ([Floci](https://floci.io), set up with the usual `aws` and `kubectl` commands), with the datastores as Docker containers beside it, in any topology: `playground/k8s/up.sh --registry <ECR repository> --topology split`.
 
 ### 4.4 Values for a real install
 

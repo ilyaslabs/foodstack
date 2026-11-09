@@ -1,6 +1,6 @@
 # The playground's values for the FoodStack chart: the cluster runs only FoodStack; MongoDB, Redis,
 # Kafka, Elasticsearch, Mailpit and Floci's S3 run as Docker containers beside it, on the fixed
-# addresses in lib.sh. up.sh adds --set topology=... and the image tag. Not for real data.
+# addresses in lib.sh. up.sh adds the topology and the images. Not for real data.
 
 scheme: http
 publicPort: 8080            # up.sh forwards http://*.localhost:8080 to the gateway
@@ -12,9 +12,6 @@ hosts:
 secrets:
   adminEmail: admin@foodstack.localhost
 
-image:
-  tag: playground
-  pullPolicy: Never         # up.sh builds the images and loads them into the cluster
 
 server:
   # Small pods, one of each, so microservices (12 Deployments) fits on a laptop.

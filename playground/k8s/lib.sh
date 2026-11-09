@@ -4,11 +4,10 @@ set -euo pipefail
 PLAYGROUND_NETWORK=${PLAYGROUND_NETWORK:-foodstack-playground}
 # A private subnet for the playground's containers; change it if it clashes with one of yours.
 PLAYGROUND_SUBNET=${PLAYGROUND_SUBNET:-10.213.0}
-PLAYGROUND_CLUSTER=${PLAYGROUND_CLUSTER:-floci}       # floci (EKS on Floci) or kind
 PLAYGROUND_PORT=${PLAYGROUND_PORT:-8080}
 
 # Fixed addresses, so the cluster's pods and the datastores' own settings agree. Docker gives
-# other containers (the cluster's node) addresses from .128 up.
+# other containers (Floci and its cluster node) addresses from .128 up; Floci itself takes .5.
 FLOCI_IP=$PLAYGROUND_SUBNET.5
 MONGODB_IP=$PLAYGROUND_SUBNET.10
 REDIS_IP=$PLAYGROUND_SUBNET.11
@@ -17,12 +16,8 @@ ELASTICSEARCH_IP=$PLAYGROUND_SUBNET.13
 MAILPIT_IP=$PLAYGROUND_SUBNET.14
 
 ELASTICSEARCH_PASSWORD=playground
-S3_KEY=playground
-S3_SECRET=playground-secret
 
 # Versions, pinned like the unit deployer's.
-FLOCI_IMAGE=floci/floci:2.4.0
-AWS_CLI_IMAGE=amazon/aws-cli:2.31.30
 MONGODB_IMAGE=mongo:8.2
 REDIS_IMAGE=redis:8.2-alpine
 KAFKA_IMAGE=apache/kafka:4.1.1
@@ -30,12 +25,10 @@ ELASTICSEARCH_IMAGE=elasticsearch:9.4.0
 MAILPIT_IMAGE=axllent/mailpit:v1.27
 ISTIO_VERSION=1.30.8
 GATEWAY_API_VERSION=v1.3.0
-KIND_NODE_IMAGE=kindest/node:v1.34.0
 
 PLAYGROUND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$PLAYGROUND_DIR/../.." && pwd)"
 STATE_DIR="$PLAYGROUND_DIR/.state"
-export KUBECONFIG="$STATE_DIR/kubeconfig"
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -63,9 +56,4 @@ wait_for() {
     sleep 2
   done
   fail "$what did not start within ${seconds}s. See: docker logs ${what%% *}"
-}
-
-aws_cli() {
-  docker run --rm --network "$PLAYGROUND_NETWORK" -e AWS_ACCESS_KEY_ID="$S3_KEY" -e AWS_SECRET_ACCESS_KEY="$S3_SECRET" \
-    -e AWS_DEFAULT_REGION=us-east-1 -v "$STATE_DIR:/state" "$AWS_CLI_IMAGE" --endpoint-url "http://$FLOCI_IP:4566" "$@"
 }
