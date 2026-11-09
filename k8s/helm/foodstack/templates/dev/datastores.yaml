@@ -9,7 +9,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ $fn }}-datastore
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "datastores") | nindent 4 }}
 automountServiceAccountToken: false
 {{- /* name, image, ports (name:port), storage, mount path, container spec extras */}}
 {{- $stores := list
@@ -27,7 +27,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ $fn }}-{{ $s.name }}
-  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $root "datastores") | nindent 4 }}
 spec:
   {{- if $s.headless }}
   clusterIP: None
@@ -43,7 +43,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {{ $fn }}-{{ $s.name }}
-  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $root "datastores") | nindent 4 }}
 spec:
   serviceName: {{ $fn }}-{{ $s.name }}
   replicas: 1

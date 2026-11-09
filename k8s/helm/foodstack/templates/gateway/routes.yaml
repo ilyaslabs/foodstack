@@ -14,7 +14,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: {{ $fn }}-api{{ if $internal }}-internal{{ end }}
-  labels: {{- include "foodstack.labels" $root | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list $root "shared") | nindent 4 }}
 spec:
   {{- if $internal }}
   # server-side rendering in the web app; any Host
@@ -43,7 +43,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: {{ $fn }}-apps
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   parentRefs: {{- include "foodstack.parentRefs" (list .) | nindent 4 }}
   hostnames: {{- toYaml $hosts | nindent 4 }}
@@ -74,7 +74,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: {{ $fn }}-admin-root
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   parentRefs: {{- include "foodstack.parentRefs" (list .) | nindent 4 }}
   hostnames: [{{ .Values.hosts.admin | quote }}]
@@ -92,7 +92,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: {{ $fn }}-https-redirect
-  labels: {{- include "foodstack.labels" . | nindent 4 }}
+  labels: {{- include "foodstack.partLabels" (list . "shared") | nindent 4 }}
 spec:
   parentRefs:
     - { name: {{ include "foodstack.gatewayName" . }}, sectionName: http }

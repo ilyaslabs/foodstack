@@ -67,6 +67,16 @@ jobs:
             helm template foodstack k8s/helm/foodstack -n foodstack -f playground/k8s/values-playground.yaml --set topology=$topology | check
           done
           helm template obs k8s/helm/foodstack-observability -n foodstack-observability --set alertmanager.enabled=true | check
+      - name: Per-service folders hold every object
+        run: |
+          for topology in monolith split microservices; do
+            v=k8s/helm/foodstack/ci/production-values.yaml
+            bash k8s/helm/foodstack/render.sh --offline --out "out-$topology" -n foodstack -f $v --set topology=$topology
+            all=$(helm template foodstack k8s/helm/foodstack -n foodstack -f $v --set topology=$topology | grep -c '^kind: ')
+            split=$(cat out-$topology/*/*.yaml | grep -c '^kind: ')
+            [[ $all == "$split" ]] || { echo "$topology: $all objects rendered, $split in the folders"; exit 1; }
+            ! grep -L 'foodstack.ilyaslabs.io/part:' out-$topology/*/*.yaml | grep . || { echo "objects without a part label"; exit 1; }
+          done
 
   # The release artefacts still build: the unit deployer zip and the images (not pushed).
   package:
