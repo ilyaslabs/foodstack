@@ -105,4 +105,4 @@ MongoDB and Redis have no password. Their ports are picked by Docker (`docker ps
 
 ## License
 
-[Fair Revenue Share License v1](https://ilyaslabs.github.io/docs/licenses/fair-revenue-v1): free to use until your project earns USD 10,000 in total revenue, then 5% of monthly gross revenue is shared with the author.
+[Fair Revenue Share License v1](LICENSE.md) (also [online](https://ilyaslabs.github.io/docs/licenses/fair-revenue-v1)): free to use until your business has earned USD 10,000 in total, then 5% of what you earn each month (your own commissions and fees, not money that only passes through you, such as store sales, tips or taxes) is shared with the author.
