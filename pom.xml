@@ -549,6 +549,41 @@
     </build>
 
     <profiles>
+        <!-- A module with only package-info.java (src/javadoc/README.txt marks it): javadoc has
+             nothing to document and fails, yet Maven Central wants a -javadoc.jar, so a small one
+             is packaged from src/javadoc instead. -->
+        <profile>
+            <id>javadoc-placeholder</id>
+            <activation>
+                <file>
+                    <exists>${basedir}/src/javadoc/README.txt</exists>
+                </file>
+            </activation>
+            <properties>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>javadoc-placeholder</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <classifier>javadoc</classifier>
+                                    <classesDirectory>${basedir}/src/javadoc</classesDirectory>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
         <!--
           Publishing to Maven Central. The ilyaslabs/cicd release and snapshot workflows run
           `mvn deploy -Drevision=...` with MAVEN_USERNAME set, which switches this profile on.
@@ -580,6 +615,9 @@
                         <configuration>
                             <doclint>none</doclint>
                             <quiet>true</quiet>
+                            <!-- impl modules hold only package-private classes; without this javadoc
+                                 finds nothing to document and fails, and Central needs the jar -->
+                            <show>package</show>
                         </configuration>
                         <executions>
                             <execution>
