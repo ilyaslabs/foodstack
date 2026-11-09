@@ -51,3 +51,12 @@ jobs:
       version: ${{ needs.branch.outputs.name }}-SNAPSHOT
       tags: ${{ needs.branch.outputs.name }}-snapshot
     secrets: inherit
+
+  # Only lists what this run published (also on the run's summary page).
+  published:
+    needs: [branch, maven, images]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Published versions and names
+        run: .github/scripts/print-published.sh "${{ needs.branch.outputs.name }}-SNAPSHOT" "${{ needs.branch.outputs.name }}-snapshot"
