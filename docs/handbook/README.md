@@ -2,7 +2,7 @@
 
 Step-by-step guides for the people who run a FoodStack marketplace: setting it up, keeping it running, and growing it as orders grow. You do not need to be a developer or a systems engineer. If you can copy a command into a terminal and click through a web page, you can follow these guides.
 
-The [Deployment guide](../deployment-guide.md) says the same things more briefly, for engineers. When the two disagree, tell the FoodStack team: both should be fixed.
+The [Deployment guide](../deployment-guide.md) says the same things more briefly, for engineers; on Kubernetes, the [Kubernetes guide](../kubernetes-guide.md) has every step and setting. When they disagree, tell the FoodStack team: all should be fixed.
 
 ## How every guide works
 

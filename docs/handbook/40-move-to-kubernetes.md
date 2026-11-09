@@ -4,7 +4,7 @@
 
 The big step: from one machine running everything to a Kubernetes cluster with managed databases, where several copies of FoodStack share the load and a machine can fail without the site going down. Your data, accounts and settings move with you; customers and staff stay signed in to the same addresses. Plan for about 30 to 60 minutes offline at a quiet time.
 
-This runbook is the one in the handbook that needs real Kubernetes knowledge. If nobody on your team has it, a managed Kubernetes service (Amazon EKS, Google GKE, Azure AKS, DigitalOcean, Hetzner and others) plus a contractor for the first day is a good plan. Everything after this runbook is a few settings at a time.
+This runbook is the one in the handbook that needs real Kubernetes knowledge; the [Kubernetes guide](../kubernetes-guide.md) explains every step and setting in depth. If nobody on your team has it, a managed Kubernetes service (Amazon EKS, Google GKE, Azure AKS, DigitalOcean, Hetzner and others) plus a contractor for the first day is a good plan. Everything after this runbook is a few settings at a time.
 
 **One-way step**: after customers order on the new install, going back means moving the data back the same way.
 

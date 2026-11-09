@@ -172,6 +172,8 @@ Migrations are always backward compatible with the previous release, so a rollba
 
 ## 4. Kubernetes (Helm)
 
+The [Kubernetes guide](kubernetes-guide.md) covers this in full: what gets installed, preparing the cluster, every chart setting, monitoring, upgrades, backups and troubleshooting. This section is the short version.
+
 ### 4.1 Cluster prerequisites
 
 | Component | Version | Notes |
