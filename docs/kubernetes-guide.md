@@ -529,7 +529,7 @@ spec:
     syncOptions: [CreateNamespace=true]
 ```
 
-Argo CD renders the chart itself rather than through `helm install`, so the chart's `lookup` of existing keys does not run: always use `secrets.existingSecret` with Argo CD, or each sync would generate new keys. Flux's HelmRelease runs Helm itself and has no such limit.
+Argo CD renders the chart itself rather than through `helm install`. That is safe: on a real install the keys come from you ([section 6](#6-keys-and-secrets)), so every sync writes the same Secret. Use `secrets.existingSecret` so the keys stay out of the repository. Flux's HelmRelease runs Helm itself and works the same way.
 
 If you prefer to see every Kubernetes object in Git, commit the folders `render.sh` writes ([section 10](#10-install-one-service-at-a-time-optional)), without `00-secrets`, and render again on every change.
 
