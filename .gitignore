@@ -10,4 +10,3 @@ dist/
 .angular/
 .env
 deploy/unit-deployer/data/
-playground/k8s/.state/

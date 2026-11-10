@@ -14,7 +14,7 @@ hosts:
 
 # https for real installs; http only for a trial cluster without certificates.
 scheme: https
-# The port in the public addresses, when it is not the scheme's own (the playground's 8080).
+# The port in the public addresses, when it is not the scheme's own (for example 8080 behind a port forward).
 publicPort: ""
 
 # The three FoodStack images live in one repository, told apart by tag:
@@ -176,7 +176,7 @@ datastores:
 # server.envFromSecrets.
 # ---------------------------------------------------------------------------------------------
 maps:
-  # true only on your own computer (the playground in playground/k8s): lets the public OpenStreetMap
+  # true only for a trial on your own computer: lets the public OpenStreetMap
   # servers through, which allow light use only.
   allowPublicOpenStreetMap: false
   geocoding:

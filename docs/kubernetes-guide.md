@@ -3,7 +3,7 @@
 This guide installs FoodStack on a Kubernetes cluster and runs it in production, with every command and every setting. It is written for the person who runs the cluster: you know `kubectl` and `helm`, and you have (or can get) a cluster and managed datastores.
 
 - Never used Kubernetes? Start on one server ([deployment guide 3](deployment-guide.md#3-single-server-unit-deployer)) and move later ([handbook 40](handbook/40-move-to-kubernetes.md)): all data moves with you.
-- Only want to look at it? [Section 4](#4-try-it-first-a-trial-install) runs everything inside a cluster in one command, and the [Kubernetes playground](../playground/k8s/README.md) does it on your own computer.
+- Only want to look at it? [Section 4](#4-try-it-first-a-trial-install) runs everything inside a cluster in one command, on any cluster, including one on your own computer.
 
 Contents
 
@@ -904,7 +904,7 @@ Defaults in brackets. The chart's own `values.yaml` has the same list with comme
 | `datastores.elasticsearch.uris`, `username`, `password`, `replicas` | empty, `elastic`, empty, `1` | |
 | `datastores.s3.endpoint`, `region`, `pathStyle`, `publicEndpoint`, `publicBaseUrl`, `accessKey`, `secretKey`, `publicBucket`, `privateBucket`, `createBuckets` | …, `true`, …, `foodstack-public`, `foodstack-private`, `false` | [5.2](#52-buckets) |
 | `maps.geocoding.*`, `maps.routing.*`, `maps.tiles.*` | | [5.3](#53-maps) |
-| `maps.allowPublicOpenStreetMap` | `false` | `true` only on your own computer (the playground) |
+| `maps.allowPublicOpenStreetMap` | `false` | `true` only for a trial on your own computer |
 
 ### Gateway, mesh, network
 
