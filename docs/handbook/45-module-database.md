@@ -4,6 +4,14 @@
 
 Each FoodStack part (module) keeps its data in its own database (`foodstack_order`, `foodstack_store`, and so on), all on one MongoDB cluster at first. When one part is far busier than the rest, or must be kept apart (for example payments and the ledger, for audits), move its database to a cluster of its own. Only that part's connection changes. Kubernetes only.
 
+**Coming from one server?** The single-server install keeps every database on its one MongoDB. The path is: [move to Kubernetes](40-move-to-kubernetes.md) (all databases onto one cluster), [split the modules](42-split-modules.md) into their own Deployments if you want (no data moves), then this guide for each module that needs its own cluster.
+
+**What moves with the copy.** The whole `foodstack_<module>` database, so with it:
+- the module's database change history (`<module>_databasechangelog`): on the upgrade in step 4 the migrations Job runs the module's changes against the new cluster, finds them all applied, and later upgrades continue from there;
+- its outbox and inbox (`<module>_outbox`, `<module>_inbox`): events not yet sent are sent from the new cluster, and events already handled are not handled twice.
+
+Other modules never read this database directly (they ask the module, or keep their own copy from its events), so nothing else needs to move.
+
 ## What you need
 
 - A new MongoDB cluster (a replica set of 3, 7.1 or newer), and its connection string.
