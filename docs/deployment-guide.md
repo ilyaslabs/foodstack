@@ -386,18 +386,21 @@ Background work needs no leader: the outbox relay, the dispatch matcher and the 
 
 ### 4.7 Moving one module's data to its own MongoDB cluster
 
-Only when the shared cluster is the bottleneck or you need isolation.
+Only when the shared cluster is the bottleneck or you need isolation. Kubernetes only: the single-server install keeps every module's database on its one MongoDB. Coming from one server, move to Kubernetes first ([handbook 40](handbook/40-move-to-kubernetes.md), all `foodstack_*` databases onto one cluster), split the modules if you want ([handbook 42](handbook/42-split-modules.md), no data moves), then move a module's database as below.
 
 1. Create the new cluster (replica set).
-2. Copy the module's database with near-zero downtime using MongoDB's live sync tool, or with a short maintenance window: `mongodump --db foodstack_order` then `mongorestore` to the new cluster.
-3. Create a secret with the new URI and set it for that module:
+2. Stop every server Deployment (note the replica counts first): the module's data must not change while it is copied. Plan 15 to 60 minutes, depending on its size.
+3. Copy the whole module database: `mongodump --db foodstack_order --archive | mongorestore --archive --drop` to the new cluster. The copy carries the module's Liquibase history (`order_databasechangelog`) and its outbox and inbox, so nothing is migrated twice and no event is lost or sent again.
+4. Create a secret with the new URI and set it for that module:
    ```yaml
    server:
      moduleDatastores:
        order: { mongodbUriSecret: order-mongodb }
    ```
-4. `helm upgrade`. Only the Deployment running `order` restarts.
-5. After verifying, drop `foodstack_order` from the old cluster.
+5. `helm upgrade`. The migrations Job runs the module's changelog against the new cluster (it finds nothing to do), and the upgrade sets the replica counts back.
+6. After verifying, drop `foodstack_order` from the old cluster.
+
+Full steps, checks and undo: [handbook 45](handbook/45-module-database.md).
 
 ### 4.8 Growing MongoDB: replicas and shards
 

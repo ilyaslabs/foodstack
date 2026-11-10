@@ -86,6 +86,7 @@ This runbook is the one in the handbook that needs real Kubernetes knowledge; th
 12. Keep the old server **stopped but intact** for a week (`./stop.sh` stops the rest). Then take one last backup off it and cancel it.
 13. Set the DNS TTL back to an hour or more.
 14. Set up backups on the cluster ([guide 20](20-backups.md#kubernetes)) and the dashboards ([guide 23](23-health-and-dashboards.md)).
+15. Later, as you grow: split the busiest modules into their own Deployments ([runbook 42](42-split-modules.md)), and give a module its own database cluster only when it needs one ([runbook 45](45-module-database.md)). Every module's data now sits in its own database (`foodstack_order`, …) on the new cluster, ready to move on its own.
 
 ## Check it worked
 
