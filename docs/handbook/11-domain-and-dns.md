@@ -56,4 +56,4 @@ Delete the three records, or point them back where they were.
 |---|---|
 | The old address still shows after an hour | Your computer or network may remember the old answer. Try `nslookup example.com 1.1.1.1`, which asks Cloudflare's public DNS directly |
 | The registrar has no DNS page | It uses another company's name servers. Its "Nameservers" setting says which; make the records there |
-| You already have a website on `example.com` | Use other names for FoodStack, for example `order.example.com`, `admin.order.example.com` and `api.order.example.com`, and give those to the installer |
+| You already have a website on `example.com` | Use other names for FoodStack, for example `order.example.com`, `admin.order.example.com` and `api.order.example.com`, and use those in your settings ([guide 14](14-install.md)) |

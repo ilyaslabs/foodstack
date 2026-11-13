@@ -74,7 +74,7 @@ jobs:
             ! grep -L 'foodstack.ilyaslabs.io/part:' out-$topology/*/*.yaml | grep . || { echo "objects without a part label"; exit 1; }
           done
 
-  # The release artefacts still build: the unit deployer zip and the images (not pushed).
+  # The release images still build (not pushed), and the Docker Compose files are valid.
   package:
     runs-on: ubuntu-latest
     steps:
@@ -84,8 +84,26 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Build the server and the unit deployer zip
-        run: mvn -B -DskipTests -pl deploy/unit-deployer -am package
+      - name: Build the server
+        run: mvn -B -DskipTests -pl app/foodstack-server -am package
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Build the web app and the back office
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile && pnpm build
+      - name: Docker Compose files are valid
+        working-directory: deploy/compose
+        run: |
+          docker compose --env-file .env.example config -q
+          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.local.yml config -q
+          docker run --rm -e FOODSTACK_SITES=:80 -e FOODSTACK_ADMIN_ROOT_HOST=x -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
+          docker run --rm -e FOODSTACK_SITES=:80 -e FOODSTACK_ADMIN_ROOT_HOST=x -v "$PWD/../services/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
       - name: Build images
         run: |
           docker build -t foodstack-server:ci app/foodstack-server

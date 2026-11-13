@@ -2,6 +2,108 @@
 
 [Back to index](README.md)
 
+## 1.0 What each service needs
+
+Start here if you are setting FoodStack up. Each box in the middle is one module. On one server
+they all run in one process; split up, each one (or each group) is its own service. Either way,
+each module needs the same things. Thick arrows are required, dashed arrows are optional.
+
+```mermaid
+flowchart TB
+    subgraph apps["Browser apps"]
+        WEB["web<br/>customer app"]
+        BO["backoffice<br/>staff, stores, riders"]
+    end
+    TILES["Map tiles<br/>{z}/{x}/{y} provider"]
+
+    subgraph services["FoodStack modules: one process, or one service each"]
+        subgraph cat["Accounts and catalogue"]
+            direction TB
+            identity
+            settings
+            media
+            geo
+            store
+            search
+        end
+        subgraph ord["Ordering"]
+            direction TB
+            promotion
+            cart
+            payment
+            order
+            review
+        end
+        subgraph del["Delivery, messages, money"]
+            direction TB
+            rider
+            dispatch
+            notification
+            ledger
+        end
+    end
+
+    subgraph shared["Used by every module"]
+        direction LR
+        M[("MongoDB<br/>one database per module")]
+        R[("Redis")]
+        K[("Kafka")]
+    end
+
+    SOCIAL["Google, Apple<br/>sign-in"]
+    S3[("Your S3 buckets")]
+    GEO["Address search<br/>Google or Nominatim"]
+    ROUTE["Road distances<br/>Google or OSRM"]
+    ES[("Elasticsearch")]
+    STRIPE["Stripe<br/>card payments"]
+    SMTP["SMTP server<br/>emails"]
+    FCM["Firebase<br/>push"]
+
+    apps ==> TILES
+    apps ==> S3
+    services ==> shared
+    identity -.-> SOCIAL
+    media ==> S3
+    geo ==> GEO
+    geo -.-> ROUTE
+    search ==> ES
+    payment -.-> STRIPE
+    notification -.-> SMTP
+    notification -.-> FCM
+```
+
+| Module | Its own database | Also needs | Outside services | Calls these modules |
+|---|---|---|---|---|
+| `identity` | `foodstack_identity` | signing key, first admin | Google and Apple sign-in (optional) | |
+| `settings` | `foodstack_settings` | | | media |
+| `media` | `foodstack_media` | | **S3 buckets (required)** | |
+| `geo` | `foodstack_geo` | | **Address search (required)**; road distances (optional) | settings |
+| `store` | `foodstack_store` | | | geo, identity, media, settings |
+| `search` | none | **Elasticsearch** | | geo, review, store |
+| `promotion` | `foodstack_promotion` | | | |
+| `cart` | `foodstack_cart` | | | geo, payment, promotion, settings, store |
+| `payment` | `foodstack_payment` | | Stripe (optional) | settings |
+| `order` | `foodstack_order` | | | cart, identity, payment, promotion, settings |
+| `rider` | `foodstack_rider` | | | geo, identity, media, settings |
+| `dispatch` | `foodstack_dispatch` | | | geo, rider, settings |
+| `notification` | `foodstack_notification` | | SMTP (optional), Firebase (optional) | identity, order, settings |
+| `ledger` | `foodstack_ledger` | | | settings |
+| `review` | `foodstack_review` | | | identity, media |
+
+- **Every module** also needs MongoDB, Redis and Kafka, the public API address (the token issuer),
+  and the personal-data key: each one checks that key on start.
+- **When modules are split**, every service also needs the internal token and the service client
+  secret, and every service except `identity` needs identity's address for the token keys.
+- **The two apps** need the map tiles; the back office also needs your bucket's address to show
+  and upload photos. Browsers load photos straight from the bucket, never through the server.
+- Ready-made settings, one file per module, with every value above: [deploy/services](../../deploy/services/README.md).
+  On one server they are the lines of `.env` ([deployment guide](../deployment-guide.md)); on
+  Kubernetes, the chart's values ([Kubernetes guide](../kubernetes-guide.md)).
+
+"Calls these modules" means the module asks them for answers while it works: a Java call in one
+process, an HTTP call on port 8081 when they are split, so those services must be reachable from
+it. Everything else between modules travels as Kafka events ([1.2](#12-modules-their-data-and-who-calls-whom)).
+
 ## 1.1 What runs where (single server, the unit deployer)
 
 This is what `install.sh` starts today (`deploy/unit-deployer/src/main/dist/docker-compose.yml`). The Kubernetes chart (M5) is drawn in [10.1](10-kubernetes.md#101-what-the-chart-installs).

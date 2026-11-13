@@ -10,7 +10,7 @@ All diagrams are [Mermaid](https://mermaid.js.org/) and render directly on GitHu
 
 | Page | What it answers |
 |---|---|
-| [1. Big picture](01-big-picture.md) | What runs where, which module owns which data, who calls whom, who sends events to whom |
+| [1. Big picture](01-big-picture.md) | What each service needs (databases, outside services, settings), what runs where, which module owns which data, who calls whom, who sends events to whom |
 | [2. Platform mechanics](02-platform-mechanics.md) | What happens to every request (security, token check), how events travel (outbox, relay, Kafka), what is in Redis, how a module gets its database, how modules call each other when split |
 | [3. Customer flows](03-customer-flows.md) | Nearby store search, address lookup, store page and menu, delivery quote |
 | [4. Back-office flows](04-backoffice-flows.md) | Sign-in and token renewal, onboarding a store, editing the menu, sold-out, drawing zones, going live, image upload, branding, sign-out everywhere, index rebuild |

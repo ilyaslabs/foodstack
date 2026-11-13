@@ -6,7 +6,7 @@ Sign in to the back office for the first time, protect your account, and make ac
 
 ## What you need
 
-- The address, email and password the installer printed ([guide 14](14-install.md)).
+- The back office address, and the administrator email and password you put under `bootstrap-admin` in `config/application.yml` ([guide 14](14-install.md), step 4).
 - Your phone with an **authenticator app** (Google Authenticator, Microsoft Authenticator, 1Password, Authy or similar).
 - Email working ([guide 15](15-email.md)), so your staff can reset forgotten passwords.
 - About 15 minutes.
@@ -15,7 +15,7 @@ Sign in to the back office for the first time, protect your account, and make ac
 
 ### Sign in and set up two-step sign-in
 
-1. Open `https://admin.example.com/admin/` and sign in with the email and password from the installer.
+1. Open `https://admin.example.com/admin/` and sign in with that email and password.
 2. FoodStack asks you to **set up an authenticator app**: administrators and finance staff must use one. Open the app on your phone, add an account, and scan the QR code on the screen (or type the key shown under it).
 3. Type the 6-digit code the app shows and confirm.
 4. FoodStack shows ten **recovery codes**. Each one lets you in once if you lose your phone. Save them in your password manager now: they are not shown again.
@@ -23,7 +23,7 @@ Sign in to the back office for the first time, protect your account, and make ac
 ### Choose your own password
 
 5. Click your initials at the top right, then **Change password**.
-6. Type the installer's password as **Current password**, and a new one (at least 10 characters, ideally a long one from your password manager) twice. Click **Change password**.
+6. Type that first password as **Current password**, and a new one (at least 10 characters, ideally a long one from your password manager) twice. Click **Change password**.
 
 ### Make accounts for your team
 
@@ -57,7 +57,7 @@ Restaurant owners and riders are **not** made here: you add them from the restau
 
 | Problem | What to do |
 |---|---|
-| "That email and password do not match." | Copy the password from `/opt/foodstack/.env` (the line `FOODSTACK_ADMIN_PASSWORD=`). It is only the *first* password: once you change it, the file no longer matters |
+| "That email and password do not match." | Copy the password from `~/foodstack/config/application.yml` (`bootstrap-admin`, `password`). It is only the *first* password, used when the account is created: once you change it, the file no longer matters |
 | The app's code is refused | The phone's clock must be right: turn on automatic date and time on the phone |
 | Too many tries | After 10 wrong passwords in 15 minutes, FoodStack waits before letting that account try again. Wait 15 minutes |
 | "An account with this email already exists." | The person already has an account (for example as a customer). FoodStack does not turn a customer into staff; ask them to use another email for work |

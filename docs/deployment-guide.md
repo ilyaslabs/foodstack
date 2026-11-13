@@ -2,22 +2,27 @@
 
 | | |
 |---|---|
-| Status | v1. Single server since M0; Kubernetes (Helm) since M5, checked on a test cluster in every topology ([TDD](TDD.md) sections 17, 18 and 27) |
+| Status | v1. Docker Compose (one machine); Kubernetes (Helm) since M5, checked on a test cluster in every topology ([TDD](TDD.md) sections 17, 18 and 27) |
 | Audience | The operator's DevOps or whoever installs and runs FoodStack. For step-by-step guides written for people without an operations background, see the [Operator handbook](handbook/README.md) |
 
 ## 1. Choose your path
 
-| | Single server (unit deployer) | Kubernetes (Helm) |
+| | Docker Compose (one machine) | Kubernetes (Helm) |
 |---|---|---|
-| Best for | Launch, pilots, one city, up to about 200 orders per hour | Growth, high availability, several cities, independent scaling |
+| Best for | Trying it, launch, pilots, one city, up to about 200 orders per hour | Growth, high availability, several cities, independent scaling |
 | You need | One Linux server with Docker | A Kubernetes cluster, plus managed or operator-run datastores |
-| Datastores | Included and installed for you (MongoDB, Kafka, Redis, Elasticsearch) | Bring your own (recommended) or run them in-cluster for trials |
+| Datastores | Included (MongoDB, Kafka, Redis, Elasticsearch) | Bring your own (recommended) or run them in-cluster for trials |
 | Photos and files | Your own S3-compatible buckets (Amazon S3, Cloudflare R2, Backblaze B2) | The same |
-| Topologies | Monolith | `monolith`, `split`, `microservices` or `custom`, switchable at any time |
+| Topologies | Every module in one server | `monolith`, `split`, `microservices` or `custom`, switchable at any time |
 | High availability | No (one machine) | Yes (replicas across nodes and zones) |
-| Effort to run | Low | Medium |
+| Settings | `.env` and `config/application.yml` | `my-values.yaml` and Secrets |
 
-Start on a single server. Moving to Kubernetes later is a data copy plus configuration (section 5); no code changes.
+Start with Docker Compose. Moving later is a data copy plus settings, never a code change: see the
+[migration guide](migration-guide.md). Running modules as separate services on your own machines,
+without Kubernetes, is also possible ([deploy/services](../deploy/services/README.md)).
+
+Which module needs which datastore, outside service and setting:
+[architecture 1.0](architecture/01-big-picture.md#10-what-each-service-needs).
 
 ## 2. Before you start (both paths)
 
@@ -26,97 +31,51 @@ Start on a single server. Moving to Kubernetes later is a data copy plus configu
 | Item | Needed for | Notes |
 |---|---|---|
 | Domain names | Everything | Three hostnames, for example `example.com` (customer app), `admin.example.com` (back office), `api.example.com` (API and login) |
+| S3-compatible storage | Images, rider documents | **Required.** Two buckets (one readable by everyone), an access key with read and write on both, and a CORS rule for your two sites. Amazon S3, Cloudflare R2 and Backblaze B2 are tested ([handbook guide 12](handbook/12-storage.md)). The server checks them on every start and refuses to start until they work |
+| Map services | Address search, map tiles, optional road distances | **Required.** Google Maps Platform (Geocoding API, Routes API) or any Nominatim-compatible search, plus any `{z}/{x}/{y}` tile service; OSRM optional for road distances. OpenStreetMap's public servers are allowed only in a trial on your own computer ([handbook guide 13](handbook/13-maps.md)) |
 | SMTP account | Email notifications, login codes | Any provider; TLS on port 587 recommended |
 | Firebase Cloud Messaging project | Push notifications | Service-account JSON key |
 | Payment gateway account | Card payments | Only if cards are enabled; hosted payment page recommended at launch |
-| Map services | Address search, map tiles, optional road distances | **Required.** Google Maps Platform (Geocoding API, Routes API) or any Nominatim-compatible search, plus any `{z}/{x}/{y}` tile service; OSRM optional for road distances. OpenStreetMap's public servers are allowed only in a `--local` trial ([handbook guide 13](handbook/13-maps.md)) |
-| S3-compatible storage | Images, rider documents | **Required.** Two buckets (one readable by everyone), an access key with read and write on both, and a CORS rule for your two sites. Amazon S3, Cloudflare R2 and Backblaze B2 are tested ([handbook guide 12](handbook/12-storage.md)). The server checks them on every start and refuses to start until they work |
 
 ### 2.2 Secrets you will hold
 
-Generated for you on a single server; created by you on Kubernetes.
+You make these once, with `openssl` (the commands are in [deploy/compose](../deploy/compose/README.md#install-on-a-server) and [Kubernetes guide 6](kubernetes-guide.md#6-keys-and-secrets)).
 
 | Secret | Purpose |
 |---|---|
-| JWT signing key pair (ES256) | Signs login tokens. Rotating it keeps the previous key valid until old tokens expire |
-| PII encryption key (32 random bytes) | Encrypts emails and phone numbers at rest. **Back it up separately; losing it makes that data unreadable** |
-| Module-Switch internal token | Protects module-to-module calls |
+| JWT signing key (ES256) | Signs login tokens. Rotating it keeps the previous key valid until old tokens expire |
+| Personal-data key (32 random bytes) | Encrypts names, emails, phones and addresses at rest. **Back it up separately; losing it makes that data unreadable** |
+| Module-Switch internal token, service client secret | Protect module-to-module calls when modules are split |
 | Datastore passwords | MongoDB, Redis, Elasticsearch, S3 access key, Kafka (if secured) |
 | SMTP, FCM, payment gateway and maps credentials | External providers |
 
-## 3. Single server (unit deployer)
+## 3. Docker Compose (one machine)
 
-### 3.1 Server requirements
-
-| | Minimum (trial) | Recommended (pilot city) |
-|---|---|---|
-| CPU | 4 vCPU | 8 vCPU |
-| Memory | 16 GB | 32 GB |
-| Disk | 100 GB SSD | 250 GB SSD (NVMe preferred), plus off-server backup storage |
-| OS | 64-bit Linux (Ubuntu 24.04 LTS, Debian 12, RHEL 9 family), amd64 or arm64 | Same |
-| Software | Docker Engine 27+ with Compose v2 | Same |
-| Network | Ports 80 and 443 open to the internet; DNS A/AAAA records for your three hostnames pointing at the server | Same, plus SSH restricted to your IPs |
-
-### 3.2 Install
+Everything is in [`deploy/compose`](../deploy/compose/README.md), whose README is the full guide:
+trying it on your own computer, installing on a server, changing settings, backups, restore,
+upgrades and the go-live checklist. In short:
 
 ```bash
-# 1. Download and unpack the release
-curl -LO https://github.com/ilyaslabs/foodstack/releases/download/v1.0.0/unit-deployer-1.0.0.zip
-unzip unit-deployer-1.0.0.zip && cd unit-deployer-1.0.0
-
-# 2. Install into a directory of your choice (data, logs and backups live there), with the
-#    settings file holding your buckets and map provider (handbook guides 12 and 13)
-sudo ./install.sh /opt/foodstack \
-  --domain example.com \
-  --admin-domain admin.example.com \
-  --api-domain api.example.com \
-  --admin-email ops@example.com \
-  --settings ~/foodstack-settings.env
+curl -LO https://github.com/ilyaslabs/foodstack/releases/download/v1.0.0/foodstack-compose-1.0.0.zip
+unzip foodstack-compose-1.0.0.zip && cd foodstack-compose-1.0.0
+cp .env.example .env
+# fill in .env (addresses, datastore passwords, map tiles) and config/application.yml (keys,
+# first administrator, buckets, maps, email, payments)
+docker compose up -d
 ```
 
-The settings file holds `KEY=VALUE` lines: `S3_ENDPOINT`, `S3_REGION`, `S3_PUBLIC_BUCKET`, `S3_PRIVATE_BUCKET`, `S3_PUBLIC_BASE_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `GEOCODING_PROVIDER` (and `GEOCODING_URL` or `GOOGLE_MAPS_API_KEY`), `GEOCODING_COUNTRY_CODES`, `MAP_TILE_URL`, `MAP_ATTRIBUTION`, and optionally `ROUTING_PROVIDER` / `ROUTING_URL`. Values can also come from the environment, or as answers when the installer asks for what is missing.
+| Task | How |
+|---|---|
+| Change a setting | Edit `config/application.yml`, then `docker compose restart server` |
+| Status and logs | `docker compose ps`, `docker compose logs -f server` |
+| Back up | `mongodump` from the `mongodb` container, nightly from cron, copied off the server ([handbook 20](handbook/20-backups.md)). Kafka, Redis and Elasticsearch need no backup |
+| Upgrade | New `FOODSTACK_VERSION` in `.env`, then `docker compose pull && docker compose up -d` ([handbook 21](handbook/21-upgrades.md)) |
+| Trial on your computer | `docker compose -f docker-compose.yml -f docker-compose.local.yml up -d`, then http://localhost:8080 |
 
-`install.sh`:
+Server size: 4 vCPU, 8 GB memory and 100 GB SSD to start; 8 vCPU, 16 GB for a busy city. 64-bit
+Linux (amd64 or arm64), Docker Engine 27+ with Compose, ports 80 and 443 open.
 
-1. Checks Docker, Compose, CPU, memory, disk and that ports 80 and 443 are free.
-2. Elasticsearch (store search) is part of the stack and runs without memory-mapped files, so no kernel setting is needed. When run as root on Linux, `install.sh` also raises `vm.max_map_count` to 262144, which Elasticsearch prefers for large indices.
-3. Creates `/opt/foodstack/{logs,config,backups}`. Service data lives in named Docker volumes (`foodstack_mongodb`, `foodstack_kafka`, …), so no folder ownership setup is needed.
-4. Generates strong passwords, the JWT key pair, the PII key and the internal token into `/opt/foodstack/.env` (permissions 600).
-5. Copies the application, web apps and configuration.
-6. Starts the datastores, waits for them to be healthy, runs database migrations once, then starts the application and the web apps.
-7. Optionally installs a systemd unit so FoodStack starts on boot (`--systemd`).
-8. Prints the first administrator's email and generated password once (also kept in `.env` as `FOODSTACK_ADMIN_PASSWORD`). Change it after the first sign-in (account menu, **Change password**).
-
-For a quick trial on your own computer (Linux, or macOS/Windows with Docker Desktop), without DNS, certificates or sudo: `./install.sh ~/foodstack --local`, then open `http://foodstack.localhost:8080/admin/` and sign in as `admin@foodstack.localhost` / `foodstack-local` (fixed for trials; a `--domain` install generates a random password).
-
-`sudo` is only needed to install into a folder your user can't write to (like `/opt`) or with `--systemd`. If an install stops part way (for example a failed image download), fix the cause and run the same command again: it removes the unfinished attempt and starts over. `./uninstall.sh` removes an install and its data volumes, keeping `backups/`.
-
-### 3.3 Configure
-
-Edit `/opt/foodstack/.env`, then run `./restart.sh server`. The main settings:
-
-| Variable | Example | Notes |
-|---|---|---|
-| `FOODSTACK_DOMAIN`, `FOODSTACK_ADMIN_DOMAIN`, `FOODSTACK_API_DOMAIN` | `example.com` | Set by `install.sh` |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_AUTH`, `SMTP_STARTTLS`, `SMTP_FROM`, `SMTP_FROM_NAME` | `smtp.example.net`, `587`, …, `true`, `true`, `orders@example.com`, `Your brand` | Order emails, sign-in codes and password reset. While `SMTP_HOST` or `SMTP_FROM` is empty nothing is emailed: customers still see updates in the app and the **Email log** page shows each message as "Not sent" |
-| `PAYMENT_GATEWAY` | `none` or `stripe` | Card payments. `none` means cash only. `sandbox` is a test page that charges nothing, for development; the server refuses it when `FOODSTACK_ENVIRONMENT=production` |
-| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | `sk_live_…`, `whsec_…` | With `PAYMENT_GATEWAY=stripe`. In the Stripe dashboard add a webhook endpoint `https://api.example.com/api/v1/payment-webhooks/stripe` for `checkout.session.completed`, `checkout.session.expired`, `checkout.session.async_payment_succeeded` and `checkout.session.async_payment_failed`, and copy its signing secret |
-| `STRIPE_PUBLISHABLE_KEY` | `pk_live_…` | Only for card fields inside the app (Ordering page: "In card fields inside the app"). The fields are Stripe's own secure frame, so card numbers never reach your server (PCI SAQ A). Without the key customers are sent to Stripe's page. Saved cards (Ordering page, off by default) need no extra key |
-| `FOODSTACK_IDENTITY_DELETION_GRACE` | `P14D` | How long after a customer asks to delete their account it is deleted; signing in again before then cancels it. Orders stay without the customer's name, phone or address, and reviews show "Deleted user" |
-| `FOODSTACK_WEB_URL` | `https://example.com` | Set by `install.sh`. Where customers come back to after paying, and the links in emails |
-| `FCM_SERVICE_ACCOUNT`, `FCM_WEB_CONFIG`, `FCM_VAPID_KEY` | `/config/push/fcm.json`, `{"apiKey":"…","projectId":"…","messagingSenderId":"…","appId":"…"}`, `BK…` | Push to riders (new jobs) and customers (order updates). Create a Firebase project, save its service account key as `/opt/foodstack/config/push/fcm.json` (the server sees it as `/config/push/fcm.json`), and copy the web app config (one line) and the Web Push key pair from the Firebase console. While `FCM_SERVICE_ACCOUNT` is empty nothing is pushed and everyone still sees updates in the app |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_PATH_STYLE`, `S3_PUBLIC_BUCKET`, `S3_PRIVATE_BUCKET`, `S3_PUBLIC_BASE_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` | `https://s3.eu-west-1.amazonaws.com`, `eu-west-1`, `false`, …, `https://cdn.example.com` | Your buckets (set by `install.sh` from `--settings`). `S3_PUBLIC_BASE_URL` is where browsers load the public bucket's files. On start the server writes a test file to each bucket, reads the public one anonymously and checks CORS for your two sites, and stops with "Storage check failed: …" naming what to fix. `MEDIA_ORIGINS` (derived) lets the back office load and upload there |
-| `ROUTING_PROVIDER`, `ROUTING_URL` | `none`, `osrm` or `google`, `http://osrm.internal:5000` | Road distance and driving time for delivery charges, dispatch and live ETAs. `none` uses the straight-line distance times a road factor; `osrm` asks an OSRM server you run; `google` uses the Routes API with `GOOGLE_MAPS_API_KEY` |
-| `GEOCODING_PROVIDER`, `GEOCODING_URL`, `GEOCODING_COUNTRY_CODES`, `GOOGLE_MAPS_API_KEY` | `google` or `nominatim`, `https://search.example-provider.com`, `pk`, `AIza…` | Address search for customers and store onboarding, limited to your country. `google` uses the Geocoding API; `nominatim` any Nominatim-compatible service at `GEOCODING_URL`. The public OpenStreetMap Nominatim is used only by `--local` trials |
-| `MAP_TILE_URL`, `MAP_TILE_ORIGIN`, `MAP_ATTRIBUTION` | `https://tiles.example-provider.com/{z}/{x}/{y}.png?key=…`, `https://tiles.example-provider.com`, `© Provider © OpenStreetMap contributors` | Map tiles in the back office (delivery zones) and live tracking, from a hosted provider or your own tile server. `install.sh` derives `MAP_TILE_ORIGIN`; if you change the host later, set it to the scheme and host of `MAP_TILE_URL`, because the page's security policy only loads tiles from there |
-| `ELASTICSEARCH_URIS`, `ELASTICSEARCH_USERNAME`, `ELASTICSEARCH_PASSWORD` | set by `install.sh` | Point at an external Elasticsearch 9 cluster if you run one; the index is rebuilt from store data on start |
-| `JAVA_HEAP`, `ES_HEAP` | `4g`, `2g` | Sized by `install.sh` from server memory |
-| `FOODSTACK_REFRESH_COOKIE_SECURE` | `true` | Keep `true`. Only a plain-HTTP trial (`--local`) sets `false`, or browsers would drop the sign-in cookie |
-| `FOODSTACK_TRACING_EXPORT`, `FOODSTACK_OTLP_ENDPOINT`, `FOODSTACK_TRACING_SAMPLING` | `false`, `http://collector:4318/v1/traces`, `0.1` | Send traces to an OpenTelemetry collector (Jaeger, Tempo, a vendor). Off by default; a trace follows a request through every module and through Kafka events |
-
-Everything else (branding, languages, currency, timezone, fees, commission, feature switches) is set in the admin panel after login. Each branch also has its own time zone, found from its location (useful in countries with several zones); the store's owner can change it on the branch page. Card payment also has a switch on the back office **Ordering** page: customers see it only when the gateway is set here and the switch is on.
-
-### 3.4 First login checklist
+### 3.1 First sign-in checklist
 
 Step by step: [handbook guides 17 to 19](handbook/README.md#start-here-your-first-launch).
 
@@ -131,44 +90,7 @@ Step by step: [handbook guides 17 to 19](handbook/README.md#start-here-your-firs
 9. **Stores:** onboard the first store and choose whether it may use operator delivery; let the owner set delivery mode, hours, zones and menu.
 10. Place a test order end to end, then cancel it (**Cancel order** on the order, with a reason).
 
-### 3.5 Day-to-day operations
-
-| Task | Command (from the install directory) |
-|---|---|
-| Start everything | `./start.sh` |
-| Stop everything (data kept) | `./stop.sh` |
-| Restart everything or one service | `./restart.sh` or `./restart.sh server` |
-| Health of every service | `./status.sh` |
-| Follow logs | `./logs.sh server` (or `mongodb`, `kafka`, `proxy`, …) |
-| Back up now | `./backup.sh` |
-| Upgrade | `./upgrade.sh /path/to/unit-deployer-1.1.0.zip` |
-
-### 3.6 Backups and restore
-
-- `backup.sh` writes `backups/<timestamp>/` with a MongoDB dump (all `foodstack_*` databases) and the configuration including `.env`. Photos and files live in your buckets: turn on bucket versioning at your provider instead.
-- Schedule it daily with cron (`--systemd` only starts FoodStack at boot; it installs no backup timer), and **copy backups off the server** (for example to S3 or another machine). Keep the PII key and `.env` in a password manager as well. [Handbook guide 20](handbook/20-backups.md) has the cron line, the off-server copy and the restore onto a new server.
-- Kafka, Redis and Elasticsearch need no backup: events are delivered from MongoDB's outbox, Redis is a cache, and search is rebuilt from the data.
-- Restore: `./restore.sh backups/<timestamp>` stops the application, restores MongoDB, clears Redis and the search index (both only copies), and starts again; search refills on start. It does not restore `.env`: on a new server, install first, then copy `FOODSTACK_PII_KEY` and `FOODSTACK_SIGNING_KEYS` (not the whole file: the datastore passwords differ) from the old `.env` before restoring.
-- Test a restore on a spare server at least once before going live.
-
-### 3.7 Upgrades
-
-1. Read the release notes for the new version.
-2. `./upgrade.sh unit-deployer-<new>.zip` takes a backup, replaces the application, web apps and compose file, runs migrations, and restarts with a short downtime (usually under a minute).
-3. If something goes wrong: `./upgrade.sh --rollback` restores the previous version's files (not the data; the pre-upgrade backup stays in `backups/` for `restore.sh` if the release notes require it).
-
-Migrations are always backward compatible with the previous release, so a rollback of the application does not require a data restore unless the release notes say so.
-
-### 3.8 Hardening checklist
-
-- [ ] Only ports 22, 80 and 443 open; SSH by key only, from known IPs.
-- [ ] OS security updates automatic (`unattended-upgrades` or equivalent).
-- [ ] Two-step sign-in for every back-office account that can change money or settings (required for ADMIN and FINANCE; others turn it on under **Two-step sign-in** in the account menu).
-- [ ] Daily off-server backups, and one test restore done.
-- [ ] Real SMTP, maps and payment credentials set; demo map services not used.
-- [ ] `FOODSTACK_ENVIRONMENT=production` (blocks the `test-seed` demo data).
-- [ ] Disk usage alert at 80% (`status.sh` reports it).
-- [ ] The web app and the API on the same site (for example `example.com` and `api.example.com`), so the sign-in cookie is sent; `FOODSTACK_REFRESH_COOKIE_SECURE=true`.
+Everything about the business (branding, languages, currency, timezone, fees, commission, feature switches) is set in the back office, not in files. Each branch also has its own time zone, found from its location; the store's owner can change it on the branch page. Card payment also has a switch on the **Ordering** page: customers see it only when the gateway is set in the settings and the switch is on.
 
 ## 4. Kubernetes (Helm)
 
@@ -278,8 +200,8 @@ maps:
 server:
   env:
     PAYMENT_GATEWAY: stripe
-  # Secrets loaded whole into every server pod: the settings of section 3.3 (SMTP_*, STRIPE_*,
-  # FCM_*, GOOGLE_MAPS_API_KEY)
+  # Secrets loaded whole into every server pod: SMTP_*, STRIPE_*, FCM_*, GOOGLE_MAPS_API_KEY
+  # (Kubernetes guide 7.2)
   envFromSecrets: [foodstack-providers]
 ```
 
@@ -303,7 +225,7 @@ kubectl -n foodstack get pods,gateway,httproute,hpa
 kubectl -n foodstack get gateway foodstack -o jsonpath='{.status.addresses[0].value}'   # point DNS here
 ```
 
-The install runs migrations in a hook Job first, then starts the pods. Sign in at `https://admin.example.com/admin/` with the email in `secrets.adminEmail` and the password from the notes. The back office asks the administrator to set up an authenticator app on the first sign-in (two-step sign-in is required for the ADMIN and FINANCE roles). Then follow the first-login checklist in section 3.4.
+The install runs migrations in a hook Job first, then starts the pods. Sign in at `https://admin.example.com/admin/` with the email in `secrets.adminEmail` and the password from the notes. The back office asks the administrator to set up an authenticator app on the first sign-in (two-step sign-in is required for the ADMIN and FINANCE roles). Then follow the first sign-in checklist in section 3.1.
 
 Load test before you open to customers, from an address the rate limits allow (`tools/k6/browse.js` in the repository; it reads only):
 
@@ -463,16 +385,10 @@ Migrations run in a pre-upgrade job and are backward compatible with the previou
 - [ ] Image signatures verified (cosign) by your admission controller, if you run one.
 - [ ] Two-step sign-in for every back-office account that can change money or settings (required for ADMIN and FINANCE; others turn it on under **Two-step sign-in** in the account menu).
 
-## 5. Moving from a single server to Kubernetes
+## 5. Moving between setups
 
-Step by step, with every command: [handbook runbook 40](handbook/40-move-to-kubernetes.md). In short:
-
-1. Prepare the cluster and datastores (sections 4.1 and 4.2). Put **the same signing key and PII key** from `/opt/foodstack/.env` into a Secret (with new `FOODSTACK_INTERNAL_TOKEN`, `FOODSTACK_SERVICE_CLIENT_SECRET` and `FOODSTACK_ADMIN_PASSWORD`) and name it in `secrets.existingSecret`, so existing logins and encrypted data keep working.
-2. Announce a short maintenance window. On the single server: `./stop.sh proxy web backoffice server` (datastores keep running), then `./backup.sh`.
-3. `mongorestore --nsInclude 'foodstack_*.*'` the backup's `mongodb.archive.gz` into the new MongoDB.
-4. `helm install`, with `datastores.s3` and `maps` holding the same values as the server's `.env`: the buckets stay where they are, so photos need no copy. the **same version** the server runs. Migrations find nothing to do; search is empty in the new Elasticsearch, so the server creates the index and fills it on start.
-5. Test through your hosts file, then switch DNS to the cluster's Gateway address.
-6. Keep the old server stopped but intact for a week as a fallback.
+Docker Compose to Kubernetes, Compose to separate services, Kubernetes monolith to split or
+microservices, and back: the [migration guide](migration-guide.md) has each path, step by step.
 
 ## 6. Troubleshooting
 
@@ -488,6 +404,6 @@ Step by step, with every command: [handbook runbook 40](handbook/40-move-to-kube
 | Kubernetes: 503 "remote connection failure" after a node restarted | Pods that started before Istio's CNI agent was ready are not in the mesh: `kubectl -n foodstack rollout restart deploy,statefulset` |
 | Kubernetes: Prometheus shows the server pods down ("EOF") | Prometheus is outside the mesh, and the mesh only takes mutual TLS. Keep the observability chart's `ambient: true`, or label your Prometheus pod `istio.io/dataplane-mode: ambient` |
 | Search results stale or empty | Only live branches with a delivery area (or pickup) appear. Every branch is re-read once a day; to rebuild now, call `POST /api/v1/search/reindex` with an admin token (202), or delete the `foodstack_search_stores_v*` index and restart: a missing index is created and filled on start |
-| Elasticsearch will not start on a single server | `./logs.sh elasticsearch`; usually too little memory for `ES_HEAP`: lower it in `.env` and `./restart.sh elasticsearch` |
-| Disk full | `status.sh` shows usage; prune old backups and logs, then extend the disk |
+| Elasticsearch will not start (Docker Compose) | `docker compose logs elasticsearch`; usually too little memory for `ES_HEAP`: lower it in `.env` and `docker compose up -d` |
+| Disk full | `df -h /` and `docker system df`; prune old backups and unused images (`docker image prune`), then extend the disk |
 | More symptoms, in plain language | [Handbook troubleshooting](handbook/90-troubleshooting.md) |

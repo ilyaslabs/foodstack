@@ -32,7 +32,7 @@ import org.bouncycastle.jce.spec.ECNamedCurveParameterSpec;
 
 /**
  * The ES256 keys that sign tokens (TDD 9.1). Keys come from configuration as EC P-256 private
- * keys, PKCS#8 ({@code openssl pkcs8}, the unit deployer) or SEC1 ({@code BEGIN EC PRIVATE KEY},
+ * keys, PKCS#8 ({@code openssl pkcs8}, as the install guides make them) or SEC1 ({@code BEGIN EC PRIVATE KEY},
  * what the Helm chart generates), with or without the PEM lines; the public half is derived, and the key id is the JWK thumbprint, so the same key
  * always gets the same id on every replica.
  */

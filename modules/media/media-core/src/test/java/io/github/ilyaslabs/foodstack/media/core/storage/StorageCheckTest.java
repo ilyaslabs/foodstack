@@ -105,7 +105,7 @@ class StorageCheckTest {
             assertThatThrownBy(() -> new StorageCheck(wrong, presigner).check(publicBucket, privateBucket,
                     endpoint + "/" + publicBucket, List.of()))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("S3_ACCESS_KEY and S3_SECRET_KEY");
+                .hasMessageContaining("access-key and secret-key");
         }
     }
 }

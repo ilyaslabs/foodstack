@@ -20,20 +20,28 @@ FoodStack works with cash only out of the box. To take cards, connect a Stripe a
    Save, then copy the endpoint's **Signing secret** (it starts `whsec_`).
 3. **Put the keys in FoodStack's settings**:
    ```bash
-   cd /opt/foodstack
-   nano .env
+   cd ~/foodstack
+   nano config/application.yml
    ```
-   ```
-   PAYMENT_GATEWAY=stripe
-   STRIPE_SECRET_KEY=<sk_...>
-   STRIPE_WEBHOOK_SECRET=<whsec_...>
-   STRIPE_PUBLISHABLE_KEY=<pk_...>
+   ```yaml
+   foodstack:
+     payment:
+       gateway: stripe
+       public-url: https://api.example.com
+       stripe:
+         secret-key: <sk_...>
+         webhook-secret: <whsec_...>
+         publishable-key: <pk_...>
    ```
    Then:
    ```bash
-   ./restart.sh server
+   docker compose restart server
    ```
-   Update the copy of `.env` in your password manager.
+   Update the copy of `config/application.yml` in your password manager.
+
+   **Separate services**: the same lines go in `payment.yml`. **Kubernetes**: `PAYMENT_GATEWAY`
+   in `server.env`, and `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `STRIPE_PUBLISHABLE_KEY`
+   in the `foodstack-providers` Secret ([Kubernetes guide](../kubernetes-guide.md)).
 4. **Switch card payment on for customers.** In the back office, open **Ordering**, switch on **Card**, choose how customers type their card (on Stripe's page, or in card fields inside the app), decide whether they may save a card, and save.
 
 ## Check it worked
@@ -47,14 +55,14 @@ When the test works, repeat steps 1 to 3 of **Steps** with the live keys and a n
 
 ## Undo
 
-In the back office, switch **Card** off on the **Ordering** page: customers see cash only at once. To disconnect Stripe entirely, set `PAYMENT_GATEWAY=none` and run `./restart.sh server`. Orders already paid keep their payments and can still be refunded from the Stripe dashboard.
+In the back office, switch **Card** off on the **Ordering** page: customers see cash only at once. To disconnect Stripe entirely, set `gateway: none` and run `docker compose restart server`. Orders already paid keep their payments and can still be refunded from the Stripe dashboard.
 
 ## If something goes wrong
 
 | Problem | What to do |
 |---|---|
-| The server does not start after the change | `./logs.sh server` says which key is missing. Stripe needs both `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` |
-| Card orders stay "Waiting for payment" after paying | Stripe's reports do not reach FoodStack. Check the webhook URL and the events in step 2, and that `STRIPE_WEBHOOK_SECRET` is that endpoint's secret. Unpaid orders fail by themselves after 30 minutes |
-| Card is not offered at checkout | Switch it on in **Ordering**; the server must also have `PAYMENT_GATEWAY=stripe` |
+| The server does not start after the change | `docker compose logs server` says which key is missing. Stripe needs both `secret-key` and `webhook-secret` |
+| Card orders stay "Waiting for payment" after paying | Stripe's reports do not reach FoodStack. Check the webhook URL and the events in step 2, and that `webhook-secret` is that endpoint's secret. Unpaid orders fail by themselves after 30 minutes |
+| Card is not offered at checkout | Switch it on in **Ordering**; the server must also have `gateway: stripe` |
 | You want restaurants to receive card money directly | That is set per branch on its **Payments** tab, after you allow it on **Ordering**. The branch connects its own Stripe account; FoodStack keeps track of the commission it owes you |
-| `PAYMENT_GATEWAY=sandbox` stops the server | The sandbox is a fake gateway for testing and is refused on a real install |
+| `gateway: sandbox` stops the server | The sandbox is a fake gateway for testing and is refused on a real install |

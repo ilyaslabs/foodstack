@@ -153,6 +153,12 @@ public class GeoProperties {
          */
         private String url = "https://nominatim.openstreetmap.org";
 
+        /**
+         * Lets a production install use OpenStreetMap's public server, which allows light use only.
+         * Off by default: production refuses to start with it (handbook guide 13).
+         */
+        private boolean allowPublicServer;
+
         /** Sent as User-Agent, as the Nominatim usage policy requires. */
         private String userAgent = "FoodStack";
 
@@ -178,6 +184,14 @@ public class GeoProperties {
 
         public void setUrl(String url) {
             this.url = url;
+        }
+
+        public boolean isAllowPublicServer() {
+            return this.allowPublicServer;
+        }
+
+        public void setAllowPublicServer(boolean allowPublicServer) {
+            this.allowPublicServer = allowPublicServer;
         }
 
         public String getUserAgent() {

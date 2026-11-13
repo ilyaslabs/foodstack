@@ -6,7 +6,9 @@ target/
 .DS_Store
 node_modules/
 dist/
-!deploy/unit-deployer/src/main/dist/
 .angular/
 .env
-deploy/unit-deployer/data/
+
+# Docker Compose: backups and the previous version kept on a server
+deploy/compose/backups/
+deploy/compose/previous/

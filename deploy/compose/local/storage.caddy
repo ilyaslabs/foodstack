@@ -1,0 +1,6 @@
+# Trial on your own computer only (docker-compose.local.yml): photos go to the storage container.
+# The Host header is passed unchanged, so upload links signed for localhost stay valid.
+@storage path /foodstack-public/* /foodstack-private/*
+handle @storage {
+	reverse_proxy storage:9000
+}

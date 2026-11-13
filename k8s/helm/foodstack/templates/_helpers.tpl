@@ -270,6 +270,9 @@ GEOCODING_URL: {{ default "" $m.geocoding.url | quote }}
 GEOCODING_COUNTRY_CODES: {{ default "" $m.geocoding.countryCodes | quote }}
 ROUTING_PROVIDER: {{ default "none" $m.routing.provider | quote }}
 ROUTING_URL: {{ default "" $m.routing.url | quote }}
+{{- if $m.allowPublicOpenStreetMap }}
+FOODSTACK_GEO_GEOCODING_ALLOW_PUBLIC_SERVER: "true"
+{{- end }}
 {{- end -}}
 
 {{/* Map tiles for the web apps: required outside the trial values. */}}

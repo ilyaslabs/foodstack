@@ -1,7 +1,7 @@
-# The single-server gateway (TDD 17.2): TLS, routing by path and security headers.
+# The proxy for Docker Compose (TDD 17.2): HTTPS, routing by path and security headers.
 # FOODSTACK_SITES lists the site addresses, for example
 #   "example.com, admin.example.com, api.example.com"   (automatic HTTPS)
-#   "http://localhost"                                   (local trial without TLS)
+#   "http://localhost"                                   (trial on your computer, no HTTPS)
 {
 	servers {
 		trusted_proxies static private_ranges
@@ -21,20 +21,21 @@
 		-Server
 	}
 
-	# No per-address rate limits on one server (ilyas, 2026-11-07): the FoodStack server limits
-	# sign-in, email codes, coupon checks and order placement itself. Kubernetes adds edge limits.
+	# No per-address rate limits here (ilyas, 2026-11-07): the FoodStack server limits sign-in,
+	# email codes, coupon checks and order placement itself. Kubernetes adds edge limits.
 
 	# The API (sign-in included) and the token keys: the FoodStack server (every module local).
 	@server path /api/* /oauth2/* /.well-known/* /actuator/health/*
 	handle @server {
 		reverse_proxy server:8080 {
 			health_uri /actuator/health/readiness
+			health_interval 5s
 		}
 	}
 
-	# Photos and files: in the operator's buckets, which browsers reach directly. A --local trial
-	# routes its bucket paths to the storage on this machine here (written by install.sh).
-	import storage.caddy
+	# Photos and files are in your buckets, which browsers reach directly. A trial on your own
+	# computer (docker-compose.local.yml) adds a route to the storage on it here.
+	import /etc/caddy/local/*.caddy
 
 	# The back office; on its own hostname the root opens it.
 	handle /admin* {

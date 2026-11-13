@@ -1,0 +1,80 @@
+# FoodStack service "search": Nearby store search.
+#
+# Needs:    Redis, Kafka, Elasticsearch.
+# Outside:  none (Elasticsearch is its datastore).
+# Calls:    geo, review, store (on their internal port 8081).
+# Answers:  /api/v1/search
+#
+# Fill in every value marked REPLACE and every example.com address, then run it:
+#   docker run -d --name search -p 8080:8080 -p 8081:8081 \
+#     -v $PWD/search.yml:/app/config/application.yml:ro ilyasdotdev/ilyaslabs-foodstack:server-<version>
+# or, with Java 25: java -jar foodstack-server.jar --spring.config.additional-location=file:search.yml
+# The README next to this file lists the start order and the proxy routes. Every value can also
+# come from the environment: write ${MY_VARIABLE} instead of the value.
+
+server:
+  port: 8080        # the public API, behind your proxy
+
+spring:
+  # No MongoDB database of its own; the address is needed only for start-up checks.
+  mongodb:
+    uri: mongodb://foodstack:REPLACE-with-the-password@mongodb.internal:27017/?replicaSet=rs0&authSource=admin
+  data:
+    redis:
+      # rediss://... for TLS. Every service uses the same Redis.
+      url: redis://:REPLACE-with-the-password@redis.internal:6379
+  kafka:
+    bootstrap-servers: kafka-1.internal:9092,kafka-2.internal:9092,kafka-3.internal:9092
+  elasticsearch:
+    uris: http://elasticsearch.internal:9200
+    username: elastic
+    password: REPLACE-with-the-password
+
+# Which service runs which module. This one runs search; every other module is called on its
+# service's internal port. Change the addresses to where you run them.
+module-switch:
+  modules:
+    identity: { mode: http, url: "http://identity.internal:8081", token: REPLACE-with-the-internal-token }
+    settings: { mode: http, url: "http://settings.internal:8081", token: REPLACE-with-the-internal-token }
+    media: { mode: http, url: "http://media.internal:8081", token: REPLACE-with-the-internal-token }
+    geo: { mode: http, url: "http://geo.internal:8081", token: REPLACE-with-the-internal-token }
+    store: { mode: http, url: "http://store.internal:8081", token: REPLACE-with-the-internal-token }
+    search: { mode: local }
+    promotion: { mode: http, url: "http://promotion.internal:8081", token: REPLACE-with-the-internal-token }
+    cart: { mode: http, url: "http://cart.internal:8081", token: REPLACE-with-the-internal-token }
+    payment: { mode: http, url: "http://payment.internal:8081", token: REPLACE-with-the-internal-token }
+    order: { mode: http, url: "http://order.internal:8081", token: REPLACE-with-the-internal-token }
+    rider: { mode: http, url: "http://rider.internal:8081", token: REPLACE-with-the-internal-token }
+    dispatch: { mode: http, url: "http://dispatch.internal:8081", token: REPLACE-with-the-internal-token }
+    notification: { mode: http, url: "http://notification.internal:8081", token: REPLACE-with-the-internal-token }
+    ledger: { mode: http, url: "http://ledger.internal:8081", token: REPLACE-with-the-internal-token }
+    review: { mode: http, url: "http://review.internal:8081", token: REPLACE-with-the-internal-token }
+  # The internal port other services call. The token is the same on every service:
+  #   openssl rand -hex 24
+  expose:
+    port: 8081
+    modules: [search]
+    token: REPLACE-with-the-internal-token
+
+foodstack:
+  environment: production
+  kafka:
+    # Partitions of the topics this service creates, and copies of each (3 on a 3-broker cluster).
+    topic-partitions: 24
+    replication-factor: 3
+  security:
+    # The public API address: the issuer of every sign-in token. The same on every service.
+    issuer: https://api.example.com
+    # Where this service gets the token keys and its own service tokens: the identity service.
+    jwk-set-uri: http://identity.internal:8080/oauth2/jwks
+    token-uri: http://identity.internal:8080/oauth2/token
+    # The same on every service: openssl rand -hex 24
+    service-client-secret: REPLACE-with-the-service-client-secret
+    # The personal-data key, the same on every service (every one checks it on start):
+    #   openssl rand -base64 32
+    # Keep a copy outside the server: without it stored personal data cannot be read.
+    pii-key: REPLACE-with-the-personal-data-key
+  search:
+    index-prefix: foodstack_
+    # Copies of each search shard: 0 on one Elasticsearch node, 1 or more on a cluster.
+    replicas: 0

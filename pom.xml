@@ -53,7 +53,6 @@
         <module>modules</module>
         <module>app</module>
         <module>integration-tests</module>
-        <module>deploy/unit-deployer</module>
     </modules>
 
     <properties>
@@ -657,7 +656,6 @@
                             <autoPublish>true</autoPublish>
                             <excludeArtifacts>
                                 <artifact>foodstack-integration-tests</artifact>
-                                <artifact>foodstack-unit-deployer</artifact>
                             </excludeArtifacts>
                         </configuration>
                     </plugin>

@@ -167,7 +167,7 @@ public class PaymentConfiguration {
                 case SandboxGateway.ID -> {
                     if ("production".equalsIgnoreCase(environment)) {
                         throw new IllegalStateException("The sandbox payment gateway cannot run in production; "
-                                + "set PAYMENT_GATEWAY to stripe or none");
+                                + "set foodstack.payment.gateway (PAYMENT_GATEWAY) to stripe or none");
                     }
                     String secret = (properties.sandboxSecret() != null && !properties.sandboxSecret().isBlank())
                             ? properties.sandboxSecret() : UUID.randomUUID().toString();
@@ -177,7 +177,8 @@ public class PaymentConfiguration {
                 case StripeGateway.ID -> {
                     PaymentProperties.Stripe stripe = properties.stripe();
                     if (blank(stripe.secretKey()) || blank(stripe.webhookSecret())) {
-                        throw new IllegalStateException("PAYMENT_GATEWAY=stripe needs STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET");
+                        throw new IllegalStateException("The stripe gateway needs foodstack.payment.stripe.secret-key and "
+                                + "webhook-secret (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET)");
                     }
                     yield new PaymentGateways(new StripeGateway(builder, stripe.apiUrl(), stripe.secretKey(),
                             stripe.webhookSecret(), stripe.publishableKey(), jsonMapper, clock), null,

@@ -1,0 +1,166 @@
+# The proxy in front of FoodStack when each module runs as its own service (deploy/services).
+# Same as the single server's Caddyfile, except that each module's API paths go to the service that
+# runs it. Change every *.internal address to where you run that service; several addresses after
+# reverse_proxy spread the load over copies of a service.
+#
+#   docker run -d --name proxy -p 80:80 -p 443:443 -p 10.0.0.5:8000:8000 \
+#     -e FOODSTACK_SITES='example.com, admin.example.com, api.example.com' \
+#     -e FOODSTACK_ADMIN_ROOT_HOST=admin.example.com \
+#     -v $PWD/Caddyfile:/etc/caddy/Caddyfile:ro -v caddy:/data caddy:2.10-alpine
+# (10.0.0.5: this machine's private address, so port 8000 stays inside your network.)
+{
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+(api) {
+	# Each module's API paths to its service (the same map as the Kubernetes chart's routes).
+	@identity path /api/v1/auth /api/v1/auth/* /api/v1/me /api/v1/me/* /api/v1/users /api/v1/users/* /api/v1/audit /api/v1/audit/* /oauth2 /oauth2/* /.well-known /.well-known/*
+	handle @identity {
+		reverse_proxy identity.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@settings path /api/v1/settings /api/v1/settings/*
+	handle @settings {
+		reverse_proxy settings.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@media path /api/v1/media /api/v1/media/*
+	handle @media {
+		reverse_proxy media.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@geo path /api/v1/geo /api/v1/geo/* /api/v1/zones /api/v1/zones/*
+	handle @geo {
+		reverse_proxy geo.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@store path /api/v1/stores /api/v1/stores/* /api/v1/brands /api/v1/brands/* /api/v1/price-changes /api/v1/price-changes/*
+	handle @store {
+		reverse_proxy store.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@search path /api/v1/search /api/v1/search/*
+	handle @search {
+		reverse_proxy search.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@promotion path /api/v1/promotions /api/v1/promotions/* /api/v1/coupons /api/v1/coupons/*
+	handle @promotion {
+		reverse_proxy promotion.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@cart path /api/v1/carts /api/v1/carts/*
+	handle @cart {
+		reverse_proxy cart.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@payment path /api/v1/payments /api/v1/payments/* /api/v1/payment-webhooks /api/v1/payment-webhooks/*
+	handle @payment {
+		reverse_proxy payment.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@order path /api/v1/orders /api/v1/orders/*
+	handle @order {
+		reverse_proxy order.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@rider path /api/v1/riders /api/v1/riders/* /api/v1/rider /api/v1/rider/*
+	handle @rider {
+		reverse_proxy rider.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@dispatch path /api/v1/deliveries /api/v1/deliveries/* /api/v1/dispatch /api/v1/dispatch/*
+	handle @dispatch {
+		reverse_proxy dispatch.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@notification path /api/v1/notifications /api/v1/notifications/* /api/v1/devices /api/v1/devices/*
+	handle @notification {
+		reverse_proxy notification.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@ledger path /api/v1/ledger /api/v1/ledger/* /api/v1/payouts /api/v1/payouts/*
+	handle @ledger {
+		reverse_proxy ledger.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+	@review path /api/v1/reviews /api/v1/reviews/*
+	handle @review {
+		reverse_proxy review.internal:8080 {
+			health_uri /actuator/health/readiness
+			health_interval 5s
+		}
+	}
+
+}
+
+(foodstack) {
+	encode zstd gzip
+	request_body {
+		max_size 25MB
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	import api
+
+	# The back office; on its own hostname the root opens it.
+	handle /admin* {
+		reverse_proxy backoffice.internal:8080
+	}
+	@adminRoot {
+		host {$FOODSTACK_ADMIN_ROOT_HOST}
+		path /
+	}
+	redir @adminRoot /admin/ 302
+
+	# Everything else: the customer app (server-side rendered).
+	handle {
+		reverse_proxy web.internal:4000
+	}
+}
+
+{$FOODSTACK_SITES} {
+	import foodstack
+}
+
+# Inside your network only: the customer web app renders pages on the server and fetches the API
+# here (its FOODSTACK_INTERNAL_API_URL). Do not open port 8000 to the internet.
+http://:8000 {
+	import api
+}

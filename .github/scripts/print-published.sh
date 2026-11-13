@@ -27,12 +27,12 @@ artifacts=$(sed -n 's#.*<artifactId>\(foodstack-[^<]*\)</artifactId>.*#\1#p' foo
   echo '```'
   if [[ -n $release ]]; then
     echo
-    echo "### Helm charts and the unit deployer"
+    echo "### Helm charts and the Docker Compose files"
     echo
     echo '```'
     echo "oci://ghcr.io/ilyaslabs/charts/foodstack:$version"
     echo "oci://ghcr.io/ilyaslabs/charts/foodstack-observability:$version"
-    echo "https://github.com/ilyaslabs/foodstack/releases/download/$release/unit-deployer-$version.zip"
+    echo "https://github.com/ilyaslabs/foodstack/releases/download/$release/foodstack-compose-$version.zip"
     echo '```'
   fi
 } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"

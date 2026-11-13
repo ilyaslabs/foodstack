@@ -1,7 +1,8 @@
 name: Release
 
 # A GitHub release named vX.Y.Z publishes the libraries to Maven Central, the images to Docker Hub
-# and GHCR, and attaches unit-deployer-X.Y.Z.zip to the release (TDD 15.2).
+# and GHCR, and attaches foodstack-compose-X.Y.Z.zip (deploy/compose with the version filled in) to the
+# release (TDD 15.2).
 on:
   release:
     types: [published]
@@ -35,7 +36,6 @@ jobs:
     with:
       version: ${{ needs.version.outputs.version }}
       tags: ${{ needs.version.outputs.version }} ${{ needs.version.outputs.minor }} latest
-      attach-to-release: ${{ github.event.release.tag_name }}
     secrets: inherit
 
   # Both Helm charts, versioned with the release, at oci://ghcr.io/ilyaslabs/charts (TDD 18.1):
@@ -60,9 +60,27 @@ jobs:
             helm push "dist/$chart-$VERSION.tgz" oci://ghcr.io/ilyaslabs/charts
           done
 
+  # The Docker Compose files, with this version in .env.example, on the release page.
+  compose:
+    needs: [version, images]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Zip and attach
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp -r deploy/compose "foodstack-compose-$VERSION"
+          sed -i "s/^FOODSTACK_VERSION=.*/FOODSTACK_VERSION=$VERSION/" "foodstack-compose-$VERSION/.env.example"
+          zip -qr "foodstack-compose-$VERSION.zip" "foodstack-compose-$VERSION"
+          gh release upload "${{ github.event.release.tag_name }}" "foodstack-compose-$VERSION.zip" --clobber
+
   # Only lists what this release published (also on the run's summary page).
   published:
-    needs: [version, charts]
+    needs: [version, charts, compose]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

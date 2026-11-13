@@ -28,7 +28,7 @@ class BootstrapAdminTest {
 
         // then
         assertThatIllegalStateException().isThrownBy(() -> new BootstrapAdmin(this.users, this.properties).createIfMissing())
-            .withMessageContaining("FOODSTACK_PII_KEY");
+            .withMessageContaining("personal-data key");
         verify(this.users, never()).emailExists(anyString());
         verify(this.users, never()).create(any(), anyString());
     }

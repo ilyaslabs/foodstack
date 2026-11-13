@@ -198,7 +198,7 @@ public class NotificationService {
             this.mongo.insert(new DeliveryDocument(id, message.userId(), EMAIL, message.template(), this.pii.encrypt(address),
                     sealed ? rendered.title() : rendered.subject(), sealed ? this.pii.encrypt(html) : html,
                     sealed ? this.pii.encrypt(text) : text, ready ? DeliveryDocument.QUEUED : DeliveryDocument.SKIPPED, 0,
-                    ready ? null : "Email is not set up (SMTP_HOST)", now, null, now,
+                    ready ? null : "Email is not set up (spring.mail.host)", now, null, now,
                     sealed ? this.pii.encrypt(rendered.subject()) : null));
         }
         catch (DuplicateKeyException ex) {
