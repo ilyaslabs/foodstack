@@ -1,7 +1,7 @@
 # Run FoodStack as separate services
 
-FoodStack is one program made of 15 modules. On one server every module runs inside one process
-(the [unit deployer](../unit-deployer/src/main/dist/README.md)). The same program can also run
+FoodStack is one program made of 15 modules. On one machine every module runs inside one process
+([Docker Compose](../compose/README.md)). The same program can also run
 each module, or a group of modules, as its own service on its own machines, without Kubernetes.
 Only the settings change, never the code.
 
@@ -57,8 +57,8 @@ Make each one once, and use the same value in every file:
 | `REPLACE-with-the-personal-data-key` | `openssl rand -base64 32` | Encrypted names, phones and addresses. **Keep a copy**: without it they can't be read |
 | `REPLACE-with-the-signing-key` (identity only) | see the comment in `identity.yml` | Signing sign-in tokens |
 
-Moving from one server? Take `FOODSTACK_PII_KEY` and `FOODSTACK_SIGNING_KEYS` from its `.env`
-instead of making new ones. Otherwise stored personal data can't be read, and everyone is signed out.
+Moving from Docker Compose? Take `pii-key` and `signing-keys` from its `config/application.yml`
+instead of making new ones ([migration guide, path 2](../../docs/migration-guide.md#path-2-docker-compose-to-separate-services)). Otherwise stored personal data can't be read, and everyone is signed out.
 
 ## Start it
 
@@ -93,8 +93,7 @@ instead of making new ones. Otherwise stored personal data can't be read, and ev
 Each service is healthy when `curl -s localhost:8080/actuator/health/readiness` answers `{"status":"UP"}`.
 
 To run without Docker, use Java 25 and the server jar: `foodstack-server-<version>-exec.jar` from
-Maven Central (`io.github.ilyaslabs:foodstack-server`, classifier `exec`), or
-`app/foodstack-server.jar` in the release's unit-deployer zip:
+Maven Central (`io.github.ilyaslabs:foodstack-server`, classifier `exec`):
 
 ```bash
 java -jar foodstack-server.jar --spring.config.additional-location=file:./order.yml

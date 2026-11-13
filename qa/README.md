@@ -53,7 +53,7 @@ Elasticsearch: http://localhost:<port> (user elastic, password foodstack-test)
 
 The containers are new on every start, so every run starts with the same demo data. A case that needs a clean state says so.
 
-[14-operations.md](14-operations.md) tests a real install (`install.sh`, and Helm on Kubernetes) separately.
+[14-operations.md](14-operations.md) tests a real install (Docker Compose, and Helm on Kubernetes) separately.
 
 ### Test accounts
 

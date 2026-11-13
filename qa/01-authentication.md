@@ -361,7 +361,7 @@ Check
 
 Who: a new FINANCE user · Where: back office
 
-This case needs ADMIN or FINANCE to require two-step sign-in, as on a real install. In the local run, start the server with `--foodstack.identity.totp.required-roles=ADMIN,FINANCE`, or test it on a `--local` trial install (OPS-01).
+This case needs ADMIN or FINANCE to require two-step sign-in, as on a real install. In the local run, start the server with `--foodstack.identity.totp.required-roles=ADMIN,FINANCE`, or test it on the Docker Compose trial (OPS-01).
 
 Steps
 1. As admin, create a user with role Finance (USER-02).

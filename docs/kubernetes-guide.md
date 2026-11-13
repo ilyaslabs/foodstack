@@ -2,7 +2,7 @@
 
 This guide installs FoodStack on a Kubernetes cluster and runs it in production, with every command and every setting. It is written for the person who runs the cluster: you know `kubectl` and `helm`, and you have (or can get) a cluster and managed datastores.
 
-- Never used Kubernetes? Start on one server ([deployment guide 3](deployment-guide.md#3-single-server-unit-deployer)) and move later ([handbook 40](handbook/40-move-to-kubernetes.md)): all data moves with you.
+- Never used Kubernetes? Start on one machine with Docker Compose ([deployment guide 3](deployment-guide.md#3-docker-compose-one-machine)) and move later ([migration guide](migration-guide.md), [handbook 40](handbook/40-move-to-kubernetes.md)): all data moves with you.
 - Only want to look at it? [Section 4](#4-try-it-first-a-trial-install) runs everything inside a cluster in one command, on any cluster, including one on your own computer.
 
 Contents
@@ -354,7 +354,7 @@ secrets:
 
 The chart writes them into the Secret `foodstack-secrets` (a Helm hook, created before the migrations Job and kept by `helm uninstall`).
 
-(Moving from one server: copy `FOODSTACK_SIGNING_KEYS` and `FOODSTACK_PII_KEY` from `/opt/foodstack/.env` instead of generating them.)
+(Moving from Docker Compose or separate services: use `signing-keys` and `pii-key` from your `config/application.yml` or service files instead of generating them, see the [migration guide](migration-guide.md).)
 
 Datastore credentials can come from your own Secret too: name it in `datastores.existingSecret`, with the keys `MONGODB_URI`, `REDIS_URL`, `ELASTICSEARCH_PASSWORD`, `S3_ACCESS_KEY` and `S3_SECRET_KEY`. The non-secret addresses (`kafka.bootstrap`, `elasticsearch.uris`, the `s3` addresses) stay in the values file. The rate limiter then needs the Redis address and password separately: `gateway.rateLimit.redis.address` and a Secret with the key `REDIS_AUTH` named in `gateway.rateLimit.redis.existingSecret`.
 
@@ -449,7 +449,7 @@ kubectl -n foodstack create secret generic foodstack-providers \
 | `SMTP_*` | Order emails, sign-in codes, password reset. Without `SMTP_HOST` and `SMTP_FROM` nothing is emailed; the **Email log** page shows each message as "Not sent" | [handbook 15](handbook/15-email.md) |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY` | Card payments with `PAYMENT_GATEWAY: stripe`. Webhook endpoint: `https://api.example.com/api/v1/payment-webhooks/stripe`. Card data stays with Stripe (PCI SAQ A) | [handbook 16](handbook/16-card-payments.md) |
 | `GOOGLE_MAPS_API_KEY` | With `maps.geocoding.provider` or `maps.routing.provider` `google` | [handbook 13](handbook/13-maps.md) |
-| `FCM_SERVICE_ACCOUNT`, `FCM_WEB_CONFIG`, `FCM_VAPID_KEY` | Push to riders and customers. `FCM_SERVICE_ACCOUNT` is the key file's JSON itself (`--from-file`), not a path | [deployment guide 3.3](deployment-guide.md#33-configure) |
+| `FCM_SERVICE_ACCOUNT`, `FCM_WEB_CONFIG`, `FCM_VAPID_KEY` | Push to riders and customers. `FCM_SERVICE_ACCOUNT` is the key file's JSON itself (`--from-file`), not a path | The `notification.push` comments in [config/application.yml](../deploy/compose/config/application.yml) |
 
 `PAYMENT_GATEWAY: sandbox` (a test page that charges nothing) is refused in production. Other server settings, such as `FOODSTACK_IDENTITY_DELETION_GRACE`, go under `server.env` (plain values) or into this Secret.
 

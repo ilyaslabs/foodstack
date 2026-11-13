@@ -291,7 +291,7 @@ By default the operator collects every card payment and pays stores later. The o
 | Observability | Traces, metrics and logs for every request, correlated by trace ID |
 | Localisation | All user-facing strings externalised; RTL layout verified for Arabic and Urdu |
 | Accessibility | WCAG 2.2 AA |
-| Portability | Runs on one Linux server with Docker through the unit deployer; optionally on any CNCF-conformant Kubernetes 1.31+; no cloud-specific dependency |
+| Portability | Runs on one Linux server with Docker Compose, or as separate services on several machines; optionally on any CNCF-conformant Kubernetes 1.31+; no cloud-specific dependency |
 | Media | Images resized to fixed variants and stored as WebP (AVIF where supported); originals over 10 MB rejected; typical menu photo under 80 KB |
 | Time | Stored in UTC; API requests and responses carry date-times as UTC epoch seconds. Each branch has its own time zone for hours and order times |
 | Developer setup | Clone and run the server from the IDE or one Maven command with Testcontainers starting every dependency; `test-seed` profile loads demo data |
@@ -301,7 +301,7 @@ By default the operator collects every card payment and pays stores later. The o
 
 | Milestone | Content | Exit criteria |
 |---|---|---|
-| **M0 Foundation** | Repo skeleton, Maven multi-module build, Angular workspace, CI, Docker images, Testcontainers local run and `test-seed` seeder, **unit deployer**, `identity`, `settings` and `media` modules | `install.sh` from the unit deployer brings up an empty branded platform on a clean server; admin can log in |
+| **M0 Foundation** | Repo skeleton, Maven multi-module build, Angular workspace, CI, Docker images, Testcontainers local run and `test-seed` seeder, **unit deployer** (replaced by Docker Compose on 2026-11-12, TDD 29), `identity`, `settings` and `media` modules | `install.sh` from the unit deployer brings up an empty branded platform on a clean server; admin can log in |
 | **M1 Catalogue** | `store`, `geo`, `search`; store onboarding, menus, store delivery zones; customer browse and search. Brand and branch data model (4.2.1) with single-branch screens | Customer finds a store and sees its menu in two languages, one RTL |
 | **M2 Ordering** | `cart`, `order`, `payment` (cash and card adapter), `promotion`, `notification` | Customer places and pays for an order; store accepts and completes a pickup order |
 | **M3 Delivery** | Saved customer addresses first (ID-6, chosen by ilyas 2026-11-02), then `dispatch`, `rider`, live tracking, rider PWA, admin live map | End-to-end delivery with rider and live map |

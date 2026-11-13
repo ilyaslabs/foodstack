@@ -97,16 +97,16 @@ flowchart TB
 - **The two apps** need the map tiles; the back office also needs your bucket's address to show
   and upload photos. Browsers load photos straight from the bucket, never through the server.
 - Ready-made settings, one file per module, with every value above: [deploy/services](../../deploy/services/README.md).
-  On one server they are the lines of `.env` ([deployment guide](../deployment-guide.md)); on
+  On one machine they are all in one `config/application.yml` ([deploy/compose](../../deploy/compose/README.md)); on
   Kubernetes, the chart's values ([Kubernetes guide](../kubernetes-guide.md)).
 
 "Calls these modules" means the module asks them for answers while it works: a Java call in one
 process, an HTTP call on port 8081 when they are split, so those services must be reachable from
 it. Everything else between modules travels as Kafka events ([1.2](#12-modules-their-data-and-who-calls-whom)).
 
-## 1.1 What runs where (single server, the unit deployer)
+## 1.1 What runs where (one machine, Docker Compose)
 
-This is what `install.sh` starts today (`deploy/unit-deployer/src/main/dist/docker-compose.yml`). The Kubernetes chart (M5) is drawn in [10.1](10-kubernetes.md#101-what-the-chart-installs).
+This is what `docker compose up -d` starts ([deploy/compose/docker-compose.yml](../../deploy/compose/docker-compose.yml)). The server reads every setting from the mounted `config/application.yml`, and the datastore passwords from `.env`. Running modules as separate services without Kubernetes is described in [deploy/services](../../deploy/services/README.md), and moving between setups in the [migration guide](../migration-guide.md). The Kubernetes chart (M5) is drawn in [10.1](10-kubernetes.md#101-what-the-chart-installs).
 
 ```mermaid
 flowchart LR
@@ -150,7 +150,7 @@ flowchart LR
 ```
 
 - The browser apps call the API on the same origin, so there is no CORS between the apps and the server.
-- Images are served straight from the operator's public bucket (or a CDN in front of it), never through the Java server; browsers upload with presigned PUT links, allowed by the bucket's CORS rule. The server refuses to start until `StorageCheck` passes. A `--local` trial instead runs a local S3 stand-in behind Caddy (`docker-compose.trial-storage.yml`) and OpenStreetMap's public maps.
+- Images are served straight from the operator's public bucket (or a CDN in front of it), never through the Java server; browsers upload with presigned PUT links, allowed by the bucket's CORS rule. The server refuses to start until `StorageCheck` passes. The trial on a laptop (`docker-compose.local.yml`) instead runs a local S3 stand-in behind Caddy, Mailpit for emails, the sandbox payment page and OpenStreetMap's public maps.
 - The server's internal Module-Switch port is not used in this topology: every module is `local` in one JVM.
 - The same code runs on many machines: see [8. How FoodStack scales out](08-scaling.md) for the scaled-out picture and the growth stages.
 

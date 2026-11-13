@@ -49,7 +49,7 @@ sequenceDiagram
 - **Mobile apps** log in with `client: mobile`: the refresh token comes in the body, is kept in the Keychain or Keystore and sent back in the body. A token is accepted only on its own channel (`REFRESH_WRONG_CHANNEL`), and a call with both a cookie and a body token is refused (`REFRESH_TWO_CHANNELS`).
 - **Sign-out everywhere, block or password reset** raise the user's `tokenVersion` (flow 4.9): access tokens stop at once (flow 2.1) and each sign-in ends at its next refresh.
 - **Keys:** the signing keys come from `FOODSTACK_SIGNING_KEYS`. Without them (development only) a temporary key is generated, and every token stops working on restart. Spring Authorization Server remains only for `/oauth2/jwks`, its metadata and the service token of split deployments.
-- **Cookie on plain HTTP:** a local trial without TLS sets `FOODSTACK_REFRESH_COOKIE_SECURE=false` (install.sh `--local` does it), or the browser would drop the cookie.
+- **Cookie on plain HTTP:** a local trial without TLS sets `foodstack.identity.refresh-cookie-secure: false` (the Docker Compose trial's `application-local.yml` does it), or the browser would drop the cookie.
 
 ## 4.2 Store change → search index (the read model)
 

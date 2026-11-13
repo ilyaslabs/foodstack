@@ -31,7 +31,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 ## 4. Business model and licensing
 
 - FoodStack is released under the **Fair Revenue Share License v1**: free for personal, educational and commercial use until the operator's project passes **USD 10,000 total revenue**, after which **5% of monthly gross revenue** is shared with the author. Copyright notices must be kept and the code may not be relicensed to remove the revenue share.
-- Artifacts are public: jars on Maven Central, images on Docker Hub (mirrored to GHCR), the unit deployer zip on GitHub releases, and the Helm chart as an OCI artifact on GHCR.
+- Artifacts are public: jars on Maven Central, images on Docker Hub (mirrored to GHCR), the Docker Compose zip on GitHub releases, and the Helm chart as an OCI artifact on GHCR.
 - Attribution ("Powered by ilyasLabs") is appreciated but not mandatory. The product UI exposes an optional footer toggle for it.
 
 ## 5. Stakeholders
@@ -51,9 +51,9 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 
 | # | Objective | Measure (target for v1) |
 |---|---|---|
-| BO-1 | Time to launch | A new operator goes from unzipping the unit deployer on one server to a branded, working marketplace in **under 1 day** with the quick-start guide |
+| BO-1 | Time to launch | A new operator goes from unzipping the Docker Compose files on one server to a branded, working marketplace in **under 1 day** with the quick-start guide |
 | BO-2 | No team needed to start | Operator launches without code changes: branding, currency, language, commission and the operator rider service are all configuration |
-| BO-3 | Low cost at small scale | The unit deployer runs a city pilot (≤ 200 orders per hour) on **one server** (8 vCPU, 32 GB RAM reference) with every dependency included |
+| BO-3 | Low cost at small scale | Docker Compose runs a city pilot (≤ 200 orders per hour) on **one server** (8 vCPU, 32 GB RAM reference) with every dependency included |
 | BO-4 | Scale without rewrite | Moving from one server to Kubernetes, splitting any module into its own deployment, and growing to national scale (more replicas, database shards, cache and broker nodes) needs configuration and machines only, never code; proven in CI by installing the `monolith`, `split` and `microservices` topologies on every release and by testing every collection on a sharded database |
 | BO-5 | Trust and safety | No critical or high open security findings at release; all service-to-service traffic encrypted (mTLS) |
 | BO-6 | Money is traceable | Every order produces balanced ledger entries; payout reports reconcile to the cent |
@@ -78,7 +78,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | In-store | Printable **QR code** per store that opens its menu, for customers at the table (view only in v1) |
 | Localisation | **Multi-language with RTL**, one currency per deployment (config); one country per deployment; a default time zone per deployment, and each branch has its own (set from its location) |
 | Branding | Name, logo, colours and fonts set from the admin panel **at runtime**, without a rebuild |
-| Operations | **Unit deployer** for launch: one zip (`unit-deployer-<version>.zip`) with the application, a Docker Compose file and install, start, stop and restart scripts that run everything, including MongoDB, Kafka, Redis, Elasticsearch and object storage, on one server. **Kubernetes** Helm chart with service mesh (mTLS) is optional, for when the operator outgrows one server. Docker images, observability, CI/CD |
+| Operations | **Docker Compose** for launch: one zip (`foodstack-compose-<version>.zip`) with a Compose file and one settings file (`config/application.yml`) that run everything, including MongoDB, Kafka, Redis and Elasticsearch, on one server, with plain `docker compose` commands (replaced the unit deployer and its scripts, 2026-11-12). Photos go to the operator's own S3-compatible buckets. Modules can also run as separate services without Kubernetes. **Kubernetes** Helm chart with service mesh (mTLS) is optional, for when the operator outgrows one server. Docker images, observability, CI/CD |
 | Media | Images stored in S3-compatible object storage, resized and compressed on upload to keep storage small |
 | Developer experience | One-click local run with Testcontainers, plus demo data when the `test-seed` profile is active |
 
@@ -109,7 +109,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 | BR-6 | Customers, stores and riders receive notifications for every order state change that affects them | Must |
 | BR-7 | Customers can rate and review stores and riders after delivery; admins can moderate | Must |
 | BR-8 | Operators can brand the platform and choose language, currency and timezone without code changes | Must |
-| BR-9 | The platform can be installed on a single server with the unit deployer, and optionally on any conformant Kubernetes cluster with one Helm chart, secure by default | Must |
+| BR-9 | The platform can be installed on a single server with Docker Compose, and optionally on any conformant Kubernetes cluster with one Helm chart, secure by default | Must |
 | BR-10 | Any backend module can be split into its own service by configuration only | Must |
 | BR-11 | All personal data handling supports data export and deletion requests (GDPR-style) | Must |
 | BR-12 | A REST API, documented with OpenAPI, covers every capability of the web apps | Must |
@@ -135,7 +135,7 @@ FoodStack gives an operator the full stack (customer app, back office, store and
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Infrastructure footprint (Mongo, Redis, Kafka, Elasticsearch) is heavy for a small pilot | Higher running cost | The unit deployer runs everything on one server with small sizing; the deployment guide lists minimum sizes and managed-service options for later |
+| Infrastructure footprint (Mongo, Redis, Kafka, Elasticsearch) is heavy for a small pilot | Higher running cost | Docker Compose runs everything on one server with small sizing; the deployment guide lists minimum sizes and managed-service options for later |
 | Third-party licence changes (Liquibase FSL, Elasticsearch AGPL/ELv2) | Legal uncertainty for operators | Operators run unmodified upstream binaries; search behind an interface so an OpenSearch adapter is possible; licences documented in `docs/` |
 | Revenue share relies on self-reporting | Lost revenue for author | Clear licence notice in README, admin "About" page, and release notes |
 | Stores collecting payments directly may not pay what they owe | Lost commission for the operator | Off by default and granted per store by the operator; outstanding balance shown on dashboards; configurable credit limit after which direct collection is suspended automatically; dues netted against any amount the operator owes the store |

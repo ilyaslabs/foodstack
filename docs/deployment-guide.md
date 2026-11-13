@@ -69,7 +69,7 @@ docker compose up -d
 | Change a setting | Edit `config/application.yml`, then `docker compose restart server` |
 | Status and logs | `docker compose ps`, `docker compose logs -f server` |
 | Back up | `mongodump` from the `mongodb` container, nightly from cron, copied off the server ([handbook 20](handbook/20-backups.md)). Kafka, Redis and Elasticsearch need no backup |
-| Upgrade | New `FOODSTACK_VERSION` in `.env`, then `docker compose pull && docker compose up -d` ([handbook 21](handbook/21-upgrades.md)) |
+| Upgrade | The new release's Compose files and Caddyfile, any new settings, a new `FOODSTACK_VERSION` in `.env`, then `docker compose pull && docker compose up -d` ([handbook 21](handbook/21-upgrades.md)) |
 | Trial on your computer | `docker compose -f docker-compose.yml -f docker-compose.local.yml up -d`, then http://localhost:8080 |
 
 Server size: 4 vCPU, 8 GB memory and 100 GB SSD to start; 8 vCPU, 16 GB for a busy city. 64-bit

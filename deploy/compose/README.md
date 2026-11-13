@@ -105,9 +105,9 @@ and events waiting for Kafka are kept in MongoDB until sent. Photos are in your 
 versioning there ([handbook 20](../../docs/handbook/20-backups.md)).
 
 ```bash
-mkdir -p backups
-docker compose exec -T mongodb sh -c 'mongodump --quiet --archive --gzip -u foodstack -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin' \
-  > backups/foodstack-$(date -u +%Y%m%dT%H%M%SZ).archive.gz
+d=backups/$(date -u +%Y%m%dT%H%M%SZ) && mkdir -p $d \
+  && docker compose exec -T mongodb sh -c 'mongodump --quiet --archive --gzip -u foodstack -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin' > $d/mongodb.archive.gz \
+  && tar -czf $d/config.tar.gz .env config && chmod -R go-rwx backups && echo "Backup done: $PWD/$d"
 ```
 
 Run it every night from cron, and copy `backups/` **off the server** (the exact cron line and the
@@ -119,28 +119,34 @@ copy to another place are in [handbook 20](../../docs/handbook/20-backups.md)). 
 ```bash
 docker compose stop proxy web backoffice server
 docker compose exec -T mongodb sh -c 'mongorestore --quiet --archive --gzip --drop -u foodstack -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --nsInclude "foodstack_*.*"' \
-  < backups/<the backup>.archive.gz
+  < backups/<the backup>/mongodb.archive.gz
 # Redis and the search index only hold copies: clear them so nothing from after the backup survives
 docker compose exec -T redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --no-auth-warning FLUSHALL'
 docker compose exec -T elasticsearch sh -c 'es="curl -fsS -u elastic:$ELASTIC_PASSWORD http://localhost:9200"; for i in $($es/_cat/indices/foodstack_search_stores_v*?h=index); do $es/$i -X DELETE; done'
 docker compose up -d
 ```
 
-Store search fills again a few minutes after the server starts. **On a new server**, install first
-with the old server's `pii-key` and `signing-keys` in `config/application.yml`, then restore.
+Store search fills again a few minutes after the server starts. **On a new server**, unpack the release zip of the
+same version, `tar -xzf backups/<the backup>/config.tar.gz` in it (the old `.env` and `config/`,
+with the old keys), `docker compose up -d`, then restore.
 
 ## Upgrade
 
-1. Read the release notes, and back up (above).
-2. Get the new version's zip, and copy any new lines from its `.env.example` and
-   `config/application.yml` into yours (the release notes list them). Then set the version:
+1. Read the release notes, back up (above), and keep the files you replace:
+   `mkdir -p previous && cp docker-compose.yml docker-compose.local.yml Caddyfile previous/`.
+2. Unzip the new version's `foodstack-compose-<version>.zip` somewhere else, and copy its
+   `docker-compose.yml`, `docker-compose.local.yml`, `Caddyfile` and `local/` over yours. Compare
+   its `.env.example` and `config/application.yml` with yours (`diff`) and copy any new settings
+   into your files (the release notes list them). Then set the version and start:
    ```bash
    sed -i 's/^FOODSTACK_VERSION=.*/FOODSTACK_VERSION=1.1.0/' .env
    docker compose pull && docker compose up -d
    ```
    The server updates its databases as it starts. Customers see the site unavailable for about a minute.
-3. **Going back**: set the old version in `.env` and `docker compose up -d` again. Database updates
-   always work with the previous version, unless the release notes say otherwise.
+3. **Going back**: `cp previous/* .`, set the old version in `.env` and `docker compose up -d` again.
+   Database updates always work with the previous version, unless the release notes say otherwise.
+
+Step by step: [handbook 21](../../docs/handbook/21-upgrades.md).
 
 ## Before you go live
 
