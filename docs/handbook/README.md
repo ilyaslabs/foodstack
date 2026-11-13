@@ -2,7 +2,7 @@
 
 Step-by-step guides for the people who run a FoodStack marketplace: setting it up, keeping it running, and growing it as orders grow. You do not need to be a developer or a systems engineer. If you can copy a command into a terminal and click through a web page, you can follow these guides.
 
-The [Deployment guide](../deployment-guide.md) says the same things more briefly, for engineers; on Kubernetes, the [Kubernetes guide](../kubernetes-guide.md) has every step and setting. When they disagree, tell the FoodStack team: all should be fixed.
+The [Deployment guide](../deployment-guide.md) says the same things more briefly, for engineers; the [migration guide](../migration-guide.md) covers moving between setups; on Kubernetes, the [Kubernetes guide](../kubernetes-guide.md) has every step and setting. When they disagree, tell the FoodStack team: all should be fixed.
 
 ## How every guide works
 
@@ -49,6 +49,7 @@ Start with [Knowing when to grow](30-when-to-grow.md): it says which signal call
 | Runbook | What it does |
 |---|---|
 | [Move from one server to Kubernetes](40-move-to-kubernetes.md) | The big step: from one machine to a cluster, with no change to your data |
+| [Every other move](../migration-guide.md) | One server to several servers without Kubernetes, regrouping services, and back |
 | [Add server replicas](41-add-server-replicas.md) | More copies of FoodStack to share the load |
 | [Split modules](42-split-modules.md) | Give busy parts (ordering, delivery) their own machines |
 | [Add MongoDB replicas](43-mongodb-replicas.md) | More copies of the database, so a machine can fail without losing anything |
@@ -70,7 +71,7 @@ FoodStack runs in two ways. The guides say which one they are for.
 
 | | One server | Kubernetes |
 |---|---|---|
-| What it is | One Linux machine running everything, installed with one command | A cluster of machines managed by Kubernetes, installed with Helm |
+| What it is | One Linux machine running everything with Docker Compose, all settings in two files | A cluster of machines managed by Kubernetes, installed with Helm |
 | Good for | Launch, pilots, one city, up to about 200 orders an hour | Growth, several cities, no downtime on upgrades |
 | Who can run it | Anyone who can follow these guides | Someone comfortable with Kubernetes, or a cloud provider's managed Kubernetes plus these guides |
 
@@ -80,6 +81,6 @@ Everyone starts on one server. Moving to Kubernetes later keeps all your data ([
 
 Three things cannot be recovered if you lose them. Keep a copy in a password manager (1Password, Bitwarden or similar) and somewhere offline:
 
-1. The file `/opt/foodstack/.env` on your server (one server), or the Kubernetes Secret `foodstack-secrets` (Kubernetes). It holds the **personal-data key**: without it, customers' emails and phone numbers can never be read again.
+1. The files `.env` and `config/application.yml` in `~/foodstack` on your server (one server), or the Kubernetes Secret `foodstack-secrets` (Kubernetes). It holds the **personal-data key**: without it, customers' emails and phone numbers can never be read again.
 2. Your backups, copied off the server ([guide 20](20-backups.md)).
 3. The administrator's password and two-step recovery codes.

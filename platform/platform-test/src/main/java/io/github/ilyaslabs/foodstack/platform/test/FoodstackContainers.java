@@ -22,15 +22,15 @@ public final class FoodstackContainers {
     public static final String REDIS_IMAGE = "redis:8.2-alpine";
 
     /**
-     * The JVM image, as in the unit deployer. The GraalVM native image starts faster but crashed
+     * The JVM image, as in the Docker Compose install. The GraalVM native image starts faster but crashed
      * intermittently on CI runners (segfault before the broker was ready).
      */
     public static final String KAFKA_IMAGE = "apache/kafka:4.1.1";
 
-    /** S3-compatible object storage (Apache-2.0); the unit deployer runs the same server. */
+    /** S3-compatible object storage (Apache-2.0); the Docker Compose trial runs the same server. */
     public static final String S3_IMAGE = "rustfs/rustfs:1.0.4";
 
-    /** Search engine of the search module; the unit deployer runs the same version. */
+    /** Search engine of the search module; the Docker Compose install runs the same version. */
     /** SMTP server that keeps every email and shows it in a web page and an API (port 8025). */
     public static final String MAILPIT_IMAGE = "axllent/mailpit:v1.27";
 

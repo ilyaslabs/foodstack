@@ -28,18 +28,18 @@ There is nothing to do while it works. To check a certificate:
 
 3. Look at what the front door says:
    ```bash
-   cd /opt/foodstack
-   ./logs.sh proxy
+   cd ~/foodstack
+   docker compose logs -f proxy
    ```
    Press Ctrl+C to stop. Look for lines with `error` and `certificate` or `acme`.
 4. Fix the cause (table below), then restart the front door, which tries again at once:
    ```bash
-   ./restart.sh proxy
+   docker compose restart proxy
    ```
 
 ### Moving to another domain
 
-5. The addresses are in `/opt/foodstack/.env`, in the lines `FOODSTACK_DOMAIN`, `FOODSTACK_ADMIN_DOMAIN`, `FOODSTACK_API_DOMAIN`, `FOODSTACK_SITES`, `FOODSTACK_HOSTNAMES`, `FOODSTACK_ADMIN_ROOT_HOST`, `FOODSTACK_PUBLIC_URL`, `FOODSTACK_WEB_URL` and `FOODSTACK_ADMIN_URL`. Point the new domain at the server first ([guide 11](11-domain-and-dns.md)), change the old name to the new one on every one of those lines, and run `./restart.sh` (everything restarts, about a minute offline). Then update the Stripe webhook address ([guide 16](16-card-payments.md)) and the Google and Apple sign-in settings, which name your domain too.
+5. The addresses are in two files in `~/foodstack`. In `.env`: `FOODSTACK_SITES`, `FOODSTACK_HOSTNAMES` and `FOODSTACK_ADMIN_ROOT_HOST`. In `config/application.yml`: `security.issuer`, `storage.check-origins`, `geo.geocoding.user-agent`, `payment.public-url`, `order.web-url` and `notification.admin-url`. Point the new domain at the server first ([guide 11](11-domain-and-dns.md)), change the old name to the new one everywhere (`grep -n 'old-name' .env config/application.yml` finds them all), add the new addresses to your buckets' CORS rules ([guide 12](12-storage.md)), and run `docker compose up -d && docker compose restart server` (about a minute offline). Changing the API name (`issuer`) signs everyone out once. Then update the Stripe webhook address ([guide 16](16-card-payments.md)) and the Google and Apple sign-in settings, which name your domain too.
 
 ## Check it worked
 
@@ -56,6 +56,6 @@ Nothing to undo: certificates are renewed by themselves. Restarting the proxy is
 |---|---|
 | "Timeout during connect" or "Connection refused" | Port 80 or 443 is closed. `sudo ufw status` must list both, and so must the provider's firewall |
 | "DNS problem: NXDOMAIN" or the wrong IP address | The domain does not point at this server yet. Check with `nslookup admin.example.com`; wait for DNS ([guide 11](11-domain-and-dns.md)) |
-| "too many certificates already issued" or "rateLimited" | Let's Encrypt allows only a few certificates per week for the same names. This happens after many reinstalls. Wait the time it says (up to a week), then `./restart.sh proxy`. Test with `--local` on your laptop rather than reinstalling the real server |
+| "too many certificates already issued" or "rateLimited" | Let's Encrypt allows only a few certificates per week for the same names. This happens after many reinstalls. Wait the time it says (up to a week), then `docker compose restart proxy`. Try things in a trial on your laptop ([guide 14](14-install.md#try-it-on-your-own-computer-first)) rather than reinstalling the real server |
 | Cloudflare: the site loops or shows error 525/526 | The orange cloud is on. Set the records to **DNS only** (grey cloud) ([guide 11](11-domain-and-dns.md)) |
 | Kubernetes: `READY False` | `kubectl -n foodstack describe certificate` and `kubectl -n cert-manager logs deploy/cert-manager` say why; the causes are the same as above. The **CertificateExpiring** alert warns 14 days ahead |

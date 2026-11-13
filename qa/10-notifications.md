@@ -133,7 +133,7 @@ Check
 
 ### NTF-06 No mail server set up
 
-Who: tester · Where: a server started without `SMTP_HOST` (for example a fresh `install.sh` with the email step skipped, OPS-01)
+Who: tester · Where: a server started without `spring.mail.host` (for example a fresh Docker Compose install with the email step skipped, OPS-01)
 
 Steps
 1. Place an order.
@@ -143,7 +143,7 @@ Expect
 - The order works as usual and the bell fills. The log lists the emails as skipped.
 
 Check
-- `notification_deliveries`: `status: "SKIPPED"`, `lastError: "Email is not set up (SMTP_HOST)"`. After setting up email and restarting, **Send again** sends them.
+- `notification_deliveries`: `status: "SKIPPED"`, `lastError: "Email is not set up (spring.mail.host)"`. After setting up email and restarting, **Send again** sends them.
 
 ### NTF-07 Push messages on the rider's phone
 

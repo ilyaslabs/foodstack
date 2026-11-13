@@ -92,21 +92,24 @@ public class StorageCheck {
         }
         catch (NoSuchBucketException ex) {
             throw fail("the bucket '" + bucket + "' does not exist. Create it in your storage provider's console "
-                    + "(handbook guide 12) or fix S3_PUBLIC_BUCKET / S3_PRIVATE_BUCKET");
+                    + "(handbook guide 12) or fix foodstack.storage.public-bucket / private-bucket "
+                    + "(S3_PUBLIC_BUCKET / S3_PRIVATE_BUCKET)");
         }
         catch (S3Exception ex) {
             if (ex.statusCode() == 404) {
-                throw fail("the bucket '" + bucket + "' does not exist at S3_ENDPOINT. Create it, or check S3_ENDPOINT "
-                        + "and S3_REGION");
+                throw fail("the bucket '" + bucket + "' does not exist at the endpoint. Create it, or check "
+                        + "foodstack.storage.endpoint and region (S3_ENDPOINT, S3_REGION)");
             }
             if (ex.statusCode() == 403 || ex.statusCode() == 401) {
                 throw fail("the access key may not write to the bucket '" + bucket + "' (" + code(ex) + "). Check "
-                        + "S3_ACCESS_KEY and S3_SECRET_KEY, and give the key read and write access to both buckets");
+                        + "foodstack.storage.access-key and secret-key (S3_ACCESS_KEY, S3_SECRET_KEY), and give the key "
+                        + "read and write access to both buckets");
             }
             throw fail("the bucket '" + bucket + "' refused a test upload: " + code(ex));
         }
         catch (SdkClientException ex) {
-            throw fail("the storage provider is not reachable at S3_ENDPOINT (" + ex.getMessage() + ")");
+            throw fail("the storage provider is not reachable at foodstack.storage.endpoint (S3_ENDPOINT): "
+                    + ex.getMessage());
         }
     }
 
@@ -118,7 +121,8 @@ public class StorageCheck {
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         }
         catch (IOException ex) {
-            throw fail("images cannot be loaded from S3_PUBLIC_BASE_URL (" + url + "): " + ex.getMessage());
+            throw fail("images cannot be loaded from foodstack.storage.public-base-url (S3_PUBLIC_BASE_URL), " + url
+                    + ": " + ex.getMessage());
         }
         catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
@@ -127,7 +131,7 @@ public class StorageCheck {
         if (response.statusCode() != 200 || !"ok".equals(response.body().strip())) {
             throw fail("a test file in the public bucket is not readable by everyone at " + url + " (HTTP "
                     + response.statusCode() + "). Allow public reading on the public bucket, and check "
-                    + "S3_PUBLIC_BASE_URL is where its files are served");
+                    + "foodstack.storage.public-base-url (S3_PUBLIC_BASE_URL) is where its files are served");
         }
     }
 
@@ -150,7 +154,8 @@ public class StorageCheck {
         }
         catch (IOException ex) {
             throw fail("browsers cannot reach the bucket '" + bucket + "' for uploads at " + url.getScheme() + "://"
-                    + url.getAuthority() + ": " + ex.getMessage() + ". Check S3_PUBLIC_ENDPOINT");
+                    + url.getAuthority() + ": " + ex.getMessage()
+                    + ". Check foodstack.storage.public-endpoint (S3_PUBLIC_ENDPOINT)");
         }
         catch (InterruptedException ex) {
             Thread.currentThread().interrupt();

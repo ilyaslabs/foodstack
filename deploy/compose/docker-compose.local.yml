@@ -1,0 +1,67 @@
+# A trial on your own computer, added on top of docker-compose.yml:
+#   cp .env.example .env        (no need to change anything in it for a trial)
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+# Then open http://localhost:8080 (customers) and http://localhost:8080/admin (admin@foodstack.localhost,
+# password foodstack-local). Emails: http://localhost:8025. Not for real data.
+services:
+  proxy:
+    # port 8080, so it doesn't clash with anything already on port 80
+    ports: !override
+      - "8080:80"
+    environment:
+      FOODSTACK_SITES: http://localhost
+      FOODSTACK_ADMIN_ROOT_HOST: no-admin-host.invalid
+    volumes:
+      - ./local/storage.caddy:/etc/caddy/local/storage.caddy:ro
+
+  server:
+    environment:
+      # also reads config/application-local.yml, on top of config/application.yml
+      SPRING_PROFILES_ACTIVE: local
+    depends_on:
+      storage: { condition: service_healthy }
+
+  web:
+    environment:
+      FOODSTACK_ALLOWED_HOSTS: localhost
+      MAP_TILE_URL: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+      MAP_ATTRIBUTION: © OpenStreetMap contributors
+
+  backoffice:
+    environment:
+      MAP_TILE_URL: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+      MAP_TILE_ORIGIN: https://tile.openstreetmap.org
+      MAP_ATTRIBUTION: © OpenStreetMap contributors
+      MEDIA_ORIGINS: http://localhost:8080
+
+  elasticsearch:
+    environment:
+      # keeps search working on a nearly full laptop disk
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+
+  # Photos and files on this computer, instead of your buckets
+  storage:
+    restart: unless-stopped
+    networks: [foodstack]
+    image: rustfs/rustfs:1.0.4
+    environment:
+      RUSTFS_ACCESS_KEY: foodstack-local
+      RUSTFS_SECRET_KEY: foodstack-local-secret
+    volumes:
+      - storage:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health > /dev/null || wget -qO- http://localhost:9000/health > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # Catches every email: read them at http://localhost:8025
+  mailpit:
+    restart: unless-stopped
+    networks: [foodstack]
+    image: axllent/mailpit:v1.27
+    ports:
+      - "8025:8025"
+
+volumes:
+  storage:

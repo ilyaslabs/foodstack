@@ -16,19 +16,35 @@ Upgrade one version at a time if you are several behind, unless the release note
 
 1. Check what you run now:
    ```bash
-   cat /opt/foodstack/VERSION
+   cd ~/foodstack
+   grep FOODSTACK_VERSION .env
    ```
-2. Download the new version's `unit-deployer-<version>.zip` into your home folder (copy its link from the releases page):
+2. **Back up** ([guide 20](20-backups.md), step 1), and keep the files you are about to replace:
+   ```bash
+   mkdir -p previous && cp docker-compose.yml docker-compose.local.yml Caddyfile previous/
+   ```
+3. **Get the new version's files** (copy the link of `foodstack-compose-<version>.zip` from the releases page) and put its Compose and proxy files in place. Your `.env` and `config/` are not touched:
    ```bash
    cd ~
-   curl -LO <link to unit-deployer-<version>.zip>
+   curl -LO <link to foodstack-compose-<version>.zip>
+   unzip -o foodstack-compose-<version>.zip
+   cp foodstack-compose-<version>/docker-compose.yml foodstack-compose-<version>/docker-compose.local.yml \
+      foodstack-compose-<version>/Caddyfile ~/foodstack/
+   cp -r foodstack-compose-<version>/local ~/foodstack/
    ```
-3. Upgrade:
+4. **Add new settings**, if the release notes list any. This shows what the new version's sample files have that yours don't:
    ```bash
-   cd /opt/foodstack
-   ./upgrade.sh ~/unit-deployer-<version>.zip
+   diff ~/foodstack/.env foodstack-compose-<version>/.env.example
+   diff ~/foodstack/config/application.yml foodstack-compose-<version>/config/application.yml
    ```
-   It backs up first (into `backups/`), keeps a copy of the current program in `.previous`, installs the new one, updates the database, and starts. It ends with `Upgraded to <version>`. Your settings (`.env`) and data are not touched.
+   Lines starting `>` are in the new samples. Copy the new ones into your files, with your values; leave your own values as they are.
+5. **Start the new version:**
+   ```bash
+   cd ~/foodstack
+   sed -i 's/^FOODSTACK_VERSION=.*/FOODSTACK_VERSION=<version>/' .env
+   docker compose pull && docker compose up -d
+   ```
+   The server updates its databases as it starts. Customers see the site unavailable for about a minute.
 
 ## Steps (Kubernetes)
 
@@ -42,8 +58,8 @@ Upgrade one version at a time if you are several behind, unless the release note
 
 ## Check it worked
 
-- `cat /opt/foodstack/VERSION` (or `helm -n foodstack list`) shows the new version.
-- `./status.sh` lists every service as running and **healthy** (Kubernetes: `kubectl -n foodstack get pods`, all `Running`).
+- `grep FOODSTACK_VERSION ~/foodstack/.env` (or `helm -n foodstack list`) shows the new version.
+- `docker compose ps` lists every service as running and **healthy** (Kubernetes: `kubectl -n foodstack get pods`, all `Running`).
 - Open the customer app and the back office, and look at **Live orders**: today's orders are there.
 
 ## Undo
@@ -51,13 +67,13 @@ Upgrade one version at a time if you are several behind, unless the release note
 **One server**:
 
 ```bash
-cd /opt/foodstack
-./upgrade.sh --rollback
+cd ~/foodstack
+cp previous/* .
+sed -i 's/^FOODSTACK_VERSION=.*/FOODSTACK_VERSION=<the old version>/' .env
+docker compose up -d
 ```
 
-This puts back the program from before the upgrade. It does **not** undo database changes: each version's database changes work with the version before it, so the old program runs on the new database. Only if the release notes say a version cannot be rolled back this way, restore the backup the upgrade made ([guide 20](20-backups.md)), which loses the orders since then.
-
-A rollback can be done once: it goes back to the version before the **last** upgrade.
+This puts back the program from before the upgrade. It does **not** undo database changes: each version's database changes work with the version before it, so the old program runs on the new database. Only if the release notes say a version cannot be rolled back this way, restore the backup you made in step 2 ([guide 20](20-backups.md)), which loses the orders since then.
 
 **Kubernetes**:
 
@@ -69,8 +85,8 @@ helm rollback foodstack -n foodstack
 
 | Problem | What to do |
 |---|---|
-| "is not a FoodStack unit deployer package" | The download is not the release zip (perhaps an error page). Download it again and check the file name |
-| "unzip is required" | `sudo apt -y install unzip` |
-| The upgrade stops at "Running migrations" with an error | Run `./upgrade.sh --rollback`, then send the error to the FoodStack team. If the old version does not start either, restore the backup the upgrade made ([guide 20](20-backups.md)) |
-| A service is not healthy after the upgrade | `./logs.sh server` says why. Roll back, then report it |
+| "End-of-central-directory signature not found" from `unzip` | The download is not the release zip (perhaps an error page). Download it again and check the file name |
+| "unzip: command not found" | `sudo apt -y install unzip` |
+| "manifest unknown" or "not found" from `docker compose pull` | The version in `.env` is mistyped: it is the number only, such as `1.1.0` |
+| The server keeps restarting after the upgrade | `docker compose logs server` says why: often a new setting the release notes list (step 4). Fix it, or roll back (Undo), then report it |
 | Kubernetes: the upgrade hangs on the migrations job | `kubectl -n foodstack logs -l app.kubernetes.io/name=foodstack-migrations` shows why. `helm rollback` returns to the old version |

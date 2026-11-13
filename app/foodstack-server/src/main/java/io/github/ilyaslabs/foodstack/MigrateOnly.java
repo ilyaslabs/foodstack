@@ -13,7 +13,7 @@ import org.springframework.core.env.MapPropertySource;
 /**
  * {@code foodstack.migrate-only=true}: every module local whatever the topology, no web server,
  * no relays, migrations on. Used once per install or upgrade, before the application starts
- * (Helm hook Job, {@code install.sh} and {@code upgrade.sh}).
+ * (the Helm hook Job). Docker Compose skips it: the server migrates on start.
  */
 public class MigrateOnly implements EnvironmentPostProcessor, Ordered {
 

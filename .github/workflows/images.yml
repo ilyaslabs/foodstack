@@ -1,6 +1,6 @@
 name: Images
 
-# Builds the unit deployer zip and the images, and pushes the images to Docker Hub
+# Builds the server and the two apps, and pushes the images to Docker Hub
 # (ilyasdotdev/ilyaslabs-foodstack) and GHCR (ghcr.io/ilyaslabs/foodstack), one repository each with
 # the part in the tag: server-1.0.0, web-1.0.0, backoffice-1.0.0 (and -1.0, -latest).
 # Called by release.yml (the version tags) and snapshot.yml (server-<branch>-snapshot on every push
@@ -16,11 +16,6 @@ on:
         description: Image tags, space separated
         required: true
         type: string
-      attach-to-release:
-        description: Upload unit-deployer-<version>.zip to this GitHub release tag
-        required: false
-        type: string
-        default: ''
     secrets:
       DOCKERHUB_USERNAME:
         required: true
@@ -43,8 +38,19 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Build the server and the unit deployer zip
-        run: mvn -B -DskipTests -Drevision=${{ inputs.version }} -pl deploy/unit-deployer -am package
+      - name: Build the server
+        run: mvn -B -DskipTests -Drevision=${{ inputs.version }} -pl app/foodstack-server -am package
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Build the web app and the back office
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile && pnpm build
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -71,12 +77,3 @@ jobs:
           push server app/foodstack-server
           push web -f frontend/docker/web.Dockerfile frontend
           push backoffice -f frontend/docker/backoffice.Dockerfile frontend
-      - name: Attach the unit deployer to the release
-        if: inputs.attach-to-release != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ inputs.attach-to-release }}" deploy/unit-deployer/target/unit-deployer-${{ inputs.version }}.zip --clobber
-      - uses: actions/upload-artifact@v4
-        with:
-          name: unit-deployer-${{ inputs.version }}
-          path: deploy/unit-deployer/target/unit-deployer-${{ inputs.version }}.zip

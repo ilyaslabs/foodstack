@@ -15,11 +15,12 @@ Growing costs money and effort, so grow when a signal says so, not before. This 
 |---|---|---|
 | 1. One server | Launch, one city, up to about 200 orders an hour at the busiest hour | Nothing: what you installed |
 | 1b. A bigger server | Up to about twice that | Your provider's "resize" button, about 5 minutes offline |
+| 1c. Several servers, no Kubernetes | One server is too small but you don't want to run a cluster | Managed databases, a few machines, and the same program run once per group of parts. [Migration guide, path 2](../migration-guide.md#path-2-docker-compose-to-separate-services) |
 | 2. Kubernetes, all of FoodStack together, several copies | Several cities; no downtime on upgrades; a machine can fail without the site going down | A cluster and managed databases. [Runbook 40](40-move-to-kubernetes.md), then [41](41-add-server-replicas.md) |
 | 3. Busy parts on their own machines | Ordering at lunch, or live delivery maps, need far more than the rest | One setting. [Runbook 42](42-split-modules.md) |
 | 4. Spread the data | The database, cache or search is what is slow | [Runbooks 43 to 49](README.md#growing) |
 
-Most marketplaces stay at stage 1 or 2 for a long time. Stage 4 is for national scale.
+Most marketplaces stay at stage 1 or 2 for a long time. Every way of moving between these setups, and what moves with you, is in the [migration guide](../migration-guide.md). Stage 4 is for national scale.
 
 ## How to read the signals
 
@@ -28,8 +29,9 @@ Most marketplaces stay at stage 1 or 2 for a long time. Stage 4 is for national 
 Run these at your busiest hour:
 
 ```bash
-cd /opt/foodstack
-./status.sh                 # all healthy, disk below 80 %
+cd ~/foodstack
+docker compose ps           # all healthy
+df -h /                     # disk below 80 %
 docker stats --no-stream    # CPU and memory of each service
 uptime                      # the three "load average" numbers
 ```
@@ -39,7 +41,7 @@ uptime                      # the three "load average" numbers
 | The load average stays above the number of CPUs (`nproc` prints it) for most of the hour | The server has no spare power | First a bigger server (stage 1b). If you are already on the largest you want to pay for: [runbook 40](40-move-to-kubernetes.md) |
 | `docker stats` shows memory close to the limit, or services restart by themselves | Too little memory | A bigger server |
 | Disk above 80 % after deleting old backups | Orders and photos have grown | A bigger disk in the provider's control panel; then `sudo resize2fs` as the provider explains |
-| Pages feel slow but CPU is low | Something outside FoodStack is slow (maps, email, the internet connection) | `./logs.sh server` and [Troubleshooting](90-troubleshooting.md) |
+| Pages feel slow but CPU is low | Something outside FoodStack is slow (maps, email, the internet connection) | `docker compose logs server` and [Troubleshooting](90-troubleshooting.md) |
 | You cannot accept a minute offline for upgrades or a server failure | You have outgrown one machine, whatever the load | [Runbook 40](40-move-to-kubernetes.md) |
 
 ### On Kubernetes
@@ -75,4 +77,4 @@ Every runbook has its own **Undo**. Adding machines can always be undone by remo
 | Problem | What to do |
 |---|---|
 | Two signals at once | Fix the one that customers feel (errors, slow checkout) first |
-| You are not sure what a signal means | Send the dashboard screenshot and `./status.sh` output to the FoodStack team before buying machines |
+| You are not sure what a signal means | Send the dashboard screenshot and `docker compose ps` output to the FoodStack team before buying machines |

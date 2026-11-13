@@ -29,7 +29,7 @@ Start the local run fresh (README), so the demo data is the same as everyone els
 | 19 | [PRIV-01](13-privacy.md#priv-01-download-my-data), [PRIV-03](13-privacy.md#priv-03-delete-my-account) | Data export, and the deletion request |
 | 20 | [OPS-04](14-operations.md#ops-04-events-wait-while-kafka-is-down), [OPS-05](14-operations.md#ops-05-failed-events-see-replay-dismiss) | No event is lost when Kafka is down, and failed events can be replayed |
 
-Before a release, also run [OPS-01](14-operations.md#ops-01-install-a-trial-with-one-command), [OPS-07](14-operations.md#ops-07-back-up-and-restore) and [OPS-08](14-operations.md#ops-08-upgrade-and-roll-back) on a clean machine with the release's own zip, and [OPS-11](14-operations.md#ops-11-kubernetes-a-trial-install-with-the-chart) on a test cluster.
+Before a release, also run [OPS-01](14-operations.md#ops-01-start-a-trial-with-one-command), [OPS-07](14-operations.md#ops-07-back-up-and-restore) and [OPS-08](14-operations.md#ops-08-upgrade-and-roll-back) on a clean machine with the release's own `foodstack-compose` zip, and [OPS-11](14-operations.md#ops-11-kubernetes-a-trial-install-with-the-chart) on a test cluster.
 
 ## Checks to run at the end
 

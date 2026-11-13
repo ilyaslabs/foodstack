@@ -349,7 +349,7 @@ class NotificationStorageTest {
         without.send(new Message("e6", this.user, null, "order-delivered", "en", Map.of("number", "A-1", "store", "X"), null,
                 false, false, true, false));
         assertThat(delivery("e6").status()).isEqualTo("SKIPPED");
-        assertThat(delivery("e6").lastError()).contains("SMTP_HOST");
+        assertThat(delivery("e6").lastError()).contains("spring.mail.host");
     }
 
     private NotificationService.DeliveryItem delivery(String eventId) {

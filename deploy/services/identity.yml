@@ -1,0 +1,87 @@
+# FoodStack service "identity": Accounts, sign-in, tokens, staff and store access.
+#
+# Needs:    MongoDB (database foodstack_identity), Redis, Kafka.
+# Outside:  Google and Apple sign-in (optional; their client ids are set in the back office).
+# Calls:    no other service (on their internal port 8081).
+# Answers:  /api/v1/auth, /api/v1/me, /api/v1/users, /api/v1/audit, /oauth2, /.well-known
+#
+# Fill in every value marked REPLACE and every example.com address, then run it:
+#   docker run -d --name identity -p 8080:8080 -p 8081:8081 \
+#     -v $PWD/identity.yml:/app/config/application.yml:ro ilyasdotdev/ilyaslabs-foodstack:server-<version>
+# or, with Java 25: java -jar foodstack-server.jar --spring.config.additional-location=file:identity.yml
+# The README next to this file lists the start order and the proxy routes. Every value can also
+# come from the environment: write ${MY_VARIABLE} instead of the value.
+
+server:
+  port: 8080        # the public API, behind your proxy
+
+spring:
+  mongodb:
+    # The cluster (a replica set); this service uses its own database foodstack_identity on it.
+    uri: mongodb://foodstack:REPLACE-with-the-password@mongodb.internal:27017/?replicaSet=rs0&authSource=admin
+  data:
+    redis:
+      # rediss://... for TLS. Every service uses the same Redis.
+      url: redis://:REPLACE-with-the-password@redis.internal:6379
+  kafka:
+    bootstrap-servers: kafka-1.internal:9092,kafka-2.internal:9092,kafka-3.internal:9092
+
+# Which service runs which module. This one runs identity; every other module is called on its
+# service's internal port. Change the addresses to where you run them.
+module-switch:
+  modules:
+    identity: { mode: local }
+    settings: { mode: http, url: "http://settings.internal:8081", token: REPLACE-with-the-internal-token }
+    media: { mode: http, url: "http://media.internal:8081", token: REPLACE-with-the-internal-token }
+    geo: { mode: http, url: "http://geo.internal:8081", token: REPLACE-with-the-internal-token }
+    store: { mode: http, url: "http://store.internal:8081", token: REPLACE-with-the-internal-token }
+    search: { mode: http, url: "http://search.internal:8081", token: REPLACE-with-the-internal-token }
+    promotion: { mode: http, url: "http://promotion.internal:8081", token: REPLACE-with-the-internal-token }
+    cart: { mode: http, url: "http://cart.internal:8081", token: REPLACE-with-the-internal-token }
+    payment: { mode: http, url: "http://payment.internal:8081", token: REPLACE-with-the-internal-token }
+    order: { mode: http, url: "http://order.internal:8081", token: REPLACE-with-the-internal-token }
+    rider: { mode: http, url: "http://rider.internal:8081", token: REPLACE-with-the-internal-token }
+    dispatch: { mode: http, url: "http://dispatch.internal:8081", token: REPLACE-with-the-internal-token }
+    notification: { mode: http, url: "http://notification.internal:8081", token: REPLACE-with-the-internal-token }
+    ledger: { mode: http, url: "http://ledger.internal:8081", token: REPLACE-with-the-internal-token }
+    review: { mode: http, url: "http://review.internal:8081", token: REPLACE-with-the-internal-token }
+  # The internal port other services call. The token is the same on every service:
+  #   openssl rand -hex 24
+  expose:
+    port: 8081
+    modules: [identity]
+    token: REPLACE-with-the-internal-token
+
+foodstack:
+  environment: production
+  kafka:
+    # Partitions of the topics this service creates, and copies of each (3 on a 3-broker cluster).
+    topic-partitions: 24
+    replication-factor: 3
+  security:
+    # The public API address: the issuer of every sign-in token. The same on every service.
+    issuer: https://api.example.com
+    # The same on every service: openssl rand -hex 24
+    service-client-secret: REPLACE-with-the-service-client-secret
+    # The personal-data key, the same on every service (every one checks it on start):
+    #   openssl rand -base64 32
+    # Keep a copy outside the server: without it stored personal data cannot be read.
+    pii-key: REPLACE-with-the-personal-data-key
+  identity:
+    # ES256 signing keys: PKCS#8 PEM bodies without the BEGIN/END lines, comma separated; the first
+    # one signs. Make one once (and keep it):
+    #   openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | openssl pkcs8 -topk8 -nocrypt | sed '1d;$d' | tr -d '\n'
+    signing-keys: REPLACE-with-the-signing-key
+    # The first administrator, created on the first start when no account has this email.
+    bootstrap-admin:
+      email: ops@example.com
+      password: REPLACE-with-a-password-of-12-characters-or-more
+    # Keep true (the sign-in cookie needs HTTPS). false only for a plain-HTTP trial.
+    refresh-cookie-secure: true
+    # How long after a customer asks to delete their account it is deleted.
+    deletion-grace: P14D
+  # Optional: put this service's database on a cluster of its own (handbook runbook 45).
+  # modules:
+  #   identity:
+  #     mongodb:
+  #       uri: mongodb://...

@@ -24,7 +24,8 @@ drawn in [docs/architecture](docs/architecture/README.md).
 | `app/foodstack-server` | The server: every module, switched local, HTTP or off by configuration |
 | `integration-tests/` | Business journeys through the REST API, each run as a monolith and as one service per module |
 | `frontend/` | Angular workspace: `web` (SSR customer app), `backoffice`, shared libraries |
-| `deploy/unit-deployer/` | Docker Compose, Caddy and scripts for one server, packaged as `unit-deployer-<version>.zip` |
+| `deploy/compose/` | Docker Compose for one machine: every module in one server, the datastores, Caddy, and one `config/application.yml` with every setting (released as `foodstack-compose-<version>.zip`) |
+| `deploy/services/` | One ready-to-fill `<module>.yml` per module and a Caddyfile, to run modules as separate services without Kubernetes |
 | `k8s/helm/foodstack` | Helm chart: any topology, Gateway API, Istio ambient, edge rate limits ([Kubernetes guide](docs/kubernetes-guide.md)) |
 | `k8s/helm/foodstack-observability` | Prometheus, Grafana dashboards and alerts, Loki, Tempo, OpenTelemetry Collector |
 | `tools/k6/` | Load test of customer browsing |
@@ -50,14 +51,23 @@ which stay running after the build so the next run starts in seconds. Stop them 
 `docker rm -f $(docker ps -q --filter label=org.testcontainers.hash)`, or build with
 `-Dtestcontainers.reuse=false` to have them removed at the end of each run.
 
-To try the full stack on one machine: `mvn -pl deploy/unit-deployer -am package -DskipTests`, unzip
-`deploy/unit-deployer/target/unit-deployer-*.zip` and run `./install.sh ~/foodstack --local`
-(no sudo), then open `http://foodstack.localhost:8080/` for the storefront and `/admin/` for the back office.
+To try the full stack on one machine with the published images:
+
+```bash
+cd deploy/compose && cp .env.example .env
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d
+```
+
+then open `http://localhost:8080/` for the storefront, `/admin/` for the back office and
+`http://localhost:8025/` for the emails. Change any setting in `config/application.yml` (or
+`config/application-local.yml` for the trial) and `docker compose restart server`.
+
+Which document to read for what: [docs/README.md](docs/README.md).
 
 ## Test sign-ins
 
 These are fixed so every developer and tester uses the same ones. They exist only in local runs and
-`--local` trial installs; a real install (`--domain`) generates a random administrator password.
+the Docker Compose trial; a real install uses the administrator you write in `config/application.yml`.
 
 | Where | Email | Password | Role |
 |---|---|---|---|
@@ -72,9 +82,9 @@ These are fixed so every developer and tester uses the same ones. They exist onl
 | `LocalFoodstackApplication` | `napoli.rider@demo.foodstack.local` | `foodstack-demo` | Napoli Slice's own rider (Usman Tariq) |
 | `LocalFoodstackApplication` | `spiceroute.rider@demo.foodstack.local` | `foodstack-demo` | Spice Route's rider (Hamza Iqbal), home branch Gulberg, also rides for DHA Phase 5 |
 | `LocalFoodstackApplication` | `admin@local.foodstack.local` | `foodstack-local` | Administrator (first-start account) |
-| `./install.sh <folder> --local` | `admin@foodstack.localhost` | `foodstack-local` | Administrator |
+| Docker Compose trial (`docker-compose.local.yml`) | `admin@foodstack.localhost` | `foodstack-local` | Administrator |
 
-Real installs, including `--local` trial installs, ask administrator and finance accounts to set up
+Real installs, including the Docker Compose trial, ask administrator and finance accounts to set up
 an authenticator app at their first sign-in (two-step sign-in, PRD ID-5); keep the recovery codes it
 shows. `LocalFoodstackApplication` leaves two-step sign-in optional, so the shared accounts above keep
 working for everyone; try it from the account menu.
@@ -82,9 +92,9 @@ working for everyone; try it from the account menu.
 In a local run, emails (order updates, sign-in codes, password resets) go to Mailpit, whose web page
 is printed at start-up ("Emails sent by this run: http://localhost:<port>"); open it to read a sign-in
 code. Card payments use the sandbox page, which charges nothing: switch card on in the back office
-**Ordering** page, then pay or decline on the test page. A `--local` trial install has no email
-server and takes cash only until you fill in `SMTP_*` and `PAYMENT_GATEWAY` in its `.env`
-([deployment guide 3.3](docs/deployment-guide.md#33-configure)).
+**Ordering** page, then pay or decline on the test page. The Docker Compose trial works the
+same way: its emails go to the Mailpit page at `http://localhost:8025`, and card payments to the
+sandbox page.
 
 The containers behind `LocalFoodstackApplication` also use fixed credentials: Elasticsearch user
 `elastic` / `foodstack-test`, storage access key `foodstack-test` / secret `foodstack-test-secret`;

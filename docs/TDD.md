@@ -37,7 +37,7 @@
 | D15 | Kubernetes | **Optional.** Helm chart; managed datastores in production, in-cluster datastores with `values-dev.yaml`; one `topology` value (`monolith` default, `split`, `microservices`, `custom`) generates every Deployment, route and Module-Switch setting (section 18.2) |
 | D16 | Service mesh | Istio ambient mode (ztunnel mTLS, waypoints for L7), Gateway API for ingress |
 | D17 | Observability | OpenTelemetry; optional Prometheus, Grafana, Tempo and Loki stack |
-| D18 | Launch deployment | **Unit deployer**: `unit-deployer-<version>.zip` with the jar, Docker Compose and install, start, stop and restart scripts running everything on one server (section 17) |
+| D18 | Launch deployment | **Docker Compose** (`deploy/compose`, released as `foodstack-compose-<version>.zip`): one `docker-compose.yml` and one mounted `config/application.yml` with every setting, run with plain `docker compose` commands, no scripts (section 17; replaced the unit deployer, ilyas 2026-11-12). Modules can also run as separate services from `deploy/services` |
 | D19 | Media | S3-compatible object storage through a `media` module, with resizing and WebP compression on upload (section 13) |
 | D20 | Time | Stored in UTC; the API exchanges date-times as UTC epoch seconds |
 | D21 | Local development | One-click run with Testcontainers; `test-seed` profile loads demo data (section 16) |
@@ -49,7 +49,7 @@
 ## 3. System context
 
 ```
-                         ┌──────────── one server (unit deployer) or Kubernetes cluster ───────────┐
+                         ┌──────────── ─ one server (Docker Compose) or Kubernetes cluster ──────────┐
  Customer browser ──┐    │                                                                          │
  Store tablet ──────┤    │  Caddy (server) or     ──► foodstack-web (Angular SSR)                    │
  Rider phone (PWA) ─┼────┼─►  Gateway API (k8s)   ──► foodstack-backoffice (nginx, Angular)          │
@@ -93,7 +93,8 @@ foodstack/
 │  └─ foodstack-server/            @SpringBootApplication, depends on every *-core, *-impl and *-web; application*.yaml; Dockerfile
 ├─ frontend/                       Angular workspace (section 14)
 ├─ deploy/
-│  └─ unit-deployer/               docker-compose.yml, scripts, Maven assembly for unit-deployer-<version>.zip (section 17)
+│  ├─ compose/                     docker-compose.yml, .env.example, config/application.yml, Caddyfile; zipped per release (section 17)
+│  └─ services/                    one <module>.yml per module and a Caddyfile, for separate services without Kubernetes
 ├─ k8s/                            optional Kubernetes deployment
 │  └─ helm/
 │     ├─ foodstack/                main chart (section 18)
@@ -333,7 +334,7 @@ Rules:
 - Each module ships `db/changelog/<module>/db.changelog-master.yaml` using the `liquibase-mongodb` change types (`createCollection`, `createIndex`, `insertMany`, `runCommand`).
 - Liquibase tracking collections are per module: `<module>_databasechangelog` and `<module>_databasechangeloglock`, so migrations of one module never block another and travel with it when extracted.
 - `platform-mongo` provides `ModuleLiquibaseRunner`, registered by each module's configuration class, so only `local` modules migrate.
-- Production: migrations run once per install or upgrade before the application starts: a Helm `pre-install,pre-upgrade` hook Job on Kubernetes, `install.sh` / `upgrade.sh` on a single server (`foodstack-server --foodstack.migrate-only=true`). In migrate-only mode **every** module is `local` whatever the topology, and each uses its own datastore override, so all module databases are migrated in one step. Dev and tests: migrations run at startup.
+- Production: migrations run once per install or upgrade before the application starts: a Helm `pre-install,pre-upgrade` hook Job on Kubernetes, the server itself on start under Docker Compose, where one server runs every module (`foodstack-server --foodstack.migrate-only=true` is the Job's mode). In migrate-only mode **every** module is `local` whatever the topology, and each uses its own datastore override, so all module databases are migrated in one step. Dev and tests: migrations run at startup.
 - Migrations must be backward compatible with the previous release (expand, then contract in a later release) so rolling upgrades work.
 
 ## 7. Events (Kafka)
@@ -480,14 +481,14 @@ Redis is a cache and coordination store only; losing it never loses business dat
 
 - `geo` owns store delivery zones (GeoJSON polygons, `geo_zones`), each belonging to one store with a fixed charge, minimum order and free-delivery threshold, and the **operator delivery pricing** (base + per km of road distance, maximum distance, optional peak multiplier, optional city override). `quote` uses the store's zones for self-delivery stores and the operator pricing for operator-delivery stores. `geo` also holds cities.
 - The delivery mode is snapshotted on the order at placement, so the price the customer saw and the party paid always match. `ledger` credits the delivery charge to the store (self-delivery) or the operator (operator delivery), and posts operator rider pay as a percentage of the operator charge (optional minimum) plus tips. If support hands an operator-delivery order back to the store, the charge is re-credited to the store.
-- Provider SPI: `GeocodingProvider`, `RoutingProvider`, `TileConfig`. Adapters: Nominatim (any compatible service) and Google Geocoding for search; OSRM and Google Routes for road distances, or none (straight line times a road factor). A real install must name a search and tile provider; the public OpenStreetMap servers are used only in `--local` trials (ilyas, 2026-11-08).
+- Provider SPI: `GeocodingProvider`, `RoutingProvider`, `TileConfig`. Adapters: Nominatim (any compatible service) and Google Geocoding for search; OSRM and Google Routes for road distances, or none (straight line times a road factor). A real install must name a search and tile provider; the public OpenStreetMap servers are used only in the Docker Compose trial and development (ilyas, 2026-11-08).
 - ETA = prep estimate + routing duration × city traffic factor (configurable). Quotes read a branch's zones and the operator pricing from Redis caches (10 minutes, generation keys, section 10).
 - **Time zones:** every branch has its own IANA zone (`store_stores.timezone`), found from its location when it is created or moved, among the zones of the deployment's country (offline: IANA `zone.tab`, and timeshape boundaries for countries with several zones), and editable by the owner. Opening hours, open-now, closures, operator peak hours, kitchen tickets and order times are in the branch's zone. Branches saved before this use the deployment's zone until next saved.
 
 ## 13. Media storage (S3)
 
 - The `media` module owns uploads. Other modules store only media IDs; `media` resolves them to URLs.
-- Storage goes through an `ObjectStorage` SPI. The default adapter uses the AWS SDK v2 S3 client, so it works with AWS S3 and with S3-compatible stores. Every real install (single server or Kubernetes) uses the operator's own buckets (Amazon S3, Cloudflare R2 and Backblaze B2 are documented and tested); a local S3 stand-in (RustFS) runs only in `--local` trials, local development and tests (ilyas, 2026-11-08). Before taking traffic the server runs `StorageCheck`: a test write to both buckets, an anonymous read through `S3_PUBLIC_BASE_URL`, and a CORS preflight per bucket from each site that uploads; any failure stops the start with what to fix.
+- Storage goes through an `ObjectStorage` SPI. The default adapter uses the AWS SDK v2 S3 client, so it works with AWS S3 and with S3-compatible stores. Every real install (single server or Kubernetes) uses the operator's own buckets (Amazon S3, Cloudflare R2 and Backblaze B2 are documented and tested); a local S3 stand-in (RustFS) runs only in the Docker Compose trial, local development and tests (ilyas, 2026-11-08). Before taking traffic the server runs `StorageCheck`: a test write to both buckets, an anonymous read through `foodstack.storage.public-base-url`, and a CORS preflight per bucket from each site that uploads; any failure stops the start with what to fix.
 - Upload flow: the client asks `POST /api/v1/media/uploads` (type, size, purpose) → receives a short-lived presigned `PUT` URL for `<bucket>/<owningModule>/<entityId>/<uuid>` → uploads directly → calls `complete`. The server never streams large files through the JVM.
 - Processing (on `complete`, on virtual threads): check magic bytes and size limits, strip EXIF/metadata, auto-rotate, resize to fixed variants (`thumb` 160 px, `card` 480 px, `detail` 1080 px), encode as WebP (quality about 80) and optionally AVIF, then delete the raw upload unless keeping originals is switched on. Processing is pure Java (ImageIO, metadata-extractor for EXIF orientation, webp-imageio for WebP, which bundles native libwebp), so it runs in plain `mvn test` and in the JRE image without system packages. AVIF and libvips are follow-ups if throughput needs them.
 - Buckets: `public` (menu, store and branding images; served with `Cache-Control: public, max-age=31536000, immutable` and content-hashed names, so a CDN can sit in front) and `private` (rider documents; access only through 5-minute signed `GET` URLs).
@@ -519,7 +520,7 @@ frontend/
 - **Runtime i18n:** Transloco with translations fetched per language, because languages are chosen at runtime. `dir="rtl"` is set from the active locale; styles use logical properties.
 - **Runtime config:** each front-end container serves `/config.json` built from environment variables at container start (API URL, OIDC issuer, maps tile URL), so one image works for every operator.
 - Accessibility: Material components plus axe checks in CI; light and dark themes.
-- Testing: unit tests with Vitest, end-to-end with Playwright against the unit deployer and the Kubernetes topologies (section 15.2).
+- Testing: unit tests with Vitest, end-to-end with Playwright against the Docker Compose stack and the Kubernetes topologies (section 15.2).
 
 ### 14.3 Images
 
@@ -539,8 +540,8 @@ frontend/
 |---|---|---|
 | `pr-checks.yml` | Pull request | Calls `ilyaslabs/cicd/.github/workflows/mvn-pr-checks.yml@main`; frontend lint, test and build; Helm lint and `kubeconform`; `ModuleRules.verify`; Trivy filesystem scan |
 | `snapshot.yml` | Push to any branch | Publishes that branch's snapshot, replacing the previous one (ilyas, 2026-11-09). The branch name is sanitized (anything but letters, digits, `.`, `_`, `-` becomes `-`): Maven Central snapshots `<branch>-SNAPSHOT` through `mvn-snapshot-release.yml` with `skip-tests` (PR checks run the tests), and images `server-<branch>-snapshot`, `web-…`, `backoffice-…` on Docker Hub and GHCR. Snapshot tags are mutable; Docker Hub keeps exact release tags immutable (rule `^(server\|web\|backoffice)-[0-9]+\.[0-9]+\.[0-9]+$`). No charts and no deployer zip. A last `published` job (also in `release.yml`) only lists every published Maven coordinate and image tag, on the log and the run summary (`.github/scripts/print-published.sh`) |
-| `release.yml` | GitHub release `vX.Y.Z` | Calls `mvn-release.yml` (Maven Central); builds, signs and pushes images to Docker Hub and GHCR; builds `unit-deployer-<version>.zip` and attaches it to the GitHub release; packages the Helm chart and pushes it to GHCR as an OCI artifact |
-| `e2e.yml` | Nightly and before release | Unit deployer install on a fresh VM-like runner (`install.sh`, `restart.sh`, `upgrade.sh`); kind cluster installs of the `monolith`, `split` and `microservices` topologies, Playwright suite, k6 smoke test |
+| `release.yml` | GitHub release `vX.Y.Z` | Calls `mvn-release.yml` (Maven Central); builds, signs and pushes images to Docker Hub and GHCR; zips `deploy/compose` as `foodstack-compose-<version>.zip` (its `.env.example` set to the version) and attaches it to the GitHub release; packages the Helm chart and pushes it to GHCR as an OCI artifact |
+| `e2e.yml` | Nightly and before release | Docker Compose install on a fresh VM-like runner (start, restart, upgrade by version); kind cluster installs of the `monolith`, `split` and `microservices` topologies, Playwright suite, k6 smoke test |
 
 A reusable `docker-release.yml` and `helm-release.yml` will be added to `ilyaslabs/cicd` so other ilyasLabs projects can share them.
 
@@ -567,23 +568,21 @@ Full rules are in the [Testing Strategy](testing-strategy.md). In short:
 - Seed content: an admin, a finance user and support user, two cities, about 10 stores with menus, photos, opening hours and their own zones, store riders and operator riders, customers with addresses, coupons, and orders in every state. Logins are printed once in the startup log.
 - Safety: startup fails if `test-seed` is active together with `foodstack.environment=production`.
 
-## 17. Single-server deployment: unit deployer
+## 17. Single-server deployment: Docker Compose
 
-The default way to launch. The whole platform runs on one server with Docker, as a modular monolith.
+The default way to launch. The whole platform runs on one machine with Docker, as a modular monolith. It replaced the unit deployer and its scripts (ilyas, 2026-11-12): a developer or operator sees every setting in one file, changes it, and relaunches with `docker compose`.
 
 ### 17.1 Package
 
-Each release attaches `unit-deployer-<version>.zip`, built by a Maven assembly in `deploy/unit-deployer/`:
+`deploy/compose/` in the repository; each release attaches it as `foodstack-compose-<version>.zip`, with `FOODSTACK_VERSION` in `.env.example` set to the release:
 
 ```
-unit-deployer-<version>/
-├─ foodstack-server.jar            the application (all modules local)
-├─ web/  backoffice/               built Angular apps (SSR server bundle and static files)
-├─ docker-compose.yml
-├─ .env.example                    every setting, documented
-├─ config/                         application.yaml, Caddyfile, MongoDB replica-set init, Kafka and Elasticsearch settings
-├─ install.sh  start.sh  stop.sh  restart.sh
-├─ status.sh  logs.sh  backup.sh  restore.sh  upgrade.sh
+foodstack-compose-<version>/
+├─ docker-compose.yml              every part; images ilyasdotdev/ilyaslabs-foodstack:{server,web,backoffice}-${FOODSTACK_VERSION}
+├─ .env.example                    what Compose itself needs: version, addresses, datastore passwords, map tiles, heaps
+├─ config/application.yml          every FoodStack setting, mounted at /config (SPRING_CONFIG_ADDITIONAL_LOCATION)
+├─ Caddyfile                       the proxy: HTTPS and routing
+├─ docker-compose.local.yml, config/application-local.yml, local/   a trial on a laptop only
 └─ README.md
 ```
 
@@ -593,39 +592,43 @@ All services share one Docker network, `foodstack`. Only the reverse proxy publi
 
 | Service | Image | Notes |
 |---|---|---|
-| `proxy` | `caddy:2.10-alpine` (stock Caddy) | The API gateway on a single server: automatic HTTPS for the operator's domains, routing of `/api`, `/oauth2`, `/.well-known` to the server and the rest to the web apps, request-size limits and security headers. No per-IP rate limits (ilyas, 2026-11-07): the server limits sign-in, codes, coupon checks and order placement itself |
-| `server` | Eclipse Temurin 25 JRE | Runs the mounted `foodstack-server.jar`; healthcheck on actuator readiness |
-| `web` | Node (LTS) | Customer app SSR server from the mounted bundle |
-| `backoffice` | nginx-unprivileged | Static back-office app |
-| `mongodb` | MongoDB | Single-node replica set (needed for transactions), auth on |
-| `kafka` | Apache Kafka | Single node, KRaft mode |
-| `redis` | Redis | Password, AOF persistence |
-| `elasticsearch` | Elasticsearch | Single node, security on, heap sized from `.env` |
-| `storage` (`--local` trials only) | RustFS | Local S3 stand-in, from `docker-compose.trial-storage.yml`; a real install uses the operator's buckets |
-| `nominatim`, `osrm` (optional) | Nominatim, OSRM | Self-hosted address search and routing for the operator's region; enabled with a Compose profile when not using a hosted maps provider |
+| `proxy` | `caddy:2.10-alpine` (stock Caddy) | The API gateway on a single server: automatic HTTPS for the operator's domains, routing of each module's paths to the server and the rest to the web apps, request-size limits and security headers. No per-IP rate limits (ilyas, 2026-11-07): the server limits sign-in, codes, coupon checks and order placement itself |
+| `server` | the server image | Every module `local`; reads `config/application.yml` (datastore passwords come from `.env`); creates and migrates its databases on start; healthcheck on actuator readiness |
+| `web` | the web image | Customer app SSR server |
+| `backoffice` | the back-office image | Static back-office app |
+| `mongodb` | `mongo:8.2` | Single-node replica set (needed for transactions), auth on; the replica key file is made once in the data volume |
+| `kafka` | `apache/kafka:4.1.1` | Single node, KRaft mode |
+| `redis` | `redis:8.2-alpine` | Password, AOF persistence |
+| `elasticsearch` | `elasticsearch:9.4.0` | Single node, security on, heap from `.env` |
+| `storage`, `mailpit` (trial only) | RustFS, Mailpit | From `docker-compose.local.yml`: a local S3 stand-in behind Caddy and a mail catcher; a real install uses the operator's buckets and SMTP |
 
-Every service has a healthcheck; `server` starts only when its dependencies are healthy. All data and logs are bind-mounted under the install directory, and every service uses `restart: unless-stopped` with log rotation.
+Every service has a healthcheck; `server` starts only when its datastores are healthy. Data lives in named volumes (`foodstack_<service>`), and every service uses `restart: unless-stopped` with log rotation.
 
-### 17.3 Scripts
+### 17.3 Operations
 
-| Script | Does |
+There are no scripts (ilyas chose plain commands in the docs, 2026-11-12). The handbook and `deploy/compose/README.md` give each command:
+
+| Task | Command |
 |---|---|
-| `install.sh <install-dir> [--domain example.com]` | Checks Docker and Compose v2, CPU, RAM, disk and ports; sets `vm.max_map_count` for Elasticsearch when run as root; creates `<dir>/{logs,config,backups}` (service data lives in named Docker volumes `foodstack_<service>`, so no sudo or folder ownership setup is needed); cleans up an unfinished earlier attempt so a re-run just works; `--local` presets a trial on `http://foodstack.localhost:8080`; generates strong secrets, JWT signing keys and the PII key into `<dir>/.env` (mode 600); copies the jar, apps and config; runs migrations once (`--foodstack.migrate-only=true`); starts the stack; optionally installs a systemd unit to start on boot; prints the first administrator sign-in |
-| `start.sh` / `stop.sh` | `docker compose up -d` / `down` (data is kept) |
-| `restart.sh [service]` | Restarts everything or one service |
-| `status.sh` / `logs.sh [service]` | Health summary / follow logs |
-| `backup.sh` | `mongodump`, a copy of the media storage and config into `<dir>/backups/<timestamp>` |
-| `restore.sh <backup-dir>` | Stop the application, restore MongoDB and media, rebuild search, start |
-| `upgrade.sh <new-zip>` / `--rollback` | Backup, replace jar, apps and compose file, run migrations, restart / restore the previous version |
-| `uninstall.sh [--yes]` | Removes the containers and data volumes after confirmation; keeps `backups/` |
+| Start, or apply a change in `.env` | `docker compose up -d` |
+| Apply a change in `config/application.yml` | `docker compose restart server` |
+| Status, logs | `docker compose ps`, `docker compose logs -f server` |
+| Backup | `mongodump` through `docker compose exec -T mongodb` into `backups/<ts>/mongodb.archive.gz`, plus a tar of `.env` and `config/`; nightly from cron ([handbook 20](handbook/20-backups.md)) |
+| Restore | Stop the apps, `mongorestore --drop`, Redis `FLUSHALL`, delete the search indices by name, `docker compose up -d` |
+| Upgrade / roll back | New Compose files from the release zip, new settings from its samples, `FOODSTACK_VERSION` in `.env`, `docker compose pull && up -d` / the previous files and version ([handbook 21](handbook/21-upgrades.md)) |
+| Remove | `docker compose down -v` (data volumes removed; the folder and backups stay) |
 
-Step-by-step operator instructions are in the [Deployment Guide](deployment-guide.md).
+Production checks that the installer used to make now live in the server, so they hold whatever starts it: `StorageCheck` on the buckets, the Google key check, and (new) a refusal of OpenStreetMap's public Nominatim server when `foodstack.environment=production`, unless `foodstack.geo.geocoding.allow-public-server` is set (the chart sets it with `maps.allowPublicOpenStreetMap`). Start-up errors name the `application.yml` setting and its environment variable.
 
-Moving to Kubernetes later is a data migration (dump and restore) plus configuration; no code changes.
+### 17.4 Separate services without Kubernetes
+
+`deploy/services/` has one complete `<module>.yml` per module (that module `local`, every other module `http` to `<module>.internal:8081`, `expose` of its own) and a Caddyfile mapping each module's public paths to its service, plus an internal listener on port 8000 for the web app's server-side rendering. Groups of modules are made by setting several modules `local` in one file. Every service needs `pii-key` (the PII cipher is platform-wide), the internal token and the service client secret; every service but identity needs identity's JWKS and token addresses.
+
+Moving between these setups is a data migration (dump and restore) plus configuration, or no data move at all when the datastores stay; no code changes ([migration guide](migration-guide.md)).
 
 ## 18. Kubernetes and Helm
 
-Optional. Use it when one server is no longer enough; at launch the unit deployer (section 17) runs the whole modular monolith on one server.
+Optional. Use it when one server is no longer enough; at launch Docker Compose (section 17) runs the whole modular monolith on one server.
 
 ### 18.1 Chart layout
 
@@ -766,10 +769,10 @@ module-switch:                              # generated by Helm per Deployment
 
 | # | Item | Proposal |
 |---|---|---|
-| T1 | Kafka adds operational weight for small pilots | The unit deployer and `values-dev.yaml` run single-node KRaft with small heap; docs list managed Kafka options; outbox keeps the app working while Kafka is briefly down |
+| T1 | Kafka adds operational weight for small pilots | Docker Compose and `values-dev.yaml` run single-node KRaft with small heap; docs list managed Kafka options; outbox keeps the app working while Kafka is briefly down |
 | T2 | One-time-code login on Spring Authorization Server | **Superseded (2026-11-03):** sign-in is the stateless auth API (9.1), where an emailed code is one more way to call `/auth/login` |
 | T3 | Choice of first card gateway (hosted payment page support required) | **Decided:** one global gateway with a hosted payment page first; regional adapters later through the same SPI |
-| T4 | Public OSM services have strict usage policies | The Helm chart and the unit deployer ship optional self-hosted Nominatim and OSRM services (off by default, enabled per region); the deployment guide explains the data import |
+| T4 | Public OSM services have strict usage policies | A real install must name a provider: Google, a hosted Nominatim-compatible service, or the operator's own Nominatim and OSRM (handbook 13); production refuses the public Nominatim server and the chart refuses the public tile server |
 | T5 | Licences of third-party servers (Liquibase FSL, Elasticsearch) | Document in `docs/licensing.md`; operators run unmodified upstream software |
 | T6 | Module-Switch is new (0.x) | FoodStack pins a released version and contributes fixes upstream; split-topology tests run in CI |
 
@@ -779,12 +782,12 @@ What M0 built differs from the design above in these places. Each is deliberate;
 
 | Area | Design | M0 | Follow-up |
 |---|---|---|---|
-| Object storage | MinIO | RustFS (Apache-2.0, S3-compatible) in the unit deployer, local runs and tests, because MinIO stopped publishing images. The code only uses the S3 API, so AWS S3 and other providers work unchanged | None needed |
+| Object storage | MinIO | RustFS (Apache-2.0, S3-compatible) in the Docker Compose trial, local runs and tests, because MinIO stopped publishing images. The code only uses the S3 API, so AWS S3 and other providers work unchanged | None needed |
 | Image processing | libvips | Pure Java with webp-imageio (section 13) | Add libvips or AVIF only if throughput needs it |
 | Web tokens | Refresh-token rotation, access token in memory | Public SPA clients get no refresh token from Spring Authorization Server. The apps keep the access token in `sessionStorage` (tab-scoped) and renew it in the background a minute before it expires: a same-origin `fetch` of `/oauth2/authorize` follows the redirect to the callback, and the code is exchanged for a new token, so the page and any open form stay as they are. A token close to expiry is renewed before an API call, and a 401 renews once and retries. Only when the identity session has ended does the user go back to the login page. Needs the issuer on the same origin as the app (true for both topologies). Sign-out uses OIDC RP-initiated logout (`/connect/logout`) | Refresh tokens through a backend-for-frontend, or in-memory tokens with silent renew in an iframe |
 | Identity session | Not specified | The login session lives in the server's memory, so it ends on restart and is not shared between replicas | Spring Session on Redis before running identity with more than one replica |
 | Login methods | Email codes, password, social, TOTP | Email and password (Argon2id) only. Email codes need the notification module and SMTP | M2 (notifications), M5 (TOTP, social) |
-| First admin | One-time link to set the password | `install.sh` generates the password, stores it in `.env` and prints it once | Password change and reset with the notification module |
+| First admin | One-time link to set the password | The operator writes it in `config/application.yml` (`bootstrap-admin`) or the chart's `secrets.adminPassword`; administrators must set up two-step sign-in at first sign-in | Password change and reset with the notification module |
 | Elasticsearch | Always in the Compose stack | Compose profile `search`, off by default; no module uses it yet | Done in M1: on by default (section 22) |
 | OpenAPI and API client | springdoc per module, generated Angular client | Hand-written typed clients in `frontend/projects/api-client` | Add springdoc and generate the client in CI |
 | Rate limiting | Edge plus per-user limits in Redis | Only Caddy request-size limits on one server | Per-IP and per-user limits with the first public write endpoints beyond sign-up |
@@ -953,3 +956,18 @@ M6 is the [Operator handbook](handbook/README.md): nine launch guides, four for 
 Checked on a fresh single-server install in this environment: install, backup, restore (later data gone, Redis empty, search index recreated), upgrade to a repackaged release and rollback, the nightly cron line, a full restore onto a new install with the two keys copied, and a wrong key stopping the server. The Kubernetes runbooks are written against the chart and checked with `helm template`; the conversions that need a provider's console (MongoDB sharding, Redis Cluster, more Kafka partitions, a CDN) were not run here. The PRD exit check, someone without an operations background following every guide end to end, is still to do.
 
 Two journeys join the integration tests, each run as a monolith and as one service per module: `CouponsAndRefundsScenario` (an operator coupon used once per customer and given back when an unpaid order is cancelled, then two partial refunds to the card, one charged to the store and one borne by the operator, with the branch's payout following) and `PricesAndSettlementScenario` (with price approval on, an owner's new price waits for approval and a rejected one never reaches customers; then finance settles the branch's finished day with a reference, refused for today, without a reference, for support, and a second time).
+
+## 29. Docker Compose replaces the unit deployer (2026-11-12)
+
+ilyas found the deployment docs long and unclear about which service needs which setting and outside service, and chose to drop the unit deployer: an operator or developer runs the whole platform with Docker Compose, or goes to Kubernetes.
+
+| Area | Before | Now | Follow-up |
+|---|---|---|---|
+| One machine | `unit-deployer-<version>.zip` with the jar, the built apps and 13 scripts (`install.sh`, `backup.sh`, `upgrade.sh`, …); settings spread over a generated `.env` | `deploy/compose`: published images, one `docker-compose.yml`, and every setting in one mounted `config/application.yml` (datastore passwords and what the web apps show in `.env`). Plain `docker compose` commands in the docs (section 17) | None |
+| Separate services | Only on Kubernetes, through the chart | `deploy/services`: one ready-to-fill `<module>.yml` per module and a Caddyfile, checked end to end with all 15 services | None |
+| Which module needs what | Spread over the deployment guide | [Architecture 1.0](architecture/01-big-picture.md#10-what-each-service-needs): one diagram and table of every module's database, datastores and outside services | None |
+| Moving between setups | Deployment guide section 5 and handbook 40 (to Kubernetes only) | [Migration guide](migration-guide.md): Compose to Kubernetes, Compose to separate services, monolith to split, services to Kubernetes, regrouping | None |
+| Checks the installer made | `install.sh` refused the public OpenStreetMap servers and missing settings | The server refuses the public Nominatim server in production (`foodstack.geo.geocoding.allow-public-server` to override; the chart sets it with `maps.allowPublicOpenStreetMap`); `StorageCheck` and the Google key check already ran in the server. Start-up errors name the yml setting and its environment variable | The public tile server is refused by the chart only; on Compose the handbook warns |
+| Migrations on one machine | `install.sh` / `upgrade.sh` ran the server once with `--foodstack.migrate-only=true` | The single server migrates as it starts; the migrate-only mode stays for the chart's hook Job | None |
+| Release | `unit-deployer-<version>.zip` attached to the release | `foodstack-compose-<version>.zip` attached to the release | None |
+| Old trial installs that kept photos on the server | `upgrade.sh` warned and handbook 12 moved them | Removed with the unit deployer: no release shipped that layout | None |

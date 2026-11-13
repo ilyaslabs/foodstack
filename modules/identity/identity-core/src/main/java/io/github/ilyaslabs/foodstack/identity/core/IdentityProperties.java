@@ -163,7 +163,7 @@ public class IdentityProperties {
         return this.bootstrapAdmin;
     }
 
-    /** The first administrator, created at startup when no user has this email yet (set by install.sh). */
+    /** The first administrator, created at startup when no user has this email yet (set in application.yml or the chart values). */
     public static class BootstrapAdmin {
 
         private String email;

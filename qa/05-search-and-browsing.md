@@ -26,7 +26,7 @@ Check
 - Network: `GET /api/v1/geo/addresses?q=Gulberg&lang=en`, then `GET /api/v1/search/stores?lat=…&lng=…&fulfilment=DELIVERY`.
 - Redis: `foodstack:geo:cache:geocode:…` holds the suggestions for 7 days (`TTL` about 604800).
 
-In the local run and a `--local` trial, address search asks OpenStreetMap's public Nominatim (a real install asks Google or the operator's Nominatim provider), so it needs internet access. Without it, step 2 says "Address search is not available right now. Use your location instead." (the API answers 503 `GEOCODING_UNAVAILABLE`): use **Use my location** (SRCH-02) instead.
+In the local run and the Docker Compose trial, address search asks OpenStreetMap's public Nominatim (a real install asks Google or the operator's Nominatim provider), so it needs internet access. Without it, step 2 says "Address search is not available right now. Use your location instead." (the API answers 503 `GEOCODING_UNAVAILABLE`): use **Use my location** (SRCH-02) instead.
 
 ### SRCH-02 Use my location
 

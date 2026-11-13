@@ -1,0 +1,141 @@
+# FoodStack settings for Docker Compose: every module in one server (deploy/compose/README.md).
+# After a change:  docker compose restart server
+# Fill in every value marked REPLACE and every example.com address. Values written ${LIKE_THIS}
+# come from .env; leave them as they are.
+#
+# Which module uses what: docs/architecture/01-big-picture.md, section 1.0.
+
+# --- Datastores: the containers in docker-compose.yml. Nothing to change. ---
+spring:
+  mongodb:
+    uri: mongodb://foodstack:${MONGODB_PASSWORD}@mongodb:27017/?replicaSet=rs0&authSource=admin
+  data:
+    redis:
+      url: redis://:${REDIS_PASSWORD}@redis:6379
+  kafka:
+    bootstrap-servers: kafka:9092
+  elasticsearch:
+    uris: http://elasticsearch:9200
+    username: elastic
+    password: ${ELASTICSEARCH_PASSWORD}
+
+  # --- Email (notification module, handbook 15) ---
+  # Order updates, sign-in codes and password resets. Leave host empty to send nothing: customers
+  # still see updates in the app, but sign-in by email code and password reset don't work.
+  mail:
+    host: smtp.example-provider.com
+    port: 587
+    username: REPLACE-with-the-smtp-user
+    password: REPLACE-with-the-smtp-password
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
+foodstack:
+  environment: production
+  kafka:
+    topic-partitions: 24
+    replication-factor: 1
+
+  # --- Keys and your public address (every module) ---
+  security:
+    # The API's public address: the issuer of every sign-in token.
+    issuer: https://api.example.com
+    # The personal-data key. Make it once with  openssl rand -base64 32  and keep a copy outside
+    # the server: without it, stored names, phones and addresses can't be read.
+    pii-key: REPLACE-with-the-personal-data-key
+
+  # --- Accounts and sign-in (identity module) ---
+  identity:
+    # The token signing key. Make it once (one line):
+    #   openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 | openssl pkcs8 -topk8 -nocrypt | sed '1d;$d' | tr -d '\n'
+    signing-keys: REPLACE-with-the-signing-key
+    # The first administrator, created on the first start. Sign in with these, then change the password.
+    bootstrap-admin:
+      email: ops@example.com
+      password: REPLACE-with-a-password-of-12-characters-or-more
+    # Keep true (the sign-in cookie needs HTTPS). false only for a plain-HTTP trial.
+    refresh-cookie-secure: true
+    # How long after a customer asks to delete their account it is deleted.
+    deletion-grace: P14D
+
+  # --- Photos and files (media module, handbook 12): your two S3-compatible buckets ---
+  # The server checks them on every start and does not start until they work.
+  storage:
+    endpoint: https://s3.eu-west-1.amazonaws.com
+    region: eu-west-1
+    # false for Amazon S3; true for Cloudflare R2 and Backblaze B2.
+    path-style: false
+    access-key: REPLACE-with-the-access-key
+    secret-key: REPLACE-with-the-secret-key
+    public-bucket: foodstack-public
+    private-bucket: foodstack-private
+    # Where browsers load the public bucket's files: its public address or your CDN.
+    public-base-url: https://foodstack-public.s3.eu-west-1.amazonaws.com
+    # Where browsers send uploads; usually the same as endpoint.
+    public-endpoint: https://s3.eu-west-1.amazonaws.com
+    # Your two sites, which upload from the browser (the check makes sure CORS allows them).
+    check-origins: https://example.com,https://admin.example.com
+
+  # --- Maps (geo module, handbook 13) ---
+  geo:
+    # Address search: "nominatim" (any Nominatim-compatible service at url) or "google".
+    geocoding:
+      provider: nominatim
+      url: https://search.example-provider.com
+      user-agent: FoodStack (https://api.example.com)
+      # Your country's two-letter code: results stay inside it.
+      country-codes: pk
+    # Road distances: "none" (straight line times a road factor, fine to start), "osrm" (your
+    # OSRM server at url) or "google".
+    routing:
+      provider: none
+      url: ""
+    # Google Maps Platform key, only when a provider above is google.
+    google-api-key: ""
+
+  # --- Store search (search module) ---
+  search:
+    index-prefix: foodstack_
+    replicas: 0
+
+  # --- Card payments (payment module, handbook 16) ---
+  payment:
+    # none (cash only) or stripe. Customers see card payment only when it is also switched on in
+    # the back office (Ordering).
+    gateway: none
+    public-url: https://api.example.com
+    stripe:
+      # sk_live_... or sk_test_...
+      secret-key: ""
+      # The signing secret of a webhook to https://api.example.com/api/v1/payment-webhooks/stripe
+      # with the checkout.session.completed, .expired, .async_payment_succeeded and
+      # .async_payment_failed events.
+      webhook-secret: ""
+      # pk_live_... or pk_test_...: only for card fields inside the app.
+      publishable-key: ""
+
+  # --- Orders (order module) ---
+  order:
+    # The customer app: card payment pages send customers back to <web-url>/orders/<id>.
+    web-url: https://example.com
+
+  # --- Emails and push (notification module, handbooks 15) ---
+  notification:
+    # Emails go out only when spring.mail.host (above) and from-address are set.
+    from-address: no-reply@example.com
+    from-name: FoodStack
+    admin-url: https://admin.example.com/admin
+    # Push to riders and customers: on when fcm-service-account is set. Firebase console > Project
+    # settings > Service accounts > Generate new private key; save it as config/push/fcm.json and
+    # set /config/push/fcm.json here. Web push also needs the web app's firebaseConfig (one-line
+    # JSON) and the Web Push key pair (Cloud Messaging).
+    push:
+      fcm-service-account: ""
+      web-config: ""
+      vapid-key: ""
+
+  # --- Reviews (review module) ---
+  review:
+    # How long after delivery a customer may rate the order.
+    window: P14D

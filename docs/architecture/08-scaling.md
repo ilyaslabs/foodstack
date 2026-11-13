@@ -116,7 +116,7 @@ Each stage keeps the code and the data. Only configuration and machines change.
 
 ```mermaid
 flowchart LR
-    S1["Stage 1<br/>One server<br/>install.sh, Docker Compose<br/>every module in one JVM"]
+    S1["Stage 1<br/>One server<br/>Docker Compose<br/>every module in one JVM"]
     S2["Stage 2<br/>Kubernetes, monolith topology<br/>server ×N, datastores as<br/>replica sets and 3-node clusters"]
     S3["Stage 3<br/>Split hot modules<br/>topology: split or custom<br/>scale each Deployment alone"]
     S4["Stage 4<br/>Shard and cluster the data<br/>MongoDB shards, Redis Cluster,<br/>more Kafka brokers and ES nodes"]
@@ -127,8 +127,8 @@ flowchart LR
 
 | Stage | When | What you change | Guide |
 |---|---|---|---|
-| 1. One server | Launch, one city | Nothing: `install.sh` | [Deployment guide 3](../deployment-guide.md#3-single-server-unit-deployer), [handbook 10 to 18](../handbook/README.md#start-here-your-first-launch) |
-| 2. Kubernetes, monolith (M5) | The server's CPU stays busy at peak, or you need no downtime on upgrades | Move the data once, install the chart, raise `replicas` | [5](../deployment-guide.md#5-moving-from-a-single-server-to-kubernetes), [4.6](../deployment-guide.md#46-scaling-and-topologies) |
+| 1. One server | Launch, one city | Nothing: `docker compose up -d` | [Deployment guide 3](../deployment-guide.md#3-docker-compose-one-machine), [handbook 10 to 18](../handbook/README.md#start-here-your-first-launch) |
+| 2. Kubernetes, monolith (M5) | The server's CPU stays busy at peak, or you need no downtime on upgrades | Move the data once, install the chart, raise `replicas` | [Migration guide](../migration-guide.md), [4.6](../deployment-guide.md#46-scaling-and-topologies) |
 | 3. Split modules (M5) | One part (ordering at lunch, live maps) needs far more than the rest | `topology: split` or `custom` | [4.6](../deployment-guide.md#46-scaling-and-topologies), [TDD 18.2](../TDD.md#182-module-topology-one-setting-any-shape) |
 | 4. Shards and clusters | MongoDB primary or Redis memory is the bottleneck, search is slow under load | Connection strings, `sh.shardCollection` with the keys in TDD 6.3, `auto_expand_replicas`, brokers | [4.6a](../deployment-guide.md#46a-growing-the-other-datastores), [4.8](../deployment-guide.md#48-growing-mongodb-replicas-and-shards) |
 

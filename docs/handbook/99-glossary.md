@@ -7,7 +7,7 @@ The technical words in this handbook, in plain terms.
 | Word | Meaning |
 |---|---|
 | **Back office** | FoodStack's website for staff, restaurants and riders, at `https://admin.example.com/admin/` |
-| **Backup** | A copy of your data, made with `./backup.sh` ([guide 20](20-backups.md)) |
+| **Backup** | A copy of your data, made with `mongodump` ([guide 20](20-backups.md)) |
 | **Bucket** | A folder at a storage provider (Amazon S3, Cloudflare R2, Backblaze B2) that holds files. FoodStack uses two: a public one for photos and a private one ([guide 12](12-storage.md)) |
 | **Branch** | One location of a restaurant. Every restaurant is a **brand** with one or more branches |
 | **Broker** | One machine of Kafka |
@@ -21,7 +21,9 @@ The technical words in this handbook, in plain terms.
 | **CORS** | A rule on a bucket that lets web pages on your addresses send files to it. Without it, uploads from the browser fail ([guide 12](12-storage.md)) |
 | **DNS** | The internet's address book: turns `example.com` into your server's IP address ([guide 11](11-domain-and-dns.md)) |
 | **Docker** | The program that runs the containers on a single server |
-| **`.env`** | The settings file of a single-server install, `/opt/foodstack/.env`. Holds passwords and the keys: keep a copy safe |
+| **`.env`** | One of the two settings files of a single-server install, `~/foodstack/.env`: your addresses, datastore passwords and map tiles. Keep a copy safe |
+| **`application.yml`** | The other settings file, `~/foodstack/config/application.yml`: keys, buckets, maps, email and payments. Holds the personal-data key: keep a copy safe |
+| **Docker Compose** | The tool that starts every part of FoodStack on one server from `docker-compose.yml` (`docker compose up -d`) |
 | **Elasticsearch** | The search engine that finds restaurants near a customer. A copy built from the database |
 | **Event** | A message from one part of FoodStack to the others, such as "order accepted". Sent through Kafka |
 | **Failed event** | An event that could not be handled after several tries. Waits on the **Failed events** page to be replayed |
@@ -32,7 +34,7 @@ The technical words in this handbook, in plain terms.
 | **Kafka** | The service that carries events between FoodStack's parts, in order, without losing them |
 | **Kubernetes** | Software that runs programs on a cluster of machines, restarts them when they fail, and adds copies when busy |
 | **Ledger** | FoodStack's record of every money movement: what each restaurant and rider earned and is owed |
-| **Logs** | What a program writes about what it is doing. `./logs.sh server` shows them |
+| **Logs** | What a program writes about what it is doing. `docker compose logs server` shows them |
 | **Map tiles** | The small square pictures a map is made of, loaded from a tile provider ([guide 13](13-maps.md)) |
 | **Migration** | An update to the database's layout that a new version brings. Runs by itself during an upgrade |
 | **Module** | One part of FoodStack, such as `order`, `store` or `dispatch`. All run together at first; they can be split ([runbook 42](42-split-modules.md)) |
@@ -47,10 +49,9 @@ The technical words in this handbook, in plain terms.
 | **Redis** | A fast memory store for short-lived data: caches, limits, live updates, riders' positions |
 | **Replica** | A copy: of a program (more copies share the load) or of data (more copies keep it safe) |
 | **Replica set** | Three or more MongoDB machines holding the same data, so one can fail |
-| **Restore** | Putting a backup back, with `./restore.sh` |
+| **Restore** | Putting a backup back, with `mongorestore` ([guide 20](20-backups.md)) |
 | **Rollback** | Going back to the version before an upgrade |
 | **Secret** | On Kubernetes, a safe place for passwords and keys, such as `foodstack-secrets` |
-| **Settings file** | `~/foodstack-settings.env`: your bucket and map lines, read once by the installer (`--settings`) and then kept in `.env` |
 | **Shard** | One part of a database split across machines; each shard is a replica set ([runbook 44](44-mongodb-sharding.md)) |
 | **Shard key** | The field that decides which shard a record goes to, such as the order id |
 | **Signing key** | `FOODSTACK_SIGNING_KEYS`: the key that proves a sign-in is real. A new one signs everyone out |

@@ -68,7 +68,7 @@ class DevicesController {
             return jsonMapper.readValue(json, Map.class);
         }
         catch (RuntimeException ex) {
-            throw new IllegalStateException("FCM_WEB_CONFIG is not valid JSON", ex);
+            throw new IllegalStateException("foodstack.notification.push.web-config (FCM_WEB_CONFIG) is not valid JSON", ex);
         }
     }
 }

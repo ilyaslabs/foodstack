@@ -73,7 +73,7 @@ Each scenario is an abstract `*Scenario` class taking the topology. `Lane` lists
 
 | Run | What starts | How |
 |---|---|---|
-| `MonolithLane` (`MONOLITH`) | One application context, every module `local` | The production configuration of the unit deployer |
+| `MonolithLane` (`MONOLITH`) | One application context, every module `local` | The production configuration of Docker Compose (every module in one server) |
 | `MicroservicesLane` (`MICROSERVICES`) | One application context **per module** (15), each with only its own module `local`, every other module `http` to the owning context on a random internal port | The same configuration the Helm chart generates for `topology: microservices` |
 
 - Both runs share the same containers (MongoDB, Kafka, Redis, an S3 stand-in, Elasticsearch, Mailpit) but use fresh databases, topics and buckets, so they never see each other's data. That lets the two lanes run **side by side** (JUnit parallel execution, `junit-platform.properties`), while the journeys inside a lane run one at a time, because some change settings the others read.
@@ -106,7 +106,7 @@ Each scenario is an abstract `*Scenario` class taking the topology. `Lane` lists
 |---|---|---|
 | Component | Vitest + Angular Testing Library | Component runs for real; services and API client mocked (same rule as the backend) |
 | Services and stores | Vitest | Real service; HTTP mocked with the generated API client's test helpers |
-| End-to-end | Playwright | The PRD journeys against the unit deployer stack on every PR (smoke) and nightly (full) |
+| End-to-end | Playwright | The PRD journeys against the Docker Compose stack on every PR (smoke) and nightly (full) |
 | Visual | Playwright screenshots | Key screens in LTR and RTL, light and dark |
 | Accessibility | axe in Playwright | No serious or critical violations |
 

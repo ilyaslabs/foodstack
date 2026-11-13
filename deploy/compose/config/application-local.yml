@@ -1,0 +1,56 @@
+# A trial on your own computer (docker-compose.local.yml), read on top of application.yml only
+# when docker-compose.local.yml is used.
+# Plain HTTP on http://localhost:8080, photos and emails kept on this computer, OpenStreetMap's public
+# servers, a test card page. Not for real data: the keys below are public.
+spring:
+  mail:
+    host: mailpit
+    port: 1025
+    username: ""
+    password: ""
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+
+foodstack:
+  environment: development
+  security:
+    issuer: http://localhost:8080
+    # A fixed, public trial key: never use it with real customers.
+    pii-key: Zm9vZHN0YWNrLWxvY2FsLXRyaWFsLWtleS0zMi1ieXQ=
+  identity:
+    # Empty: a new key on every start, so everyone is signed out when the server restarts.
+    signing-keys: ""
+    bootstrap-admin:
+      email: admin@foodstack.localhost
+      password: foodstack-local
+    refresh-cookie-secure: false
+  storage:
+    endpoint: http://storage:9000
+    region: us-east-1
+    path-style: true
+    access-key: foodstack-local
+    secret-key: foodstack-local-secret
+    public-base-url: http://localhost:8080/foodstack-public
+    public-endpoint: http://localhost:8080
+    create-buckets: true
+    # The browser reaches the storage through the proxy at localhost, the server can't: no check.
+    check-on-start: false
+    check-origins: ""
+  geo:
+    geocoding:
+      provider: nominatim
+      url: https://nominatim.openstreetmap.org
+      user-agent: FoodStack trial
+      country-codes: ""
+    routing:
+      provider: none
+  payment:
+    gateway: sandbox
+    public-url: http://localhost:8080
+    sandbox-secret: foodstack-local-sandbox-secret
+  order:
+    web-url: http://localhost:8080
+  notification:
+    from-address: no-reply@foodstack.localhost
+    admin-url: http://localhost:8080/admin

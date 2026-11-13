@@ -2,67 +2,54 @@
 
 [Back to index](README.md)
 
-What the operator's tools do, traced from the unit deployer scripts (`deploy/unit-deployer/src/main/dist`), the Helm chart's migrations job, `ModuleMigrations` and the back-office screens added in M6. The step-by-step guides that use them are the [Operator handbook](../handbook/README.md).
+What the operator's tools do, traced from the Docker Compose commands in the handbook ([deploy/compose](../../deploy/compose/README.md)), the Helm chart's migrations job, `ModuleMigrations` and the back-office screens added in M6. The step-by-step guides that use them are the [Operator handbook](../handbook/README.md).
 
 ## 11.1 Backup and restore on one server
 
-`backup.sh` copies only what cannot be rebuilt and lives on the server. Photos and files are in the operator's own buckets (versioned at the provider), so a real install backs up only MongoDB and the settings; a `--local` trial (`FOODSTACK_TRIAL_STORAGE=true`) also tars its local storage stand-in. `restore.sh` puts it back and clears the copies that would otherwise be newer than the data.
+There are no scripts: the handbook ([guide 20](../handbook/20-backups.md)) gives plain `docker compose` commands, which a cron line runs nightly. A backup copies only what cannot be rebuilt and lives on the server: MongoDB and the two settings files. Photos and files are in the operator's own buckets (versioned at the provider). A restore puts MongoDB back and clears the copies that would otherwise be newer than the data.
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Op as Operator (cron or by hand)
-    participant B as backup.sh / restore.sh
     participant M as mongodb
-    participant S as storage (trial only)
     participant R as redis
     participant E as elasticsearch
     participant App as proxy, web, backoffice, server
 
     Note over Op,App: Backup (the site stays up)
-    Op->>B: ./backup.sh
-    B->>M: mongodump --archive --gzip (every database)
-    M-->>B: backups/<ts>/mongodb.archive.gz
-    opt FOODSTACK_TRIAL_STORAGE=true
-        B->>S: tar /data
-        S-->>B: backups/<ts>/storage.tar.gz
-    end
-    B->>B: tar .env, config, VERSION → config.tar.gz, then chmod go-rwx
+    Op->>M: docker compose exec -T mongodb mongodump --archive --gzip
+    M-->>Op: backups/<ts>/mongodb.archive.gz
+    Op->>Op: tar .env and config/ → backups/<ts>/config.tar.gz, chmod go-rwx
 
     Note over Op,App: Restore
-    Op->>B: ./restore.sh backups/<ts>
-    B->>App: compose stop proxy web backoffice server
-    B->>M: mongorestore --drop --nsInclude foodstack_*.*
-    opt trial and storage.tar.gz present
-        B->>S: delete /data, untar, restart storage
-    end
-    B->>R: FLUSHALL (caches, leases, limits, live channels)
-    B->>E: DELETE foodstack_search_stores_v* (by name)
-    B->>App: compose up -d
+    Op->>App: docker compose stop proxy web backoffice server
+    Op->>M: mongorestore --drop --nsInclude foodstack_*.*
+    Op->>R: FLUSHALL (caches, leases, limits, live channels)
+    Op->>E: list foodstack_search_stores_v* with _cat, DELETE each by name
+    Op->>App: docker compose up -d
     App->>E: index missing → create it and fill it from MongoDB (SearchIndexBootstrap)
 ```
 
 - Kafka, Redis and Elasticsearch are never backed up: events wait in each module's outbox in MongoDB, Redis holds only short-lived copies, and the search index is rebuilt from the catalogue.
-- `restore.sh` does not touch `.env`. On a new server the operator installs first, then copies only `FOODSTACK_PII_KEY` and `FOODSTACK_SIGNING_KEYS` from the old `.env`, because the new install's datastore passwords differ ([handbook 20](../handbook/20-backups.md)).
-- A wrong `FOODSTACK_PII_KEY` stops the server at start: before making the first administrator, `BootstrapAdmin` decrypts the first administrator's stored email (`UserService.piiKeyOpensStoredData`) and throws if it cannot. Without this, the server started, could read no one's details, and made a second first administrator.
+- Elasticsearch 9 refuses wildcard deletes (`action.destructive_requires_name`), so the restore lists the indices and deletes them one by one.
+- On a new server the operator unpacks `config.tar.gz` before the first `docker compose up -d`. The old `.env` is safe to reuse there because the new MongoDB volume is empty and takes its password from it; `pii-key` and `signing-keys` come back with `config/application.yml` ([handbook 20](../handbook/20-backups.md)).
+- A wrong `pii-key` stops the server at start: before making the first administrator, `BootstrapAdmin` decrypts the first administrator's stored email (`UserService.piiKeyOpensStoredData`) and throws if it cannot. Without this, the server started, could read no one's details, and made a second first administrator.
 
 ## 11.2 Upgrade and rollback on one server
 
 ```mermaid
 flowchart TB
-    U["./upgrade.sh unit-deployer-&lt;v&gt;.zip"] --> C{"zip holds<br/>app/foodstack-server.jar?"}
-    C -- no --> X["stop: not a FoodStack package"]
-    C -- yes --> BK["backup.sh"]
-    BK --> P["copy app, compose file, VERSION, lib, scripts<br/>to .previous/"]
-    P --> I["install the new files<br/>(Caddyfile and backoffice.conf.template too;<br/>.env and data untouched)"]
-    I --> MG["stop the apps, run the server once with<br/>--foodstack.migrate-only=true"]
-    MG --> UP["compose up -d"]
+    BK["back up (11.1), copy docker-compose*.yml<br/>and Caddyfile to previous/"] --> Z["unzip foodstack-compose-&lt;v&gt;.zip,<br/>copy its compose files, Caddyfile, local/"]
+    Z --> D["diff .env and config/application.yml<br/>against the new samples, add new settings"]
+    D --> V["FOODSTACK_VERSION=&lt;v&gt; in .env"]
+    V --> UP["docker compose pull && up -d<br/>(the server runs every module's migrations on start)"]
 
-    RB["./upgrade.sh --rollback"] --> RP["stop the apps, copy .previous/ back"]
-    RP --> RU["compose up -d<br/>(data stays: each release's migrations<br/>work with the release before it)"]
+    RB["rollback"] --> RP["copy previous/ back,<br/>old FOODSTACK_VERSION"]
+    RP --> RU["docker compose up -d<br/>(data stays: each release's migrations<br/>work with the release before it)"]
 ```
 
-On Kubernetes the same order holds: a pre-upgrade hook Job runs every module's migrations with its own datastore override, then the Deployments roll.
+On one machine there is one server, so it migrates as it starts. On Kubernetes, with many pods, a pre-upgrade hook Job runs every module's migrations with its own datastore override (`--foodstack.migrate-only=true`), then the Deployments roll.
 
 ## 11.3 Moving from one server to Kubernetes
 
@@ -75,17 +62,19 @@ sequenceDiagram
     participant NS as S3 buckets
     participant K as Kubernetes (helm)
 
-    Op->>K: Secret foodstack-keys: old FOODSTACK_SIGNING_KEYS and FOODSTACK_PII_KEY, new internal tokens
-    Op->>Old: stop.sh proxy web backoffice server, backup.sh
+    Op->>K: Secret foodstack-keys: old pii-key and signing-keys, new internal tokens
+    Op->>Old: docker compose stop proxy web backoffice server, mongodump
     Old->>NM: mongorestore foodstack_*.* from mongodb.archive.gz
-    Op->>K: helm install (same version, secrets.existingSecret,<br/>datastores.s3 and maps copied from the old .env)
+    Op->>K: helm install (same version, secrets.existingSecret,<br/>datastores.s3 and maps copied from the old application.yml)
     K->>NS: StorageCheck: same buckets, CORS already allows the same two sites
     K->>NM: migrations Job: change sets already applied, nothing to do
     K->>K: server pods start, empty Elasticsearch → index created and filled
     Op->>Op: test through the hosts file, then switch DNS
 ```
 
-The buckets stay where they are, so photos are not copied and stored image URLs stay valid. Image URLs are copied into brands, menu items and orders when they are written (`logoUrls`, `coverUrls` and the like), so a change of `S3_PUBLIC_BASE_URL` (a CDN, or an old install moving its photos off the server, handbook guide 12) needs the stored URLs rewritten. `tools/migrate/rewrite-media-urls.js` walks every document of every `foodstack_*` database, replaces strings that start with the old base, and keeps BSON types (dates, longs, decimals, ids) as they are.
+The buckets stay where they are, so photos are not copied and stored image URLs stay valid. Image URLs are copied into brands, menu items and orders when they are written (`logoUrls`, `coverUrls` and the like), so a change of `foodstack.storage.public-base-url` (a CDN, handbook guide 49) needs the stored URLs rewritten. `tools/migrate/rewrite-media-urls.js` walks every document of every `foodstack_*` database, replaces strings that start with the old base, and keeps BSON types (dates, longs, decimals, ids) as they are.
+
+The other moves (to separate services, regrouping, back) are in the [migration guide](../migration-guide.md).
 
 ## 11.4 Sharding a database that already has data
 

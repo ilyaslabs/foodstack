@@ -20,7 +20,7 @@ This runbook is the one in the handbook that needs real Kubernetes knowledge; th
   | Redis 7+ | Amazon ElastiCache, Redis Cloud, Upstash | The URL (`rediss://…`) |
   | Elasticsearch 9, 3 nodes | Elastic Cloud | The URL and the `elastic` password |
   
-- Your single server's `/opt/foodstack/.env` (from the server or your password manager). Photos stay in the buckets your server already uses ([guide 12](12-storage.md)), so they need no copy. If `.env` has `FOODSTACK_TRIAL_STORAGE=true` (an install from before buckets were required), first do [Move photos from this server](12-storage.md#move-photos-from-this-server).
+- Your single server's `~/foodstack/.env` and `~/foodstack/config/application.yml` (from the server or your password manager). Photos stay in the buckets your server already uses ([guide 12](12-storage.md)), so they need no copy. The [migration guide](../migration-guide.md#where-each-setting-goes) lists where each setting goes on Kubernetes.
 - Docker on your computer, or on the old server, to run the copying tools.
 - Half a day to prepare, then the maintenance window.
 
@@ -28,23 +28,24 @@ This runbook is the one in the handbook that needs real Kubernetes knowledge; th
 
 ### Prepare (no downtime)
 
-1. **Keys.** From the old `.env`, copy `FOODSTACK_SIGNING_KEYS` and `FOODSTACK_PII_KEY` into a Secret, with three new random values. Same keys means customers stay signed in and their personal details stay readable.
+1. **Keys.** From the old `config/application.yml`, copy `identity.signing-keys` and `security.pii-key` into a Secret, with three new random values. Same keys means customers stay signed in and their personal details stay readable.
    ```bash
    kubectl create namespace foodstack
    kubectl -n foodstack create secret generic foodstack-keys \
-     --from-literal=FOODSTACK_SIGNING_KEYS='<value from .env>' \
-     --from-literal=FOODSTACK_PII_KEY='<value from .env>' \
+     --from-literal=FOODSTACK_SIGNING_KEYS='<signing-keys from application.yml>' \
+     --from-literal=FOODSTACK_PII_KEY='<pii-key from application.yml>' \
      --from-literal=FOODSTACK_INTERNAL_TOKEN="$(openssl rand -hex 24)" \
      --from-literal=FOODSTACK_SERVICE_CLIENT_SECRET="$(openssl rand -hex 24)" \
      --from-literal=FOODSTACK_ADMIN_PASSWORD="$(openssl rand -hex 12)"
    ```
-2. **Your other settings.** Every `SMTP_`, `STRIPE_` and `FCM_` line, and `GOOGLE_MAPS_API_KEY` if you use Google, from the old `.env` goes into a second Secret, as in [deployment guide 4.4](../deployment-guide.md#44-values-for-a-real-install) (`foodstack-providers`).
+2. **Your other settings.** The email (`spring.mail`, `notification`), Stripe (`payment.stripe`) and push (`notification.push`) values, and `geo.google-api-key` if you use Google, from the old `config/application.yml` go into a second Secret as `SMTP_*`, `STRIPE_*`, `FCM_*` and `GOOGLE_MAPS_API_KEY`, as in [deployment guide 4.4](../deployment-guide.md#44-values-for-a-real-install) (`foodstack-providers`).
 3. **Values.** Write `my-values.yaml` as in [deployment guide 4.4](../deployment-guide.md#44-values-for-a-real-install), with:
    - `hosts`: exactly the three addresses you use now;
    - `secrets.existingSecret: foodstack-keys`;
-   - your datastores, and under `datastores.s3` the **same buckets** as the old `.env`: `endpoint` (`S3_ENDPOINT`), `region` (`S3_REGION`), `pathStyle` (`S3_PATH_STYLE`), `publicBaseUrl` (`S3_PUBLIC_BASE_URL`), `accessKey`, `secretKey`, `publicBucket` and `privateBucket`;
+   - your datastores, and under `datastores.s3` the **same buckets** as the old `storage` part: `endpoint`, `region`, `pathStyle` (`path-style`), `publicBaseUrl` (`public-base-url`), `accessKey`, `secretKey`, `publicBucket` and `privateBucket`;
+   - `datastores.kafka.topicPartitions` the same as the old `kafka.topic-partitions` (24 unless you changed it);
    - `server.envFromSecrets: [foodstack-providers]`;
-   - the `maps:` section from the old `GEOCODING_`, `ROUTING_`, `MAP_TILE_URL` and `MAP_ATTRIBUTION` lines ([guide 13](13-maps.md)).
+   - the `maps:` section from the old `geo` part and the `MAP_TILE_URL` and `MAP_ATTRIBUTION` lines of `.env` ([guide 13](13-maps.md)).
 
    The buckets need no change: their CORS rule already allows your two addresses, which stay the same.
 
@@ -55,14 +56,13 @@ This runbook is the one in the handbook that needs real Kubernetes knowledge; th
 
 5. On the old server, stop the apps (the databases keep running) and take a final backup:
    ```bash
-   cd /opt/foodstack
-   ./stop.sh proxy web backoffice server
-   ./backup.sh
+   cd ~/foodstack
+   docker compose stop proxy web backoffice server
    ```
-   Customers now see the site as unreachable. Note the backup folder's name.
+   Then make a backup ([guide 20](20-backups.md), step 1). Customers now see the site as unreachable. Note the backup folder's name.
 6. **Copy the database** into the new MongoDB, from the old server (it has Docker):
    ```bash
-   docker run --rm -v /opt/foodstack/backups/<date and time>:/backup mongo:8.2 \
+   docker run --rm -v ~/foodstack/backups/<date and time>:/backup mongo:8.2 \
      mongorestore --uri '<new MongoDB connection string>' --archive=/backup/mongodb.archive.gz --gzip \
      --nsInclude 'foodstack_*.*' --drop
    ```
@@ -72,7 +72,7 @@ This runbook is the one in the handbook that needs real Kubernetes knowledge; th
    helm install foodstack oci://ghcr.io/ilyaslabs/charts/foodstack --version <the version your server runs> \
      -n foodstack -f my-values.yaml --wait --timeout 15m
    ```
-   Use the **same version** as the old server (`cat /opt/foodstack/VERSION`); upgrade after the move. The database updates find nothing to do, the server pods start, and store search fills itself from the database within a few minutes.
+   Use the **same version** as the old server (`grep FOODSTACK_VERSION ~/foodstack/.env`); upgrade after the move. The database updates find nothing to do, the server pods start, and store search fills itself from the database within a few minutes.
 8. **Find the cluster's address**:
     ```bash
     kubectl -n foodstack get gateway foodstack -o jsonpath='{.status.addresses[0].value}'
@@ -83,7 +83,7 @@ This runbook is the one in the handbook that needs real Kubernetes knowledge; th
 
 ### Afterwards
 
-12. Keep the old server **stopped but intact** for a week (`./stop.sh` stops the rest). Then take one last backup off it and cancel it.
+12. Keep the old server **stopped but intact** for a week (`docker compose stop` stops the rest). Then take one last backup off it and cancel it.
 13. Set the DNS TTL back to an hour or more.
 14. Set up backups on the cluster ([guide 20](20-backups.md#kubernetes)) and the dashboards ([guide 23](23-health-and-dashboards.md)).
 15. Later, as you grow: split the busiest modules into their own Deployments ([runbook 42](42-split-modules.md)), and give a module its own database cluster only when it needs one ([runbook 45](45-module-database.md)). Every module's data now sits in its own database (`foodstack_order`, …) on the new cluster, ready to move on its own.
@@ -99,9 +99,9 @@ This runbook is the one in the handbook that needs real Kubernetes knowledge; th
 
 ## Undo
 
-- **Before the DNS switch**: nothing changed for customers. `./start.sh` on the old server brings it back as it was; delete the cluster install with `helm -n foodstack uninstall foodstack` if you want to try again later.
-- **After the DNS switch, in the first hours**: put the DNS records back to the old server's address and `./start.sh` there. Orders placed on the cluster in between are **not** on the old server; take note of them from **Orders** first.
-- **Later**: move back the same way in reverse (a database dump from the cluster into the server's `restore.sh`), with a maintenance window.
+- **Before the DNS switch**: nothing changed for customers. `docker compose up -d` on the old server brings it back as it was; delete the cluster install with `helm -n foodstack uninstall foodstack` if you want to try again later.
+- **After the DNS switch, in the first hours**: put the DNS records back to the old server's address and `docker compose up -d` there. Orders placed on the cluster in between are **not** on the old server; take note of them from **Orders** first.
+- **Later**: move back the same way in reverse (a `mongodump` from the cluster, restored on the server as in [guide 20](20-backups.md), step 5), with a maintenance window.
 
 ## If something goes wrong
 
@@ -112,6 +112,6 @@ This runbook is the one in the handbook that needs real Kubernetes knowledge; th
 | Every signed-in page says 401 "Jwt verification fails" | istiod is missing `PILOT_JWT_ENABLE_REMOTE_JWKS=envoy` ([deployment guide 4.1](../deployment-guide.md#41-cluster-prerequisites)). Restart istiod until it is fixed |
 | Pods restart with "FOODSTACK_PII_KEY does not open the accounts already stored" | `FOODSTACK_PII_KEY` in `foodstack-keys` is not the old one. Fix the Secret and `kubectl -n foodstack rollout restart deploy` |
 | Everyone is signed out | `FOODSTACK_SIGNING_KEYS` is not the old one. Not harmful: people sign in again. Fix the Secret if you want old sessions back |
-| Pods stop with "Storage check failed: …" | A `datastores.s3` value differs from the old `.env`. The message says which ([guide 12](12-storage.md#if-something-goes-wrong)) |
+| Pods stop with "Storage check failed: …" | A `datastores.s3` value differs from the old `storage` part. The message says which ([guide 12](12-storage.md#if-something-goes-wrong)) |
 | The restore in step 6 says "not authorized" | The connection string's user needs the `restore` role (in Atlas: **Database Access**, "Atlas admin" or "readWriteAnyDatabase" plus restore) |
 | Store search is empty after an hour | `kubectl -n foodstack logs deploy/foodstack-core | grep -i search`. Elasticsearch must be reachable from the cluster |

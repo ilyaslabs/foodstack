@@ -13,29 +13,39 @@ FoodStack emails order updates to customers, new orders to restaurants, sign-in 
 
 ## Steps
 
-1. Open the settings file on the server:
+1. Open the settings on the server:
    ```bash
-   cd /opt/foodstack
-   nano .env
+   cd ~/foodstack
+   nano config/application.yml
    ```
-2. Find the lines starting with `SMTP_` and fill them in:
-   ```
-   SMTP_HOST=<smtp host, such as email-smtp.eu-west-1.amazonaws.com>
-   SMTP_PORT=587
-   SMTP_USERNAME=<smtp username>
-   SMTP_PASSWORD=<smtp password>
-   SMTP_AUTH=true
-   SMTP_STARTTLS=true
-   SMTP_FROM=orders@example.com
-   SMTP_FROM_NAME=<your marketplace's name>
+2. Fill in the `mail` part (under `spring`) and the sender (under `foodstack.notification`):
+   ```yaml
+   spring:
+     mail:
+       host: <smtp host, such as email-smtp.eu-west-1.amazonaws.com>
+       port: 587
+       username: <smtp username>
+       password: <smtp password>
+       properties:
+         mail.smtp.auth: true
+         mail.smtp.starttls.enable: true
+
+   foodstack:
+     notification:
+       from-address: orders@example.com
+       from-name: <your marketplace's name>
    ```
    Save with Ctrl+O, Enter, and leave with Ctrl+X.
-3. Restart the server part of FoodStack so it reads the new settings:
+3. Restart the server so it reads the new settings:
    ```bash
-   ./restart.sh server
+   docker compose restart server
    ```
    It takes about a minute to come back.
-4. Update the copy of `.env` in your password manager.
+4. Update the copy of `config/application.yml` in your password manager.
+
+**Separate services**: the same lines go in `notification.yml`. **Kubernetes**: `SMTP_HOST`,
+`SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` and `SMTP_FROM_NAME` in the
+`foodstack-providers` Secret ([Kubernetes guide](../kubernetes-guide.md)).
 
 ## Check it worked
 
@@ -45,13 +55,13 @@ FoodStack emails order updates to customers, new orders to restaurants, sign-in 
 
 ## Undo
 
-Empty the `SMTP_HOST` line again and run `./restart.sh server`. Emails stop; the **Email log** lists new ones as not sent.
+Empty `spring.mail.host` again and run `docker compose restart server`. Emails stop; the **Email log** lists new ones as not sent.
 
 ## If something goes wrong
 
 | Problem | What to do |
 |---|---|
-| The **Email log** shows the email as failed, with an error | Read the error. "Authentication failed": wrong username or password. "Connection refused" or "timed out": wrong host or port, or the provider blocks port 587 (some cloud providers block outgoing mail ports until you ask them). Fix `.env`, restart, then click **Send again** on the failed email |
+| The **Email log** shows the email as failed, with an error | Read the error. "Authentication failed": wrong username or password. "Connection refused" or "timed out": wrong host or port, or the provider blocks port 587 (some cloud providers block outgoing mail ports until you ask them). Fix `config/application.yml`, restart, then click **Send again** on the failed email |
 | The log says sent, but nothing arrives | Look in spam. Finish the sending service's domain checks (SPF and DKIM records). Some services keep new accounts in a "sandbox" that only sends to verified addresses: ask them to lift it |
-| The log says "Email is not set up (SMTP_HOST)" | `SMTP_HOST` or `SMTP_FROM` is empty, or the server was not restarted |
+| The log says "Email is not set up (spring.mail.host)" | `spring.mail.host` or `from-address` is empty, or the server was not restarted |
 | Sign-in codes are not in the log text | That is on purpose: codes are secret, so the log shows only the subject |

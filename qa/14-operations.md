@@ -2,97 +2,89 @@
 
 [Back to QA index](README.md)
 
-Installing and running FoodStack the way an operator does: the one-command install, health, failed events, rebuilding search, backups, upgrades, and the Kubernetes chart with its dashboards. Most cases here use a **real install** (`install.sh`), not the local run. The [Operator handbook](../docs/handbook/README.md) has the full steps; these cases check that they work.
+Installing and running FoodStack the way an operator does: the Docker Compose install, health, failed events, rebuilding search, backups, upgrades, and the Kubernetes chart with its dashboards. Most cases here use **Docker Compose** (`deploy/compose`), not the local run. The [Operator handbook](../docs/handbook/README.md) has the full steps; these cases check that they work. Every command runs in the Compose folder: `deploy/compose` in the repository, or the folder unpacked from a release's `foodstack-compose-<version>.zip`. To test unreleased code, set `FOODSTACK_VERSION` in `.env` to a snapshot tag such as `main-snapshot`.
 
-Get the unit deployer zip from a release, or build it: `mvn -pl deploy/unit-deployer -am package -DskipTests` (it lands in `deploy/unit-deployer/target/`).
+In the cases below, `trial` means `docker compose -f docker-compose.yml -f docker-compose.local.yml`.
 
-### OPS-01 Install a trial with one command
+### OPS-01 Start a trial with one command
 
 Who: tester · Where: a computer with Docker (Linux, or macOS or Windows with Docker Desktop), no sudo
 
 Steps
-1. Unzip the unit deployer and run `./install.sh ~/foodstack --local`.
-2. Open `http://foodstack.localhost:8080/admin/` and sign in as `admin@foodstack.localhost` with `foodstack-local`.
-3. Open `http://foodstack.localhost:8080/`.
-4. Run `~/foodstack/status.sh`.
+1. `cp .env.example .env`, then `trial up -d`.
+2. Open `http://localhost:8080/admin/` and sign in as `admin@foodstack.localhost` with `foodstack-local`.
+3. Open `http://localhost:8080/` and `http://localhost:8025/`.
+4. Run `trial ps`.
 
 Expect
-- Step 1 runs to the end without asking anything and without sudo, and ends with "FoodStack … is running." and the addresses and sign-in.
-- Step 2: the back office opens. Step 3: the customer app opens and asks for a location (no stores yet).
-- Step 4: every service `running` and `healthy`, and "Disk used: …%".
+- Step 1 needs no edits and no sudo; every container starts.
+- Step 2: the back office opens and asks to set up the authenticator app (AUTH-20). Step 3: the customer app opens and asks for a location (no stores yet); Mailpit opens.
+- Step 4: every service `Up` and `(healthy)`, `proxy` `Up`.
 
 Check
-- `~/foodstack/.env` exists with permission `-rw-------` (600) and holds generated passwords and keys. `FOODSTACK_ENVIRONMENT=production`, `PAYMENT_GATEWAY=none`.
-- `~/foodstack/config/mongodb-keyfile` is read-only for its owner (400).
-- `docker volume ls` shows `foodstack_mongodb`, `foodstack_storage` (the trial's local photo store) and the other data volumes. `.env` has `FOODSTACK_TRIAL_STORAGE=true`.
+- `docker volume ls` shows `foodstack_mongodb`, `foodstack_redis`, `foodstack_kafka`, `foodstack_elasticsearch`, `foodstack_caddy` and the trial's `foodstack_storage`.
+- `docker compose exec mongodb ls -l /data/db/.replica-keyfile` is read-only for its owner (`-r--------`).
 - No demo data: only the administrator exists in `identity_users`.
 
-### OPS-02 The installer refuses what would break things
+### OPS-02 Change a setting and relaunch
 
-Who: tester · Where: the same computer as OPS-01
+Who: tester · Where: the trial of OPS-01
 
 Steps
-1. Run the same `install.sh ~/foodstack --local` again.
-2. Run it into another folder, `~/foodstack2`.
-3. With something listening on port 8080, run an install into a new folder after uninstalling (OPS-10).
-4. Stop an install part way (Ctrl+C while it pulls images), then run the same command again.
+1. In `config/application-local.yml`, add `logging.level.io.github.ilyaslabs: DEBUG`, then `trial restart server`.
+2. In `.env`, change `JAVA_HEAP` to `1g`, then `trial up -d`.
 
 Expect
-1. "~/foodstack already holds an installation. Use upgrade.sh to update it, or uninstall.sh to remove it."
-2. "FoodStack is already installed on this machine in …. Run …/uninstall.sh first."
-3. "Port 8080 is already in use. Pick another with --http-port / --https-port."
-4. "Removing an unfinished earlier install", then it finishes normally.
+- Step 1: the server is healthy again within a minute, and `docker compose logs server` now has `DEBUG` lines from `io.github.ilyaslabs`. Remove the line and restart: they stop.
+- Step 2: only `server` is recreated; `docker compose exec server sh -c 'echo $JAVA_TOOL_OPTIONS'` shows `-Xmx1g`.
+
+Check
+- `docker compose exec server ls /config` lists `application.yml` and `application-local.yml`: the folder is mounted, not copied into the image.
 
 ### OPS-02b Install for real with your own buckets and map provider
 
 Who: operator · Where: a server with the three names pointing at it (handbook guides 10 and 11), buckets made as in handbook guide 12 (do it once each with Amazon S3, Cloudflare R2 and Backblaze B2 before a release), and a map provider (guide 13: once with Google, once with a Nominatim-compatible provider)
 
 Steps
-1. Write `~/foodstack-settings.env` with the `S3_*`, `GEOCODING_*` (and `GOOGLE_MAPS_API_KEY`), `MAP_*` and `ROUTING_*` lines, then run the install of handbook guide 14 with `--settings ~/foodstack-settings.env`.
-2. Run it again on a fresh server with the file missing two lines (for example `S3_SECRET_KEY` and `MAP_ATTRIBUTION`), from a terminal.
-3. Sign in to the back office, add a brand logo and a dish photo, and open a branch's **Delivery** tab.
-4. In the customer app, search for a street, and get a delivery quote on a store page.
+1. Follow handbook guide 14: fill in `.env` and `config/application.yml`, then `docker compose up -d`.
+2. Sign in to the back office, add a brand logo and a dish photo, and open a branch's **Delivery** tab.
+3. In the customer app, search for a street, and get a delivery quote on a store page.
 
 Expect
-- Step 1 asks nothing and ends with "FoodStack … is running.".
-- Step 2 asks for the two missing values (the secret is not shown as you type), then installs.
-- Step 3: the photos upload and show; their address starts with `S3_PUBLIC_BASE_URL`. The map shows the provider's tiles and its credit.
-- Step 4: suggestions appear, only in `GEOCODING_COUNTRY_CODES`. With `ROUTING_PROVIDER=google` the quote's distance follows the roads.
+- Step 1: `grep -n 'REPLACE\|example' .env config/application.yml` shows only what you chose to leave; every service becomes healthy and the three addresses open with a padlock.
+- Step 2: the photos upload and show; their address starts with `storage.public-base-url`. The map shows the provider's tiles and its credit.
+- Step 3: suggestions appear, only in `geo.geocoding.country-codes`. With `routing.provider: google` the quote's distance follows the roads.
 
 Check
-- `docker volume ls` has no `foodstack_storage`; `docker compose ps` has no `storage` service. `.env` has the S3 and map lines, quoted, and a `MEDIA_ORIGINS` line.
-- `./logs.sh server` shows "Storage check passed: buckets … and …, images at …".
+- `docker compose ps` has no `storage` or `mailpit` service.
+- `docker compose logs server` shows "Storage check passed: buckets … and …, images at …".
 - In each bucket, no `_foodstack-check/` file is left behind.
 - Browser F12, Console: no blocked image, upload or tile address in the back office.
 
-### OPS-02c Missing or wrong buckets and maps stop the install
+### OPS-02c Wrong buckets and maps stop the server
 
-Who: tester · Where: a server as in OPS-02b, or any computer with Docker for steps 1 to 3 (they stop before anything starts)
+Who: tester · Where: a server as in OPS-02b
 
 Steps
-1. `./install.sh ~/fs --domain example.com` with no settings file, input not from a terminal (`< /dev/null`).
-2. A settings file with `MAP_TILE_URL=https://tile.openstreetmap.org/{z}/{x}/{y}.png`; then one with `GEOCODING_PROVIDER=google` and no key; then one with `S3_ENDPOINT=http://…`.
-3. A settings file with `MAP_TILE_URL` without `{z}`.
-4. On a server as in OPS-02b, install once each with: a bucket name mistyped; a wrong secret key; the public bucket not public; the CORS rule removed from the private bucket.
+1. In `config/application.yml`, one at a time, followed by `docker compose restart server`: `geo.geocoding.url: https://nominatim.openstreetmap.org`; `geo.geocoding.provider: google` with no `google-api-key`; a bucket name mistyped; a wrong `secret-key`; the public bucket not public; the CORS rule removed from the private bucket.
+2. Put the right value back after each one.
 
 Expect
-1. "Missing settings: S3_ENDPOINT … A real install needs your storage buckets and map provider: see handbook guides 12 and 13, then pass --settings <file>." Nothing is created.
-2. "OpenStreetMap's public servers allow only light use and are for --local trials. …"; "Missing settings: GOOGLE_MAPS_API_KEY …"; "http://… must start with https://".
-3. "MAP_TILE_URL must contain {z}, {x} and {y}."
-4. The install stops with "Storage check failed: …" and what to fix, in order: "the bucket '…' does not exist …"; "the access key may not write to the bucket '…' … Check S3_ACCESS_KEY and S3_SECRET_KEY …"; "a test file in the public bucket is not readable by everyone at … (HTTP 403) …"; "the bucket '…' does not allow uploads from https://admin.example.com (CORS …)". After the fix, the same command installs.
+1. The server keeps restarting, and `docker compose logs server` says, in order: "foodstack.geo.geocoding.url: OpenStreetMap's public server allows light use only …"; "foodstack.geo.geocoding.provider: google needs foodstack.geo.google-api-key …"; "Storage check failed: the bucket '…' does not exist …"; "… the access key may not write to the bucket '…' … Check foodstack.storage.access-key and secret-key …"; "… a test file in the public bucket is not readable by everyone at … (HTTP 403) …"; "… the bucket '…' does not allow uploads from https://admin.example.com (CORS …)".
+2. After each fix the server is healthy again.
 
 ### OPS-03 Health checks
 
 Who: tester · Where: terminal
 
 Steps
-1. `curl -s http://foodstack.localhost:8080/actuator/health/readiness` and `…/actuator/health/liveness`.
-2. `./stop.sh mongodb`, then ask readiness again, run `./status.sh` and open the customer app.
-3. `./start.sh`.
+1. `curl -s http://localhost:8080/actuator/health/readiness` and `…/actuator/health/liveness`.
+2. `docker compose stop mongodb`, then ask readiness again, run `docker compose ps` and open the customer app.
+3. `trial up -d` (or `docker compose up -d` on a real install).
 
 Expect
 1. `{"status":"UP"}` for both.
-2. `status.sh` shows mongodb stopped. Readiness stays `UP`: the server is fine and reconnects by itself, so nothing restarts it. Pages that need data show an error.
+2. `docker compose ps` no longer lists mongodb as running. Readiness stays `UP`: the server is fine and reconnects by itself, so nothing restarts it. Pages that need data show an error.
 3. Everything comes back healthy within a couple of minutes, with no data lost.
 
 Check
@@ -100,10 +92,10 @@ Check
 
 ### OPS-04 Events wait while Kafka is down
 
-Who: tester · Where: local run or a trial install
+Who: tester · Where: local run or the trial
 
 Steps
-1. Stop Kafka (`docker stop <kafka container>`, or `./stop.sh kafka`).
+1. Stop Kafka (`docker stop <kafka container>`, or `docker compose stop kafka`).
 2. Place a cash order as a customer.
 3. Start Kafka again and wait a minute.
 
@@ -164,96 +156,99 @@ Check
 
 ### OPS-07 Back up and restore
 
-Who: tester · Where: a trial install (OPS-01) with a store, an order and a dish photo. On a real install (OPS-02b) the same, without `storage.tar.gz`: photos are in the buckets
+Who: tester · Where: the trial (OPS-01) or a real install (OPS-02b), with a store, an order and a dish photo
 
 Steps
-1. `./backup.sh`.
-2. Change something you can see: delete the dish photo, rename the store, place another order.
-3. `./restore.sh backups/<timestamp>` with the folder from step 1.
+1. Make a backup with the command of handbook guide 20, step 1.
+2. Change something you can see: rename the store, place another order.
+3. Restore the backup with the commands of guide 20, step 5.
 4. Sign in and look at the store and orders.
 
 Expect
-- Step 1: "Backup done: …/backups/<timestamp>" with `mongodb.archive.gz`, `storage.tar.gz` and `config.tar.gz`. The folder is readable only by its owner.
-- Step 3: "Restore done." after stopping and starting the application.
-- Step 4: everything is as it was at the backup: the old store name, the photo back, the later order gone. Signing in still works, and customers' emails and phone numbers still read correctly.
-- Step 3 prints "Clearing caches and the search index" before "Starting". Search finds the store again within a few minutes (the index is recreated and filled from the restored data).
+- Step 1: "Backup done: …/backups/<timestamp>" with `mongodb.archive.gz` and `config.tar.gz`. The folder is readable only by its owner.
+- Step 3 runs without errors and ends with every container started; the Elasticsearch command prints `{"acknowledged":true}` for each search index.
+- Step 4: everything is as it was at the backup: the old store name, the later order gone. Signing in still works, and customers' emails and phone numbers still read correctly. Search finds the store again within a few minutes (the index is recreated and filled from the restored data).
 
 Check
-- `config.tar.gz` holds `.env`, `config/` and `VERSION`. Without the `.env` from the same install (its `FOODSTACK_PII_KEY`), restored personal data cannot be read: keep it in a password manager.
-- Redis: a key you set before step 3 (`redis-cli -a … set qa:stale 1`) is gone after it.
+- `config.tar.gz` holds `.env` and `config/`. Without the `config/application.yml` of the same install (its `pii-key`), restored personal data cannot be read: keep it in a password manager.
+- Redis: a key you set before step 3 (`docker compose exec redis redis-cli -a … set qa:stale 1`) is gone after it.
 - Elasticsearch: `_cat/indices/foodstack_search_stores_v*?h=index,creation.date.string` shows a creation time after step 3.
+- The nightly cron line of guide 20, step 3, run by hand with `sh -c` (with `\%` written as `%`), writes a new folder and "Backup done" to `backups/backup.log`.
 
 ### OPS-07b Restore onto a new server, and a wrong key
 
-Who: tester · Where: two trial installs, one after the other (handbook guide 20, "Restore on a new server")
+Who: tester · Where: two Compose folders, one after the other (handbook guide 20, "Restore on a new server")
 
 Steps
-1. On install A, `./backup.sh` and copy the backup folder somewhere else. `./uninstall.sh --yes`.
-2. Install B in a new folder. Copy the backup into its `backups/`. Copy **only** `FOODSTACK_PII_KEY` and `FOODSTACK_SIGNING_KEYS` from A's `.env` (`tar -xzf backups/<ts>/config.tar.gz -O .env`) into B's `.env`.
-3. `./restart.sh server`, then `./restore.sh backups/<ts>`.
+1. In folder A, make a backup and copy the backup folder somewhere else. Then `trial down -v`.
+2. Unpack a fresh Compose folder B. Copy the backup into its `backups/`, and `tar -xzf backups/<ts>/config.tar.gz` there.
+3. `trial up -d`, wait until healthy, then restore (guide 20, step 5).
 4. Sign in with A's administrator password.
-5. Put a new random `FOODSTACK_PII_KEY` in `.env` (`openssl rand -base64 32`) and `./restart.sh server`. Then put the right one back and restart again.
+5. Put a new random `pii-key` in the config (`openssl rand -base64 32`) and `trial restart server`. Then put the right one back and restart again.
 
 Expect
 - Step 3 and 4: A's data is there and A's administrator signs in.
-- Step 5: the server does not become healthy, and `./logs.sh server` says "FOODSTACK_PII_KEY does not open the accounts already stored". With the right key it is healthy again.
+- Step 5: the server does not become healthy, and `docker compose logs server` says "The personal-data key (foodstack.security.pii-key, FOODSTACK_PII_KEY) does not open the accounts already stored". With the right key it is healthy again.
 
 Check
 - `identity_users` holds exactly one `ADMIN` per administrator of A: the wrong key did not make a new first administrator.
 
 ### OPS-08 Upgrade and roll back
 
-Who: tester · Where: a trial install
+Who: tester · Where: a real install or the trial, on an older version
 
 Steps
-1. Build or download a newer unit deployer zip and run `./upgrade.sh <zip>`.
-2. Check the app. Then `./upgrade.sh --rollback`.
+1. Follow handbook guide 21 to a newer version (or from a release to `main-snapshot`).
+2. Check the app. Then follow guide 21, **Undo**.
 
 Expect
-- Step 1: it backs up first, installs the new version, runs migrations, and ends with "Upgraded to …". The site is down for about a minute.
-- Data, sign-ins and settings are kept.
-- Step 2: "Rolled back." and `cat VERSION` shows the previous version. The app works.
-- Without a zip: "usage: upgrade.sh <unit-deployer.zip> | --rollback". With a wrong zip: "… is not a FoodStack unit deployer package".
+- Step 1: the server updates its databases as it starts; the site is down for about a minute. Data, sign-ins and settings are kept, and `.env` and `config/` are unchanged apart from the version and the new settings you added.
+- Step 2: `grep FOODSTACK_VERSION .env` shows the previous version, and `docker compose ps` shows the old images running. The app works.
 
 Check
-- `backups/` has a new folder from the upgrade. `.previous/` holds the files of the version before.
+- `previous/` holds the Compose files and Caddyfile of the version before.
 - The migration logs in `foodstack_<module>.<module>_databasechangelog` have the new change sets.
-
-### OPS-08b Upgrade an install that kept photos on the server
-
-Who: tester · Where: an install made with a release from before buckets were required, with a dish photo
-
-Steps
-1. `./upgrade.sh <new zip>`.
-2. Follow handbook guide 12, "Move photos from this server", to buckets of your own.
-
-Expect
-- Step 1 warns "Photos are still kept on this server" and points to guide 12; the site keeps working with the photos where they were (`.env` gains `FOODSTACK_TRIAL_STORAGE=true`).
-- Step 2: the photo shows from the bucket's address; `docker volume ls` no longer has `foodstack_storage`, and backups no longer have `storage.tar.gz`.
 
 ### OPS-09 Production refuses unsafe settings
 
-Who: tester · Where: a trial install's `.env`
+Who: tester · Where: a real install's `config/application.yml` (`environment: production`)
 
 Steps
-1. Set `PAYMENT_GATEWAY=sandbox` and run `./restart.sh server`.
+1. Set `foodstack.payment.gateway: sandbox` and run `docker compose restart server`.
 2. Set it back to `none` and restart.
 
 Expect
-1. The server does not start. `./logs.sh server` shows "The sandbox payment gateway cannot run in production; set PAYMENT_GATEWAY to stripe or none".
+1. The server does not start. `docker compose logs server` shows "The sandbox payment gateway cannot run in production; set foodstack.payment.gateway (PAYMENT_GATEWAY) to stripe or none".
 2. It starts again.
 
-### OPS-10 Uninstall
+### OPS-10 Remove an install
 
-Who: tester · Where: a trial install
+Who: tester · Where: the trial
 
 Steps
-1. `./uninstall.sh`, then type anything but `delete`.
-2. `./uninstall.sh` and type `delete`.
+1. `trial down`.
+2. `trial up -d`, then `trial down -v`.
 
 Expect
-1. "Cancelled." Nothing is removed.
-2. Containers and data volumes are gone. `backups/` is kept, with the message "Uninstalled. Delete … yourself once you no longer need its backups."
+1. Containers are gone; `docker volume ls` still lists the data volumes, and the next `up -d` has the same data.
+2. Containers and data volumes are gone. The folder, with `.env`, `config/` and `backups/`, is kept.
+
+### OPS-10b Separate services
+
+Who: tester · Where: one machine with Docker, or several (deploy/services/README.md)
+
+Steps
+1. Start MongoDB (replica set), Redis, Kafka and Elasticsearch, fill in the 15 files of `deploy/services` and the Caddyfile, and start `identity`, the other 14 services, the two apps and the proxy as the README shows.
+2. Onboard a store and place a cash order end to end (STORE-01, ORD-03).
+3. Group `order`, `dispatch` and `search` on their own and the rest in one `core` service (README, "Group modules into fewer services"), and repeat step 2.
+
+Expect
+- Step 1: every service answers `{"status":"UP"}` on `/actuator/health/readiness`.
+- Step 2 and 3 work as on one machine: the store is found in search, the order goes from placed to collected, and its emails show as sent in the **Email log**.
+
+Check
+- No service logs an `ERROR` during the journey.
+- `foodstack_<module>` databases exist for every module except `search`.
 
 ### OPS-11 Kubernetes: a trial install with the chart
 

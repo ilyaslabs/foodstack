@@ -134,7 +134,7 @@ public class GeoConfiguration {
         }
         else if ("google".equalsIgnoreCase(routing.getProvider())) {
             provider = new GoogleRoutingProvider(RestClient.builder().requestFactory(requestFactory), routing.getUrl(),
-                    googleKey(properties, "ROUTING_PROVIDER=google"), routing.getProfile());
+                    googleKey(properties, "foodstack.geo.routing.provider: google"), routing.getProfile());
         }
         return new RoutingService(provider, estimate, redis, namespace, routing.getCacheTtl());
     }
@@ -155,11 +155,17 @@ public class GeoConfiguration {
     }
 
     @Bean
-    GeocodingProvider geoGeocodingProvider(GeoProperties properties) {
+    GeocodingProvider geoGeocodingProvider(GeoProperties properties,
+            @Value("${foodstack.environment:development}") String environment) {
         GeoProperties.Geocoding geocoding = properties.getGeocoding();
         boolean google = "google".equalsIgnoreCase(geocoding.getProvider());
         if (!google && !"nominatim".equalsIgnoreCase(geocoding.getProvider())) {
             return new DisabledGeocodingProvider();
+        }
+        if (!google && "production".equals(environment) && !geocoding.isAllowPublicServer()
+                && String.valueOf(geocoding.getUrl()).contains("nominatim.openstreetmap.org")) {
+            throw new IllegalStateException("foodstack.geo.geocoding.url: OpenStreetMap's public server allows light "
+                    + "use only. Use a hosted Nominatim-compatible provider, your own server, or Google (handbook 13)");
         }
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(geocoding.getTimeout());
@@ -171,7 +177,8 @@ public class GeoConfiguration {
             if (url != null && url.contains("nominatim")) {
                 url = null;
             }
-            return new GoogleGeocodingProvider(builder, url, googleKey(properties, "GEOCODING_PROVIDER=google"),
+            return new GoogleGeocodingProvider(builder, url,
+                    googleKey(properties, "foodstack.geo.geocoding.provider: google"),
                     geocoding.getCountryCodes());
         }
         return new NominatimGeocodingProvider(builder, geocoding.getUrl(), geocoding.getUserAgent(),
@@ -181,7 +188,8 @@ public class GeoConfiguration {
     private static String googleKey(GeoProperties properties, String setting) {
         String key = properties.getGoogleApiKey();
         if (key == null || key.isBlank()) {
-            throw new IllegalStateException(setting + " needs GOOGLE_MAPS_API_KEY (a Google Maps Platform key with the "
+            throw new IllegalStateException(setting + " needs foodstack.geo.google-api-key (GOOGLE_MAPS_API_KEY: a "
+                    + "Google Maps Platform key with the "
                     + "Geocoding API and the Routes API turned on)");
         }
         return key.strip();
