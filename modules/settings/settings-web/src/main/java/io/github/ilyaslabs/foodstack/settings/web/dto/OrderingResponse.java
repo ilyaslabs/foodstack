@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.settings.web.dto;
 
+import io.github.ilyaslabs.evl.EVL;
+
 /**
  * Ordering rules. Rates are basis points (100 = 1%), amounts are minor units.
  *
@@ -13,6 +15,7 @@ package io.github.ilyaslabs.foodstack.settings.web.dto;
  * @param version for {@code If-Match}
  * @param updatedAt last change in epoch seconds, or {@code null}
  */
+@EVL.Response(id = "settings.ordering-response", name = "Ordering Rules Response")
 public record OrderingResponse(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
         int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, long version, Long updatedAt,
         boolean priceApprovalRequired, boolean directCollectionEnabled, long creditLimitMinor, String cardStyle,

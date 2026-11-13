@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import io.github.ilyaslabs.evl.EVL;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.exception.SdkClientException;
@@ -27,6 +28,16 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
  * public address, and browsers on the FoodStack sites may upload to both (CORS). Without it, a
  * mistake shows up only later, as broken photos or failed uploads.
  */
+@EVL.Component(id = "media.storage-check", name = "Storage Check", module = "media",
+        layer = EVL.Layer.INFRASTRUCTURE,
+        responsibilities = { "Write a test file to both buckets", "Read it back anonymously at the public base URL",
+                "Check CORS for every site that uploads from the browser",
+                "Stop the start with what to fix when any step fails" })
+@EVL.Dependency(target = "media.bucket-storage", type = EVL.DependencyType.EXTERNAL,
+        reason = "Checks the buckets with the S3 API and plain HTTP before the server takes traffic")
+@EVL.Doc(value = "Runs once before the server takes traffic, unless foodstack.storage.check-on-start is false",
+        requirements = "req.media-storage-works-before-start",
+        decisions = "adr.media-operator-buckets")
 public class StorageCheck {
 
     private static final Logger log = LoggerFactory.getLogger(StorageCheck.class);

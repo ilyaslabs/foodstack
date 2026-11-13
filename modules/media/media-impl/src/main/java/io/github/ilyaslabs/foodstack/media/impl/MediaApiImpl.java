@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.media.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.media.api.MediaApi;
 import io.github.ilyaslabs.foodstack.media.api.MediaAssetView;
 import io.github.ilyaslabs.foodstack.media.api.MediaOwner;
@@ -16,6 +17,10 @@ import org.springframework.stereotype.Component;
  * page, menu photos). Only back-office users who manage what an image belongs to (branding,
  * stores, their own brand) or the platform may claim and release one (TDD 9.1).
  */
+@EVL.Implementation(id = "media.api-impl", name = "Media API Implementation", of = "media.api")
+@EVL.Doc(value = "Delegates to the media service and maps the result.",
+        security = "Anyone may read an asset. Claim and release need a service call or one of the "
+                + "permissions settings:manage, store:manage, store:portal or media:upload.")
 @Component
 class MediaApiImpl implements MediaApi {
 

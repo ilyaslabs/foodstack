@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.media.api.events;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.media.api.MediaPurpose;
 import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
 
@@ -12,6 +13,9 @@ import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
  * @param variants names of the processed variants
  * @param uploadedBy user who uploaded it
  */
+@EVL.Event(id = "media.media-ready", name = "Media Ready", channel = "<namespace>.media.events",
+        delivery = EVL.Delivery.AT_LEAST_ONCE, ordering = "Per media id (Kafka key = media id)",
+        schema = "foodstack.media.MediaReady.v1", broker = "platform.kafka")
 public record MediaReady(String mediaId, MediaPurpose purpose, java.util.List<String> variants, String uploadedBy)
         implements ModuleEvent {
 

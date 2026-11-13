@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.media.web.dto;
 
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.media.api.MediaPurpose;
 import io.github.ilyaslabs.foodstack.media.api.MediaStatus;
 
@@ -14,6 +15,7 @@ import io.github.ilyaslabs.foodstack.media.api.MediaStatus;
  * @param variants sizes by name
  * @param createdAt UTC epoch seconds
  */
+@EVL.Response(id = "media.asset-response", name = "Media Asset Response")
 public record MediaAssetResponse(String id, MediaPurpose purpose, MediaStatus status, Map<String, Variant> variants,
         long createdAt) {
 

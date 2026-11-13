@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.settings.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -22,6 +24,8 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedBy who changed it
  * @param version optimistic lock
  */
+@EVL.DataModel(id = "settings.delivery", name = "Delivery Rules", module = "settings", owner = "settings",
+        storage = "MongoDB foodstack_settings.settings_settings, _id delivery (unsharded)")
 @Document("settings_settings")
 public record DeliveryDocument(@Id String id, int riderPayBasisPoints, long riderPayMinMinor, int offerTimeoutSeconds,
         int searchRadiusMeters, int searchLeadMinutes, int noRiderAlertSeconds, Long proofCodeAboveMinor,

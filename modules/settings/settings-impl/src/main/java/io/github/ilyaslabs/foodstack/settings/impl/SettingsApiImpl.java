@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.settings.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.core.EpochSeconds;
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
 import io.github.ilyaslabs.foodstack.settings.api.DeliveryView;
@@ -20,6 +21,9 @@ import org.springframework.stereotype.Component;
  * {@link SettingsApi} for other modules: delegates to the core service and maps the result. Open to
  * every caller: branding, languages and ordering rules are public (TDD 9.1).
  */
+@EVL.Implementation(id = "settings.api-impl", name = "Settings API Implementation", of = "settings.api")
+@EVL.Doc(value = "Delegates to the settings services and maps the result.",
+        security = "Open to every caller: branding, languages and the rules are public (TDD 9.1).")
 @Component
 class SettingsApiImpl implements SettingsApi {
 

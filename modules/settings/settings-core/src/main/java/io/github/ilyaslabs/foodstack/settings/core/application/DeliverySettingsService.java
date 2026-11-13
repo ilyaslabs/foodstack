@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.settings.api.events.SettingsChanged;
 import io.github.ilyaslabs.foodstack.settings.core.persistence.DeliveryDocument;
@@ -17,6 +18,12 @@ import org.springframework.transaction.support.TransactionTemplate;
  * support alert time (OF-8), delivery code threshold (DR-6) and location retention. Read through
  * the shared settings cache; with no document yet the defaults below apply.
  */
+@EVL.Component(id = "settings.delivery-service", name = "Delivery Settings Service", module = "settings",
+        layer = EVL.Layer.APPLICATION,
+        responsibilities = { "Read the delivery rules, with built-in defaults when the document is missing",
+                "Validate and save delivery rules against the version the editor saw" })
+@EVL.Dependency(target = "settings.cache", type = EVL.DependencyType.CACHE,
+        reason = "Read-through reads; evicts the section after a change")
 public class DeliverySettingsService {
 
     static final DeliveryDocument DEFAULTS = new DeliveryDocument(DeliveryDocument.ID, 7000, 0, 30, 5000, 10, 300, null, 30,
@@ -46,6 +53,7 @@ public class DeliverySettingsService {
                 () -> details(this.repository.findById(DeliveryDocument.ID).orElse(DEFAULTS)));
     }
 
+    @EVL.Producer(event = "settings.settings-changed", when = "Delivery rules saved (section delivery)")
     public DeliveryDetails update(UpdateDelivery update, long expectedVersion, String userId) {
         validate(update);
         DeliveryDocument current = this.repository.findById(DeliveryDocument.ID).orElse(DEFAULTS);

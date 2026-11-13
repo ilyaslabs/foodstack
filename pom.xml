@@ -75,6 +75,8 @@
         <archunit.version>1.5.1</archunit.version>
         <instancio.version>6.1.0</instancio.version>
         <rest-assured.version>6.3.0</rest-assured.version>
+        <!-- EVL architecture annotations (CLASS retention, no runtime footprint); see evl.yaml -->
+        <evl.version>1.0.0</evl.version>
 
         <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
         <testcontainers.reuse>true</testcontainers.reuse>
@@ -87,6 +89,11 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>evl-annotations</artifactId>
+                <version>${evl.version}</version>
+            </dependency>
             <!-- FoodStack artifacts (same list as foodstack-bom, which cannot be imported inside its own reactor) -->
             <dependency>
                 <groupId>io.github.ilyaslabs</groupId>

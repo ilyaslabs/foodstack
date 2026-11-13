@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.media.web.dto;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.media.api.MediaPurpose;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -12,5 +13,7 @@ import jakarta.validation.constraints.Positive;
  * @param contentType {@code image/jpeg}, {@code image/png} or {@code image/webp}
  * @param sizeBytes exact size of the file
  */
+@EVL.Request(id = "media.start-upload-request", name = "Start Upload Request",
+        validation = "purpose required; contentType not blank; sizeBytes positive")
 public record StartUploadRequest(@NotNull MediaPurpose purpose, @NotBlank String contentType, @Positive long sizeBytes) {
 }

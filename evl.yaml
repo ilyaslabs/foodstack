@@ -1,0 +1,18 @@
+evl: "1.0"
+id: foodstack
+name: FoodStack
+description: >-
+  Open source, white-label food ordering and delivery marketplace. A modular monolith built on
+  Module Switch: every module can run in the main server or as its own service by configuration.
+  EVL documentation covers the settings and media modules so far.
+documents:
+  - "docs/evl/**/*.evl.yaml"
+sources:
+  - "modules/media/media-api/src/main/java"
+  - "modules/media/media-core/src/main/java"
+  - "modules/media/media-impl/src/main/java"
+  - "modules/media/media-web/src/main/java"
+  - "modules/settings/settings-api/src/main/java"
+  - "modules/settings/settings-core/src/main/java"
+  - "modules/settings/settings-impl/src/main/java"
+  - "modules/settings/settings-web/src/main/java"

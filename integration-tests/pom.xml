@@ -21,6 +21,12 @@
     </properties>
 
     <dependencies>
+        <!-- Reads EVL-annotated classes; without it javac warns "Cannot find annotation method". -->
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>evl-annotations</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
             <artifactId>foodstack-server</artifactId>

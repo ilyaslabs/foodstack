@@ -3,10 +3,15 @@ package io.github.ilyaslabs.foodstack.media.core.storage;
 import java.net.URI;
 import java.time.Duration;
 
+import io.github.ilyaslabs.evl.EVL;
+
 /**
  * Object storage SPI (TDD 13). The default adapter speaks the S3 API, so it works with AWS S3 and
  * S3-compatible servers.
  */
+@EVL.Interface(id = "media.object-storage", name = "Object Storage", module = "media",
+        responsibilities = { "Presign upload and download URLs", "Read, write and delete objects",
+                "Create the buckets when asked" })
 public interface ObjectStorage {
 
     /** A URL the client can {@code PUT} the object to directly, valid for {@code ttl}. */

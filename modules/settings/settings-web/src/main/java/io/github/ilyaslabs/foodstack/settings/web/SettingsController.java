@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.core.EpochSeconds;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.web.ETags;
@@ -46,6 +47,10 @@ import org.springframework.web.bind.annotation.RestController;
  * Runtime branding, locale and ordering rules. Reads are public and carry an {@code ETag}; edits need
  * {@code settings:manage} and the {@code If-Match} of the version the editor saw (TDD 8.1).
  */
+@EVL.Component(id = "settings.controller", name = "Settings Controller", module = "settings",
+        layer = EVL.Layer.PRESENTATION,
+        responsibilities = { "REST API under /api/v1/settings", "ETag and Cache-Control on reads",
+                "If-Match on every change" })
 @RestController
 @RequestMapping("/api/v1/settings")
 class SettingsController {
@@ -67,6 +72,9 @@ class SettingsController {
         this.orderingService = orderingService;
     }
 
+    @EVL.Endpoint(id = "settings.get-branding", name = "Get Branding", protocol = EVL.Protocol.HTTP, method = "GET",
+            path = "/api/v1/settings/branding", responseRef = "settings.branding-response",
+            auth = "Public; ETag, max-age 60 s")
     @GetMapping("/branding")
     ResponseEntity<BrandingResponse> branding(@RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
         BrandingDetails branding = this.settingsService.getBranding();
@@ -77,6 +85,13 @@ class SettingsController {
         return ResponseEntity.ok().eTag(etag).cacheControl(PUBLIC_CACHE).body(toResponse(branding));
     }
 
+    @EVL.Endpoint(id = "settings.update-branding", name = "Update Branding", protocol = EVL.Protocol.HTTP,
+            method = "PUT", path = "/api/v1/settings/branding", requestRef = "settings.branding-request",
+            responseRef = "settings.branding-response", flow = "settings.branding-update",
+            auth = "settings:manage; If-Match required",
+            errors = { "settings.error.if-match-required", "settings.error.invalid", "settings.error.version-conflict",
+                    "media.error.not-found", "media.error.not-ready", "media.error.purpose-mismatch",
+                    "media.error.already-claimed" })
     @PutMapping("/branding")
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<BrandingResponse> updateBranding(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
@@ -87,6 +102,9 @@ class SettingsController {
         return ResponseEntity.ok().eTag(ETags.of("branding", updated.version())).body(toResponse(updated));
     }
 
+    @EVL.Endpoint(id = "settings.get-locale", name = "Get Locale", protocol = EVL.Protocol.HTTP, method = "GET",
+            path = "/api/v1/settings/locale", responseRef = "settings.locale-response",
+            auth = "Public; ETag, max-age 60 s")
     @GetMapping("/locale")
     ResponseEntity<LocaleResponse> locale(@RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
         LocaleDetails locale = this.settingsService.getLocale();
@@ -97,6 +115,11 @@ class SettingsController {
         return ResponseEntity.ok().eTag(etag).cacheControl(PUBLIC_CACHE).body(toResponse(locale));
     }
 
+    @EVL.Endpoint(id = "settings.update-locale", name = "Update Locale", protocol = EVL.Protocol.HTTP,
+            method = "PUT", path = "/api/v1/settings/locale", requestRef = "settings.locale-request",
+            responseRef = "settings.locale-response", auth = "settings:manage; If-Match required",
+            errors = { "settings.error.if-match-required", "settings.error.invalid",
+                    "settings.error.version-conflict" })
     @PutMapping("/locale")
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<LocaleResponse> updateLocale(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
@@ -107,12 +130,20 @@ class SettingsController {
         return ResponseEntity.ok().eTag(ETags.of("locale", updated.version())).body(toResponse(updated));
     }
 
+    @EVL.Endpoint(id = "settings.get-ordering", name = "Get Ordering Rules", protocol = EVL.Protocol.HTTP,
+            method = "GET", path = "/api/v1/settings/ordering", responseRef = "settings.ordering-response",
+            auth = "Public; ETag")
     @GetMapping("/ordering")
     ResponseEntity<OrderingResponse> ordering() {
         OrderingDetails ordering = this.orderingService.get();
         return ResponseEntity.ok().eTag(ETags.of("ordering", ordering.version())).body(toResponse(ordering));
     }
 
+    @EVL.Endpoint(id = "settings.update-ordering", name = "Update Ordering Rules", protocol = EVL.Protocol.HTTP,
+            method = "PUT", path = "/api/v1/settings/ordering", requestRef = "settings.ordering-request",
+            responseRef = "settings.ordering-response", auth = "settings:manage; If-Match required",
+            errors = { "settings.error.if-match-required", "settings.error.invalid",
+                    "settings.error.version-conflict" })
     @PutMapping("/ordering")
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<OrderingResponse> updateOrdering(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
@@ -131,6 +162,9 @@ class SettingsController {
     }
 
     /** Rider pay and dispatch rules are for operator staff only, unlike the other sections. */
+    @EVL.Endpoint(id = "settings.get-delivery", name = "Get Delivery Rules", protocol = EVL.Protocol.HTTP,
+            method = "GET", path = "/api/v1/settings/delivery", responseRef = "settings.delivery-response",
+            auth = "settings:manage (operator staff only); ETag")
     @GetMapping("/delivery")
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<DeliveryResponse> delivery() {
@@ -138,6 +172,11 @@ class SettingsController {
         return ResponseEntity.ok().eTag(ETags.of("delivery", delivery.version())).body(toResponse(delivery));
     }
 
+    @EVL.Endpoint(id = "settings.update-delivery", name = "Update Delivery Rules", protocol = EVL.Protocol.HTTP,
+            method = "PUT", path = "/api/v1/settings/delivery", requestRef = "settings.delivery-request",
+            responseRef = "settings.delivery-response", auth = "settings:manage; If-Match required",
+            errors = { "settings.error.if-match-required", "settings.error.invalid",
+                    "settings.error.version-conflict" })
     @PutMapping("/delivery")
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<DeliveryResponse> updateDelivery(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,

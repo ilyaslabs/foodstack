@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.settings.web.dto;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+
 /**
  * {@code GET /api/v1/settings/locale}.
  *
@@ -12,6 +14,7 @@ import java.util.List;
  * @param timezone IANA zone id
  * @param version current version (also the ETag)
  */
+@EVL.Response(id = "settings.locale-response", name = "Locale Response")
 public record LocaleResponse(String defaultLanguage, List<String> languages, List<String> rtlLanguages, String currency,
         String timezone, long version) {
 }

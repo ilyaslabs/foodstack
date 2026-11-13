@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.settings.web.dto;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 
@@ -13,6 +14,7 @@ import jakarta.validation.constraints.NotEmpty;
  * @param currency ISO 4217 code
  * @param timezone IANA zone id
  */
+@EVL.Request(id = "settings.locale-request", name = "Locale Request")
 public record LocaleRequest(@NotBlank String defaultLanguage, @NotEmpty List<String> languages, @NotBlank String currency,
         @NotBlank String timezone) {
 }

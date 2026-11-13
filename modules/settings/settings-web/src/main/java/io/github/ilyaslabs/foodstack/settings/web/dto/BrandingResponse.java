@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.settings.web.dto;
 
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
+
 /**
  * {@code GET /api/v1/settings/branding}: everything the apps need to theme themselves at runtime.
  *
@@ -14,6 +16,7 @@ import java.util.Map;
  * @param version current version (also the ETag)
  * @param updatedAt UTC epoch seconds, or {@code null}
  */
+@EVL.Response(id = "settings.branding-response", name = "Branding Response")
 public record BrandingResponse(String name, String tagline, String primaryColor, String secondaryColor, String fontFamily,
         Logo logo, long version, Long updatedAt) {
 

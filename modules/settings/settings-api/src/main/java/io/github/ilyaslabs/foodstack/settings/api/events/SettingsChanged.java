@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.settings.api.events;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
 
 /**
@@ -11,6 +12,9 @@ import io.github.ilyaslabs.foodstack.platform.core.ModuleEvent;
  * @param version the section's new version
  * @param changedBy user who made the change
  */
+@EVL.Event(id = "settings.settings-changed", name = "Settings Changed", channel = "<namespace>.settings.events",
+        delivery = EVL.Delivery.AT_LEAST_ONCE, ordering = "Per section (Kafka key = section)",
+        schema = "foodstack.settings.SettingsChanged.v1", broker = "platform.kafka")
 public record SettingsChanged(String section, long version, String changedBy) implements ModuleEvent {
 
     public static final String BRANDING = "branding";

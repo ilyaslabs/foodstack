@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.settings.web.dto;
 
+import io.github.ilyaslabs.evl.EVL;
+
 /**
  * {@code PUT /api/v1/settings/ordering} with {@code If-Match}. Rates are basis points (100 = 1%).
  *
@@ -14,6 +16,7 @@ package io.github.ilyaslabs.foodstack.settings.web.dto;
  * @param directCollectionEnabled branches may collect card payments themselves; {@code null} keeps it
  * @param creditLimitMinor default credit limit of a direct-collecting branch; {@code null} keeps it
  */
+@EVL.Request(id = "settings.ordering-request", name = "Ordering Rules Request")
 public record OrderingRequest(boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor, int serviceFeeBasisPoints,
         int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, Boolean priceApprovalRequired,
         Boolean directCollectionEnabled, Long creditLimitMinor, String cardStyle, Boolean savedCardsEnabled) {

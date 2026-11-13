@@ -17,4 +17,14 @@
     <modules>
         <module>foodstack-server</module>
     </modules>
+
+    <!-- EVL architecture annotations (evl.yaml, docs/evl). Compile time only. Every module that reads
+         annotated classes needs it too, or javac warns "Cannot find annotation method". -->
+    <dependencies>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>evl-annotations</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
 </project>

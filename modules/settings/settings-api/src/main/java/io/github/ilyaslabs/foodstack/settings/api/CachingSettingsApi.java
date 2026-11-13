@@ -5,11 +5,19 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.function.Supplier;
 
+import io.github.ilyaslabs.evl.EVL;
+
 /**
  * Keeps each settings answer for a short time, for callers that reach the settings module over the
  * network (TDD 7.5, gap 12d). Settings change rarely, and a branch page or checkout must not cost a
  * call to another service each time it asks for the currency or time zone.
  */
+@EVL.Cache(id = "settings.remote-cache", name = "Remote Settings Cache",
+        store = "Memory of the calling service, one value per section",
+        ttl = "30 s in the server (RemoteSettingsCache); shorter in the integration tests",
+        key = "Section (branding, locale, ordering, delivery)", invalidation = "Time only")
+@EVL.Doc(value = "Wraps SettingsApi only where the settings module runs in another service; the server's "
+        + "RemoteSettingsCache bean post-processor applies it.", decisions = "adr.settings-caching")
 public final class CachingSettingsApi implements SettingsApi {
 
     private final SettingsApi delegate;

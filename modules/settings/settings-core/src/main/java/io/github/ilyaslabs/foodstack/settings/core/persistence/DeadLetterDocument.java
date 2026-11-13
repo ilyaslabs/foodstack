@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.settings.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -26,6 +28,13 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param handledAt when
  * @param expiresAt TTL: 30 days after it failed
  */
+@EVL.DataModel(id = "settings.dead-letter", name = "Dead Letter", module = "settings", owner = "settings",
+        storage = "MongoDB foodstack_settings.settings_dead_letters (unsharded)",
+        lifecycle = "OPEN, then REPLAYED or DISMISSED by one operator",
+        retention = "30 days (TTL index on expiresAt)", pii = true)
+@EVL.Index(fields = { "status", "failedAt" }, reason = "List by status, newest first")
+@EVL.Index(fields = "failedAt", reason = "List every status, newest first")
+@EVL.Index(fields = "expiresAt", reason = "TTL: rows go 30 days after the failure")
 @Document("settings_dead_letters")
 public record DeadLetterDocument(@Id String id, String module, String originalTopic, String consumerGroup, String key,
         String eventType, String eventId, String error, String valueCipher, Instant failedAt, String status,

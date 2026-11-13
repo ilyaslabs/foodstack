@@ -1,0 +1,184 @@
+# yaml-language-server: $schema=https://ilyaslabs.github.io/evl-lib/schema/1.0/evl-document.schema.json
+# The settings module: branding, locale, ordering and delivery rules of the deployment, and the
+# back office's list of failed events. Facts about single classes and methods are @EVL annotations in
+# modules/settings; this file holds the module, its dependency on media, flows, errors, decisions and
+# the settings that are not on a properties class.
+evl: "1.0"
+
+modules:
+  - id: settings
+    name: Settings
+    description: >-
+      Runtime settings of the one operator of a deployment: branding, languages, currency, time zone, ordering rules and delivery rules. Also keeps every dead-lettered event of the installation for the back office. Runs in the main server or as its own service (Module Switch); its data lives in the database `foodstack_settings`.
+    responsibilities:
+      - Branding and locale, read before anyone signs in
+      - Ordering and delivery rules used by checkout and dispatch
+      - Versioned changes with If-Match, announced as Settings Changed
+      - Failed events (dead letters) to look at, replay or dismiss
+    packages:
+      - "io.github.ilyaslabs.foodstack.settings.**"
+
+dependencies:
+  - from: settings
+    to: media
+    type: API
+    reason: "The branding logo is a media asset: settings claims, releases and resolves it through the media API."
+
+errors:
+  - {id: settings.error.invalid, name: Settings invalid, code: SETTINGS_INVALID, condition: "HTTP 400. One or more fields are out of range; details.errors names each field."}
+  - {id: settings.error.version-conflict, name: Changed by someone else, code: SETTINGS_VERSION_CONFLICT, condition: "HTTP 409. The section changed since the editor loaded it; details.currentVersion has the new version."}
+  - {id: settings.error.if-match-required, name: If-Match required, code: IF_MATCH_REQUIRED, condition: "HTTP 400. A change was sent without the ETag the editor started from."}
+  - {id: settings.error.missing, name: Settings missing, code: SETTINGS_MISSING, condition: "HTTP 500. The branding or locale document is missing because the migrations have not run."}
+  - {id: settings.error.status-invalid, name: Status invalid, code: STATUS_INVALID, condition: "HTTP 400. The status filter is not OPEN, REPLAYED or DISMISSED."}
+  - {id: settings.error.dead-letter-not-found, name: Failed event not found, code: DEAD_LETTER_NOT_FOUND, condition: "HTTP 404."}
+  - {id: settings.error.dead-letter-handled, name: Failed event already handled, code: DEAD_LETTER_HANDLED, condition: "HTTP 409. Already replayed or dismissed, possibly by someone else a moment ago."}
+  - {id: settings.error.dead-letter-no-consumer, name: Failed consumer unknown, code: DEAD_LETTER_NO_CONSUMER, condition: "HTTP 409. The record has no original consumer group header, so it cannot be replayed."}
+  - {id: settings.error.dead-letter-foreign, name: Event of another installation, code: DEAD_LETTER_FOREIGN, condition: "HTTP 409. The original topic is outside this installation's namespace."}
+
+dataModels:
+  - id: settings.dead-letter
+    name: Dead Letter
+    fields:
+      - {name: id, meaning: "<dlt topic>:<partition>:<offset>, so a record read twice is stored once", source: {ref: "io.github.ilyaslabs.foodstack.settings.core.persistence.DeadLetterDocument#id"}}
+      - {name: consumerGroup, meaning: "The consumer group that failed, and the only one a replay goes to", source: {ref: "io.github.ilyaslabs.foodstack.settings.core.persistence.DeadLetterDocument#consumerGroup"}}
+      - {name: error, meaning: "Exception class and message, cut to 1,000 characters", source: {ref: "io.github.ilyaslabs.foodstack.settings.core.persistence.DeadLetterDocument#error"}}
+      - {name: valueCipher, meaning: "The event itself, encrypted with the personal-data key", sensitive: true, source: {ref: "io.github.ilyaslabs.foodstack.settings.core.persistence.DeadLetterDocument#valueCipher"}}
+      - {name: status, meaning: "OPEN, REPLAYED or DISMISSED", source: {ref: "io.github.ilyaslabs.foodstack.settings.core.persistence.DeadLetterDocument#status"}}
+
+configProperties:
+  - id: settings.cache-ttl
+    name: Settings cache time
+    description: How long a settings section stays in the Redis cache when nothing changes it.
+    source: {ref: "io.github.ilyaslabs.foodstack.settings.core.SettingsConfiguration#settingsCache"}
+    key: foodstack.settings.cache-ttl
+    defaultValue: 10m
+    affects: [settings.cache]
+
+flows:
+  - id: settings.rebrand
+    name: Rebrand the marketplace
+    category: BUSINESS
+    module: settings
+    actors: [actor.operator]
+    trigger: "The operator changes the marketplace name, colours, font or logo in the back office"
+    postconditions: ["Customer and back-office apps show the new branding"]
+    implementedBy: [settings.branding-update]
+    steps:
+      - {id: upload-logo, type: ACTION, name: Upload a new logo, description: "Only when the logo changes.", realizedBy: [media.image-upload]}
+      - {id: save-branding, type: ACTION, name: Save the branding, realizedBy: [settings.branding-update]}
+      - {id: apps-load-branding, type: ACTION, name: Apps load the new branding, description: "The apps read the branding on start (TDD 14.2); readers may see the old one for up to 60 seconds (Cache-Control).", realizedBy: [settings.get-branding]}
+  - id: settings.branding-update
+    name: Branding Update
+    category: APPLICATION
+    module: settings
+    actors: [actor.operator]
+    trigger: "PUT /api/v1/settings/branding with If-Match"
+    entryPoint: {ref: "io.github.ilyaslabs.foodstack.settings.web.SettingsController#updateBranding"}
+    steps:
+      - id: require-if-match
+        type: ACTION
+        name: Read the version from If-Match
+        errors:
+          - on: settings.error.if-match-required
+            then:
+              - {id: no-if-match, type: FAIL, name: Reject the change, error: settings.error.if-match-required}
+      - id: validate
+        type: ACTION
+        name: Validate name, tagline, colours and font
+        source: {ref: "io.github.ilyaslabs.foodstack.settings.core.application.SettingsService#updateBranding"}
+        errors:
+          - on: settings.error.invalid
+            then:
+              - {id: invalid, type: FAIL, name: Reject the change, error: settings.error.invalid}
+      - id: check-version
+        type: ACTION
+        name: Compare with the current version
+        errors:
+          - on: settings.error.version-conflict
+            then:
+              - {id: conflict, type: FAIL, name: Reject the change, error: settings.error.version-conflict}
+      - id: new-logo
+        type: DECISION
+        name: Different logo?
+        branches:
+          - when: a new logo media id
+            steps:
+              - {id: claim-logo, type: CALL_FLOW, name: Claim the new logo, flow: media.claim-asset}
+        otherwise:
+          - {id: same-logo, type: NOTE, text: "Same logo or no logo: nothing to claim"}
+      - {id: save, type: ACTION, name: Save the branding and add Settings Changed to the outbox in one transaction, realizedBy: [settings.branding-repository]}
+      - {id: publish-changed, type: EVENT, name: Publish Settings Changed, direction: PUBLISH, event: settings.settings-changed}
+      - {id: evict-cache, type: ACTION, name: Evict branding from the settings cache, realizedBy: [settings.cache]}
+      - id: old-logo
+        type: DECISION
+        name: Old logo replaced or removed?
+        branches:
+          - when: "replaced or removed"
+            steps:
+              - {id: release-logo, type: CALL_FLOW, name: Release the old logo, flow: media.release-asset}
+        otherwise:
+          - {id: keep-logo, type: NOTE, text: "The old logo is still the logo"}
+      - {id: resolve-logo, type: ACTION, name: Resolve the logo URLs for the answer, description: "Reads the asset through the media API to return its variant URLs."}
+  - id: settings.dead-letter-capture
+    name: Dead Letter Capture
+    category: BACKGROUND
+    module: settings
+    trigger: "A record arrives on any <namespace>.<module>.events.dlt or <namespace>.audit.dlt topic"
+    entryPoint: {ref: "io.github.ilyaslabs.foodstack.settings.core.deadletters.DeadLetterListener#onDeadLetter"}
+    steps:
+      - {id: consume, type: EVENT, name: Read the dead-lettered record, direction: CONSUME, event: platform.dead-letter}
+      - {id: read-headers, type: ACTION, name: "Read the original topic, consumer group and exception from the headers", source: {ref: "io.github.ilyaslabs.foodstack.settings.core.deadletters.DeadLetterService#record"}}
+      - {id: encrypt, type: ACTION, name: Encrypt the event with the personal-data key}
+      - id: store
+        type: ACTION
+        name: Insert it as OPEN, expiring after 30 days
+        errors:
+          - on: "Duplicate key (the record was read before)"
+            then:
+              - {id: already-kept, type: END, name: Keep the first copy, outcome: "Nothing changes"}
+      - {id: count, type: ACTION, name: Count it in foodstack.dead.letters, description: "The observability chart alerts on this counter."}
+  - id: settings.dead-letter-replay
+    name: Dead Letter Replay
+    category: APPLICATION
+    module: settings
+    actors: [actor.operator]
+    trigger: "An operator replays a failed event from the back office"
+    entryPoint: {ref: "io.github.ilyaslabs.foodstack.settings.web.DeadLetterController#replay"}
+    steps:
+      - id: check
+        type: ACTION
+        name: Check the entry is open, has a consumer group and belongs to this installation
+        source: {ref: "io.github.ilyaslabs.foodstack.settings.core.deadletters.DeadLetterService#replay"}
+        errors:
+          - on: settings.error.dead-letter-handled
+            then:
+              - {id: handled, type: FAIL, name: Refuse, error: settings.error.dead-letter-handled}
+          - on: settings.error.dead-letter-no-consumer
+            then:
+              - {id: no-consumer, type: FAIL, name: Refuse, error: settings.error.dead-letter-no-consumer}
+          - on: settings.error.dead-letter-foreign
+            then:
+              - {id: foreign, type: FAIL, name: Refuse, error: settings.error.dead-letter-foreign}
+      - id: republish
+        type: ACTION
+        name: Publish the decrypted event to its original topic with a replay-for header
+        description: "Waits up to 10 seconds for Kafka; only the consumer group that failed handles it again."
+      - id: mark-replayed
+        type: ACTION
+        name: Mark it REPLAYED if it is still OPEN
+        errors:
+          - on: "Someone else handled it meanwhile"
+            then:
+              - {id: raced, type: FAIL, name: Report the conflict, error: settings.error.dead-letter-handled}
+
+decisions:
+  - id: adr.settings-caching
+    name: Settings answers are cached at two levels
+    status: ACCEPTED
+    context: >-
+      Every page view and checkout asks for the currency, time zone or rules, and settings change rarely. When settings runs in another service, each question would be a network call.
+    decision: >-
+      The settings module keeps each section in Redis (read-through, evicted on change). Where the settings module runs in another service, the caller also keeps each answer in memory for 30 seconds (TDD 7.5, scale gap 12d).
+    consequences: "Other services can see a change up to 30 seconds late."
+    date: "2026-11-03"
+    relates: [settings.cache, settings.remote-cache]

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.settings.web.dto;
 
+import io.github.ilyaslabs.evl.EVL;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -14,6 +15,7 @@ import jakarta.validation.constraints.Size;
  * @param fontFamily CSS font family
  * @param logoMediaId a processed BRANDING upload, or {@code null}
  */
+@EVL.Request(id = "settings.branding-request", name = "Branding Request")
 public record BrandingRequest(@NotBlank @Size(max = 60) String name, @Size(max = 120) String tagline,
         @NotBlank @Pattern(regexp = "#[0-9A-Fa-f]{6}") String primaryColor,
         @NotBlank @Pattern(regexp = "#[0-9A-Fa-f]{6}") String secondaryColor, @NotBlank String fontFamily,

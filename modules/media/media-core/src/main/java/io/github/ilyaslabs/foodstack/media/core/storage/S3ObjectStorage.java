@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.media.core.storage;
 import java.net.URI;
 import java.time.Duration;
 
+import io.github.ilyaslabs.evl.EVL;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
@@ -14,6 +15,10 @@ import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 /** {@link ObjectStorage} on the AWS SDK v2 S3 client. */
+@EVL.Implementation(id = "media.s3-object-storage", name = "S3 Object Storage", of = "media.object-storage",
+        variant = "S3 API (AWS SDK v2)")
+@EVL.Dependency(target = "media.bucket-storage", type = EVL.DependencyType.EXTERNAL,
+        reason = "Every object operation goes to the operator's S3-compatible buckets")
 public class S3ObjectStorage implements ObjectStorage {
 
     private final S3Client client;

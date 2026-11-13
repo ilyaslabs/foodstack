@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://ilyaslabs.github.io/evl-lib/schema/1.0/evl-document.schema.json
+# Shared elements that every module's documentation refers to: who uses FoodStack and what it runs on.
+evl: "1.0"
+
+events:
+  - id: platform.dead-letter
+    name: Dead-lettered event
+    description: >-
+      A copy of a module event whose consumer kept failing after its retries, with the failing consumer group and the exception in the Kafka `DLT_*` headers. Topics keep them 30 days.
+    channel: "<namespace>.<module>.events.dlt and <namespace>.audit.dlt"
+    broker: platform.kafka
+
+infrastructure:
+  - id: platform.mongodb
+    name: MongoDB
+    description: >-
+      Every module has its own database `foodstack_<module>` on a shared cluster, and every collection name starts with the module name.
+    resourceType: MongoDB cluster
+  - id: platform.kafka
+    name: Kafka
+    description: >-
+      Module events. Each module writes events to its own outbox in the same transaction as the data change; a relay sends them to the topic `<namespace>.<module>.events`, keyed by the event subject (TDD 7.1, 7.2).
+    resourceType: Kafka cluster
+  - id: platform.redis
+    name: Redis
+    description: Shared caches, rate limits and work-bucket leases.
+    resourceType: Redis (standalone, Sentinel or Cluster)
+
+actors:
+  - id: actor.operator
+    name: Operator staff
+    description: >-
+      The marketplace operator's back-office users. Settings changes need the `settings:manage` permission.
+    actorType: HUMAN
+  - id: actor.store-staff
+    name: Store staff
+    description: Brand owners and branch staff working in the back office.
+    actorType: HUMAN
+  - id: actor.customer
+    name: Customer
+    description: People ordering food in the customer web app.
+    actorType: HUMAN

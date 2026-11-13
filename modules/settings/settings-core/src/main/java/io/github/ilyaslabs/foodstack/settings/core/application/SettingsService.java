@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.media.api.MediaApi;
 import io.github.ilyaslabs.foodstack.media.api.MediaAssetView;
 import io.github.ilyaslabs.foodstack.media.api.MediaOwner;
@@ -30,6 +31,15 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Branding and locale of the deployment. Reads are cached; every change is versioned, checked
  * against the version the editor saw, and published as {@link SettingsChanged}.
  */
+@EVL.Component(id = "settings.service", name = "Settings Service", module = "settings",
+        layer = EVL.Layer.APPLICATION,
+        responsibilities = { "Read branding and locale through the settings cache",
+                "Validate and save branding and locale changes against the version the editor saw",
+                "Claim the new logo and release the old one in the media module" })
+@EVL.Dependency(target = "media.api", type = EVL.DependencyType.API,
+        reason = "Claims, releases and resolves the branding logo")
+@EVL.Dependency(target = "settings.cache", type = EVL.DependencyType.CACHE,
+        reason = "Read-through reads; evicts the section after a change")
 public class SettingsService {
 
     static final MediaOwner LOGO_OWNER = new MediaOwner("settings", "branding");
@@ -75,6 +85,7 @@ public class SettingsService {
      * Replaces the branding.
      * @param expectedVersion the version the editor started from; a different current version fails with 409
      */
+    @EVL.Producer(event = "settings.settings-changed", when = "Branding saved (section branding)")
     public BrandingDetails updateBranding(UpdateBranding update, long expectedVersion, String userId) {
         validate(update);
         BrandingDocument branding = loadBranding();
@@ -104,6 +115,7 @@ public class SettingsService {
         return branding(saved);
     }
 
+    @EVL.Producer(event = "settings.settings-changed", when = "Locale saved (section locale)")
     public LocaleDetails updateLocale(UpdateLocale update, long expectedVersion, String userId) {
         List<String> languages = validate(update);
         LocaleDocument locale = loadLocale();

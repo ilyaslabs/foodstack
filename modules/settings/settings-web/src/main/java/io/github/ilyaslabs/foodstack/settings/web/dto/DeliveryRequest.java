@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.settings.web.dto;
 
+import io.github.ilyaslabs.evl.EVL;
+
 /**
  * {@code PUT /api/v1/settings/delivery} with {@code If-Match}. Shares are basis points (100 = 1%).
  *
@@ -12,6 +14,7 @@ package io.github.ilyaslabs.foodstack.settings.web.dto;
  * @param proofCodeAboveMinor orders from this total need the customer's code, or {@code null} for never
  * @param locationRetentionDays days of rider location history, 1 to 365
  */
+@EVL.Request(id = "settings.delivery-request", name = "Delivery Rules Request")
 public record DeliveryRequest(int riderPayBasisPoints, long riderPayMinMinor, int offerTimeoutSeconds, int searchRadiusMeters,
         int searchLeadMinutes, int noRiderAlertSeconds, Long proofCodeAboveMinor, int locationRetentionDays) {
 }

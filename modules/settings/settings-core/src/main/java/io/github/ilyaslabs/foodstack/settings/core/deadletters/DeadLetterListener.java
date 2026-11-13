@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.settings.core.deadletters;
 
+import io.github.ilyaslabs.evl.EVL;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import org.springframework.kafka.annotation.KafkaListener;
@@ -8,6 +9,9 @@ import org.springframework.kafka.annotation.KafkaListener;
  * Reads every dead-letter topic of this installation into the back office's list (TDD 7.1). New
  * topics are picked up when the consumer refreshes its metadata (within five minutes).
  */
+@EVL.Component(id = "settings.dead-letter-listener", name = "Dead Letter Listener", module = "settings",
+        layer = EVL.Layer.INTEGRATION,
+        responsibilities = "Read every dead-letter topic of this installation into the back office's list")
 public class DeadLetterListener {
 
     private final DeadLetterService deadLetters;
@@ -16,6 +20,8 @@ public class DeadLetterListener {
         this.deadLetters = deadLetters;
     }
 
+    @EVL.Consumer(event = "platform.dead-letter", flow = "settings.dead-letter-capture", idempotent = true,
+            onFailure = "Container default; a record read twice is stored once (id = topic:partition:offset)")
     @KafkaListener(id = "${foodstack.namespace:foodstack}-settings-dead-letters",
             groupId = "${foodstack.namespace:foodstack}-settings-dead-letters",
             topicPattern = "${foodstack.namespace:foodstack}\\.([a-z]+\\.events|audit)\\.dlt",

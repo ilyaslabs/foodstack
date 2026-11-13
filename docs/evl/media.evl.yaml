@@ -1,0 +1,200 @@
+# yaml-language-server: $schema=https://ilyaslabs.github.io/evl-lib/schema/1.0/evl-document.schema.json
+# The media module: uploads, image processing and the operator's buckets (TDD 13).
+# Facts about single classes and methods are @EVL annotations in modules/media; this file holds the
+# module, flows, errors, the external system, decisions and requirements.
+evl: "1.0"
+
+modules:
+  - id: media
+    name: Media
+    description: >-
+      Owns uploads. Other modules store only media ids and resolve them to URLs through the media API. Runs in the main server or as its own service (Module Switch); its data lives in the database `foodstack_media`.
+    responsibilities:
+      - Presigned direct uploads to the operator's buckets
+      - Image validation and processing into fixed WebP variants
+      - Public and signed URLs for variants
+      - Which entity of another module uses an asset
+    packages:
+      - "io.github.ilyaslabs.foodstack.media.**"
+
+errors:
+  - {id: media.error.not-found, name: Media not found, code: MEDIA_NOT_FOUND, condition: "HTTP 404. No asset with this id, or the id is malformed."}
+  - {id: media.error.not-ready, name: Media not ready, code: MEDIA_NOT_READY, condition: "HTTP 409. A claim for an asset that is not READY."}
+  - {id: media.error.already-claimed, name: Media already in use, code: MEDIA_ALREADY_CLAIMED, condition: "HTTP 409. Another entity already uses the asset."}
+  - {id: media.error.purpose-mismatch, name: Media purpose mismatch, code: MEDIA_PURPOSE_MISMATCH, condition: "HTTP 400. The asset was uploaded for a different purpose than the claim asks for."}
+  - {id: media.error.purpose-required, name: Purpose required, code: MEDIA_PURPOSE_REQUIRED, condition: "HTTP 400. The upload request has no purpose."}
+  - {id: media.error.purpose-denied, name: Purpose not allowed, code: MEDIA_PURPOSE_DENIED, condition: "HTTP 403. Without media:upload, only REVIEW photos may be uploaded."}
+  - {id: media.error.unsupported-type, name: Unsupported image type, code: MEDIA_UNSUPPORTED_TYPE, condition: "HTTP 400. Not JPEG, PNG or WebP, by declared type or by magic bytes."}
+  - {id: media.error.too-large, name: Image too large, code: MEDIA_TOO_LARGE, condition: "HTTP 400. More bytes than foodstack.storage.max-upload-bytes, or more than 50 million pixels."}
+  - {id: media.error.corrupt, name: Image unreadable, code: MEDIA_CORRUPT, condition: "HTTP 400. The bytes could not be decoded as an image."}
+  - {id: media.error.not-uploader, name: Not the uploader, code: MEDIA_NOT_UPLOADER, condition: "HTTP 403. Only the user who started the upload may complete it."}
+  - {id: media.error.not-uploaded, name: Nothing uploaded, code: MEDIA_NOT_UPLOADED, condition: "HTTP 409. Complete was called before the bytes reached the private bucket."}
+  - {id: media.error.rejected-before, name: Upload rejected earlier, code: "<failure code>", condition: "HTTP 409 with the asset's failure code. Complete was called again for a FAILED asset."}
+dataModels:
+  - id: media.asset
+    name: Media Asset
+    lifecycle:
+      states: [PENDING_UPLOAD, READY, FAILED]
+      transitions:
+        - {from: PENDING_UPLOAD, to: READY, by: media.image-upload/mark-ready}
+        - {from: PENDING_UPLOAD, to: FAILED, by: media.image-upload/mark-failed}
+
+externalSystems:
+  - id: media.bucket-storage
+    name: S3-compatible bucket storage
+    description: >-
+      The operator's own public and private buckets (Amazon S3, Cloudflare R2, Backblaze B2 or another S3-compatible store). Browsers upload to it and load images from it directly.
+    systemType: STORAGE
+    url: "https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html"
+    owner: The operator
+
+flows:
+  - id: media.image-upload
+    name: Image Upload
+    decisions: [adr.media-direct-upload]
+    category: APPLICATION
+    module: media
+    actors: [actor.operator, actor.store-staff, actor.customer]
+    trigger: "Someone attaches an image: branding, a store or menu photo, a rider document or a review photo"
+    entryPoint: {ref: "io.github.ilyaslabs.foodstack.media.web.MediaController#startUpload"}
+    postconditions: ["The asset is READY with its variants stored, or FAILED with a failure code"]
+    steps:
+      - id: start-upload
+        type: ACTION
+        name: Check type, size and purpose
+        source: {ref: "io.github.ilyaslabs.foodstack.media.core.application.MediaService#startUpload"}
+        errors:
+          - on: media.error.unsupported-type
+            then:
+              - {id: reject-type, type: FAIL, name: Reject the request, error: media.error.unsupported-type}
+          - on: media.error.too-large
+            then:
+              - {id: reject-size, type: FAIL, name: Reject the request, error: media.error.too-large}
+      - {id: save-pending, type: ACTION, name: Save the asset as PENDING_UPLOAD, realizedBy: [media.asset-repository]}
+      - {id: presign-upload, type: ACTION, name: Presign a PUT URL in the private bucket, realizedBy: [media.s3-object-storage]}
+      - id: client-upload
+        type: WAIT
+        name: Client uploads the bytes
+        for: "The client PUTs the file straight to the private bucket, then calls complete"
+      - id: complete-upload
+        type: ACTION
+        name: Check the caller is the uploader
+        source: {ref: "io.github.ilyaslabs.foodstack.media.core.application.MediaService#completeUpload"}
+        errors:
+          - on: media.error.not-uploader
+            then:
+              - {id: reject-caller, type: FAIL, name: Reject the caller, error: media.error.not-uploader}
+      - id: current-status
+        type: DECISION
+        name: Asset status?
+        branches:
+          - when: READY
+            steps:
+              - {id: already-ready, type: END, name: Return the ready asset, outcome: "Repeat call returns the same asset"}
+          - when: FAILED
+            steps:
+              - {id: already-failed, type: FAIL, name: Report the earlier rejection, error: media.error.rejected-before}
+        otherwise:
+          - id: read-upload
+            type: ACTION
+            name: Read the raw upload
+            realizedBy: [media.s3-object-storage]
+            errors:
+              - on: media.error.not-uploaded
+                then:
+                  - {id: nothing-uploaded, type: FAIL, name: Report nothing uploaded, error: media.error.not-uploaded}
+      - id: process
+        type: ACTION
+        name: Process into WebP variants
+        realizedBy: [media.image-processor]
+        errors:
+          - on: "Image rejected (MEDIA_TOO_LARGE, MEDIA_UNSUPPORTED_TYPE or MEDIA_CORRUPT)"
+            then:
+              - {id: mark-failed, type: ACTION, name: Mark the asset FAILED and delete the raw upload}
+              - {id: reject-image, type: FAIL, name: Reject the image, error: media.error.corrupt}
+      - {id: store-variants, type: ACTION, name: Write the variants to the public or private bucket by purpose, realizedBy: [media.s3-object-storage]}
+      - {id: mark-ready, type: ACTION, name: Save READY and add Media Ready to the outbox in one transaction, realizedBy: [media.asset-repository]}
+      - {id: publish-ready, type: EVENT, name: Publish Media Ready, direction: PUBLISH, event: media.media-ready}
+      - id: keep-original
+        type: DECISION
+        name: Keep originals?
+        branches:
+          - when: "foodstack.storage.keep-originals is false"
+            steps:
+              - {id: delete-raw, type: ACTION, name: Delete the raw upload, realizedBy: [media.s3-object-storage]}
+          - when: "foodstack.storage.keep-originals is true"
+            steps:
+              - {id: keep-raw, type: NOTE, text: "The raw upload stays in the private bucket"}
+  - id: media.claim-asset
+    name: Claim Asset
+    category: APPLICATION
+    module: media
+    trigger: "Another module attaches a ready asset to one of its entities (for example the branding logo)"
+    entryPoint: {ref: "io.github.ilyaslabs.foodstack.media.impl.MediaApiImpl#claim"}
+    steps:
+      - {id: check-caller, type: ACTION, name: Check the caller may attach images, realizedBy: [media.api-impl]}
+      - {id: find-asset, type: ACTION, name: Find the asset, source: {ref: "io.github.ilyaslabs.foodstack.media.core.application.MediaService#claim"}, errors: [{on: media.error.not-found, then: [{id: unknown-asset, type: FAIL, name: Unknown asset, error: media.error.not-found}]}]}
+      - id: ready
+        type: DECISION
+        name: Asset ready and uploaded for this purpose?
+        branches:
+          - when: not READY
+            steps:
+              - {id: not-ready, type: FAIL, name: Refuse, error: media.error.not-ready}
+          - when: other purpose
+            steps:
+              - {id: wrong-purpose, type: FAIL, name: Refuse, error: media.error.purpose-mismatch}
+        otherwise:
+          - {id: purpose-ok, type: NOTE, text: "READY and the purpose matches (or none was asked for)"}
+      - id: current-owner
+        type: DECISION
+        name: Who uses it now?
+        branches:
+          - when: the same entity
+            steps:
+              - {id: same-owner, type: END, name: Nothing to change, outcome: "Claiming again is a no-op"}
+          - when: another entity
+            steps:
+              - {id: taken, type: FAIL, name: Refuse, error: media.error.already-claimed}
+        otherwise:
+          - {id: save-owner, type: ACTION, name: Record the owner, realizedBy: [media.asset-repository]}
+  - id: media.release-asset
+    name: Release Asset
+    category: APPLICATION
+    module: media
+    trigger: "Another module stops using an asset (for example the logo is replaced)"
+    entryPoint: {ref: "io.github.ilyaslabs.foodstack.media.impl.MediaApiImpl#release"}
+    steps:
+      - {id: check-caller, type: ACTION, name: Check the caller may attach images, realizedBy: [media.api-impl]}
+      - {id: clear-owner, type: ACTION, name: Clear the owner when it is this entity, description: "Unknown assets and assets owned by someone else are ignored.", source: {ref: "io.github.ilyaslabs.foodstack.media.core.application.MediaService#release"}}
+
+decisions:
+  - id: adr.media-direct-upload
+    name: Browsers upload straight to the bucket
+    status: ACCEPTED
+    context: "Images can be several megabytes, and the server should not stream large files through the JVM."
+    decision: >-
+      The client asks for a short-lived presigned PUT URL, uploads the bytes directly to the private bucket, then calls complete; the server reads the upload once to process it.
+    consequences: >-
+      The buckets need CORS rules for every site that uploads, and the storage check tests them before the server starts.
+    relates: [media.image-upload, media.storage-check]
+  - id: adr.media-operator-buckets
+    name: Every real install uses the operator's own buckets
+    status: ACCEPTED
+    context: "A bundled storage server would be one more stateful service for the operator to run and back up."
+    decision: >-
+      Single-server and Kubernetes installs use a third-party S3-compatible store. A local S3 stand-in runs only in the Docker Compose trial, local development and tests.
+    alternatives: ["Bundle an S3-compatible server with every install"]
+    consequences: "The server checks the buckets on start and refuses to start with a clear message."
+    date: "2026-11-08"
+    relates: [media.bucket-storage, media.storage-check]
+
+requirements:
+  - id: req.media-storage-works-before-start
+    name: Media storage works before the server takes traffic
+    kind: FUNCTIONAL
+    statement: >-
+      Before taking traffic, the server writes a test file to both buckets, reads it back anonymously at the public base URL, and checks CORS for every site that uploads; any failure stops the start with what to fix.
+    ticket: "docs/TDD.md section 13"
+    priority: MUST
+    relates: [media.storage-check]

@@ -2,11 +2,15 @@ package io.github.ilyaslabs.foodstack.settings.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /** The {@code branding} document of {@code settings_settings} (unsharded: one document per section). */
+@EVL.DataModel(id = "settings.branding", name = "Branding", module = "settings", owner = "settings",
+        storage = "MongoDB foodstack_settings.settings_settings, _id branding (unsharded)")
 @Document("settings_settings")
 public class BrandingDocument {
 
@@ -25,12 +29,16 @@ public class BrandingDocument {
 
     private String fontFamily;
 
+    @EVL.Field(meaning = "Media id of the logo, claimed in the media module for settings/branding")
+    @EVL.Relationship(target = "media.asset", cardinality = EVL.Cardinality.ONE_TO_ONE,
+            ownership = EVL.Ownership.REFERENCE)
     private String logoMediaId;
 
     private Instant updatedAt;
 
     private String updatedBy;
 
+    @EVL.Field(meaning = "Optimistic lock; editors send it back as If-Match")
     @Version
     private Long version;
 

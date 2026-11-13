@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.media.api.MediaPurpose;
 import io.github.ilyaslabs.foodstack.media.api.MediaStatus;
 import io.github.ilyaslabs.foodstack.media.api.events.MediaReady;
@@ -30,6 +31,16 @@ import org.springframework.transaction.support.TransactionTemplate;
  * server never streams large files), then calls {@link #completeUpload}, which validates and
  * processes the image into WebP variants.
  */
+@EVL.Component(id = "media.service", name = "Media Service", module = "media", layer = EVL.Layer.APPLICATION,
+        responsibilities = { "Issue presigned upload URLs for accepted image types and sizes",
+                "Validate and process uploads into WebP variants", "Resolve variant URLs, signed for private assets",
+                "Track the one entity that uses an asset" })
+@EVL.Dependency(target = "media.object-storage", type = EVL.DependencyType.DIRECT,
+        reason = "Presigns, reads, writes and deletes objects in the buckets")
+@EVL.Dependency(target = "media.image-processor", type = EVL.DependencyType.DIRECT,
+        reason = "Turns an upload into the fixed WebP variants")
+@EVL.Doc(value = "Never streams an upload through the server: the client PUTs it to the private bucket.",
+        decisions = "adr.media-direct-upload")
 public class MediaService {
 
     static final Set<String> ACCEPTED_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
@@ -91,6 +102,7 @@ public class MediaService {
     }
 
     /** Validates and processes the uploaded bytes. Only the uploader may complete. */
+    @EVL.Producer(event = "media.media-ready", when = "The upload was processed and its variants are stored")
     public MediaAssetDetails completeUpload(String mediaId, String userId) {
         MediaAssetDocument asset = find(mediaId);
         if (!Objects.equals(asset.getCreatedBy(), userId)) {

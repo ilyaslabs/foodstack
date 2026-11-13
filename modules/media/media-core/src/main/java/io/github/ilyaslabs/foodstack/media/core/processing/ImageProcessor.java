@@ -24,6 +24,7 @@ import com.drew.imaging.ImageProcessingException;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.MetadataException;
 import com.drew.metadata.exif.ExifIFD0Directory;
+import io.github.ilyaslabs.evl.EVL;
 
 /**
  * Turns an uploaded image into the fixed WebP variants (TDD 13): checks magic bytes and limits,
@@ -33,6 +34,10 @@ import com.drew.metadata.exif.ExifIFD0Directory;
  * Pure Java plus the native libwebp bundled in {@code webp-imageio}, so the server needs no
  * system image libraries.
  */
+@EVL.Component(id = "media.image-processor", name = "Image Processor", module = "media", layer = EVL.Layer.DOMAIN,
+        responsibilities = { "Accept only JPEG, PNG and WebP by magic bytes, within size and pixel limits",
+                "Apply the EXIF orientation and drop all metadata",
+                "Resize to thumb 160, card 480 and detail 1080 px and encode WebP" })
 public class ImageProcessor {
 
     private static final long MAX_PIXELS = 50_000_000L;

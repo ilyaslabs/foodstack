@@ -10,6 +10,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.kafka.DeadLetters;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.settings.core.persistence.DeadLetterDocument;
@@ -38,6 +39,12 @@ import org.springframework.kafka.support.KafkaHeaders;
  * that failed (the others already handled it, see {@code ReplayFilter}), or dismisses it. A replay
  * that fails again comes back as a new entry.
  */
+@EVL.Component(id = "settings.dead-letter-service", name = "Dead Letter Service", module = "settings",
+        layer = EVL.Layer.APPLICATION,
+        responsibilities = { "Keep every dead-lettered event, encrypted, for 30 days",
+                "List, show, replay or dismiss a failed event" })
+@EVL.Dependency(target = "platform.kafka", type = EVL.DependencyType.ASYNC,
+        reason = "Replays an event to its original topic for the one consumer group that failed")
 public class DeadLetterService {
 
     static final Duration KEEP = Duration.ofDays(30);
@@ -47,6 +54,7 @@ public class DeadLetterService {
     static final int PAGE = 100;
 
     /** A failed event as the back office lists it. */
+    @EVL.Response(id = "settings.dead-letter-response", name = "Dead Letter")
     public record DeadLetter(String id, String module, String consumer, String eventType, String eventId, String error,
             Instant failedAt, String status, String handledBy, Instant handledAt) {
     }

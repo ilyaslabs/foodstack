@@ -4,11 +4,15 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /** The {@code locale} document of {@code settings_settings}. */
+@EVL.DataModel(id = "settings.locale", name = "Locale", module = "settings", owner = "settings",
+        storage = "MongoDB foodstack_settings.settings_settings, _id locale (unsharded)")
 @Document("settings_settings")
 public class LocaleDocument {
 
@@ -19,10 +23,13 @@ public class LocaleDocument {
 
     private String defaultLanguage;
 
+    @EVL.Field(meaning = "Enabled BCP 47 language tags, default first", example = "[en, ar, ur]")
     private List<String> languages = new ArrayList<>();
 
+    @EVL.Field(meaning = "ISO 4217 code of every price in the deployment", example = "PKR")
     private String currency;
 
+    @EVL.Field(meaning = "IANA time zone of the deployment", example = "Asia/Karachi")
     private String timezone;
 
     private Instant updatedAt;
