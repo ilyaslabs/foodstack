@@ -100,8 +100,9 @@ jobs:
       - name: Docker Compose files are valid
         working-directory: deploy/compose
         run: |
-          docker compose --env-file .env.example config -q
-          docker compose --env-file .env.example -f docker-compose.yml -f docker-compose.local.yml config -q
+          cp .env.example .env    # as the guide says; the server reads it as its env_file
+          docker compose config -q
+          docker compose -f docker-compose.yml -f docker-compose.local.yml config -q
           docker run --rm -e FOODSTACK_SITES=:80 -e FOODSTACK_ADMIN_ROOT_HOST=x -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
           docker run --rm -e FOODSTACK_SITES=:80 -e FOODSTACK_ADMIN_ROOT_HOST=x -v "$PWD/../services/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.10-alpine caddy validate --config /etc/caddy/Caddyfile
       - name: Build images
