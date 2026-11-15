@@ -1,6 +1,5 @@
 package io.github.ilyaslabs.foodstack.geo.core.persistence;
 
-import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -26,7 +25,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param version optimistic lock
  */
 @Document("geo_cities")
-@EVL.Database("foodstack_geo")
 public record CityDocument(@Id String id, Map<String, String> name, double centreLat, double centreLng, boolean active,
         Pricing pricing, Instant updatedAt, String updatedBy, @Version Long version) {
 

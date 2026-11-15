@@ -1,6 +1,5 @@
 package io.github.ilyaslabs.foodstack.media.core.persistence;
 
-import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -17,7 +16,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * Variants are a fixed small map and the owner is a single reference, so the document never grows.
  */
 @Document("media_assets")
-@EVL.Database("foodstack_media")
 public class MediaAssetDocument {
 
     @Id

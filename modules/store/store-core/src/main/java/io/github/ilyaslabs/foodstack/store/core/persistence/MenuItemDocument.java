@@ -1,6 +1,5 @@
 package io.github.ilyaslabs.foodstack.store.core.persistence;
 
-import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -19,7 +18,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * {@code branchIds} limits a branch-only item to chosen branches; absent means every branch (PRD BB-3).
  */
 @Document("store_menu_items")
-@EVL.Database("foodstack_store")
 public class MenuItemDocument {
 
     @Id

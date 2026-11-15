@@ -1,6 +1,5 @@
 package io.github.ilyaslabs.foodstack.settings.core.persistence;
 
-import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -9,7 +8,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 /** The {@code branding} document of {@code settings_settings} (unsharded: one document per section). */
 @Document("settings_settings")
-@EVL.Database("foodstack_settings")
 public class BrandingDocument {
 
     public static final String ID = "branding";

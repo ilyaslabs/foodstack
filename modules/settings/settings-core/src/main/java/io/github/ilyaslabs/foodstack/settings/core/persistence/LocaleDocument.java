@@ -1,6 +1,5 @@
 package io.github.ilyaslabs.foodstack.settings.core.persistence;
 
-import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -11,7 +10,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 /** The {@code locale} document of {@code settings_settings}. */
 @Document("settings_settings")
-@EVL.Database("foodstack_settings")
 public class LocaleDocument {
 
     public static final String ID = "locale";

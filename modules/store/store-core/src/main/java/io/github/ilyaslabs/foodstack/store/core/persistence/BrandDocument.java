@@ -1,6 +1,5 @@
 package io.github.ilyaslabs.foodstack.store.core.persistence;
 
-import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -21,7 +20,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * its branches share: name, images, cuisines, the menu and the default commission (TDD 5.7).
  */
 @Document("store_brands")
-@EVL.Database("foodstack_store")
 public class BrandDocument {
 
     @Id

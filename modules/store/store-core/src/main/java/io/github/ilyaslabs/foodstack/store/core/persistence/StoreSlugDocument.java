@@ -1,6 +1,5 @@
 package io.github.ilyaslabs.foodstack.store.core.persistence;
 
-import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -13,7 +12,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * old links do not redirect (TDD 22).
  */
 @Document("store_slugs")
-@EVL.Database("foodstack_store")
 public class StoreSlugDocument {
 
     @Id

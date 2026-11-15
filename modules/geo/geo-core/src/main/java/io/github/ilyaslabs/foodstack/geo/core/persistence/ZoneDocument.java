@@ -1,6 +1,5 @@
 package io.github.ilyaslabs.foodstack.geo.core.persistence;
 
-import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -12,7 +11,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * written). A ring zone keeps its centre and radius so the editor can show it again.
  */
 @Document("geo_zones")
-@EVL.Database("foodstack_geo")
 public class ZoneDocument {
 
     @Id
