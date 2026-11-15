@@ -7,6 +7,8 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.CityView;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
@@ -89,6 +91,8 @@ class StoreSeeder {
         this.mongo = storeMongo;
     }
 
+    @Flow(value = "seed-store", label = "Seed demo restaurants", description = "Profile test-seed only; Spice Route and Napoli Slice with menus and owners")
+    @EVL.Job(trigger = "application ready (test-seed profile)")
     @EventListener(ApplicationReadyEvent.class)
     @Order(30)
     void seed() {
@@ -100,6 +104,7 @@ class StoreSeeder {
         }
         // Seeding is the platform's own work: calls to identity and media run with a service token
         this.serviceCalls.run(() -> {
+            // @flow seed-store>restaurants: Brands, branches, sections and items
             spiceRoute();
             napoli();
             // A second Spice Route branch, still a draft, so the brand shows how branches share one menu

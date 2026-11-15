@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.media.api.MediaApi;
 import io.github.ilyaslabs.foodstack.media.api.MediaOwner;
 import io.github.ilyaslabs.foodstack.media.api.MediaPurpose;
@@ -99,6 +100,7 @@ public class MenuService {
 
     // ---- Editor --------------------------------------------------------------------------
 
+    @Flow(value = "menu-editor>scope?>brand>load", label = "Items and sections of the brand")
     public MenuDetails editorMenu(String brandId) {
         requireBrand(brandId);
         LocaleView locale = this.settings.getLocale();
@@ -115,6 +117,7 @@ public class MenuService {
     }
 
     /** The brand menu with only the items one branch of it sells. */
+    @Flow(value = "menu-editor>scope?>branch>load", label = "Items the branch sells with its overrides")
     public MenuDetails branchEditorMenu(String brandId, String storeId) {
         StoreDocument store = this.stores.findById(storeId)
             .filter((s) -> s.getBrandId().equals(brandId))
@@ -130,6 +133,7 @@ public class MenuService {
         return new MenuDetails(menu.brandId(), menu.currency(), menu.languages(), sections);
     }
 
+    @Flow(value = "menu-section-create>save", label = "Validate, save section, MenuChanged")
     public MenuDetails.Section createSection(String brandId, Map<String, String> name, String userId) {
         requireBrand(brandId);
         LocaleView locale = this.settings.getLocale();
@@ -155,6 +159,7 @@ public class MenuService {
                 StoreService.version(saved.getVersion()), List.of());
     }
 
+    @Flow(value = "menu-section-update>save", label = "Validate, save section, MenuChanged")
     public MenuDetails.Section updateSection(String brandId, String sectionId, Map<String, String> name, int sortOrder,
             long expectedVersion, String userId) {
         LocaleView locale = this.settings.getLocale();
@@ -173,6 +178,7 @@ public class MenuService {
     }
 
     /** Deletes an empty section; move or delete its items first. */
+    @Flow(value = "menu-section-delete>delete", label = "Delete if empty", onError = "SECTION_NOT_EMPTY")
     public void deleteSection(String brandId, String sectionId, String userId) {
         MenuSectionDocument section = findSection(brandId, sectionId);
         if (this.items.countByBrandIdAndSectionIdAndDeletedAtIsNull(brandId, sectionId) > 0) {
@@ -184,9 +190,12 @@ public class MenuService {
         });
     }
 
+    @Flow(value = "menu-item-create>save", label = "Create the item")
     public MenuDetails.Item createItem(String brandId, MenuItemInput input, String userId) {
+        // @flow menu-item-create>save>validate: Section, names, price, dietary tags, up to 10 modifier groups, branches
         requireBrand(brandId);
         validate(brandId, input);
+        // @flow menu-item-create>save>limit: Item limit [on error MENU_LIMIT]
         if (this.items.countByBrandIdAndDeletedAtIsNull(brandId) >= MAX_ITEMS) {
             throw new ModuleException.Conflict("A menu can have at most " + MAX_ITEMS + " items", "MENU_LIMIT");
         }
@@ -196,20 +205,25 @@ public class MenuService {
         item.setBrandId(brandId);
         item.setCreatedAt(now);
         item.setCreatedBy(userId);
+        // @flow menu-item-create>save>apply: Copy the input, claim the image with media
         apply(item, input, null, userId, now);
         MenuItemDocument saved = inMenuTransaction(brandId, userId, () -> this.items.insert(item));
         return itemDetails(saved);
     }
 
+    @Flow(value = "menu-item-update>save", label = "Update the item")
     public MenuDetails.Item updateItem(String brandId, String itemId, MenuItemInput input, long expectedVersion,
             String userId) {
+        // @flow menu-item-update>save>validate: Item input and edited version
         validate(brandId, input);
         MenuItemDocument item = findItem(brandId, itemId);
         StoreService.requireVersion("item", item.getVersion(), expectedVersion, "MENU_VERSION_CONFLICT");
         String oldImage = item.getImageMediaId();
         // with price approval on, changed prices wait for operator staff and the rest applies now
+        // @flow menu-item-update>save>hold: Hold changed prices as requests [when price approval needed]
         MenuPrices.Held held = (this.prices != null) ? this.prices.hold(item, input, userId)
                 : new MenuPrices.Held(input, List.of());
+        // @flow menu-item-update>save>apply: Copy the input, claim a new image with media
         apply(item, held.input(), oldImage, userId, this.clock.instant());
         MenuItemDocument saved = inMenuTransaction(brandId, userId, () -> {
             if (this.prices != null) {
@@ -217,6 +231,7 @@ public class MenuService {
             }
             return this.items.save(item);
         });
+        // @flow menu-item-update>save>release: Release the old image [when replaced]
         if (oldImage != null && !oldImage.equals(saved.getImageMediaId())) {
             this.media.release(oldImage, owner(itemId));
         }
@@ -224,6 +239,7 @@ public class MenuService {
     }
 
     /** Removes an item from the menu; past orders keep their own copy (soft delete). */
+    @Flow(value = "menu-item-delete>delete", label = "Soft delete, release image")
     public void deleteItem(String brandId, String itemId, String userId) {
         MenuItemDocument item = findItem(brandId, itemId);
         item.setDeletedAt(this.clock.instant());
@@ -237,6 +253,7 @@ public class MenuService {
     // ---- Branch availability -------------------------------------------------------------
 
     /** Marks an item, or one of its modifier options, sold out or available at one branch (PRD ST-4). */
+    @Flow(value = "store-sold-out>save", label = "Mark sold out")
     public void setSoldOut(String storeId, String itemId, String optionId, boolean soldOut, String userId) {
         StoreDocument store = this.stores.findById(storeId)
             .orElseThrow(() -> new ModuleException.NotFound("Branch " + storeId + " not found", "STORE_NOT_FOUND"));
@@ -246,6 +263,7 @@ public class MenuService {
             .noneMatch((o) -> o.id().equals(option))) {
             throw new ModuleException.NotFound("Option " + option + " not found", "MENU_OPTION_NOT_FOUND");
         }
+        // @flow store-sold-out>save>override: Find or create the branch override
         String id = storeId + ":" + itemId + ((option != null) ? ":" + option : "");
         ItemOverrideDocument override = this.overrides.findById(id).orElseGet(() -> {
             ItemOverrideDocument created = new ItemOverrideDocument();
@@ -258,20 +276,26 @@ public class MenuService {
         override.setSoldOut(soldOut);
         override.setUpdatedAt(this.clock.instant());
         override.setUpdatedBy(userId);
+        // @flow store-sold-out>save>write: Save and ItemAvailabilityChanged
         this.transaction.executeWithoutResult((status) -> {
             this.overrides.save(override);
             this.outbox.append(new ItemAvailabilityChanged(storeId, itemId, option, soldOut, userId));
         });
+        // @flow store-sold-out>save>evict: Bump the branch's menu cache
         this.cache.evict(List.of(storeId));
     }
 
     // ---- Customers -----------------------------------------------------------------------
 
     /** The branch's menu: brand items for this branch, with its sold-out marks. */
+    @Flow(value = "store-menu>menu>cache", label = "Menu cache, else build")
+    @Flow(value = "store-api-validate-order>validate>menu", label = "Effective menu through the cache")
+    @Flow(value = "store-api-listing>build>menu", label = "Effective menu through the cache")
     public EffectiveMenu effectiveMenu(String storeId) {
         return this.cache.get(storeId, () -> buildEffectiveMenu(storeId));
     }
 
+    @Flow(value = "store-menu>menu>cache>build", label = "Brand items for this branch with its price overrides and sold-out marks", each = "menu item")
     private EffectiveMenu buildEffectiveMenu(String storeId) {
         StoreDocument store = this.stores.findById(storeId)
             .orElseThrow(() -> new ModuleException.NotFound("Branch " + storeId + " not found", "STORE_NOT_FOUND"));
@@ -312,6 +336,9 @@ public class MenuService {
 
     // ---- Helpers -------------------------------------------------------------------------
 
+    @Flow(value = "menu-item-create>save>write", label = "Save, MenuChanged, evict every branch's menu")
+    @Flow(value = "menu-item-update>save>write", label = "Save with price requests, MenuChanged, evict every branch's menu")
+    @Flow(value = "menu-item-delete>delete>write", label = "Save, MenuChanged, evict every branch's menu")
     private <T> T inMenuTransaction(String brandId, String userId, java.util.function.Supplier<T> write) {
         T result = this.transaction.execute((status) -> {
             T value = write.get();

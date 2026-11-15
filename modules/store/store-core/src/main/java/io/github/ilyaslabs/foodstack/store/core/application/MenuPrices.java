@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
@@ -151,6 +152,7 @@ public class MenuPrices {
         APPLIED, PENDING
     }
 
+    @Flow(value = "menu-branch-prices>load", label = "Overrides and waiting requests")
     public BranchPrices branchPrices(String storeId) {
         StoreDocument store = findStore(storeId);
         List<BranchPrice> prices = this.overrides.findByStoreId(storeId)
@@ -169,7 +171,9 @@ public class MenuPrices {
      * Sets the branch's own price for an item, or for one of its options ({@code optionId});
      * {@code priceMinor} {@code null} goes back to the brand price.
      */
+    @Flow(value = "menu-branch-price-set>set", label = "Set the price")
     public Outcome setBranchPrice(String storeId, String itemId, String optionId, Long priceMinor, String userId) {
+        // @flow menu-branch-price-set>set>validate: Item and option of the brand, price 0 or more
         StoreDocument store = findStore(storeId);
         MenuItemDocument item = this.items.findById(itemId)
             .filter((i) -> i.getBrandId().equals(store.getBrandId()) && i.getDeletedAt() == null)
@@ -193,16 +197,21 @@ public class MenuPrices {
         long current = (existing != null && existing.getPriceOverrideMinor() != null) ? existing.getPriceOverrideMinor()
                 : brandPrice;
         Long wanted = (priceMinor != null && priceMinor == brandPrice) ? null : priceMinor;
+        // @flow menu-branch-price-set>set>approval?: Needs approval?
+        // @flow menu-branch-price-set>set>approval?>request: Save a PENDING price change [when approval required and not operator]
         if (approvalNeeded()) {
             PriceChangeDocument request = request(store.getBrandId(), storeId, itemId, option, current, wanted, userId,
                     this.clock.instant());
             this.changes.save(request);
             return Outcome.PENDING;
         }
+        // @flow menu-branch-price-set>set>approval?>apply: Apply now [when else]
         applyBranchPrice(store, itemId, option, wanted, userId);
         return Outcome.APPLIED;
     }
 
+    @Flow(value = "menu-branch-price-set>set>approval?>apply>write", label = "Save override, MenuChanged, evict the branch's menu")
+    @Flow(value = "menu-price-approve>decide>kind?>branch", label = "Apply the branch price", when = "branch price")
     private void applyBranchPrice(StoreDocument store, String itemId, String option, Long priceMinor, String userId) {
         String overrideId = store.getId() + ":" + itemId + ((option != null) ? ":" + option : "");
         ItemOverrideDocument override = this.overrides.findById(overrideId).orElseGet(() -> {
@@ -249,22 +258,28 @@ public class MenuPrices {
     }
 
     /** Price changes of the brand and its branches waiting for approval, for the brand's menu editor. */
+    @Flow(value = "menu-price-changes-brand>load", label = "PENDING changes of the brand and its branches")
     public List<PriceChange> brandPending(String brandId) {
         return views(this.changes.findByBrandIdAndStatus(brandId, PriceChangeDocument.PENDING));
     }
 
+    @Flow(value = "menu-price-changes>load", label = "All PENDING changes")
     public List<PriceChange> pending() {
         requireOperator();
         return views(this.changes.findByStatusOrderByRequestedAtAsc(PriceChangeDocument.PENDING, PageRequest.of(0, MAX_LISTED)));
     }
 
     /** Approves (applies the price) or rejects a waiting change. */
+    @Flow(value = "menu-price-approve>decide", label = "Decide")
+    @Flow(value = "menu-price-reject>decide", label = "Decide")
     public PriceChange decide(String requestId, boolean approve, String userId) {
+        // @flow menu-price-approve>decide>load, menu-price-reject>decide>load: Operator only; load the PENDING request
         requireOperator();
         PriceChangeDocument request = this.changes.findById(requestId)
             .filter((c) -> PriceChangeDocument.PENDING.equals(c.status()))
             .orElseThrow(() -> new ModuleException.NotFound("No price change " + requestId + " is waiting",
                     "PRICE_CHANGE_NOT_FOUND"));
+        // @flow menu-price-approve>decide>kind?: Branch or brand price?
         if (approve) {
             if (request.storeId() != null) {
                 applyBranchPrice(findStore(request.storeId()), request.itemId(), request.optionId(), request.proposedMinor(),
@@ -274,6 +289,7 @@ public class MenuPrices {
                 applyBrandPrice(request, userId);
             }
         }
+        // @flow menu-price-approve>decide>mark, menu-price-reject>decide>mark: Mark APPROVED or REJECTED
         PriceChangeDocument decided = this.changes.save(new PriceChangeDocument(request.id(), request.brandId(),
                 request.storeId(), request.itemId(), request.optionId(), request.currentMinor(), request.proposedMinor(),
                 approve ? PriceChangeDocument.APPROVED : PriceChangeDocument.REJECTED, request.requestedBy(),
@@ -281,6 +297,7 @@ public class MenuPrices {
         return views(List.of(decided)).getFirst();
     }
 
+    @Flow(value = "menu-price-approve>decide>kind?>brand", label = "Apply the brand price, MenuChanged, evict every branch's menu", when = "brand price")
     private void applyBrandPrice(PriceChangeDocument request, String userId) {
         MenuItemDocument item = this.items.findById(request.itemId())
             .filter((i) -> i.getDeletedAt() == null)

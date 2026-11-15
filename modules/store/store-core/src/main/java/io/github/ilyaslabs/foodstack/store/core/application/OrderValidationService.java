@@ -11,6 +11,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.store.api.OrderLineRequest;
@@ -55,11 +56,13 @@ public class OrderValidationService {
         return Set.copyOf(owners);
     }
 
+    @Flow(value = "store-api-validate-order>validate", label = "Price the lines")
     public OrderValidationView validate(OrderValidationRequest request) {
         List<OrderLineRequest> lines = (request.lines() != null) ? request.lines() : List.of();
         if (lines.size() > MAX_LINES) {
             throw new ModuleException.BadRequest("An order has at most " + MAX_LINES + " lines", "TOO_MANY_LINES");
         }
+        // @flow store-api-validate-order>validate>store: Branch, brand, open now
         StoreDocument store = this.stores.findStore(request.storeId());
         BrandDocument brand = this.stores.findBrand(store.getBrandId());
         LocaleView locale = this.settings.getLocale();
@@ -71,6 +74,7 @@ public class OrderValidationService {
         List<PricedLine> priced = new ArrayList<>();
         List<LineProblem> problems = new ArrayList<>();
         long subtotal = 0;
+        // @flow store-api-validate-order>validate>lines: Item exists, not sold out, quantity, modifier min/max, option prices [each line]
         for (int index = 0; index < lines.size(); index++) {
             OrderLineRequest line = lines.get(index);
             EffectiveMenu.Item item = items.get(line.itemId());

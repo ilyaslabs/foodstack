@@ -1,5 +1,8 @@
 package io.github.ilyaslabs.foodstack.store.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -18,6 +21,8 @@ public class SlugBackfill {
         this.stores = stores;
     }
 
+    @Flow(value = "store-slug-backfill", label = "Give old branches a web address", description = "Safe on several instances at once")
+    @EVL.Job(trigger = "application ready")
     @EventListener(ApplicationReadyEvent.class)
     @Order(40)
     public void assign() {

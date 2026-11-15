@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.CityView;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaRequest;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
@@ -144,7 +145,9 @@ public class StoreService {
      * Onboards a restaurant (PRD ST-1, BB-1): a brand with the same name and its first branch, in
      * {@code DRAFT} until the operator makes it live. Opening hours start at 11:00 to 23:00 daily.
      */
+    @Flow(value = "store-onboard>create", label = "Create brand and branch")
     public StoreDetails onboard(NewStore command, String userId) {
+        // @flow store-onboard>create>validate: Names, address, location, prep time, commission, city
         LocaleView locale = this.settings.getLocale();
         Map<String, String> errors = new LinkedHashMap<>();
         requireText(errors, "brandName", command.brandName(), 1, 80);
@@ -165,6 +168,7 @@ public class StoreService {
         }
         failIfAny(errors, "STORE_INVALID");
 
+        // @flow store-onboard>create>build: Brand, DRAFT branch, time zone from location, free slug
         Instant now = this.clock.instant();
         BrandDocument brand = new BrandDocument();
         brand.setId(Ids.newId());
@@ -200,6 +204,7 @@ public class StoreService {
         store.setUpdatedBy(userId);
         store.setSlug(freeSlug(Slugs.of(brand.getName(), store.getBranchName())));
 
+        // @flow store-onboard>create>save: Slug, brand, branch, BrandChanged and StoreChanged in one transaction [on error DuplicateKeyException -> SLUG_TAKEN]
         StoreDocument saved = claimingSlug(() -> this.transaction.execute((status) -> {
             this.slugs.insert(new StoreSlugDocument(store.getSlug(), store.getId(), now));
             BrandDocument savedBrand = this.brands.insert(brand);
@@ -208,6 +213,7 @@ public class StoreService {
             this.outbox.append(new StoreChanged(result.getId(), result.getBrandId(), version(result.getVersion()), userId));
             return result;
         }));
+        // @flow store-onboard>create>remember: Publish branch->brand for access checks
         rememberBrand(saved);
         return details(saved, brand, locale);
     }
@@ -217,8 +223,11 @@ public class StoreService {
      * live. The brand's menu is shared at once; the branch needs its own hours, zones and riders.
      * The brand shows in the apps from its second branch on.
      */
+    @Flow(value = "brand-branch-add>create", label = "Create the branch")
+    @Flow(value = "seed-store>branch", label = "Second Spice Route branch")
     public StoreDetails addBranch(String brandId, NewBranch command, String userId) {
         LocaleView locale = this.settings.getLocale();
+        // @flow brand-branch-add>create>validate: Name unique in brand, address, location, city
         BrandDocument brand = findBrand(brandId);
         Map<String, String> errors = new LinkedHashMap<>();
         requireText(errors, "branchName", command.branchName(), 1, 60);
@@ -235,6 +244,7 @@ public class StoreService {
             errors.put("branchName", "another branch of this brand has this name");
         }
         failIfAny(errors, "STORE_INVALID");
+        // @flow brand-branch-add>create>limit: Branch limit [on error BRANCH_LIMIT]
         if (existing.size() >= MAX_BRANCHES) {
             throw new ModuleException.Conflict("A brand can have at most " + MAX_BRANCHES + " branches", "BRANCH_LIMIT");
         }
@@ -263,6 +273,7 @@ public class StoreService {
         brand.setBranchCount(existing.size() + 1);
         brand.setUpdatedAt(now);
         brand.setUpdatedBy(userId);
+        // @flow brand-branch-add>create>save: Slug, branch, branch count, BrandChanged and StoreChanged in one transaction
         StoreDocument saved = claimingSlug(() -> this.transaction.execute((status) -> {
             this.slugs.insert(new StoreSlugDocument(store.getSlug(), store.getId(), now));
             BrandDocument savedBrand = this.brands.save(brand);
@@ -271,11 +282,13 @@ public class StoreService {
             this.outbox.append(new StoreChanged(result.getId(), brandId, version(result.getVersion()), userId));
             return result;
         }));
+        // @flow brand-branch-add>create>remember: Publish branch->brand for access checks
         rememberBrand(saved);
         return details(saved, findBrand(brandId), locale);
     }
 
     /** The brand's branches, in the order they were added. */
+    @Flow(value = "brand-branches>list", label = "Branches of the brand")
     public List<StoreSummary> branches(String brandId) {
         findBrand(brandId);
         return summaries(this.stores.findByBrandId(brandId)
@@ -285,6 +298,7 @@ public class StoreService {
     }
 
     /** Publishes every branch's brand for access checks and moves owners kept on single branches to their brand. */
+    @Flow(value = "store-branch-access-backfill>run", label = "Walk every branch", each = "page of 200 branches")
     public int backfillBranchAccess() {
         int moved = 0;
         String after = "";
@@ -293,6 +307,7 @@ public class StoreService {
             if (page.isEmpty()) {
                 return moved;
             }
+            // @flow store-branch-access-backfill>run>remember: Publish branch->brand, move brand owners off the branch [each branch]
             for (StoreDocument store : page) {
                 rememberBrand(store);
                 moved += moveBrandOwnersOffBranch(store);
@@ -337,6 +352,9 @@ public class StoreService {
      * The branch a customer link points at: its slug, or its id (the back office and API clients
      * still use ids). Unknown slugs are not found; a changed slug does not redirect.
      */
+    @Flow(value = "store-page>resolve>slug", label = "Slug to branch id")
+    @Flow(value = "store-menu>resolve>slug", label = "Slug to branch id")
+    @Flow(value = "store-delivery-quote>resolve>slug", label = "Slug to branch id")
     public String resolve(String key) {
         if (Slugs.looksLikeId(key)) {
             return key;
@@ -347,7 +365,9 @@ public class StoreService {
     }
 
     /** Sets the branch's web address (operator only); the old slug is freed. */
+    @Flow(value = "store-update-slug>change", label = "Change the slug")
     public StoreDetails updateSlug(String storeId, String slug, long expectedVersion, String userId) {
+        // @flow store-update-slug>change>validate: 3+ lower-case letters, digits, single hyphens; edited version
         String wanted = (slug != null) ? slug.trim().toLowerCase(Locale.ROOT) : null;
         if (!Slugs.isValid(wanted)) {
             failIfAny(Map.of("slug", "use 3 to " + Slugs.MAX_LENGTH + " lower-case letters, digits and single hyphens"),
@@ -355,12 +375,16 @@ public class StoreService {
         }
         StoreDocument store = findStore(storeId);
         requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
+        // @flow store-update-slug>change>same?: Changed?
+        // @flow store-update-slug>change>same?>unchanged: Nothing to do [when same slug]
         if (wanted.equals(store.getSlug())) {
             return details(store, findBrand(store.getBrandId()), this.settings.getLocale());
         }
+        // @flow store-update-slug>change>same?>taken: Reject SLUG_TAKEN [when used by another branch]
         if (this.slugs.existsById(wanted)) {
             throw slugTaken();
         }
+        // @flow store-update-slug>change>same?>save: Insert new slug, free the old one [when free]
         String old = store.getSlug();
         store.setSlug(wanted);
         return claimingSlug(() -> saveBranch(store, () -> {
@@ -376,6 +400,7 @@ public class StoreService {
      * and the demo seeder's. Runs at start-up; safe to run on several instances at once.
      * @return how many branches got one
      */
+    @Flow(value = "store-slug-backfill>assign", label = "Give branches without a slug one", each = "batch of 100")
     public int assignMissingSlugs(String userId) {
         int assigned = 0;
         for (int attempt = 0; attempt < 1000; attempt++) {
@@ -424,11 +449,16 @@ public class StoreService {
                 Map.of("errors", Map.of("slug", "already used by another restaurant")));
     }
 
+    @Flow(value = "store-details>load", label = "Branch with brand and locale")
+    @Flow(value = "store-page>resolve>load", label = "Load the branch")
+    @Flow(value = "store-menu>resolve>load", label = "Load the branch")
+    @Flow(value = "store-delivery-quote>resolve>load", label = "Load the branch")
     public StoreDetails get(String storeId) {
         StoreDocument store = findStore(storeId);
         return details(store, findBrand(store.getBrandId()), this.settings.getLocale());
     }
 
+    @Flow(value = "brand-view>load", label = "Load the brand")
     public BrandDetails getBrand(String brandId) {
         return brandDetails(findBrand(brandId));
     }
@@ -438,6 +468,7 @@ public class StoreService {
      * @param onlyIds limit to these branches (a store owner's), or {@code null} for every branch
      * @param query optional text matched against brand and branch names
      */
+    @Flow(value = "store-list>who?>all>query", label = "Newest first, name filter, logos from brands")
     public List<StoreSummary> list(Set<String> onlyIds, String query, int limit) {
         int size = Math.min(Math.max(limit, 1), 200);
         List<StoreDocument> found = (onlyIds != null) ? this.stores.findByIdInOrderByIdDesc(onlyIds)
@@ -454,6 +485,7 @@ public class StoreService {
      * Branches a store-area user works on: their own branches plus every branch of the brands they
      * own (PRD BB-5), newest first.
      */
+    @Flow(value = "store-list>who?>own>query", label = "Own and brand branches, newest first")
     public List<StoreSummary> listFor(Set<String> storeIds, Set<String> brandIds) {
         Map<String, StoreDocument> found = new LinkedHashMap<>();
         if (!storeIds.isEmpty()) {
@@ -486,7 +518,9 @@ public class StoreService {
     // ---- Brand ---------------------------------------------------------------------------
 
     /** Replaces the brand's name, description, cuisines and images (PRD BB-2). */
+    @Flow(value = "brand-update>save", label = "Save the brand")
     public BrandDetails updateBrand(String brandId, UpdateBrand update, long expectedVersion, String userId) {
+        // @flow brand-update>save>validate: Name, description per language, cuisines; edited version
         LocaleView locale = this.settings.getLocale();
         Map<String, String> errors = new LinkedHashMap<>();
         requireText(errors, "name", update.name(), 1, 80);
@@ -501,6 +535,7 @@ public class StoreService {
         String oldCover = brand.getCoverMediaId();
         String newLogo = blankToNull(update.logoMediaId());
         String newCover = blankToNull(update.coverMediaId());
+        // @flow brand-update>save>claim: Claim new logo and cover with media [when changed]
         if (newLogo != null && !newLogo.equals(oldLogo)) {
             brand.setLogoUrls(urls(this.media.claim(newLogo, MediaPurpose.STORE, owner)));
         }
@@ -520,6 +555,7 @@ public class StoreService {
         brand.setCuisines(cuisines);
         brand.setUpdatedAt(this.clock.instant());
         brand.setUpdatedBy(userId);
+        // @flow brand-update>save>write: Save brand, copy the name to branches, BrandChanged [each branch]
         List<StoreDocument> branches = this.stores.findByBrandId(brandId);
         BrandDocument saved = this.transaction.execute((status) -> {
             BrandDocument result = this.brands.save(brand);
@@ -532,6 +568,7 @@ public class StoreService {
             this.outbox.append(new BrandChanged(brandId, version(result.getVersion()), userId));
             return result;
         });
+        // @flow brand-update>save>release: Release replaced images [when replaced]
         releaseIfReplaced(oldLogo, newLogo, owner);
         releaseIfReplaced(oldCover, newCover, owner);
         return brandDetails(saved);
@@ -547,6 +584,7 @@ public class StoreService {
      * now. Orders take the commission in force when they are placed; a change replaces any change
      * planned on or after its date.
      */
+    @Flow(value = "brand-commission>plan", label = "Plan the change", description = "replaces changes planned on or after its date")
     public BrandDetails updateCommission(String brandId, Commission commission, Instant effectiveFrom, String userId) {
         Map<String, String> errors = new LinkedHashMap<>();
         validate(errors, commission);
@@ -570,6 +608,7 @@ public class StoreService {
     public static final int MAX_SEARCH_BOOST = 3;
 
     /** The brand's search boost, 0 to 3 (operator only). */
+    @Flow(value = "brand-search-boost-view>load", label = "Read the boost")
     public int searchBoost(String brandId) {
         return findBrand(brandId).getSearchBoost();
     }
@@ -578,6 +617,7 @@ public class StoreService {
      * Moves a brand up in search (operator only, TDD 11): 0 is none, 1 to 3 rank its branches
      * higher among those equally open, near and well rated. Search re-reads its branches.
      */
+    @Flow(value = "brand-search-boost-update>save", label = "Save boost and BrandChanged", description = "search re-reads its branches")
     public int updateSearchBoost(String brandId, int level, String userId) {
         if (level < 0 || level > MAX_SEARCH_BOOST) {
             throw new ModuleException.BadRequest("The boost is 0 to " + MAX_SEARCH_BOOST, "SEARCH_BOOST_INVALID",
@@ -600,6 +640,7 @@ public class StoreService {
      * Plans a branch's own commission from a date (operator only, PRD BB-8, FI-2); a {@code null}
      * commission goes back to the brand's from that date.
      */
+    @Flow(value = "store-commission>plan", label = "Plan the branch's commission")
     public StoreDetails updateBranchCommission(String storeId, Commission commission, Instant effectiveFrom, String userId) {
         Map<String, String> errors = new LinkedHashMap<>();
         if (commission != null) {
@@ -620,8 +661,10 @@ public class StoreService {
      *
      * @param creditLimitMinor the branch's own limit, or {@code null} for the operator's default
      */
+    @Flow(value = "store-payment-collection>set", label = "Set collection mode")
     public StoreDetails setPaymentCollection(String storeId, String mode, Long creditLimitMinor, String reason, String userId) {
         Map<String, String> errors = new LinkedHashMap<>();
+        // @flow store-payment-collection>set>validate: OPERATOR or DIRECT, limit 0+, a reason
         if (!PaymentCollection.OPERATOR.equals(mode) && !PaymentCollection.DIRECT.equals(mode)) {
             errors.put("mode", "must be OPERATOR or DIRECT");
         }
@@ -640,6 +683,7 @@ public class StoreService {
         store.setPaymentCollection(mode);
         store.setCollection(new PaymentCollection(mode, creditLimitMinor, why, userId, this.clock.instant()));
         BrandDocument brand = findBrand(store.getBrandId());
+        // @flow store-payment-collection>set>event: StorePaymentCollectionChanged with branch and brand owners
         java.util.Set<String> owners = new java.util.TreeSet<>(store.getOwnerUserIds());
         owners.addAll(brand.getOwnerUserIds());
         String name = (store.getBranchName() == null || store.getBranchName().isBlank()) ? brand.getName()
@@ -649,6 +693,7 @@ public class StoreService {
     }
 
     /** Whether branch managers may create promotions for their own branch (PRD BB-11); brand owners decide. */
+    @Flow(value = "brand-branch-promotions>save", label = "Save, BrandChanged and BranchPromotionsChanged")
     public BrandDetails setBranchPromotionsAllowed(String brandId, boolean allowed, String userId) {
         BrandDocument brand = findBrand(brandId);
         brand.setBranchPromotionsAllowed(allowed);
@@ -682,8 +727,10 @@ public class StoreService {
     // ---- Branch --------------------------------------------------------------------------
 
     /** The owner's branch details (PRD BB-2, ST-7, ST-13). */
+    @Flow(value = "store-update-branch>save", label = "Save branch details")
     public StoreDetails updateBranch(String storeId, UpdateBranch update, long expectedVersion, String userId) {
         Map<String, String> errors = new LinkedHashMap<>();
+        // @flow store-update-branch>save>validate: Address, location, prep 5-120 min, time zone, 58/80 mm paper; edited version
         optionalText(errors, "branchName", update.branchName(), 60);
         validate(errors, update.address(), update.location());
         if (update.prepMinutes() < 5 || update.prepMinutes() > 120) {
@@ -701,6 +748,7 @@ public class StoreService {
         failIfAny(errors, "STORE_INVALID");
         StoreDocument store = findStore(storeId);
         requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
+        // @flow store-update-branch>save>operator: Reject OPERATOR_DELIVERY_NOT_ALLOWED [when operator delivery not allowed]
         if (update.deliveryMode() == DeliveryMode.OPERATOR && !store.isOperatorDeliveryAllowed()) {
             throw new ModuleException.Conflict("The operator has not enabled operator delivery for this branch",
                     "OPERATOR_DELIVERY_NOT_ALLOWED");
@@ -719,6 +767,7 @@ public class StoreService {
     }
 
     /** Details only the operator edits. Withdrawing operator delivery switches the branch back to self-delivery. */
+    @Flow(value = "store-update-admin>save", label = "Save operator details")
     public StoreDetails updateAdmin(String storeId, StoreAdminUpdate update, long expectedVersion, String userId) {
         Map<String, String> errors = new LinkedHashMap<>();
         requireText(errors, "legalName", update.legalName(), 1, 120);
@@ -731,6 +780,7 @@ public class StoreService {
         store.setLegalName(update.legalName().trim());
         store.setTaxId(blankToNull(update.taxId()));
         store.setOperatorDeliveryAllowed(update.operatorDeliveryAllowed());
+        // @flow store-update-admin>save>self: Back to self-delivery [when operator delivery withdrawn]
         if (!update.operatorDeliveryAllowed() && store.getDeliveryMode() == DeliveryMode.OPERATOR) {
             store.setDeliveryMode(DeliveryMode.SELF);
         }
@@ -738,9 +788,11 @@ public class StoreService {
     }
 
     /** Weekly opening hours and holiday closures (PRD ST-2). */
+    @Flow(value = "store-update-hours>save", label = "Save hours and closures")
     public StoreDetails updateHours(String storeId, Map<DayOfWeek, List<TimeRange>> hours, List<Closure> closures,
             long expectedVersion, String userId) {
         Map<String, String> errors = new LinkedHashMap<>();
+        // @flow store-update-hours>save>validate: At most 4 ranges a day, at most 50 closures [each day]
         Map<DayOfWeek, List<TimeRange>> cleanHours = new EnumMap<>(DayOfWeek.class);
         if (hours != null) {
             hours.forEach((day, ranges) -> {
@@ -782,6 +834,7 @@ public class StoreService {
         requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
         store.setOpeningHours(cleanHours);
         LocalDate today = LocalDate.ofInstant(this.clock.instant(), zone(store, this.settings.getLocale()));
+        // @flow store-update-hours>save>trim: Drop closures already over
         store.setClosures(cleanClosures.stream().filter((c) -> !c.to().isBefore(today.minusDays(1))).toList());
         return saveBranch(store, userId);
     }
@@ -789,6 +842,7 @@ public class StoreService {
     /**
      * The owner's safety switch (PRD ST-2a): closed until switched back on, whatever the timetable.
      */
+    @Flow(value = "store-set-closed>save", label = "Save the switch and StoreAvailabilityChanged")
     public StoreDetails setTemporarilyClosed(String storeId, boolean closed, String reason, String userId) {
         if (reason != null && reason.trim().length() > 120) {
             throw new ModuleException.BadRequest("The reason must be at most 120 characters", "STORE_INVALID");
@@ -812,8 +866,10 @@ public class StoreService {
      * Makes a branch visible to customers, or hides it (operator only). Going live needs a location,
      * at least one menu item, and somewhere to deliver or pickup switched on.
      */
+    @Flow(value = "store-set-status>save", label = "Change status")
     public StoreDetails setStatus(String storeId, StoreStatus status, String userId) {
         StoreDocument store = findStore(storeId);
+        // @flow store-set-status>save>ready: Check readiness [when going LIVE] [on error STORE_NOT_READY]
         if (status == StoreStatus.LIVE) {
             List<String> missing = readiness(store);
             if (!missing.isEmpty()) {
@@ -830,6 +886,8 @@ public class StoreService {
         return readiness(findStore(storeId));
     }
 
+    @Flow(value = "store-readiness>check", label = "Location, a menu item, a delivery area or pickup")
+    @Flow(value = "store-set-status>save>ready>check", label = "Location, a menu item, a delivery area or pickup")
     private List<String> readiness(StoreDocument store) {
         List<String> missing = new ArrayList<>();
         if (store.getLocation() == null) {
@@ -849,11 +907,13 @@ public class StoreService {
     // ---- Owners --------------------------------------------------------------------------
 
     /** The branch's own owners and managers (PRD BB-5, BB-6), not the brand's owners. */
+    @Flow(value = "store-owners-list>load", label = "Branch owners, names from identity")
     public List<OwnerDetails> owners(String storeId) {
         return people(findStore(storeId).getOwnerUserIds());
     }
 
     /** The brand's owners (PRD BB-5). */
+    @Flow(value = "brand-owners-list>load", label = "Brand owners, names from identity")
     public List<OwnerDetails> brandOwners(String brandId) {
         return people(findBrand(brandId).getOwnerUserIds());
     }
@@ -876,13 +936,17 @@ public class StoreService {
      * Gives a person access to one branch only (PRD BB-5, BB-6): a branch manager or a franchise
      * owner. They run the branch but never edit the brand menu or prices.
      */
+    @Flow(value = "store-owner-add>grant", label = "Grant branch access")
+    @Flow(value = "seed-store>owners", label = "Demo brand owner and branch manager")
     public OwnerDetails addOwner(String storeId, NewOwner owner, String userId) {
         StoreDocument store = findStore(storeId);
         if (store.getOwnerUserIds().size() >= MAX_OWNERS) {
             throw new ModuleException.Conflict("A branch can have at most " + MAX_OWNERS + " owners", "OWNER_LIMIT");
         }
+        // @flow store-owner-add>grant>identity: Create or find the user, grant branch access in identity
         UserView user = this.identity.grantStoreAccess(new StoreAccessGrant(owner.email(), owner.displayName(),
                 owner.initialPassword(), storeId, userId));
+        // @flow store-owner-add>grant>save: Save owners and StoreChanged
         store.getOwnerUserIds().add(user.id());
         Instant now = this.clock.instant();
         store.setUpdatedAt(now);
@@ -894,8 +958,10 @@ public class StoreService {
         return new OwnerDetails(user.id(), user.email(), user.displayName());
     }
 
+    @Flow(value = "store-owner-remove>revoke", label = "Remove and revoke")
     public void removeOwner(String storeId, String ownerUserId, String userId) {
         StoreDocument store = findStore(storeId);
+        // @flow store-owner-remove>revoke>save: Save owners and StoreChanged [when they were an owner]
         if (!store.getOwnerUserIds().remove(ownerUserId)) {
             return;
         }
@@ -905,15 +971,18 @@ public class StoreService {
             StoreDocument saved = this.stores.save(store);
             this.outbox.append(new StoreChanged(storeId, saved.getBrandId(), version(saved.getVersion()), userId));
         });
+        // @flow store-owner-remove>revoke>identity: Revoke branch access in identity
         this.identity.revokeStoreAccess(ownerUserId, storeId);
     }
 
     /** Gives a person brand owner access (PRD BB-5): the brand, its menu and every branch. */
+    @Flow(value = "brand-owner-add>grant", label = "Grant brand access")
     public OwnerDetails addBrandOwner(String brandId, NewOwner owner, String userId) {
         BrandDocument brand = findBrand(brandId);
         if (brand.getOwnerUserIds().size() >= MAX_OWNERS) {
             throw new ModuleException.Conflict("A brand can have at most " + MAX_OWNERS + " owners", "OWNER_LIMIT");
         }
+        // @flow brand-owner-add>grant>identity: Create or find the user, grant brand access in identity
         UserView user = this.identity.grantBrandAccess(new BrandAccessGrant(owner.email(), owner.displayName(),
                 owner.initialPassword(), brandId, userId));
         brand.getOwnerUserIds().add(user.id());
@@ -923,6 +992,7 @@ public class StoreService {
         return new OwnerDetails(user.id(), user.email(), user.displayName());
     }
 
+    @Flow(value = "brand-owner-remove>revoke", label = "Remove and revoke")
     public void removeBrandOwner(String brandId, String ownerUserId, String userId) {
         BrandDocument brand = findBrand(brandId);
         if (!brand.getOwnerUserIds().remove(ownerUserId)) {
@@ -931,10 +1001,13 @@ public class StoreService {
         brand.setUpdatedAt(this.clock.instant());
         brand.setUpdatedBy(userId);
         saveBrandAndBranches(brand, userId);
+        // @flow brand-owner-remove>revoke>identity: Revoke brand access in identity
         this.identity.revokeBrandAccess(ownerUserId, brandId);
     }
 
     /** Saves the brand and tells every branch, whose order alerts go to the brand's owners too. */
+    @Flow(value = "brand-owner-add>grant>save", label = "Save brand, BrandChanged and StoreChanged per branch", each = "branch")
+    @Flow(value = "brand-owner-remove>revoke>save", label = "Save brand, BrandChanged and StoreChanged per branch", each = "branch")
     private void saveBrandAndBranches(BrandDocument brand, String userId) {
         List<StoreDocument> branches = this.stores.findByBrandId(brand.getId());
         this.transaction.executeWithoutResult((status) -> {
@@ -949,9 +1022,11 @@ public class StoreService {
     // ---- Customers -----------------------------------------------------------------------
 
     /** Delivery charge and time from the branch to an address (PRD SE-7). */
+    @Flow(value = "store-delivery-quote>quote", label = "Quote from geo, add prep and travel time")
     public DeliveryQuote quote(String storeId, GeoPoint destination) {
         StoreDocument store = findStore(storeId);
         String currency = this.settings.getLocale().currency();
+        // @flow store-delivery-quote>quote>no-location: OUT_OF_AREA [when branch has no location]
         if (store.getLocation() == null) {
             return new DeliveryQuote(false, DeliveryQuoteView.OUT_OF_AREA, 0, 0, null, 0, 0, currency);
         }
@@ -980,6 +1055,14 @@ public class StoreService {
     }
 
     /** Saves the branch, with {@code alsoWrite} in the same transaction. */
+    @Flow(value = "store-update-branch>save>write", label = "Save branch and StoreChanged in one transaction")
+    @Flow(value = "store-update-admin>save>write", label = "Save branch and StoreChanged in one transaction")
+    @Flow(value = "store-update-slug>change>same?>save>write", label = "Save branch and StoreChanged in one transaction")
+    @Flow(value = "store-update-hours>save>write", label = "Save branch and StoreChanged in one transaction")
+    @Flow(value = "store-set-status>save>write", label = "Save branch and StoreChanged in one transaction")
+    @Flow(value = "store-commission>plan>write", label = "Save branch and StoreChanged in one transaction")
+    @Flow(value = "store-payment-collection>set>write", label = "Save branch and StoreChanged in one transaction")
+    @Flow(value = "store-slug-backfill>assign>write", label = "Save branch and StoreChanged in one transaction")
     private StoreDetails saveBranch(StoreDocument store, Runnable alsoWrite, String userId) {
         store.setUpdatedAt(this.clock.instant());
         store.setUpdatedBy(userId);

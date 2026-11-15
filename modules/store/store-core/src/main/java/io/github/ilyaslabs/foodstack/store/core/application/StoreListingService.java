@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.settings.api.LocaleView;
 import io.github.ilyaslabs.foodstack.settings.api.SettingsApi;
 import io.github.ilyaslabs.foodstack.store.api.StoreIdPage;
@@ -36,6 +37,7 @@ public class StoreListingService {
         this.settings = settings;
     }
 
+    @Flow(value = "store-api-listing>build", label = "Build the listing")
     public StoreListingView listing(String storeId) {
         StoreDocument store = this.stores.findStore(storeId);
         BrandDocument brand = this.stores.findBrand(store.getBrandId());
@@ -43,6 +45,7 @@ public class StoreListingService {
         EffectiveMenu menu = this.menus.effectiveMenu(storeId);
         Map<String, List<String>> dishNames = new LinkedHashMap<>();
         LinkedHashSet<String> dietary = new LinkedHashSet<>();
+        // @flow store-api-listing>build>dishes: Dish names and dietary tags of available items [each item]
         for (EffectiveMenu.Section section : menu.sections()) {
             for (EffectiveMenu.Item item : section.items()) {
                 if (item.soldOut()) {
@@ -67,6 +70,7 @@ public class StoreListingService {
                 brand.getSearchBoost());
     }
 
+    @Flow(value = "store-api-store-ids>page", label = "Ids after the cursor")
     public StoreIdPage storeIds(String afterId, int limit) {
         int size = Math.min(Math.max(limit, 1), 500);
         List<String> ids = this.repository.findByIdGreaterThanOrderByIdAsc((afterId != null) ? afterId : "", Limit.of(size))

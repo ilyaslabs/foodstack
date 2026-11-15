@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.store.web;
 import java.time.Duration;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
@@ -44,6 +46,7 @@ import org.springframework.web.bind.annotation.RestController;
  * logging in.
  */
 @RestController
+@EVL.Endpoint(path = "/api/v1/stores")
 @RequestMapping("/api/v1/stores")
 class StoresController {
 
@@ -64,6 +67,8 @@ class StoresController {
 
     // ---- Back office ----------------------------------------------------------------------
 
+    @Flow(value = "store-onboard", label = "Onboard a restaurant", description = "A brand and its first branch, in DRAFT until the operator makes it live")
+    @EVL.Endpoint(method = "POST", path = "", caller = "Back office (operator)")
     @PostMapping
     @PreAuthorize("hasAuthority('store:manage')")
     ResponseEntity<StoreDtos.StoreResponse> onboard(@Valid @RequestBody StoreDtos.OnboardRequest request) {
@@ -75,10 +80,14 @@ class StoresController {
         return ResponseEntity.status(HttpStatus.CREATED).eTag(etag(created)).body(StoreMapper.store(created));
     }
 
+    @Flow(value = "store-list", label = "List branches", description = "Operator: all, with search; store users: their branches and their brands' branches")
+    @EVL.Endpoint(method = "GET", path = "", caller = "Back office")
     @GetMapping
     @PreAuthorize("hasAuthority('store:manage') or hasAuthority('store:portal')")
     StoreDtos.StoreListResponse list(@RequestParam(required = false) String q,
             @RequestParam(defaultValue = "50") int limit) {
+        // @flow store-list>who?: Who is asking?
+        // @flow store-list>who?>own: Own branches and every branch of owned brands [when store-area user]
         if (!CurrentUser.hasAuthority(OPERATOR_PERMISSION)) {
             // a store-area user: their own branches and every branch of the brands they own (PRD BB-5)
             return new StoreDtos.StoreListResponse(this.storeService.listFor(CurrentUser.storeIds(), CurrentUser.brandIds())
@@ -86,10 +95,13 @@ class StoresController {
                 .map(StoreMapper::summary)
                 .toList());
         }
+        // @flow store-list>who?>all: Newest branches, filtered by name [when operator]
         return new StoreDtos.StoreListResponse(
                 this.storeService.list(null, q, limit).stream().map(StoreMapper::summary).toList());
     }
 
+    @Flow(value = "store-details", label = "Get branch details", description = "Back-office view with ETag")
+    @EVL.Endpoint(method = "GET", path = "/{storeId}/details", caller = "Back office")
     @GetMapping("/{storeId}/details")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<StoreDtos.StoreResponse> details(@PathVariable String storeId) {
@@ -98,6 +110,8 @@ class StoresController {
         return ResponseEntity.ok().eTag(etag(store)).body(StoreMapper.store(store));
     }
 
+    @Flow(value = "store-update-branch", label = "Update branch details", description = "Name, address, location, time zone, prep time, delivery mode, ticket paper")
+    @EVL.Endpoint(method = "PUT", path = "/{storeId}/branch", caller = "Back office (store)")
     @PutMapping("/{storeId}/branch")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<StoreDtos.StoreResponse> updateBranch(@PathVariable String storeId,
@@ -113,6 +127,8 @@ class StoresController {
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }
 
+    @Flow(value = "store-update-admin", label = "Update operator-only details", description = "Legal name, tax id, operator delivery allowed, city")
+    @EVL.Endpoint(method = "PUT", path = "/{storeId}/admin", caller = "Back office (operator)")
     @PutMapping("/{storeId}/admin")
     @PreAuthorize("hasAuthority('store:manage')")
     ResponseEntity<StoreDtos.StoreResponse> updateAdmin(@PathVariable String storeId,
@@ -124,6 +140,8 @@ class StoresController {
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }
 
+    @Flow(value = "store-update-slug", label = "Change web address", description = "The old slug is freed; no redirect")
+    @EVL.Endpoint(method = "PUT", path = "/{storeId}/slug", caller = "Back office (operator)")
     @PutMapping("/{storeId}/slug")
     @PreAuthorize("hasAuthority('store:manage')")
     ResponseEntity<StoreDtos.StoreResponse> updateSlug(@PathVariable String storeId,
@@ -134,6 +152,8 @@ class StoresController {
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }
 
+    @Flow(value = "store-update-hours", label = "Set opening hours", description = "Weekly ranges and holiday closures")
+    @EVL.Endpoint(method = "PUT", path = "/{storeId}/hours", caller = "Back office (store)")
     @PutMapping("/{storeId}/hours")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<StoreDtos.StoreResponse> updateHours(@PathVariable String storeId,
@@ -145,6 +165,8 @@ class StoresController {
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }
 
+    @Flow(value = "store-set-closed", label = "Close or reopen temporarily", description = "The owner's safety switch")
+    @EVL.Endpoint(method = "PUT", path = "/{storeId}/availability", caller = "Back office (store)")
     @PutMapping("/{storeId}/availability")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<StoreDtos.StoreResponse> availability(@PathVariable String storeId,
@@ -155,6 +177,8 @@ class StoresController {
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }
 
+    @Flow(value = "store-set-status", label = "Make branch live or hide it", description = "Going live needs a location, a menu and a delivery area or pickup")
+    @EVL.Endpoint(method = "PUT", path = "/{storeId}/status", caller = "Back office (operator)")
     @PutMapping("/{storeId}/status")
     @PreAuthorize("hasAuthority('store:manage')")
     ResponseEntity<StoreDtos.StoreResponse> status(@PathVariable String storeId,
@@ -163,6 +187,8 @@ class StoresController {
         return ResponseEntity.ok().eTag(etag(updated)).body(StoreMapper.store(updated));
     }
 
+    @Flow(value = "store-readiness", label = "Check what blocks going live", description = "LOCATION, MENU, DELIVERY_AREA")
+    @EVL.Endpoint(method = "GET", path = "/{storeId}/readiness", caller = "Back office")
     @GetMapping("/{storeId}/readiness")
     @PreAuthorize("isAuthenticated()")
     StoreDtos.ReadinessResponse readiness(@PathVariable String storeId) {
@@ -171,6 +197,8 @@ class StoresController {
     }
 
     /** The branch's own owners and managers. Operator staff and the brand's owners. */
+    @Flow(value = "store-owners-list", label = "List branch managers", description = "The branch's own owners, not the brand's")
+    @EVL.Endpoint(method = "GET", path = "/{storeId}/owners", caller = "Back office (brand owner)")
     @GetMapping("/{storeId}/owners")
     @PreAuthorize("isAuthenticated()")
     List<StoreDtos.OwnerResponse> owners(@PathVariable String storeId) {
@@ -179,6 +207,8 @@ class StoresController {
     }
 
     /** Adds a branch manager or franchise owner (PRD BB-5, BB-6). Operator staff and the brand's owners. */
+    @Flow(value = "store-owner-add", label = "Add branch manager", description = "Creates or finds the user in identity and grants branch access")
+    @EVL.Endpoint(method = "POST", path = "/{storeId}/owners", caller = "Back office (brand owner)")
     @PostMapping("/{storeId}/owners")
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.CREATED)
@@ -188,6 +218,8 @@ class StoresController {
                 new NewOwner(request.email(), request.displayName(), request.initialPassword()), CurrentUser.id()));
     }
 
+    @Flow(value = "store-owner-remove", label = "Remove branch manager", description = "Revokes branch access in identity")
+    @EVL.Endpoint(method = "DELETE", path = "/{storeId}/owners/{userId}", caller = "Back office (brand owner)")
     @DeleteMapping("/{storeId}/owners/{userId}")
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -197,6 +229,8 @@ class StoresController {
     }
 
     /** The branch's own commission from a date (operator only, PRD BB-8, FI-2). */
+    @Flow(value = "store-commission", label = "Plan branch commission", description = "From a date; null goes back to the brand's")
+    @EVL.Endpoint(method = "PUT", path = "/{storeId}/commission", caller = "Back office (operator)")
     @PutMapping("/{storeId}/commission")
     @PreAuthorize("hasAuthority('store:manage')")
     ResponseEntity<StoreDtos.StoreResponse> commission(@PathVariable String storeId,
@@ -208,6 +242,8 @@ class StoresController {
     }
 
     /** Lets a branch collect card payments itself, or stops it, with its credit limit (finance, PRD DP-2, DP-7). */
+    @Flow(value = "store-payment-collection", label = "Set who collects card payments", description = "Operator or the branch's own merchant account, plus credit limit; audit-logged")
+    @EVL.Endpoint(method = "PUT", path = "/{storeId}/payment-collection", caller = "Back office (finance)")
     @PutMapping("/{storeId}/payment-collection")
     @PreAuthorize("hasAuthority('store:payment-collection:manage')")
     ResponseEntity<StoreDtos.StoreResponse> paymentCollection(@PathVariable String storeId,
@@ -231,6 +267,8 @@ class StoresController {
         }
     }
 
+    @Flow(value = "store-sold-out", label = "Mark item sold out", description = "An item or one modifier option, at one branch")
+    @EVL.Endpoint(method = "PUT", path = "/{storeId}/menu/items/{itemId}/sold-out", caller = "Back office (store)")
     @PutMapping("/{storeId}/menu/items/{itemId}/sold-out")
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.NO_CONTENT)
@@ -243,16 +281,23 @@ class StoresController {
     // ---- Customers ------------------------------------------------------------------------
 
     /** A branch's page by its slug ({@code spice-route-gulberg}) or its id. */
+    @Flow(value = "store-page", label = "Show branch page", description = "By slug or id; live branches only for customers; shared cache for live branches")
+    @EVL.Endpoint(method = "GET", path = "/{key}", caller = "Customer app")
     @GetMapping("/{key}")
     ResponseEntity<StoreDtos.StorePageResponse> page(@PathVariable String key) {
+        // @flow store-page>resolve: Resolve slug or id, hide non-live branches
         StoreDetails store = visible(this.storeService.resolve(key));
         return ResponseEntity.ok().cacheControl(shared(store)).body(StoreMapper.page(store));
     }
 
+    @Flow(value = "store-menu", label = "Show branch menu", description = "The effective menu: brand items for this branch with its prices and sold-out marks")
+    @EVL.Endpoint(method = "GET", path = "/{key}/menu", caller = "Customer app")
     @GetMapping("/{key}/menu")
     ResponseEntity<MenuDtos.MenuResponse> menu(@PathVariable String key) {
+        // @flow store-menu>resolve: Resolve slug or id, hide non-live branches
         String storeId = this.storeService.resolve(key);
         StoreDetails store = visible(storeId);
+        // @flow store-menu>menu: Effective menu through the cache
         return ResponseEntity.ok().cacheControl(shared(store)).body(StoreMapper.menu(this.menuService.effectiveMenu(storeId)));
     }
 
@@ -269,8 +314,11 @@ class StoresController {
         return CacheControl.noCache().cachePublic().sMaxAge(SHARED_CACHE);
     }
 
+    @Flow(value = "store-delivery-quote", label = "Quote delivery to an address", description = "Charge and time from the branch")
+    @EVL.Endpoint(method = "GET", path = "/{key}/delivery-quote", caller = "Customer app")
     @GetMapping("/{key}/delivery-quote")
     StoreDtos.QuoteResponse quote(@PathVariable String key, @RequestParam double lat, @RequestParam double lng) {
+        // @flow store-delivery-quote>resolve: Resolve slug or id, hide non-live branches
         String storeId = this.storeService.resolve(key);
         visible(storeId);
         GeoPoint destination = new GeoPoint(lat, lng);
