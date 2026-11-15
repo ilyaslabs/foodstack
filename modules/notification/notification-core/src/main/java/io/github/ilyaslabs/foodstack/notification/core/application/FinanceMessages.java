@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.notification.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,7 @@ public class FinanceMessages {
         this.serviceCalls = serviceCalls;
     }
 
+    @Flow(value = "notification-on-ledger>type?>exceeded", label = "Tell the branch and finance the credit limit is exceeded", when = "StoreCreditLimitExceeded")
     public void onExceeded(String eventId, StoreCreditLimitExceeded e) {
         Map<String, Object> params = Templates.params("store", name(e.storeName()), "owed",
                 Money.format(e.owedMinor(), e.currency()), "limit", Money.format(e.limitMinor(), e.currency()));
@@ -52,6 +54,7 @@ public class FinanceMessages {
         }
     }
 
+    @Flow(value = "notification-on-ledger>type?>restored", label = "Tell the branch collection is restored", when = "StoreCreditRestored")
     public void onRestored(String eventId, StoreCreditRestored e) {
         Map<String, Object> params = Templates.params("store", name(e.storeName()));
         for (String userId : (e.ownerUserIds() != null) ? e.ownerUserIds() : Set.<String>of()) {

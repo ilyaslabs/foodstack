@@ -1,6 +1,9 @@
 package io.github.ilyaslabs.foodstack.notification.core.channel;
 
+import io.github.ilyaslabs.evl.EVL;
+
 /** Sends one email. Implementations throw {@link MailFailure} when it did not go out. */
+@EVL.External("SMTP mail server")
 public interface MailTransport {
 
     void send(String to, String subject, String html, String text);

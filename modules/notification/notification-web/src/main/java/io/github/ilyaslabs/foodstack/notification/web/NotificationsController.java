@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.notification.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +42,8 @@ class NotificationsController {
     /** The user's notification data, for their data export (PRD ID-7). */
     @GetMapping("/api/v1/notifications/mine/export")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "notification-export-mine", label = "Export my notifications")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/notifications/mine/export", caller = "Customer web")
     CustomerNotificationData.Export export() {
         return this.data.export(CurrentUser.id());
     }
@@ -49,18 +53,24 @@ class NotificationsController {
 
     @GetMapping("/api/v1/notifications")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "notification-inbox", label = "Notification inbox")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/notifications", caller = "Customer web")
     List<InboxService.Item> list(@RequestParam(required = false) Long before, @RequestParam(defaultValue = "20") int limit) {
         return this.inbox.list(CurrentUser.id(), before, limit);
     }
 
     @GetMapping("/api/v1/notifications/unread-count")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "notification-unread-count", label = "Unread count")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/notifications/unread-count", caller = "Customer web")
     Map<String, Long> unread() {
         return Map.of("unread", this.inbox.unread(CurrentUser.id()));
     }
 
     @PostMapping("/api/v1/notifications/{id}/read")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "notification-mark-read", label = "Mark notification read")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/notifications/{id}/read", caller = "Customer web")
     ResponseEntity<Void> read(@PathVariable String id) {
         this.inbox.markRead(CurrentUser.id(), id);
         return ResponseEntity.noContent().build();
@@ -68,6 +78,8 @@ class NotificationsController {
 
     @PostMapping("/api/v1/notifications/read-all")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "notification-mark-all-read", label = "Mark all read")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/notifications/read-all", caller = "Customer web")
     ResponseEntity<Void> readAll() {
         this.inbox.markAllRead(CurrentUser.id());
         return ResponseEntity.noContent().build();
@@ -75,12 +87,16 @@ class NotificationsController {
 
     @GetMapping("/api/v1/notifications/preferences")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "notification-preferences", label = "Email preferences")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/notifications/preferences", caller = "Customer web")
     NotificationService.Preferences preferences() {
         return this.notifications.preferences(CurrentUser.id());
     }
 
     @PutMapping("/api/v1/notifications/preferences")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "notification-update-preferences", label = "Change email preferences")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/notifications/preferences", caller = "Customer web")
     NotificationService.Preferences updatePreferences(@RequestBody PreferencesRequest request) {
         NotificationService.Preferences current = this.notifications.preferences(CurrentUser.id());
         return this.notifications.updatePreferences(CurrentUser.id(),
@@ -90,6 +106,8 @@ class NotificationsController {
 
     @GetMapping("/api/v1/notifications/deliveries")
     @PreAuthorize("hasAnyAuthority('settings:manage', 'order:manage')")
+    @Flow(value = "notification-delivery-log", label = "Email and push log", description = "Operator view of sent, queued and failed messages")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/notifications/deliveries", caller = "Back office")
     List<NotificationService.DeliveryItem> deliveries(@RequestParam(required = false) String status,
             @RequestParam(required = false) Long before, @RequestParam(defaultValue = "50") int limit) {
         return this.notifications.deliveries(status, before, limit);
@@ -97,6 +115,8 @@ class NotificationsController {
 
     @PostMapping("/api/v1/notifications/deliveries/{id}/retry")
     @PreAuthorize("hasAnyAuthority('settings:manage', 'order:manage')")
+    @Flow(value = "notification-retry", label = "Send failed email again")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/notifications/deliveries/{id}/retry", caller = "Back office")
     ResponseEntity<Void> retry(@PathVariable String id) {
         this.notifications.retry(id);
         return ResponseEntity.accepted().build();

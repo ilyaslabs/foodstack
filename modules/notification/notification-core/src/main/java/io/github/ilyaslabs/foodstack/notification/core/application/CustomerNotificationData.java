@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.notification.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.notification.core.persistence.DeliveryDocument;
@@ -63,6 +64,7 @@ public class CustomerNotificationData {
     }
 
     /** Removes everything this module keeps about the user. Safe to run again. */
+    @Flow(value = "notification-on-identity>type?>deleted", label = "Delete the user's inbox, devices and delivery log", when = "UserDeleted")
     public void erase(String userId) {
         Query mine = Query.query(Criteria.where("userId").is(userId));
         this.mongo.remove(mine, InboxDocument.class);

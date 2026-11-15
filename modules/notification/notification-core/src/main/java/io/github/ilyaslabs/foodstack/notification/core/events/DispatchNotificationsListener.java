@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.notification.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DispatchAlert;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.RiderAssigned;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.RiderOffered;
@@ -15,6 +17,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * Turns dispatch events into messages. Messages for the notification centre are keyed by their
  * event; an offer is push only, so the inbox guard keeps a redelivered offer from ringing twice.
  */
+@EVL.Queue("foodstack.dispatch.events")
 public class DispatchNotificationsListener {
 
     static final String CONSUMER = "notification-dispatch";
@@ -41,8 +44,11 @@ public class DispatchNotificationsListener {
             id = "${foodstack.namespace:foodstack}-notification-dispatch",
             groupId = "${foodstack.namespace:foodstack}-notification",
             topics = "${foodstack.namespace:foodstack}.dispatch.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "notification-on-dispatch", label = "Notify about deliveries", after = "dispatch-match")
+    @EVL.Job(trigger = "RiderOffered, RiderAssigned, DispatchAlert")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
+        // @flow notification-on-dispatch>type?: Which event?
         if (OFFERED.equals(event.type())) {
             RiderOffered e = event.dataAs(RiderOffered.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> this.messages.onOffered(event.id(), e));

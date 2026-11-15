@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.notification.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.notification.core.application.NotificationService.Message;
@@ -51,6 +52,7 @@ public class OrderMessages {
         this.serviceCalls = serviceCalls;
     }
 
+    @Flow(value = "notification-on-order>type?>order", label = "Pick who to tell and which template for this order step", when = "order events")
     public void onOrderEvent(String eventId, Object event) {
         switch (event) {
             case OrderConfirmed e -> {
@@ -92,6 +94,7 @@ public class OrderMessages {
         }
     }
 
+    @Flow(value = "notification-on-order>type?>refund", label = "Tell the customer about the refund", when = "RefundSucceeded")
     public void onRefund(String eventId, RefundSucceeded refund) {
         OrderSummary order = this.serviceCalls.call(() -> this.orders.getSummary(refund.orderId()));
         if (order != null) {

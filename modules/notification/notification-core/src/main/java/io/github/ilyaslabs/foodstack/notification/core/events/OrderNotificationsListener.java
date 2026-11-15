@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.notification.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.Map;
 import java.util.Set;
 
@@ -23,6 +25,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * Tells customers and stores about their orders (PRD 4.10, TR-2): order and payment events become
  * messages. Each message is keyed by its event, so redelivery sends nothing twice.
  */
+@EVL.Queue("foodstack.order.events")
 public class OrderNotificationsListener {
 
     private static final Map<String, Class<?>> ORDER_EVENTS = Map.of(
@@ -51,9 +54,12 @@ public class OrderNotificationsListener {
             groupId = "${foodstack.namespace:foodstack}-notification",
             topics = { "${foodstack.namespace:foodstack}.order.events", "${foodstack.namespace:foodstack}.payment.events" },
             properties = "auto.offset.reset=earliest")
+    @Flow(value = "notification-on-order", label = "Notify about order steps", description = "order and payment events", after = "order-store-action")
+    @EVL.Job(trigger = "order events, RefundSucceeded")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         Class<?> type = ORDER_EVENTS.get(event.type());
+        // @flow notification-on-order>type?: Which event?
         if (type != null) {
             this.messages.onOrderEvent(event.id(), event.dataAs(type, this.jsonMapper));
         }

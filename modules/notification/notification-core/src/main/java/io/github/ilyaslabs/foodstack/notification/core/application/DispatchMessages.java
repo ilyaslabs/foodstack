@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.notification.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -44,6 +45,7 @@ public class DispatchMessages {
     }
 
     /** Push only: an offer is gone in seconds, so it has no place in the notification centre. */
+    @Flow(value = "notification-on-dispatch>type?>offered", label = "Push the offer to the rider", when = "RiderOffered")
     public void onOffered(String eventId, RiderOffered e) {
         DeliverySummary d = e.delivery();
         this.notifications.send(new Message(eventId, e.riderId(), null, "rider-offer", operatorLanguage(),
@@ -52,6 +54,7 @@ public class DispatchMessages {
                 RIDER_LINK, true, false, false, false, true));
     }
 
+    @Flow(value = "notification-on-dispatch>type?>assigned", label = "Tell the customer and branch a rider is coming", when = "RiderAssigned")
     public void onAssigned(String eventId, RiderAssigned e) {
         DeliverySummary d = e.delivery();
         String language = (d.language() != null) ? d.language() : operatorLanguage();
@@ -67,6 +70,7 @@ public class DispatchMessages {
         }
     }
 
+    @Flow(value = "notification-on-dispatch>type?>alert", label = "Alert dispatch staff that no rider is free", when = "DispatchAlert")
     public void onAlert(String eventId, DispatchAlert e) {
         DeliverySummary d = e.delivery();
         List<String> staff = this.serviceCalls.call(() -> this.identity.userIdsWithRoles(Set.of(Role.ADMIN, Role.SUPPORT)));
