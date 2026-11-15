@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.review.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Instant;
 
@@ -22,6 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
  * no inbox is needed. Also anonymises a deleted customer's reviews ({@code UserDeleted}, PRD ID-7),
  * which is as safe to repeat.
  */
+@EVL.Queue("foodstack.order.events")
 public class FinishedOrdersListener {
 
     private static final String DELIVERED = EventTypes.type("order", OrderDelivered.class);
@@ -49,10 +52,13 @@ public class FinishedOrdersListener {
             topics = { "${foodstack.namespace:foodstack}.order.events", "${foodstack.namespace:foodstack}.dispatch.events",
                 "${foodstack.namespace:foodstack}.identity.events" },
             properties = "auto.offset.reset=earliest")
+    @Flow(value = "review-on-event", label = "Make finished orders rateable", description = "order, dispatch and identity events", after = "order-store-action")
+    @EVL.Job(trigger = "OrderDelivered, OrderCollected, DeliveryCompleted, UserDeleted")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
         Instant at = (event.time() != null) ? event.time() : this.clock.instant();
+        // @flow review-on-event>type?: Which event?
         if (DELIVERED.equals(type)) {
             finished(event.dataAs(OrderDelivered.class, this.jsonMapper).order(), at);
         }
