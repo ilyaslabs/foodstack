@@ -1,5 +1,8 @@
 package io.github.ilyaslabs.foodstack.settings.core.deadletters;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
+
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import org.springframework.kafka.annotation.KafkaListener;
@@ -16,6 +19,8 @@ public class DeadLetterListener {
         this.deadLetters = deadLetters;
     }
 
+    @Flow(value = "dead-letters-collect", label = "Collect dead letters", description = "Every module's .dlt topics, after a handler kept failing")
+    @EVL.Job(trigger = "<ns>.*.events.dlt, <ns>.audit.dlt")
     @KafkaListener(id = "${foodstack.namespace:foodstack}-settings-dead-letters",
             groupId = "${foodstack.namespace:foodstack}-settings-dead-letters",
             topicPattern = "${foodstack.namespace:foodstack}\\.([a-z]+\\.events|audit)\\.dlt",

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.payment.api;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.moduleswitch.Param;
 
 /**
@@ -7,6 +8,7 @@ import io.github.ilyaslabs.moduleswitch.Param;
  * placement and sends the customer to the gateway's hosted page; the outcome comes back as
  * {@code PaymentSucceeded} or {@code PaymentFailed}. Refunds follow the order events.
  */
+@EVL.Interface(value = "PaymentApi", description = "The payment module API: an in-process call, or HTTP when payment runs as its own service")
 public interface PaymentApi {
 
     /** Which payment methods checkout may offer: the operator's switches and whether a card gateway is set up. */

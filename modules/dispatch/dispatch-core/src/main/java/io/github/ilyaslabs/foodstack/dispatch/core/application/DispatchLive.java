@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.core.GeoCells;
 import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import org.slf4j.Logger;
@@ -21,6 +22,7 @@ import org.springframework.data.redis.core.script.RedisScript;
  * (the operator's live board, which follows the {@link GeoCells map cells} it shows, by the job's
  * pickup point; TDD 7.5). Messages carry ids and statuses only; screens reload what changed.
  */
+@EVL.Cache(value = "Redis", description = "Open offer per rider (SET NX with expiry) and live dispatch channels")
 public class DispatchLive {
 
     private static final Logger log = LoggerFactory.getLogger(DispatchLive.class);

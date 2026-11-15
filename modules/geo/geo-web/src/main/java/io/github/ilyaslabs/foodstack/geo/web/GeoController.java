@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.geo.web;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.core.application.AddressSuggestion;
 import io.github.ilyaslabs.foodstack.geo.core.application.GeocodingService;
 import io.github.ilyaslabs.foodstack.geo.core.application.OperatorPricing;
@@ -32,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Operator delivery pricing (admin) and address search (public). */
 @RestController
+@EVL.Endpoint(path = "/api/v1/geo")
 @RequestMapping("/api/v1/geo")
 class GeoController {
 
@@ -46,6 +49,8 @@ class GeoController {
         this.geocodingService = geocodingService;
     }
 
+    @Flow(value = "geo-operator-pricing-view", label = "Get operator delivery pricing", description = "Base charge, per km, max distance, peak windows")
+    @EVL.Endpoint(method = "GET", path = "/operator-pricing", caller = "Back office")
     @GetMapping("/operator-pricing")
     @PreAuthorize("hasAnyAuthority('geo:manage', 'store:manage', 'store:portal')")
     ResponseEntity<OperatorPricingResponse> pricing() {
@@ -53,6 +58,8 @@ class GeoController {
         return ResponseEntity.ok().eTag(ETags.of(PRICING, pricing.version())).body(toResponse(pricing));
     }
 
+    @Flow(value = "geo-operator-pricing-update", label = "Update operator delivery pricing", description = "Needs geo:manage and If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/operator-pricing", caller = "Back office (operator)")
     @PutMapping("/operator-pricing")
     @PreAuthorize("hasAuthority('geo:manage')")
     ResponseEntity<OperatorPricingResponse> updatePricing(
@@ -74,6 +81,8 @@ class GeoController {
     }
 
     /** Address search for the location picker (PRD SE-6). */
+    @Flow(value = "geo-address-search", label = "Search addresses", description = "Geocoding provider, cached in Redis")
+    @EVL.Endpoint(method = "GET", path = "/addresses", caller = "Customer app / back office")
     @GetMapping("/addresses")
     List<AddressResponse> search(@RequestParam("q") String query,
             @RequestHeader(value = HttpHeaders.ACCEPT_LANGUAGE, required = false) String language) {
@@ -81,6 +90,8 @@ class GeoController {
     }
 
     /** The address at a map pin or the device location. */
+    @Flow(value = "geo-address-reverse", label = "Address at a point", description = "Reverse geocoding, cached in Redis")
+    @EVL.Endpoint(method = "GET", path = "/addresses/reverse", caller = "Customer app / back office")
     @GetMapping("/addresses/reverse")
     List<AddressResponse> reverse(@RequestParam double lat, @RequestParam double lng,
             @RequestHeader(value = HttpHeaders.ACCEPT_LANGUAGE, required = false) String language) {
@@ -88,6 +99,8 @@ class GeoController {
     }
 
     /** Whether address search is configured, so the apps can hide the search box. */
+    @Flow(value = "geo-address-availability", label = "Is address search on?", description = "Whether a geocoding provider is configured")
+    @EVL.Endpoint(method = "GET", path = "/addresses/availability", caller = "Customer app / back office")
     @GetMapping("/addresses/availability")
     Map<String, Boolean> availability() {
         return Map.of("available", this.geocodingService.isAvailable());

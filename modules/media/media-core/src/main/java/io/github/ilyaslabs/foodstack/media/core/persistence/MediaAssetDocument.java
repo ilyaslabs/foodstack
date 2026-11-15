@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.media.api.MediaPurpose;
 import io.github.ilyaslabs.foodstack.media.api.MediaStatus;
 
@@ -15,6 +16,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * An uploaded asset in {@code media_assets}. Shard key {@code { _id: hashed }}: always read by id.
  * Variants are a fixed small map and the owner is a single reference, so the document never grows.
  */
+@EVL.Database(value = "foodstack_media", table = "media_assets")
 @Document("media_assets")
 public class MediaAssetDocument {
 

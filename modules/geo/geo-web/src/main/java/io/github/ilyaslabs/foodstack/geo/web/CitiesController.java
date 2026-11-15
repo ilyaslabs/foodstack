@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.geo.web;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.geo.core.application.City;
 import io.github.ilyaslabs.foodstack.geo.core.application.CityInput;
@@ -37,6 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
  * and rider forms pick one); operator staff with {@code geo:manage} add and change them.
  */
 @RestController
+@EVL.Endpoint(path = "/api/v1/geo/cities")
 @RequestMapping("/api/v1/geo/cities")
 class CitiesController {
 
@@ -48,6 +51,8 @@ class CitiesController {
         this.cityService = cityService;
     }
 
+    @Flow(value = "geo-cities-list", label = "List cities", description = "Sorted by name in the default language")
+    @EVL.Endpoint(method = "GET", path = "", caller = "Back office")
     @GetMapping
     @PreAuthorize("isAuthenticated()")
     List<CityResponse> list() {
@@ -55,6 +60,8 @@ class CitiesController {
     }
 
     /** The active city nearest to a point, to fill in a new branch's or rider's city; 204 when none is near. */
+    @Flow(value = "geo-city-nearest", label = "Find nearest city", description = "Nearest active city within the radius, or 204")
+    @EVL.Endpoint(method = "GET", path = "/nearest", caller = "Back office")
     @GetMapping("/nearest")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<CityResponse> nearest(@RequestParam double lat, @RequestParam double lng) {
@@ -62,6 +69,8 @@ class CitiesController {
         return (city != null) ? ResponseEntity.ok(toResponse(city)) : ResponseEntity.noContent().build();
     }
 
+    @Flow(value = "geo-city-view", label = "Get city", description = "With ETag")
+    @EVL.Endpoint(method = "GET", path = "/{cityId}", caller = "Back office (operator)")
     @GetMapping("/{cityId}")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<CityResponse> get(@PathVariable String cityId) {
@@ -69,6 +78,8 @@ class CitiesController {
         return ResponseEntity.ok().eTag(ETags.of(CITY, city.version())).body(toResponse(city));
     }
 
+    @Flow(value = "geo-city-create", label = "Create city", description = "Name per language, centre, optional own delivery pricing")
+    @EVL.Endpoint(method = "POST", path = "", caller = "Back office (operator)")
     @PostMapping
     @PreAuthorize("hasAuthority('geo:manage')")
     ResponseEntity<CityResponse> create(@Valid @RequestBody CityRequest request) {
@@ -76,6 +87,8 @@ class CitiesController {
         return ResponseEntity.status(HttpStatus.CREATED).eTag(ETags.of(CITY, city.version())).body(toResponse(city));
     }
 
+    @Flow(value = "geo-city-update", label = "Update city", description = "Needs If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/{cityId}", caller = "Back office (operator)")
     @PutMapping("/{cityId}")
     @PreAuthorize("hasAuthority('geo:manage')")
     ResponseEntity<CityResponse> update(@PathVariable String cityId,

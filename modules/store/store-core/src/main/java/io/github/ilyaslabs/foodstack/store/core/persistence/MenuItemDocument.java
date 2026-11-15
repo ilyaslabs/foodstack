@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.store.core.application.ModifierGroup;
 
 import org.springframework.data.annotation.Id;
@@ -17,6 +18,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * An item of a brand menu in {@code store_menu_items}; shard key {@code { brandId: hashed }}.
  * {@code branchIds} limits a branch-only item to chosen branches; absent means every branch (PRD BB-3).
  */
+@EVL.Database(value = "foodstack_store", table = "store_menu_items")
 @Document("store_menu_items")
 public class MenuItemDocument {
 

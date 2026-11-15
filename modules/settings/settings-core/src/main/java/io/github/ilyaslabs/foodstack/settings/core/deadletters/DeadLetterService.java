@@ -10,6 +10,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.kafka.DeadLetters;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
 import io.github.ilyaslabs.foodstack.settings.core.persistence.DeadLetterDocument;
@@ -80,7 +81,9 @@ public class DeadLetterService {
     }
 
     /** Keeps a record read from a dead-letter topic; reading it again changes nothing. */
+    @Flow(value = "dead-letters-collect>record", label = "Store the failed event", description = "encrypted, kept 30 days")
     public void record(ConsumerRecord<String, String> record) {
+        // @flow dead-letters-collect>record>headers: Read original topic, consumer group and error
         String originalTopic = header(record.headers(), KafkaHeaders.DLT_ORIGINAL_TOPIC)
             .orElse(DeadLetters.originalTopic(record.topic()));
         String group = header(record.headers(), KafkaHeaders.DLT_ORIGINAL_CONSUMER_GROUP).orElse("");
@@ -97,6 +100,7 @@ public class DeadLetterService {
             // not readable: exactly what failed; keep it as it is
         }
         Instant failedAt = Instant.ofEpochMilli(record.timestamp());
+        // @flow dead-letters-collect>record>insert: Insert OPEN entry, count the metric
         DeadLetterDocument document = new DeadLetterDocument(record.topic() + ":" + record.partition() + ":" + record.offset(),
                 module(originalTopic), originalTopic, group, record.key(), eventType, eventId,
                 error.length() > MAX_ERROR ? error.substring(0, MAX_ERROR) : error,
@@ -106,12 +110,14 @@ public class DeadLetterService {
             this.mongo.insert(document);
             this.received.increment();
         }
+        // @flow dead-letters-collect>record>duplicate: Ignore a re-read after restart [on error DuplicateKeyException]
         catch (DuplicateKeyException ex) {
             // read again after a restart
         }
     }
 
     /** Newest first, at most 100; {@code status} null for every status. */
+    @Flow(value = "dead-letters-list>query", label = "Query newest entries")
     public List<DeadLetter> list(String status) {
         Query query = new Query().with(Sort.by(Sort.Direction.DESC, "failedAt")).limit(PAGE);
         if (status != null && !status.isBlank()) {
@@ -121,18 +127,22 @@ public class DeadLetterService {
     }
 
     /** How many are waiting for someone, for the navigation badge. */
+    @Flow(value = "dead-letters-count>query", label = "Count OPEN entries")
     public long openCount() {
         return this.mongo.count(Query.query(Criteria.where("status").is(DeadLetterDocument.OPEN)), DeadLetterDocument.class);
     }
 
     /** The event itself, decrypted, to see what failed. */
+    @Flow(value = "dead-letters-event>decrypt", label = "Load and decrypt the event")
     public String event(String id) {
         DeadLetterDocument document = find(id);
         return document.valueCipher() != null ? this.pii.decrypt(document.valueCipher()) : null;
     }
 
     /** Publishes the event again for the consumer group that failed on it, and marks the entry replayed. */
+    @Flow(value = "dead-letters-replay>send", label = "Replay")
     public DeadLetter replay(String id, String userId) {
+        // @flow dead-letters-replay>send>check: Check OPEN, known consumer, this installation
         DeadLetterDocument document = find(id);
         if (!DeadLetterDocument.OPEN.equals(document.status())) {
             throw new ModuleException.Conflict("This event was already " + document.status().toLowerCase(),
@@ -145,6 +155,7 @@ public class DeadLetterService {
         if (!document.originalTopic().startsWith(this.namespace + ".")) {
             throw new ModuleException.Conflict("This event belongs to another installation", "DEAD_LETTER_FOREIGN");
         }
+        // @flow dead-letters-replay>send>publish: Publish to the original topic with a replay-for header
         ProducerRecord<String, String> replay = new ProducerRecord<>(document.originalTopic(), document.key(),
                 document.valueCipher() != null ? this.pii.decrypt(document.valueCipher()) : null);
         replay.headers().add(DeadLetters.REPLAY_FOR, document.consumerGroup().getBytes(StandardCharsets.UTF_8));
@@ -158,10 +169,12 @@ public class DeadLetterService {
         catch (ExecutionException | TimeoutException ex) {
             throw new IllegalStateException("Could not publish the replay of " + id, ex);
         }
+        // @flow dead-letters-replay>send>mark: Mark REPLAYED (one handler only)
         return handle(id, DeadLetterDocument.REPLAYED, userId);
     }
 
     /** Marks the entry dealt with, without replaying it. */
+    @Flow(value = "dead-letters-dismiss>mark", label = "Mark DISMISSED if still OPEN")
     public DeadLetter dismiss(String id, String userId) {
         DeadLetterDocument document = find(id);
         if (!DeadLetterDocument.OPEN.equals(document.status())) {

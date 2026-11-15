@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.geo.core.application;
 import java.time.Duration;
 import java.util.Locale;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.geo.api.RouteView;
 import io.github.ilyaslabs.foodstack.geo.core.routing.RoutingProvider;
@@ -51,20 +52,26 @@ public class RoutingService {
         return new RoutingService(null, new StraightLineRoutingProvider(roadFactor, 25), null, "foodstack", Duration.ZERO);
     }
 
+    @Flow(value = "geo-api-route>route", label = "Route between two points")
+    @Flow(value = "geo-api-quote>quote>distance>route", label = "Route between two points")
     public RouteView route(GeoPoint from, GeoPoint to) {
         if (from == null || to == null || !from.isValid() || !to.isValid()) {
             throw new ModuleException.BadRequest("Both points must be valid coordinates", "LOCATION_INVALID");
         }
+        // @flow geo-api-route>route>provider?: Provider configured?
+        // @flow geo-api-route>route>provider?>estimate: Straight line x road factor [when no provider]
         if (this.provider == null) {
             RoutingProvider.Route route = this.estimate.route(from, to);
             return new RouteView(route.distanceMeters(), route.durationSeconds(), true);
         }
+        // @flow geo-api-route>route>provider?>cached: Cached route (points rounded to ~10 m) [when provider]
         String key = this.prefix + String.format(Locale.ROOT, "%.4f,%.4f:%.4f,%.4f", from.lat(), from.lng(), to.lat(), to.lng());
         String cached = read(key);
         if (cached != null) {
             String[] parts = cached.split(",");
             return new RouteView(Long.parseLong(parts[0]), Long.parseLong(parts[1]), false);
         }
+        // @flow geo-api-route>route>provider?>ask: Ask the routing provider, cache the answer [when not cached]
         try {
             RoutingProvider.Route route = this.provider.route(from, to);
             if (route != null) {
@@ -72,6 +79,7 @@ public class RoutingService {
                 return new RouteView(route.distanceMeters(), route.durationSeconds(), false);
             }
         }
+        // @flow geo-api-route>route>provider?>fallback: Estimate instead [on error provider did not answer]
         catch (RuntimeException ex) {
             log.warn("Routing provider did not answer, estimating instead: {}", ex.getMessage());
         }

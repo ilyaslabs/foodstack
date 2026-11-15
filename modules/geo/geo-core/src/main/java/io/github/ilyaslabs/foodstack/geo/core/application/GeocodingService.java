@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Supplier;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.core.geocoding.GeocodingProvider;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 import tools.jackson.core.type.TypeReference;
@@ -40,6 +41,7 @@ public class GeocodingService {
         this.ttl = ttl;
     }
 
+    @Flow(value = "geo-address-search>search", label = "Search through the cache", description = "3 to 200 characters")
     public List<AddressSuggestion> search(String query, String language) {
         String text = (query != null) ? query.trim() : "";
         if (text.length() < 3 || text.length() > 200) {
@@ -49,6 +51,7 @@ public class GeocodingService {
         return cached("q:" + lang + ":" + text.toLowerCase(Locale.ROOT), () -> this.provider.search(text, lang));
     }
 
+    @Flow(value = "geo-address-reverse>reverse", label = "Reverse lookup through the cache", description = "point rounded to ~10 m")
     public List<AddressSuggestion> reverse(double lat, double lng, String language) {
         if (!Double.isFinite(lat) || !Double.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
             throw new ModuleException.BadRequest("The location is not a valid point", "LOCATION_INVALID");
@@ -62,6 +65,8 @@ public class GeocodingService {
         return this.provider.isAvailable();
     }
 
+    @Flow(value = "geo-address-search>search>cached", label = "Redis first, else the provider")
+    @Flow(value = "geo-address-reverse>reverse>cached", label = "Redis first, else the provider")
     private List<AddressSuggestion> cached(String key, Supplier<List<AddressSuggestion>> loader) {
         if (!this.provider.isAvailable()) {
             throw new ModuleException.Unavailable("Address search is switched off on this platform", "GEOCODING_DISABLED");

@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.identity.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Sharded;
@@ -21,6 +23,7 @@ import org.springframework.data.mongodb.core.mapping.ShardingStrategy;
  * @param expiresAt when it stops working (30 days after it was issued)
  * @param usedAt when it was swapped for the next one, or {@code null}
  */
+@EVL.Database(value = "foodstack_identity", table = "identity_refresh_tokens")
 @Document("identity_refresh_tokens")
 @Sharded(shardKey = "_id", shardingStrategy = ShardingStrategy.HASH, immutableKey = true)
 public record RefreshTokenDocument(@Id String id, String familyId, String userId, String client, long tokenVersion,

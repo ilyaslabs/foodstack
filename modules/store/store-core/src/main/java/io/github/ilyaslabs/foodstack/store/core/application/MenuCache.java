@@ -4,6 +4,8 @@ import java.time.Duration;
 import java.util.Collection;
 import java.util.function.Supplier;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import tools.jackson.databind.json.JsonMapper;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -14,6 +16,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * entry, so a menu read that started before the change and finishes after it writes to the old
  * generation, which nobody reads any more, and can never hide the change.
  */
+@EVL.Cache(value = "Redis", description = "Each branch's effective menu, generation-bumped on change")
 public class MenuCache {
 
     private final StringRedisTemplate redis;

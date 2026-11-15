@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.core.Buckets;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -23,6 +24,7 @@ import org.springframework.data.redis.core.script.RedisScript;
  * replica alone holds every bucket. Every Redis command touches one key, so it runs unchanged on
  * Redis Cluster.
  */
+@EVL.Cache(value = "Redis", description = "Worker heartbeats and the 64 per-bucket leases of a partitioned job")
 public class BucketLeases {
 
     private static final Log logger = LogFactory.getLog(BucketLeases.class);

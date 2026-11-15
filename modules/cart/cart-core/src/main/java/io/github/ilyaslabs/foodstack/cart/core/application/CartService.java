@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.cart.api.CheckoutView;
 import io.github.ilyaslabs.foodstack.cart.core.persistence.CartDocument.CartLine;
 import io.github.ilyaslabs.foodstack.cart.core.persistence.CartDocument;
@@ -55,6 +56,7 @@ public class CartService {
         this.clock = clock;
     }
 
+    @Flow(value = "cart-view>load", label = "Load and price cart", description = "prices come from the store module, never stored")
     public CartDetails get(String customerId) {
         CartDocument cart = this.carts.findById(customerId).orElse(null);
         if (cart == null || cart.lines() == null || cart.lines().isEmpty()) {
@@ -67,21 +69,31 @@ public class CartService {
                 count, lineProblems(cart, view));
     }
 
+    @Flow(value = "cart-add-line>add", label = "Add the line")
     public CartDetails addLine(String customerId, AddLine add) {
+        // @flow cart-add-line>add>validate: Validate quantity (1-50) and note
         String note = cleanNote(add.note());
         List<String> options = List.copyOf(Objects.requireNonNullElse(add.optionIds(), List.of()));
         if (add.quantity() < 1 || add.quantity() > MAX_QUANTITY) {
             throw invalid("quantity", "must be between 1 and " + MAX_QUANTITY);
         }
+        // @flow cart-add-line>add>check: Check the item with the store module
+        // @flow cart-add-line>add>check>ok?: Can the item be ordered?
+        // @flow cart-add-line>add>check>ok?>closed: Reject STORE_NOT_LIVE [when branch not live]
         OrderValidationView check = this.store.validateOrder(new OrderValidationRequest(add.storeId(),
                 List.of(new OrderLineRequest(add.itemId(), add.quantity(), options))));
         if (!check.store().live()) {
             throw new ModuleException.BadRequest("This restaurant is not taking orders", "STORE_NOT_LIVE");
         }
+        // @flow cart-add-line>add>check>ok?>invalid: Reject LINE_INVALID [when line problems]
         if (!check.problems().isEmpty()) {
             throw new ModuleException.BadRequest("This item cannot be added as chosen", "LINE_INVALID",
                     Map.of("problems", check.problems().stream().map(CartService::problem).toList()));
         }
+        // @flow cart-add-line>add>write: Write the cart
+        // @flow cart-add-line>add>write>other-store?: Cart from another branch?
+        // @flow cart-add-line>add>write>other-store?>conflict: Reject CART_OTHER_STORE [when other branch and no replace]
+        // @flow cart-add-line>add>write>other-store?>replace: Clear the old lines [when replaceOtherStore]
         write(customerId, (cart) -> {
             List<CartLine> lines = new ArrayList<>((cart != null && cart.lines() != null) ? cart.lines() : List.of());
             if (cart != null && cart.storeId() != null && !cart.storeId().equals(add.storeId()) && !lines.isEmpty()) {
@@ -91,6 +103,8 @@ public class CartService {
                 }
                 lines.clear();
             }
+            // @flow cart-add-line>add>write>same?: Same item, options and note?
+            // @flow cart-add-line>add>write>same?>merge: Add to that line's quantity [when same line exists]
             int same = indexOfSame(lines, add.itemId(), options, note);
             if (same >= 0) {
                 CartLine existing = lines.get(same);
@@ -101,6 +115,7 @@ public class CartService {
                 lines.set(same, new CartLine(existing.lineId(), existing.itemId(), quantity, existing.optionIds(), note));
             }
             else {
+                // @flow cart-add-line>add>write>same?>new: Add a new line, at most 100 [when else]
                 if (lines.size() >= MAX_LINES) {
                     throw new ModuleException.BadRequest("A cart holds at most " + MAX_LINES + " lines", "CART_FULL");
                 }
@@ -113,6 +128,8 @@ public class CartService {
     }
 
     /** Sets a line's quantity; 0 removes the line. */
+    @Flow(value = "cart-set-quantity>update", label = "Update or remove the line", description = "0 removes it")
+    @Flow(value = "cart-remove-line>update", label = "Remove the line")
     public CartDetails setQuantity(String customerId, String lineId, int quantity) {
         if (quantity < 0 || quantity > MAX_QUANTITY) {
             throw invalid("quantity", "must be between 0 and " + MAX_QUANTITY);
@@ -141,11 +158,13 @@ public class CartService {
         return get(customerId);
     }
 
+    @Flow(value = "cart-clear>delete", label = "Delete cart document")
     public void clear(String customerId) {
         this.carts.deleteById(customerId);
     }
 
     /** Empties the cart only while it is still at {@code version} (after an order was placed from it). */
+    @Flow(value = "cart-api-clear>delete", label = "Delete the cart if still at that version")
     public void clearIfVersion(String customerId, long version) {
         Criteria criteria = Criteria.where("_id").is(customerId);
         criteria = (version == 0) ? criteria.and("version").in(0L, null) : criteria.and("version").is(version);
@@ -194,6 +213,9 @@ public class CartService {
         return details;
     }
 
+    @Flow(value = "cart-add-line>add>write>save", label = "Save with optimistic lock", each = "attempt up to 3", onError = "OptimisticLockingFailureException -> CART_CHANGED")
+    @Flow(value = "cart-set-quantity>update>save", label = "Save with optimistic lock", each = "attempt up to 3", onError = "OptimisticLockingFailureException -> CART_CHANGED")
+    @Flow(value = "cart-remove-line>update>save", label = "Save with optimistic lock", each = "attempt up to 3", onError = "OptimisticLockingFailureException -> CART_CHANGED")
     private void write(String customerId, UnaryOperator<CartDocument> change) {
         for (int attempt = 1;; attempt++) {
             CartDocument current = this.carts.findById(customerId).orElse(null);

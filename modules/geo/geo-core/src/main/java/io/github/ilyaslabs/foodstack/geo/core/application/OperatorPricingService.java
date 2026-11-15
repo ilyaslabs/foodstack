@@ -6,6 +6,7 @@ import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.events.OperatorDeliveryPricingChanged;
 import io.github.ilyaslabs.foodstack.geo.core.persistence.OperatorPricingDocument;
 import io.github.ilyaslabs.foodstack.geo.core.persistence.OperatorPricingRepository;
@@ -47,14 +48,20 @@ public class OperatorPricingService {
     }
 
     /** The pricing, from the cache when there; changes always check the stored version. */
+    @Flow(value = "geo-operator-pricing-view>load", label = "Read pricing through the cache")
+    @Flow(value = "geo-api-quote>quote>mode?>operator>pricing>load", label = "Read pricing through the cache")
     public OperatorPricing get() {
         return this.cache.operatorPricing(() -> toDetails(load()));
     }
 
+    @Flow(value = "geo-operator-pricing-update>save", label = "Save pricing")
+    @Flow(value = "seed-geo>pricing", label = "Demo operator pricing")
     public OperatorPricing update(UpdateOperatorPricing update, long expectedVersion, String userId) {
+        // @flow geo-operator-pricing-update>save>validate: Charges, 1-50 km, x1-x3 peak, up to 10 windows
         validate(update);
         OperatorPricingDocument pricing = load();
         long current = (pricing.getVersion() != null) ? pricing.getVersion() : 0;
+        // @flow geo-operator-pricing-update>save>version: Check the edited version [on error PRICING_VERSION_CONFLICT]
         if (current != expectedVersion) {
             throw new ModuleException.Conflict("The delivery pricing was changed by someone else; reload and retry",
                     "PRICING_VERSION_CONFLICT", Map.of("currentVersion", current));
@@ -69,11 +76,13 @@ public class OperatorPricingService {
         pricing.setPeakWindows(update.peakWindows());
         pricing.setUpdatedAt(this.clock.instant());
         pricing.setUpdatedBy(userId);
+        // @flow geo-operator-pricing-update>save>write: Save and OperatorDeliveryPricingChanged event
         OperatorPricingDocument saved = this.transaction.execute((status) -> {
             OperatorPricingDocument result = this.repository.save(pricing);
             this.outbox.append(new OperatorDeliveryPricingChanged(result.getVersion(), userId));
             return result;
         });
+        // @flow geo-operator-pricing-update>save>evict: Bump the pricing cache generation
         this.cache.evictOperatorPricing();
         return toDetails(saved);
     }

@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.geo.core.routing;
 
 import java.util.Locale;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import tools.jackson.databind.JsonNode;
 
@@ -11,6 +12,7 @@ import org.springframework.web.client.RestClient;
  * OSRM's {@code route} service (OpenStreetMap). Self-host it for the operator's region or use a
  * hosted provider; the public demo server is not for production (deployment guide).
  */
+@EVL.External(value = "OSRM routing", description = "Road distance and driving time")
 public class OsrmRoutingProvider implements RoutingProvider {
 
     private final RestClient client;

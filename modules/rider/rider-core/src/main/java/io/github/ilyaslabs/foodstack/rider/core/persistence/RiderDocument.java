@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.rider.core.persistence;
 import java.time.Instant;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -37,6 +39,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedAt last change
  * @param version optimistic lock of the profile
  */
+@EVL.Database(value = "foodstack_rider", table = "rider_riders")
 @Document("rider_riders")
 public record RiderDocument(@Id String id, String kind, String storeId, String brandId, String name, String phoneCipher, String vehicle,
         String plate, String city, String cityId, String status, boolean online, Instant idleSince, Double lat, Double lng,

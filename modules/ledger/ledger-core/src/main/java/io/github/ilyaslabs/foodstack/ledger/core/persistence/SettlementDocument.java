@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.ledger.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Sharded;
@@ -22,6 +24,7 @@ import org.springframework.data.mongodb.core.mapping.Sharded;
  * @param settledBy who settled it
  * @param settledAt when
  */
+@EVL.Database(value = "foodstack_ledger", table = "ledger_settlements")
 @Document("ledger_settlements")
 @Sharded(shardKey = "accountId", immutableKey = true)
 public record SettlementDocument(@Id String id, String accountId, String partyType, String partyId, String brandId,

@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.ledger.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -17,6 +19,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param currency ISO 4217 code
  * @param createdAt first posting
  */
+@EVL.Database(value = "foodstack_ledger", table = "ledger_accounts")
 @Document("ledger_accounts")
 public record AccountDocument(@Id String id, String partyType, String partyId, String name, String brandId, String currency,
         Instant createdAt) {

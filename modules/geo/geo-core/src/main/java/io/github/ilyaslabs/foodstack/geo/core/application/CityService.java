@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.geo.api.events.CityChanged;
 import io.github.ilyaslabs.foodstack.geo.core.domain.GeoMath;
@@ -58,6 +59,7 @@ public class CityService {
     }
 
     /** Every city, sorted by its name in the default language. */
+    @Flow(value = "geo-cities-list>load", label = "Read cities through the cache")
     public List<City> list() {
         return this.cache.cities(() -> {
             LocaleView view = this.locale.get();
@@ -92,6 +94,7 @@ public class CityService {
     }
 
     /** The active city nearest to a point within the radius, or {@code null}. */
+    @Flow(value = "geo-city-nearest>find", label = "Nearest active city within the radius", each = "city")
     public City nearest(GeoPoint point) {
         if (point == null || !point.isValid()) {
             return null;
@@ -111,8 +114,12 @@ public class CityService {
         return best;
     }
 
+    @Flow(value = "geo-city-create>create", label = "Create the city")
+    @Flow(value = "seed-geo>cities", label = "Lahore and Islamabad")
     public City create(CityInput input, String userId) {
+        // @flow geo-city-create>create>validate: Names in deployment languages, unique, valid centre and pricing
         validate(input, null);
+        // @flow geo-city-create>create>limit: At most 500 cities [on error CITY_LIMIT]
         if (this.repository.count() >= MAX_CITIES) {
             throw new ModuleException.Conflict("A deployment can have at most " + MAX_CITIES + " cities", "CITY_LIMIT");
         }
@@ -121,10 +128,13 @@ public class CityService {
         return save(city, userId);
     }
 
+    @Flow(value = "geo-city-update>update", label = "Update the city")
     public City update(String cityId, CityInput input, long expectedVersion, String userId) {
+        // @flow geo-city-update>update>validate: Names, centre and pricing
         validate(input, cityId);
         CityDocument current = this.repository.findById(cityId)
             .orElseThrow(() -> new ModuleException.NotFound("City " + cityId + " not found", "CITY_NOT_FOUND"));
+        // @flow geo-city-update>update>version: Check the edited version [on error CITY_VERSION_CONFLICT]
         long version = (current.version() != null) ? current.version() : 0;
         if (version != expectedVersion) {
             throw new ModuleException.Conflict("The city was changed by someone else; reload and retry",
@@ -135,6 +145,8 @@ public class CityService {
         return save(changed, userId);
     }
 
+    @Flow(value = "geo-city-create>create>save", label = "Save, CityChanged event, evict cities cache")
+    @Flow(value = "geo-city-update>update>save", label = "Save, CityChanged event, evict cities cache")
     private City save(CityDocument city, String userId) {
         CityDocument saved = this.transaction.execute((status) -> {
             CityDocument result = this.repository.save(city);

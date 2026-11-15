@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.geo.core.application.CityInput;
 import io.github.ilyaslabs.foodstack.geo.core.application.CityPricing;
@@ -53,6 +55,8 @@ class GeoSeeder {
         this.mongo = geoMongoTemplate;
     }
 
+    @Flow(value = "seed-geo", label = "Seed demo zones, pricing and cities", description = "Profile test-seed only; once per database")
+    @EVL.Job(trigger = "application ready (test-seed profile)")
     @EventListener(ApplicationReadyEvent.class)
     @Order(25)
     void seed() {

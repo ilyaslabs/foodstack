@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.notification.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -14,6 +16,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param marketingEmails offers and news (opt-in)
  * @param updatedAt last change
  */
+@EVL.Database(value = "foodstack_notification", table = "notification_preferences")
 @Document("notification_preferences")
 public record PreferencesDocument(@Id String id, boolean orderEmails, boolean marketingEmails, Instant updatedAt) {
 }

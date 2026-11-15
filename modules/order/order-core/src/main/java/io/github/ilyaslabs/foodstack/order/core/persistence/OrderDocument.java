@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
@@ -59,6 +60,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param merchantAccountId the brand's or branch's merchant account the card payment goes into, or {@code null}
  *        for the operator's (snapshotted at placement, so refunds use the same account)
  */
+@EVL.Database(value = "foodstack_order", table = "order_orders")
 @Document("order_orders")
 public record OrderDocument(@Id String id, String number, String customerId, String customerName, String contactPhone,
         Store store, OrderStatus status, Fulfilment fulfilment, DeliveryMode deliveryMode, Destination destination,

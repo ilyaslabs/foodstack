@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -64,6 +66,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param revision number of changes
  * @param cityId the store's city, to look for riders of that city only, or {@code null}
  */
+@EVL.Database(value = "foodstack_dispatch", table = "dispatch_jobs")
 @Document("dispatch_jobs")
 public record JobDocument(@Id String id, String orderNumber, String customerId, String customerName, String contactPhoneCipher,
         String storeId, String storeName, Set<String> storeOwnerIds, String mode, String status, String riderId, String riderName,

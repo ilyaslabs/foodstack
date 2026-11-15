@@ -4,11 +4,14 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /** The {@code locale} document of {@code settings_settings}. */
+@EVL.Database(value = "foodstack_settings", table = "settings_settings")
 @Document("settings_settings")
 public class LocaleDocument {
 

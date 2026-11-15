@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.core.GeoCells;
 import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import org.slf4j.Logger;
@@ -30,6 +31,7 @@ import org.springframework.data.redis.domain.geo.GeoReference;
  * they show) and {@code <ns>:rider:rt:order:<orderId>} (the customer and the store following one
  * delivery). Lost messages only delay a map until the next ping.
  */
+@EVL.Cache(value = "Redis", description = "Online riders in per-cell GEO sets, last positions")
 public class RiderPresence {
 
     private static final Logger log = LoggerFactory.getLogger(RiderPresence.class);

@@ -23,6 +23,10 @@
     <dependencies>
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>evl-annotations</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
             <artifactId>foodstack-server</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

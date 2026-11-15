@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.store.api.StoreStatus;
 import io.github.ilyaslabs.foodstack.store.api.TimeRange;
@@ -27,6 +28,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * A branch in {@code store_stores}; shard key {@code { _id: hashed }} (a branch is read by its id).
  * Orders, zones, riders and payouts all stay keyed by this id (TDD 5.7).
  */
+@EVL.Database(value = "foodstack_store", table = "store_stores")
 @Document("store_stores")
 public class StoreDocument {
 

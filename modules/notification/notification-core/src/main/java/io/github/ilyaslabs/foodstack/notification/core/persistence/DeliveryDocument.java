@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.notification.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -30,6 +32,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param app push only: {@code web} or {@code backoffice}
  * @param link push only: the URL the message opens, or {@code null}
  */
+@EVL.Database(value = "foodstack_notification", table = "notification_deliveries")
 @Document("notification_deliveries")
 public record DeliveryDocument(@Id String id, String userId, String channel, String template, String recipient, String subject,
         String html, String text, String status, int attempts, String lastError, Instant nextAttemptAt, Instant sentAt,

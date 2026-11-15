@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.identity.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -25,6 +27,7 @@ import org.springframework.data.mongodb.core.mapping.Sharded;
  * @param updatedAt last change
  * @param version optimistic lock
  */
+@EVL.Database(value = "foodstack_identity", table = "identity_addresses")
 @Document("identity_addresses")
 @Sharded(shardKey = "userId", immutableKey = true)
 public record AddressDocument(@Id String id, String userId, String label, String name, double lat, double lng,

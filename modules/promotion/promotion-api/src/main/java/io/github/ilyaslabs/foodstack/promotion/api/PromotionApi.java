@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.promotion.api;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.moduleswitch.Param;
 
 /**
@@ -8,6 +9,7 @@ import io.github.ilyaslabs.moduleswitch.Param;
  * and releases it if the placement fails. Redemption on confirmation and release on cancellation
  * follow the order events (TDD 5.3, 5.5).
  */
+@EVL.Interface(value = "PromotionApi", description = "The promotion module API: an in-process call, or HTTP when promotion runs as its own service")
 public interface PromotionApi {
 
     /** Whether a coupon applies to this order and what it takes off. No side effects. */

@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.identity.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -7,6 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * Email blind index to user id in {@code identity_login_keys}; shard key {@code { loginKey: 1 }}
  * with a unique index on it, so each email belongs to at most one user.
  */
+@EVL.Database(value = "foodstack_identity", table = "identity_login_keys")
 @Document("identity_login_keys")
 public class LoginKeyDocument {
 

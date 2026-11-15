@@ -3,9 +3,12 @@ package io.github.ilyaslabs.foodstack.store.core.persistence;
 import java.util.Collection;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.domain.Limit;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+@EVL.Database(value = "foodstack_store", table = "store_stores")
 public interface StoreRepository extends MongoRepository<StoreDocument, String> {
 
     List<StoreDocument> findByBrandId(String brandId);

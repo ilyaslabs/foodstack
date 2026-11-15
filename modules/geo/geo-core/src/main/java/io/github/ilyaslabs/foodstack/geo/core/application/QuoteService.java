@@ -8,6 +8,7 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.function.Supplier;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaRequest;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaView;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
@@ -67,18 +68,26 @@ public class QuoteService {
         this.timeZone = timeZone;
     }
 
+    @Flow(value = "geo-api-quote>quote", label = "Compute the quote")
     public DeliveryQuoteView quote(QuoteRequest request) {
+        // @flow geo-api-quote>quote>validate: Check both points [on error LOCATION_INVALID]
         requireValid(request.storeLocation(), "storeLocation");
         requireValid(request.destination(), "destination");
+        // @flow geo-api-quote>quote>distance: Road distance
         long distance = this.routing.route(request.storeLocation(), request.destination()).distanceMeters();
+        // @flow geo-api-quote>quote>mode?: Who delivers?
+        // @flow geo-api-quote>quote>mode?>operator: Operator riders [when OPERATOR]
+        // @flow geo-api-quote>quote>mode?>operator>pricing: Operator pricing, or the city's own
         if (request.deliveryMode() == DeliveryMode.OPERATOR) {
             OperatorPricing operator = effective(this.pricing.get(), request.cityId());
+            // @flow geo-api-quote>quote>mode?>operator>refuse: Refuse OPERATOR_DELIVERY_OFF or TOO_FAR [when off or beyond max distance]
             if (!operator.enabled()) {
                 return refusal(DeliveryQuoteView.OPERATOR_DELIVERY_OFF, distance, DeliveryMode.OPERATOR);
             }
             if (distance > operator.maxDistanceMeters()) {
                 return refusal(DeliveryQuoteView.TOO_FAR, distance, DeliveryMode.OPERATOR);
             }
+            // @flow geo-api-quote>quote>mode?>operator>charge: Base + per km, peak multiplier in peak windows
             long charge = operator.baseChargeMinor() + Math.round(operator.perKmMinor() * distance / 1000.0);
             if (operator.peakMultiplierPercent() > 100 && isPeak(operator.peakWindows(), request.storeTimezone())) {
                 charge = Math.round(charge * operator.peakMultiplierPercent() / 100.0);
@@ -86,16 +95,21 @@ public class QuoteService {
             return new DeliveryQuoteView(true, null, charge, operator.minOrderMinor(), operator.freeDeliveryAboveMinor(),
                     distance, null, DeliveryMode.OPERATOR);
         }
+        // @flow geo-api-quote>quote>mode?>zones: First of the branch's zones containing the address [when SELF] [each zone]
         for (ZoneDetails zone : this.zones.getZones(request.storeId())) {
             if (GeoMath.contains(zone.polygon(), request.destination())) {
                 return new DeliveryQuoteView(true, null, zone.chargeMinor(), zone.minOrderMinor(),
                         zone.freeDeliveryAboveMinor(), distance, zone.id(), DeliveryMode.SELF);
             }
         }
+        // @flow geo-api-quote>quote>mode?>zones>refuse: Refuse OUT_OF_AREA [when no zone contains it]
         return refusal(DeliveryQuoteView.OUT_OF_AREA, distance, DeliveryMode.SELF);
     }
 
+    @Flow(value = "geo-api-delivery-area>outline", label = "Build the outline")
     public DeliveryAreaView deliveryArea(DeliveryAreaRequest request) {
+        // @flow geo-api-delivery-area>outline>mode?: Who delivers?
+        // @flow geo-api-delivery-area>outline>mode?>circle: Circle of max distance / road factor [when OPERATOR]
         if (request.deliveryMode() == DeliveryMode.OPERATOR) {
             OperatorPricing operator = effective(this.pricing.get(), request.cityId());
             if (!operator.enabled() || request.storeLocation() == null || !request.storeLocation().isValid()) {
@@ -105,6 +119,7 @@ public class QuoteService {
             return new DeliveryAreaView(request.storeId(),
                     List.of(GeoMath.circle(request.storeLocation(), straightLine, AREA_CIRCLE_POINTS)));
         }
+        // @flow geo-api-delivery-area>outline>mode?>zones: The branch's zone polygons [when SELF]
         return new DeliveryAreaView(request.storeId(),
                 this.zones.getZones(request.storeId()).stream().map(ZoneDetails::polygon).toList());
     }

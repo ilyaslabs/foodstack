@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -12,6 +14,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * A section (category) of a brand menu in {@code store_menu_sections}; shard key
  * {@code { brandId: hashed }} (menus are read per brand).
  */
+@EVL.Database(value = "foodstack_store", table = "store_menu_sections")
 @Document("store_menu_sections")
 public class MenuSectionDocument {
 

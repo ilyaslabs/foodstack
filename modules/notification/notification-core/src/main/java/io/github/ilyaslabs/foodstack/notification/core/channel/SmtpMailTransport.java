@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.notification.core.channel;
 
 import java.nio.charset.StandardCharsets;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import jakarta.mail.MessagingException;
 import jakarta.mail.SendFailedException;
 import jakarta.mail.internet.AddressException;
@@ -14,6 +16,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 
 /** Email over SMTP ({@code SMTP_HOST}, {@code SMTP_PORT}, ...; Mailpit on a local install). */
+@EVL.External(value = "SMTP mail server", description = "Sends emails")
 public class SmtpMailTransport implements MailTransport {
 
     private final JavaMailSender sender;

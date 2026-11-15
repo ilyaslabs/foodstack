@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.rider.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Sharded;
@@ -19,6 +21,7 @@ import org.springframework.data.mongodb.core.mapping.Sharded;
  * @param at when the phone took it
  * @param expireAt when MongoDB deletes it
  */
+@EVL.Database(value = "foodstack_rider", table = "rider_locations")
 @Document("rider_locations")
 @Sharded(shardKey = "riderId", immutableKey = true)
 public record LocationDocument(@Id String id, String riderId, java.util.List<String> orderIds, double lat, double lng,

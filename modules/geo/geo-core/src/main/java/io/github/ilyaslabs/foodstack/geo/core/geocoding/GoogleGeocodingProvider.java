@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Supplier;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.geo.core.application.AddressSuggestion;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 import org.slf4j.Logger;
@@ -18,6 +19,7 @@ import org.springframework.web.client.RestClientException;
  * Google's Geocoding API for address search and the address at a map pin. Results are limited to
  * the deployment's country ({@code country-codes}, first code; one deployment serves one country).
  */
+@EVL.External(value = "Google Maps", description = "Geocoding API: address search and reverse lookup")
 public class GoogleGeocodingProvider implements GeocodingProvider {
 
     /** Google's endpoint; tests point the client elsewhere. */

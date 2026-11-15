@@ -14,6 +14,7 @@ import co.elastic.clients.elasticsearch._types.VersionType;
 import co.elastic.clients.elasticsearch._types.aggregations.Aggregate;
 import co.elastic.clients.elasticsearch.core.SearchRequest;
 import co.elastic.clients.elasticsearch.core.SearchResponse;
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.search.api.CuisineCount;
 import io.github.ilyaslabs.foodstack.search.api.Fulfilment;
@@ -35,6 +36,7 @@ import tools.jackson.databind.node.ObjectNode;
  * may overlap); the customer's point must fall inside one. Results are collapsed on the brand so a
  * brand shows its nearest branch only.
  */
+@EVL.Database(value = "Elasticsearch", description = "Branch and dish search index")
 public class ElasticsearchStoreSearchEngine implements StoreSearchEngine {
 
     /**

@@ -4,6 +4,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.function.Supplier;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
@@ -21,6 +23,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * nobody reads, so it can never hide the change. Shared by every replica, so a change is seen
  * everywhere at once. When Redis is down, reads go to the database.
  */
+@EVL.Cache(value = "Redis", description = "Branch zones and operator pricing for quotes, 10 min, generation-bumped on change")
 public class GeoCache {
 
     private static final TypeReference<List<ZoneDetails>> ZONES = new TypeReference<>() {

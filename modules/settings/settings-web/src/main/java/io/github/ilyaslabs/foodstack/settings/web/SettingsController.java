@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.core.EpochSeconds;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.platform.web.ETags;
@@ -47,6 +49,7 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code settings:manage} and the {@code If-Match} of the version the editor saw (TDD 8.1).
  */
 @RestController
+@EVL.Endpoint(path = "/api/v1/settings")
 @RequestMapping("/api/v1/settings")
 class SettingsController {
 
@@ -67,16 +70,23 @@ class SettingsController {
         this.orderingService = orderingService;
     }
 
+    @Flow(value = "settings-branding-view", label = "Get branding", description = "Name, colours, font and logo URLs; ETag answers 304")
+    @EVL.Endpoint(method = "GET", path = "/branding", caller = "Any app")
     @GetMapping("/branding")
     ResponseEntity<BrandingResponse> branding(@RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
         BrandingDetails branding = this.settingsService.getBranding();
+        // @flow settings-branding-view>etag?: Same ETag?
+        // @flow settings-branding-view>etag?>not-modified: Answer 304 [when If-None-Match matches]
         String etag = ETags.of("branding", branding.version());
         if (ETags.matches(etag, ifNoneMatch)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).cacheControl(PUBLIC_CACHE).build();
         }
+        // @flow settings-branding-view>etag?>body: Answer branding, public cache 60 s [when else]
         return ResponseEntity.ok().eTag(etag).cacheControl(PUBLIC_CACHE).body(toResponse(branding));
     }
 
+    @Flow(value = "settings-branding-update", label = "Update branding", description = "Needs settings:manage and If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/branding", caller = "Back office (operator)")
     @PutMapping("/branding")
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<BrandingResponse> updateBranding(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
@@ -87,16 +97,23 @@ class SettingsController {
         return ResponseEntity.ok().eTag(ETags.of("branding", updated.version())).body(toResponse(updated));
     }
 
+    @Flow(value = "settings-locale-view", label = "Get languages and currency", description = "ETag answers 304")
+    @EVL.Endpoint(method = "GET", path = "/locale", caller = "Any app")
     @GetMapping("/locale")
     ResponseEntity<LocaleResponse> locale(@RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
         LocaleDetails locale = this.settingsService.getLocale();
+        // @flow settings-locale-view>etag?: Same ETag?
+        // @flow settings-locale-view>etag?>not-modified: Answer 304 [when If-None-Match matches]
         String etag = ETags.of("locale", locale.version());
         if (ETags.matches(etag, ifNoneMatch)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).eTag(etag).cacheControl(PUBLIC_CACHE).build();
         }
+        // @flow settings-locale-view>etag?>body: Answer locale with RTL languages [when else]
         return ResponseEntity.ok().eTag(etag).cacheControl(PUBLIC_CACHE).body(toResponse(locale));
     }
 
+    @Flow(value = "settings-locale-update", label = "Update languages, currency, time zone", description = "Needs settings:manage and If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/locale", caller = "Back office (operator)")
     @PutMapping("/locale")
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<LocaleResponse> updateLocale(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
@@ -107,12 +124,16 @@ class SettingsController {
         return ResponseEntity.ok().eTag(ETags.of("locale", updated.version())).body(toResponse(updated));
     }
 
+    @Flow(value = "settings-ordering-view", label = "Get ordering settings", description = "Payment methods, fees, tax, tips, accept timeout")
+    @EVL.Endpoint(method = "GET", path = "/ordering", caller = "Any app")
     @GetMapping("/ordering")
     ResponseEntity<OrderingResponse> ordering() {
         OrderingDetails ordering = this.orderingService.get();
         return ResponseEntity.ok().eTag(ETags.of("ordering", ordering.version())).body(toResponse(ordering));
     }
 
+    @Flow(value = "settings-ordering-update", label = "Update ordering settings", description = "Needs settings:manage and If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/ordering", caller = "Back office (operator)")
     @PutMapping("/ordering")
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<OrderingResponse> updateOrdering(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
@@ -131,6 +152,8 @@ class SettingsController {
     }
 
     /** Rider pay and dispatch rules are for operator staff only, unlike the other sections. */
+    @Flow(value = "settings-delivery-view", label = "Get delivery settings", description = "Rider pay, offers, search radius")
+    @EVL.Endpoint(method = "GET", path = "/delivery", caller = "Back office (operator)")
     @GetMapping("/delivery")
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<DeliveryResponse> delivery() {
@@ -138,6 +161,8 @@ class SettingsController {
         return ResponseEntity.ok().eTag(ETags.of("delivery", delivery.version())).body(toResponse(delivery));
     }
 
+    @Flow(value = "settings-delivery-update", label = "Update delivery settings", description = "Needs settings:manage and If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/delivery", caller = "Back office (operator)")
     @PutMapping("/delivery")
     @PreAuthorize("hasAuthority('settings:manage')")
     ResponseEntity<DeliveryResponse> updateDelivery(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,

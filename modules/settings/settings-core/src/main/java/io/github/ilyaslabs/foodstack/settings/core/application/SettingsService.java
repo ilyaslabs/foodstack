@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.media.api.MediaApi;
 import io.github.ilyaslabs.foodstack.media.api.MediaAssetView;
 import io.github.ilyaslabs.foodstack.media.api.MediaOwner;
@@ -63,10 +64,12 @@ public class SettingsService {
         this.clock = clock;
     }
 
+    @Flow(value = "settings-branding-view>load", label = "Read branding through the cache", description = "logo URLs from the media module")
     public BrandingDetails getBranding() {
         return this.cache.get(SettingsChanged.BRANDING, BrandingDetails.class, () -> branding(loadBranding()));
     }
 
+    @Flow(value = "settings-locale-view>load", label = "Read locale through the cache")
     public LocaleDetails getLocale() {
         return this.cache.get(SettingsChanged.LOCALE, LocaleDetails.class, () -> locale(loadLocale()));
     }
@@ -75,12 +78,16 @@ public class SettingsService {
      * Replaces the branding.
      * @param expectedVersion the version the editor started from; a different current version fails with 409
      */
+    @Flow(value = "settings-branding-update>save", label = "Save branding")
     public BrandingDetails updateBranding(UpdateBranding update, long expectedVersion, String userId) {
+        // @flow settings-branding-update>save>validate: Check name, colours and font
         validate(update);
         BrandingDocument branding = loadBranding();
+        // @flow settings-branding-update>save>version: Check the edited version [on error SETTINGS_VERSION_CONFLICT]
         requireVersion("branding", branding.getVersion(), expectedVersion);
         String oldLogo = branding.getLogoMediaId();
         String newLogo = blankToNull(update.logoMediaId());
+        // @flow settings-branding-update>save>claim-logo: Claim the new logo with media [when logo changed]
         if (newLogo != null && !newLogo.equals(oldLogo)) {
             this.mediaApi.claim(newLogo, MediaPurpose.BRANDING, LOGO_OWNER);
         }
@@ -92,21 +99,27 @@ public class SettingsService {
         branding.setLogoMediaId(newLogo);
         branding.setUpdatedAt(this.clock.instant());
         branding.setUpdatedBy(userId);
+        // @flow settings-branding-update>save>write: Save and SettingsChanged event in one transaction
         BrandingDocument saved = this.transaction.execute((status) -> {
             BrandingDocument result = this.brandingRepository.save(branding);
             this.outbox.append(new SettingsChanged(SettingsChanged.BRANDING, result.getVersion(), userId));
             return result;
         });
+        // @flow settings-branding-update>save>evict: Evict the cached branding
         this.cache.evict(SettingsChanged.BRANDING);
+        // @flow settings-branding-update>save>release-logo: Release the old logo [when logo replaced]
         if (oldLogo != null && !oldLogo.equals(newLogo)) {
             this.mediaApi.release(oldLogo, LOGO_OWNER);
         }
         return branding(saved);
     }
 
+    @Flow(value = "settings-locale-update>save", label = "Save locale")
     public LocaleDetails updateLocale(UpdateLocale update, long expectedVersion, String userId) {
+        // @flow settings-locale-update>save>validate: Check BCP 47 tags, ISO currency, IANA zone
         List<String> languages = validate(update);
         LocaleDocument locale = loadLocale();
+        // @flow settings-locale-update>save>version: Check the edited version [on error SETTINGS_VERSION_CONFLICT]
         requireVersion("locale", locale.getVersion(), expectedVersion);
         locale.setDefaultLanguage(update.defaultLanguage());
         locale.setLanguages(languages);
@@ -114,11 +127,13 @@ public class SettingsService {
         locale.setTimezone(update.timezone());
         locale.setUpdatedAt(this.clock.instant());
         locale.setUpdatedBy(userId);
+        // @flow settings-locale-update>save>write: Save and SettingsChanged event in one transaction
         LocaleDocument saved = this.transaction.execute((status) -> {
             LocaleDocument result = this.localeRepository.save(locale);
             this.outbox.append(new SettingsChanged(SettingsChanged.LOCALE, result.getVersion(), userId));
             return result;
         });
+        // @flow settings-locale-update>save>evict: Evict the cached locale
         this.cache.evict(SettingsChanged.LOCALE);
         return locale(saved);
     }

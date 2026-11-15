@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.platform.security;
 import java.time.Clock;
 import java.time.Duration;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.core.TooManyRequestsException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * window, so it works on Redis Cluster. When Redis is down the limit is skipped (fail open), as at
  * the edge.
  */
+@EVL.Cache(value = "Redis", description = "Per-user fixed-window counters; fails open when Redis is down")
 public class RateLimiter {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimiter.class);

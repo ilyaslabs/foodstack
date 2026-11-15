@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.geo.impl;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.CityView;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaRequest;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaView;
@@ -37,11 +39,15 @@ class GeoApiImpl implements GeoApi {
         this.cityService = cityService;
     }
 
+    @Flow(value = "geo-api-cities", label = "Cities for other modules", description = "")
+    @EVL.Endpoint(method = "API", path = "GeoApi.cities", caller = "Store, order")
     @Override
     public List<CityView> cities() {
         return this.cityService.list().stream().map(GeoApiImpl::view).toList();
     }
 
+    @Flow(value = "geo-api-nearest-city", label = "Nearest city for other modules", description = "Gives a new branch its city")
+    @EVL.Endpoint(method = "API", path = "GeoApi.nearestCity", caller = "Store")
     @Override
     public CityView nearestCity(GeoPoint point) {
         City city = this.cityService.nearest(point);
@@ -52,16 +58,22 @@ class GeoApiImpl implements GeoApi {
         return new CityView(city.id(), city.name(), city.centre(), city.active(), city.pricing() != null);
     }
 
+    @Flow(value = "geo-api-route", label = "Road distance and time", description = "Used by dispatch and live ETAs")
+    @EVL.Endpoint(method = "API", path = "GeoApi.route", caller = "Dispatch, order")
     @Override
     public RouteView route(RouteRequest request) {
         return this.routingService.route(request.from(), request.to());
     }
 
+    @Flow(value = "geo-api-quote", label = "Quote delivery", description = "Store zones for self-delivery, operator or city pricing otherwise")
+    @EVL.Endpoint(method = "API", path = "GeoApi.quote", caller = "Cart, search")
     @Override
     public DeliveryQuoteView quote(QuoteRequest request) {
         return this.quoteService.quote(request);
     }
 
+    @Flow(value = "geo-api-delivery-area", label = "Delivery area outline", description = "Zones, or a circle for operator delivery")
+    @EVL.Endpoint(method = "API", path = "GeoApi.deliveryArea", caller = "Store, search")
     @Override
     public DeliveryAreaView deliveryArea(DeliveryAreaRequest request) {
         return this.quoteService.deliveryArea(request);

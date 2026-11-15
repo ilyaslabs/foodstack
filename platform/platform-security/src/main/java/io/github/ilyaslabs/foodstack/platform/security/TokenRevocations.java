@@ -4,6 +4,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
@@ -17,6 +19,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * {@code identity} raises the version when an account is blocked, a password changes, roles are
  * removed or the user logs out everywhere; every module then rejects older tokens.
  */
+@EVL.Cache(value = "Redis", description = "Lowest valid token version per user, plus a small in-memory cache")
 public class TokenRevocations {
 
     /** Default for how many users' versions each process keeps in memory. */

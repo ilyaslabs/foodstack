@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.store.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -26,6 +28,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param decidedAt when decided, or {@code null}
  * @param version optimistic lock
  */
+@EVL.Database(value = "foodstack_store", table = "store_price_changes")
 @Document("store_price_changes")
 public record PriceChangeDocument(@Id String id, String brandId, String storeId, String itemId, String optionId,
         long currentMinor, Long proposedMinor, String status, String requestedBy, Instant requestedAt, String decidedBy,

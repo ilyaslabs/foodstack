@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.settings.api.events.SettingsChanged;
 import io.github.ilyaslabs.foodstack.settings.core.persistence.OrderingDocument;
@@ -50,15 +51,19 @@ public class OrderingSettingsService {
         this.clock = clock;
     }
 
+    @Flow(value = "settings-ordering-view>load", label = "Read ordering settings through the cache")
     public OrderingDetails get() {
         return this.cache.get(SettingsChanged.ORDERING, OrderingDetails.class,
                 () -> details(this.repository.findById(OrderingDocument.ID).orElse(DEFAULTS)));
     }
 
+    @Flow(value = "settings-ordering-update>save", label = "Save ordering settings")
     public OrderingDetails update(UpdateOrdering update, long expectedVersion, String userId) {
+        // @flow settings-ordering-update>save>validate: Check the values
         validate(update);
         OrderingDocument current = this.repository.findById(OrderingDocument.ID).orElse(DEFAULTS);
         long currentVersion = (current.version() != null) ? current.version() : 0L;
+        // @flow settings-ordering-update>save>version: Check the edited version [on error SETTINGS_VERSION_CONFLICT]
         if (currentVersion != expectedVersion) {
             throw new ModuleException.Conflict("The ordering settings were changed by someone else; reload and retry",
                     "SETTINGS_VERSION_CONFLICT", Map.of("currentVersion", currentVersion));
@@ -67,11 +72,13 @@ public class OrderingSettingsService {
                 update.serviceFeeMinor(), update.serviceFeeBasisPoints(), update.taxBasisPoints(), update.tipsEnabled(),
                 update.acceptTimeoutSeconds(), this.clock.instant(), userId, current.version(), update.priceApprovalRequired(),
                 update.directCollectionEnabled(), update.creditLimitMinor(), update.cardStyle(), update.savedCardsEnabled());
+        // @flow settings-ordering-update>save>write: Save and SettingsChanged event in one transaction
         OrderingDocument saved = this.transaction.execute((status) -> {
             OrderingDocument result = this.repository.save(changed);
             this.outbox.append(new SettingsChanged(SettingsChanged.ORDERING, result.version(), userId));
             return result;
         });
+        // @flow settings-ordering-update>save>evict: Evict the cached ordering settings
         this.cache.evict(SettingsChanged.ORDERING);
         return details(saved);
     }

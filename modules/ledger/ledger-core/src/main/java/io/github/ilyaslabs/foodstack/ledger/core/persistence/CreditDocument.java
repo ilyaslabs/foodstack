@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.ledger.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -20,6 +22,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param owedMinor what it owed at the last check
  * @param checkedAt the last check
  */
+@EVL.Database(value = "foodstack_ledger", table = "ledger_credit")
 @Document("ledger_credit")
 public record CreditDocument(@Id String id, String brandId, String storeName, java.util.Set<String> ownerUserIds, String mode, Long creditLimitMinor, boolean exceeded,
         long owedMinor, Instant checkedAt) {

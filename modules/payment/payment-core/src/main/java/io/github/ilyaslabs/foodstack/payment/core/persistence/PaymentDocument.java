@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.payment.core.persistence;
 import java.time.Instant;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -32,6 +34,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param customerReference the gateway customer whose saved cards the page offers, or {@code null}
  * @param updatedAt last change
  */
+@EVL.Database(value = "foodstack_payment", table = "payment_intents")
 @Document("payment_intents")
 public record PaymentDocument(@Id String id, String customerId, String status, long amountMinor, String currency,
         String merchantAccount, String gateway, String sessionReference, String paymentReference, String redirectUrl,

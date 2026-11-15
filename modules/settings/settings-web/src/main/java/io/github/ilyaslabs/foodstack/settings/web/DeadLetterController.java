@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.settings.web;
 import java.util.List;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.settings.core.deadletters.DeadLetterService;
 import io.github.ilyaslabs.foodstack.settings.core.deadletters.DeadLetterService.DeadLetter;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
  * and dismiss. Operators with {@code settings:manage} only, since an event can hold personal data.
  */
 @RestController
+@EVL.Endpoint(path = "/api/v1/settings/dead-letters", caller = "Back office (operator)")
 @RequestMapping("/api/v1/settings/dead-letters")
 @PreAuthorize("hasAuthority('settings:manage')")
 class DeadLetterController {
@@ -35,6 +38,8 @@ class DeadLetterController {
         this.deadLetters = deadLetters;
     }
 
+    @Flow(value = "dead-letters-list", label = "List failed events", description = "Latest 100, optional status filter")
+    @EVL.Endpoint(method = "GET", path = "", caller = "Back office (operator)")
     @GetMapping
     ResponseEntity<List<DeadLetter>> list(@RequestParam(required = false) String status) {
         if (status != null && !status.isBlank() && !STATUSES.contains(status)) {
@@ -44,22 +49,30 @@ class DeadLetterController {
     }
 
     /** The number waiting, for the navigation badge. */
+    @Flow(value = "dead-letters-count", label = "Count open failed events", description = "For the back-office badge")
+    @EVL.Endpoint(method = "GET", path = "/open-count", caller = "Back office (operator)")
     @GetMapping("/open-count")
     long openCount() {
         return this.deadLetters.openCount();
     }
 
     /** The event as it was published (JSON, or the raw text if it could not be read). */
+    @Flow(value = "dead-letters-event", label = "Show failed event", description = "Decrypts the stored event")
+    @EVL.Endpoint(method = "GET", path = "/{id}/event", caller = "Back office (operator)")
     @GetMapping("/{id}/event")
     ResponseEntity<EventResponse> event(@PathVariable String id) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new EventResponse(this.deadLetters.event(id)));
     }
 
+    @Flow(value = "dead-letters-replay", label = "Replay failed event", description = "Sends it again to the consumer that failed")
+    @EVL.Endpoint(method = "POST", path = "/{id}/replay", caller = "Back office (operator)")
     @PostMapping("/{id}/replay")
     DeadLetter replay(@PathVariable String id) {
         return this.deadLetters.replay(id, CurrentUser.id());
     }
 
+    @Flow(value = "dead-letters-dismiss", label = "Dismiss failed event", description = "Marks it handled without replaying")
+    @EVL.Endpoint(method = "POST", path = "/{id}/dismiss", caller = "Back office (operator)")
     @PostMapping("/{id}/dismiss")
     DeadLetter dismiss(@PathVariable String id) {
         return this.deadLetters.dismiss(id, CurrentUser.id());

@@ -1,11 +1,13 @@
 package io.github.ilyaslabs.foodstack.order.api;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.moduleswitch.Param;
 
 /**
  * What other modules may ask the order module. Most of them follow the order events instead;
  * this read is for the few that need an order's current state. Errors: {@code ORDER_NOT_FOUND} (404).
  */
+@EVL.Interface(value = "OrderApi", description = "The order module API: an in-process call, or HTTP when order runs as its own service")
 public interface OrderApi {
 
     /** The order's summary as it is now. Its customer, its store's people, operator staff or the platform. */

@@ -11,6 +11,8 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
@@ -28,6 +30,7 @@ import org.springframework.web.client.RestClientException;
  * service account (RS256), trades it for an access token (cached until shortly before it expires) and
  * sends one message per device. Web, Android and iOS devices all use this one API.
  */
+@EVL.External(value = "Firebase Cloud Messaging", description = "Push notifications to devices")
 public class FcmPushTransport implements PushTransport {
 
     private static final Logger log = LoggerFactory.getLogger(FcmPushTransport.class);

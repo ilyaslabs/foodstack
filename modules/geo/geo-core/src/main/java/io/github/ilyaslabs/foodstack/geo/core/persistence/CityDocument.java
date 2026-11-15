@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.geo.core.application.PeakWindow;
 
 import org.springframework.data.annotation.Id;
@@ -24,6 +25,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedBy who changed it
  * @param version optimistic lock
  */
+@EVL.Database(value = "foodstack_geo", table = "geo_cities")
 @Document("geo_cities")
 public record CityDocument(@Id String id, Map<String, String> name, double centreLat, double centreLng, boolean active,
         Pricing pricing, Instant updatedAt, String updatedBy, @Version Long version) {

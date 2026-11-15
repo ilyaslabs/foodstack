@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.store.core.application.Commission;
 import io.github.ilyaslabs.foodstack.store.core.application.CommissionChange;
 
@@ -19,6 +20,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * A brand in {@code store_brands}; shard key {@code { _id: hashed }} (read by brand id). Holds what
  * its branches share: name, images, cuisines, the menu and the default commission (TDD 5.7).
  */
+@EVL.Database(value = "foodstack_store", table = "store_brands")
 @Document("store_brands")
 public class BrandDocument {
 

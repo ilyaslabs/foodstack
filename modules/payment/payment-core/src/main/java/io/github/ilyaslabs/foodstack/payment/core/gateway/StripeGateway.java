@@ -11,6 +11,8 @@ import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.util.LinkedMultiValueMap;
@@ -30,6 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
  * Amounts are passed in the currency's minor units, which is what Stripe expects for the common
  * two-decimal currencies; zero-decimal currencies need no conversion either.
  */
+@EVL.External(value = "Card payment gateway", description = "Hosted payment page, refunds and webhooks; card data never reaches FoodStack")
 public class StripeGateway implements CardGateway {
 
     public static final String ID = "stripe";

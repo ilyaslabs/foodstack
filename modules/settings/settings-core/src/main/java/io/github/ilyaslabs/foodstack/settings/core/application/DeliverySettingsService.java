@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.settings.api.events.SettingsChanged;
 import io.github.ilyaslabs.foodstack.settings.core.persistence.DeliveryDocument;
@@ -41,15 +42,19 @@ public class DeliverySettingsService {
         this.clock = clock;
     }
 
+    @Flow(value = "settings-delivery-view>load", label = "Read delivery settings through the cache")
     public DeliveryDetails get() {
         return this.cache.get(SettingsChanged.DELIVERY, DeliveryDetails.class,
                 () -> details(this.repository.findById(DeliveryDocument.ID).orElse(DEFAULTS)));
     }
 
+    @Flow(value = "settings-delivery-update>save", label = "Save delivery settings")
     public DeliveryDetails update(UpdateDelivery update, long expectedVersion, String userId) {
+        // @flow settings-delivery-update>save>validate: Check the values
         validate(update);
         DeliveryDocument current = this.repository.findById(DeliveryDocument.ID).orElse(DEFAULTS);
         long currentVersion = (current.version() != null) ? current.version() : 0L;
+        // @flow settings-delivery-update>save>version: Check the edited version [on error SETTINGS_VERSION_CONFLICT]
         if (currentVersion != expectedVersion) {
             throw new ModuleException.Conflict("The delivery settings were changed by someone else; reload and retry",
                     "SETTINGS_VERSION_CONFLICT", Map.of("currentVersion", currentVersion));
@@ -58,11 +63,13 @@ public class DeliverySettingsService {
                 update.riderPayMinMinor(), update.offerTimeoutSeconds(), update.searchRadiusMeters(),
                 update.searchLeadMinutes(), update.noRiderAlertSeconds(), update.proofCodeAboveMinor(),
                 update.locationRetentionDays(), this.clock.instant(), userId, current.version());
+        // @flow settings-delivery-update>save>write: Save and SettingsChanged event in one transaction
         DeliveryDocument saved = this.transaction.execute((status) -> {
             DeliveryDocument result = this.repository.save(changed);
             this.outbox.append(new SettingsChanged(SettingsChanged.DELIVERY, result.version(), userId));
             return result;
         });
+        // @flow settings-delivery-update>save>evict: Evict the cached delivery settings
         this.cache.evict(SettingsChanged.DELIVERY);
         return details(saved);
     }

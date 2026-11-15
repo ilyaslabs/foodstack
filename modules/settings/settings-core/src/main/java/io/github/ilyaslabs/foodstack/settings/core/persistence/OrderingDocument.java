@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.settings.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -24,6 +26,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param directCollectionEnabled branches may collect card payments themselves ({@code null}: off)
  * @param creditLimitMinor default credit limit of a direct-collecting branch ({@code null}: the default)
  */
+@EVL.Database(value = "foodstack_settings", table = "settings_settings")
 @Document("settings_settings")
 public record OrderingDocument(@Id String id, boolean cashEnabled, boolean cardEnabled, long serviceFeeMinor,
         int serviceFeeBasisPoints, int taxBasisPoints, boolean tipsEnabled, int acceptTimeoutSeconds, Instant updatedAt,

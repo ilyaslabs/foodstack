@@ -22,4 +22,12 @@
         <module>platform-kafka</module>
         <module>platform-security</module>
     </modules>
+
+    <dependencies>
+        <!-- EVL flow-map tags; provided scope does not pass to dependants, so each tree declares it -->
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>evl-annotations</artifactId>
+        </dependency>
+    </dependencies>
 </project>

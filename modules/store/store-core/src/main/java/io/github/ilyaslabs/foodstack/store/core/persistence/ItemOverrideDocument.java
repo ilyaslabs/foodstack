@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.store.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -11,6 +13,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * shard key {@code { storeId: hashed }} (read together when the branch menu is built). Id
  * {@code <storeId>:<itemId>[:<optionId>]}. Price overrides arrive with the multi-branch screens (M4).
  */
+@EVL.Database(value = "foodstack_store", table = "store_item_overrides")
 @Document("store_item_overrides")
 public class ItemOverrideDocument {
 

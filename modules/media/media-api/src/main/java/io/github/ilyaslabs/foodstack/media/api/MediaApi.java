@@ -1,11 +1,13 @@
 package io.github.ilyaslabs.foodstack.media.api;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.moduleswitch.Param;
 
 /**
  * What other modules may ask the media module. Errors: {@code MEDIA_NOT_FOUND} (404),
  * {@code MEDIA_NOT_READY} and {@code MEDIA_ALREADY_CLAIMED} (409), {@code MEDIA_PURPOSE_MISMATCH} (400).
  */
+@EVL.Interface(value = "MediaApi", description = "The media module API: an in-process call, or HTTP when media runs as its own service")
 public interface MediaApi {
 
     /** An asset with the URLs of its variants. */

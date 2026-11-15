@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.identity.core.persistence;
 import java.time.Instant;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -27,6 +29,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param ip the caller's address
  * @param traceId the request's trace
  */
+@EVL.Database(value = "foodstack_identity", table = "identity_audit_log")
 @Document("identity_audit_log")
 public record AuditLogDocument(@Id String id, String kind, Instant at, String actorId, String actorName, List<String> roles,
         String area, String action, String resource, int status, String request, String before, String after, String ip,

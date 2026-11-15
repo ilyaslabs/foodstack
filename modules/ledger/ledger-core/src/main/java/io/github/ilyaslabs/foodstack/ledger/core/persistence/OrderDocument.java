@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.ledger.core.persistence;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -18,6 +20,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param collectedBy {@code OPERATOR} or {@code STORE}
  * @param pendingRefunds refunds asked while the order was in progress
  */
+@EVL.Database(value = "foodstack_ledger", table = "ledger_orders")
 @Document("ledger_orders")
 public record OrderDocument(@Id String id, String storeId, String brandId, Boolean done, Boolean closed, String collectedBy,
         List<PendingRefund> pendingRefunds) {

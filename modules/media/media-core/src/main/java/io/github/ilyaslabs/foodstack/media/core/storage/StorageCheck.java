@@ -11,6 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.core.exception.SdkClientException;
@@ -57,15 +60,20 @@ public class StorageCheck {
      * the same site, as on a trial install)
      * @throws IllegalStateException naming the first thing to fix
      */
+    @Flow(value = "media-storage-check", label = "Check object storage at start", description = "Refuses to start with a message naming the first thing to fix")
+    @EVL.Job(trigger = "application start")
     public void check(String publicBucket, String privateBucket, String publicBaseUrl, List<String> origins) {
         String key = PREFIX + UUID.randomUUID() + ".txt";
         List<String> written = new ArrayList<>();
         try {
+            // @flow media-storage-check>write: Write a test file to both buckets
             for (String bucket : List.of(publicBucket, privateBucket)) {
                 write(bucket, key);
                 written.add(bucket);
             }
+            // @flow media-storage-check>public-read: Read it back from the public URL
             publicRead(publicBaseUrl, key);
+            // @flow media-storage-check>cors: Check browser upload (CORS) [each site origin]
             for (String origin : origins) {
                 for (String bucket : List.of(publicBucket, privateBucket)) {
                     browserUpload(bucket, origin);
@@ -73,6 +81,7 @@ public class StorageCheck {
             }
             log.info("Storage check passed: buckets {} and {}, images at {}", publicBucket, privateBucket, publicBaseUrl);
         }
+        // @flow media-storage-check>cleanup: Delete the test files
         finally {
             for (String bucket : written) {
                 try {

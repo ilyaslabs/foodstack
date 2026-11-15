@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.review.core.persistence;
 
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -15,6 +17,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param sum their stars added up
  * @param stars published reviews per star, keyed {@code "1"} to {@code "5"}
  */
+@EVL.Database(value = "foodstack_review", table = "review_store_stats")
 @Document("review_store_stats")
 public record StoreStatsDocument(@Id String id, String brandId, long count, long sum, Map<String, Long> stars) {
 }

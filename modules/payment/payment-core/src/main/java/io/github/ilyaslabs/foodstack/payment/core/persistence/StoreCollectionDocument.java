@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.payment.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -16,6 +18,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param suspended over its credit limit: the operator collects until it is back within it
  * @param updatedAt last change
  */
+@EVL.Database(value = "foodstack_payment", table = "payment_store_collection")
 @Document("payment_store_collection")
 public record StoreCollectionDocument(@Id String id, String brandId, String mode, boolean suspended, Instant updatedAt) {
 

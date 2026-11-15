@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.identity.core.persistence;
 import java.time.Instant;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -18,6 +20,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedBy who changed it last
  * @param updatedAt when
  */
+@EVL.Database(value = "foodstack_identity", table = "identity_settings")
 @Document("identity_settings")
 public record SignInSettingsDocument(@Id String id, List<String> googleClientIds, List<String> appleClientIds,
         String updatedBy, Instant updatedAt) {

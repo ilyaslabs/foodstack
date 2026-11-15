@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.geo.web;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.geo.core.application.ZoneDetails;
 import io.github.ilyaslabs.foodstack.geo.core.application.ZoneInput;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code geo:manage} can view and correct any branch's zones for support (SE-7).
  */
 @RestController
+@EVL.Endpoint(path = "/api/v1/zones")
 @RequestMapping("/api/v1/zones")
 class ZonesController {
 
@@ -38,16 +41,22 @@ class ZonesController {
         this.zoneService = zoneService;
     }
 
+    @Flow(value = "geo-zones-view", label = "Get delivery zones", description = "A self-delivery branch's zones; branch staff or geo:manage")
+    @EVL.Endpoint(method = "GET", path = "/stores/{storeId}", caller = "Back office (store)")
     @GetMapping("/stores/{storeId}")
     @PreAuthorize("isAuthenticated()")
     ZonesResponse zones(@PathVariable String storeId) {
+        // @flow geo-zones-view>access: Check branch access
         CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
         return toResponse(storeId, this.zoneService.getZones(storeId));
     }
 
+    @Flow(value = "geo-zones-replace", label = "Replace delivery zones", description = "Circles or polygons with charge, minimum order and free-delivery threshold")
+    @EVL.Endpoint(method = "PUT", path = "/stores/{storeId}", caller = "Back office (store)")
     @PutMapping("/stores/{storeId}")
     @PreAuthorize("isAuthenticated()")
     ZonesResponse replace(@PathVariable String storeId, @Valid @RequestBody ZonesRequest request) {
+        // @flow geo-zones-replace>access: Check branch access
         CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
         List<ZoneInput> inputs = request.zones().stream().map(ZonesController::toInput).toList();
         return toResponse(storeId, this.zoneService.replaceZones(storeId, inputs, CurrentUser.id()));

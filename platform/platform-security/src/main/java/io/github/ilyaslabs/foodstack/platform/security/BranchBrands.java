@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.platform.security;
 
 import java.util.Optional;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 
@@ -16,6 +18,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * the answers in a bounded in-memory cache with no expiry. An unknown branch, or Redis being
  * unreachable, means no brand: access is refused, never guessed.
  */
+@EVL.Cache(value = "Redis", description = "Which brand each branch belongs to")
 public class BranchBrands {
 
     /** Default for how many branches each process keeps in memory. */

@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.geo.core.geocoding;
 import java.util.ArrayList;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.geo.core.application.AddressSuggestion;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 import tools.jackson.databind.JsonNode;
@@ -15,6 +16,7 @@ import org.springframework.web.client.RestClientException;
  * Nominatim (OpenStreetMap) search and reverse lookup. Self-host it or use a hosted provider in
  * production: the public server allows one request per second (deployment guide).
  */
+@EVL.External(value = "Nominatim geocoding", description = "Address search and reverse lookup")
 public class NominatimGeocodingProvider implements GeocodingProvider {
 
     private final RestClient client;

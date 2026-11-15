@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.geo.core.persistence;
 import java.time.Instant;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.geo.core.application.PeakWindow;
 
 import org.springframework.data.annotation.Id;
@@ -14,6 +15,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * (unsharded): base charge plus a rate per km of road distance, up to a maximum distance, with a
  * minimum order, a free-delivery threshold and dearer peak hours (PRD DR-1b).
  */
+@EVL.Database(value = "foodstack_geo", table = "geo_settings")
 @Document("geo_settings")
 public class OperatorPricingDocument {
 

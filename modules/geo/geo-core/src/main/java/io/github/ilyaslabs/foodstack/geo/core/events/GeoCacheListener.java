@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.geo.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.events.CityChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.OperatorDeliveryPricingChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.ZoneChanged;
@@ -32,17 +34,23 @@ public class GeoCacheListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "geo-cache-evict", label = "Evict geo caches on change", description = "Every replica, latest offset: makes sure no stale quote data survives a change")
+    @EVL.Job(trigger = "<ns>.geo.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.geo:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-geo-cache", groupId = "${foodstack.namespace:foodstack}-geo-cache",
             topics = "${foodstack.namespace:foodstack}.geo.events", properties = "auto.offset.reset=latest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
+        // @flow geo-cache-evict>type?: Which change?
+        // @flow geo-cache-evict>type?>zones: Evict the branch's zones [when ZoneChanged]
         if (ZONE_CHANGED.equals(event.type())) {
             this.cache.evictZones(event.dataAs(ZoneChanged.class, this.jsonMapper).storeId());
         }
+        // @flow geo-cache-evict>type?>pricing: Evict operator pricing [when OperatorDeliveryPricingChanged]
         else if (PRICING_CHANGED.equals(event.type())) {
             this.cache.evictOperatorPricing();
         }
+        // @flow geo-cache-evict>type?>cities: Evict cities [when CityChanged]
         else if (CITY_CHANGED.equals(event.type())) {
             this.cache.evictCities();
         }

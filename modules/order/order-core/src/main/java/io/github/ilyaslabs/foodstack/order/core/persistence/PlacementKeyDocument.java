@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.order.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -15,6 +17,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param fingerprint a hash of the request, so a reused key with another request is refused
  * @param createdAt used at
  */
+@EVL.Database(value = "foodstack_order", table = "order_placement_keys")
 @Document("order_placement_keys")
 public record PlacementKeyDocument(@Id String id, String orderId, String fingerprint, Instant createdAt) {
 }

@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.store.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -11,6 +13,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * need the shard key), and a customer link is read through it. A changed slug frees the old one;
  * old links do not redirect (TDD 22).
  */
+@EVL.Database(value = "foodstack_store", table = "store_slugs")
 @Document("store_slugs")
 public class StoreSlugDocument {
 

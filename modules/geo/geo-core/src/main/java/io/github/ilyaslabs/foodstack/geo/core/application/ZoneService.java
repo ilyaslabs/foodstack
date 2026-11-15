@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.geo.api.events.ZoneChanged;
 import io.github.ilyaslabs.foodstack.geo.core.domain.GeoMath;
@@ -56,25 +57,32 @@ public class ZoneService {
     }
 
     /** The branch's zones, from the cache when there. */
+    @Flow(value = "geo-zones-view>load", label = "Read zones through the cache")
+    @Flow(value = "geo-api-quote>quote>mode?>zones>load", label = "Read zones through the cache")
     public List<ZoneDetails> getZones(String storeId) {
         return this.cache.zones(storeId,
                 () -> this.zones.findByStoreIdOrderBySortOrderAsc(storeId).stream().map(ZoneService::toDetails).toList());
     }
 
     /** Replaces every zone of the branch and publishes {@link ZoneChanged}. */
+    @Flow(value = "geo-zones-replace>save", label = "Replace the zones")
+    @Flow(value = "seed-geo>zones", label = "Demo zone rings", each = "demo branch")
     public List<ZoneDetails> replaceZones(String storeId, List<ZoneInput> inputs, String userId) {
+        // @flow geo-zones-replace>save>validate: At most 20 zones; names, radius 200 m-50 km or 3-200 point outline that does not cross itself
         validate(storeId, inputs);
         Instant now = this.clock.instant();
         List<ZoneDocument> documents = new ArrayList<>();
         for (int i = 0; i < inputs.size(); i++) {
             documents.add(toDocument(storeId, i, inputs.get(i), now, userId));
         }
+        // @flow geo-zones-replace>save>write: Delete old, save new, ZoneChanged event in one transaction
         List<ZoneDocument> saved = this.transaction.execute((status) -> {
             this.zones.deleteByStoreId(storeId);
             List<ZoneDocument> result = this.zones.saveAll(documents);
             this.outbox.append(new ZoneChanged(storeId, result.size(), userId));
             return result;
         });
+        // @flow geo-zones-replace>save>evict: Bump the zones cache generation
         this.cache.evictZones(storeId);
         return saved.stream().map(ZoneService::toDetails).toList();
     }

@@ -1,11 +1,13 @@
 package io.github.ilyaslabs.foodstack.store.api;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.moduleswitch.Param;
 
 /**
  * What other modules may ask the store module. In code a branch is a <em>store</em>
  * ({@code storeId}); only the UI says Brand and Branch (TDD 5.7). Errors: {@code STORE_NOT_FOUND} (404).
  */
+@EVL.Interface(value = "StoreApi", description = "The store module API: an in-process call, or HTTP when store runs as its own service")
 public interface StoreApi {
 
     /**

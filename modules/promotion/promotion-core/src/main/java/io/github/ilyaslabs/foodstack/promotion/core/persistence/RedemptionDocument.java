@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.promotion.core.persistence;
 import java.time.Instant;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -24,6 +26,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param redeemedAt when the order was confirmed, or {@code null}
  * @param releasedAt when the use was given back, or {@code null}
  */
+@EVL.Database(value = "foodstack_promotion", table = "promotion_redemptions")
 @Document("promotion_redemptions")
 public record RedemptionDocument(@Id String id, String promotionId, String code, Map<String, String> title, String customerId,
         String storeId, String status, long itemsDiscountMinor, long deliveryDiscountMinor, long operatorShareMinor,

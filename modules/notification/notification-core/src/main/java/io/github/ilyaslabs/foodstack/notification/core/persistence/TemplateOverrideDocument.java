@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.notification.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -19,6 +21,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedAt last save
  * @param updatedBy who saved it
  */
+@EVL.Database(value = "foodstack_notification", table = "notification_templates")
 @Document("notification_templates")
 public record TemplateOverrideDocument(@Id String id, String template, String language, String title, String body,
         String subject, long version, Instant updatedAt, String updatedBy) {

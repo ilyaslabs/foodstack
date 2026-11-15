@@ -67,6 +67,7 @@
         <liquibase-mongodb.version>5.0.4</liquibase-mongodb.version>
         <awssdk.version>2.57.7</awssdk.version>
         <uuid-creator.version>6.1.1</uuid-creator.version>
+        <evl-annotations.version>2.0.0</evl-annotations.version>
         <bouncycastle.version>1.86</bouncycastle.version>
         <webp-imageio.version>0.11.0</webp-imageio.version>
         <metadata-extractor.version>2.22.0</metadata-extractor.version>
@@ -436,6 +437,13 @@
                 <groupId>org.liquibase.ext</groupId>
                 <artifactId>liquibase-mongodb</artifactId>
                 <version>${liquibase-mongodb.version}</version>
+            </dependency>
+            <!-- EVL flow-map tags (@Flow, @EVL.*); class-retention only, never needed at runtime -->
+            <dependency>
+                <groupId>io.github.ilyaslabs</groupId>
+                <artifactId>evl-annotations</artifactId>
+                <version>${evl-annotations.version}</version>
+                <scope>provided</scope>
             </dependency>
             <dependency>
                 <groupId>com.github.f4b6a3</groupId>

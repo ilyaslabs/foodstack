@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.ledger.core.persistence;
 import java.time.Instant;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.ledger.core.domain.Leg;
 
 import org.springframework.data.annotation.Id;
@@ -30,6 +31,7 @@ import org.springframework.data.mongodb.core.mapping.Sharded;
  * @param note detail such as a refund reason or a settlement reference, or {@code null}
  * @param rolled whether the daily roll-ups include it
  */
+@EVL.Database(value = "foodstack_ledger", table = "ledger_transactions")
 @Document("ledger_transactions")
 @Sharded(shardKey = "partition", immutableKey = true)
 public record TransactionDocument(@Id String id, String partition, int bucket, String type, String storeId, String brandId,

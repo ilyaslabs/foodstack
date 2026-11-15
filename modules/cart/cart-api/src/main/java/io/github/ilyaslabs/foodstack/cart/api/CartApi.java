@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.cart.api;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.moduleswitch.Param;
 
 /**
@@ -7,6 +8,7 @@ import io.github.ilyaslabs.moduleswitch.Param;
  * placement with {@link #checkout}, the same calculation the checkout screen shows, then empties the
  * cart with {@link #clear} (TDD 5.3).
  */
+@EVL.Interface(value = "CartApi", description = "The cart module API: an in-process call, or HTTP when cart runs as its own service")
 public interface CartApi {
 
     /**

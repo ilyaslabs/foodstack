@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.settings.core.seed;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateBranding;
 import io.github.ilyaslabs.foodstack.settings.core.application.UpdateLocale;
@@ -36,6 +38,8 @@ class SettingsSeeder {
         this.mongo = settingsMongoTemplate;
     }
 
+    @Flow(value = "seed-settings", label = "Seed demo settings", description = "Profile test-seed only; once per database")
+    @EVL.Job(trigger = "application ready (test-seed profile)")
     @EventListener(ApplicationReadyEvent.class)
     @Order(20)
     void seed() {
@@ -45,9 +49,11 @@ class SettingsSeeder {
         catch (DuplicateKeyException ex) {
             return;
         }
+        // @flow seed-settings>branding: Demo branding
         long brandingVersion = this.settings.getBranding().version();
         this.settings.updateBranding(new UpdateBranding("FoodStack Demo", "Tasty food from local kitchens", "#C62828",
                 "#2E7D32", "Roboto", null), brandingVersion, "seed");
+        // @flow seed-settings>locale: Languages en, ar, ur and PKR
         long localeVersion = this.settings.getLocale().version();
         this.settings.updateLocale(new UpdateLocale("en", java.util.List.of("en", "ar", "ur"), "PKR", "Asia/Karachi"),
                 localeVersion, "seed");

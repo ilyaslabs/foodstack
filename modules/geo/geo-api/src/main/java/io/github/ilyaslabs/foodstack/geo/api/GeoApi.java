@@ -1,11 +1,13 @@
 package io.github.ilyaslabs.foodstack.geo.api;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.moduleswitch.Param;
 
 /**
  * What other modules may ask the geo module. Both calls are cheap (a branch has a handful of
  * zones) and never call a maps provider.
  */
+@EVL.Interface(value = "GeoApi", description = "The geo module API: an in-process call, or HTTP when geo runs as its own service")
 public interface GeoApi {
 
     /**

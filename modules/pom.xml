@@ -31,4 +31,12 @@
         <module>dispatch</module>
         <module>notification</module>
     </modules>
+
+    <dependencies>
+        <!-- EVL flow-map tags; provided scope does not pass to dependants, so each tree declares it -->
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>evl-annotations</artifactId>
+        </dependency>
+    </dependencies>
 </project>

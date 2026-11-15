@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.cart.core.persistence;
 import java.time.Instant;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -18,6 +20,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedAt last change, drives the expiry index
  * @param version optimistic lock, also the cart version an order was priced at
  */
+@EVL.Database(value = "foodstack_cart", table = "cart_carts")
 @Document("cart_carts")
 public record CartDocument(@Id String id, String storeId, List<CartLine> lines, Instant updatedAt, @Version Long version) {
 

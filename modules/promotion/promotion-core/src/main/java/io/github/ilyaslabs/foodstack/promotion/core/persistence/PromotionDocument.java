@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
 
 import org.springframework.data.annotation.Id;
@@ -42,6 +43,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedBy who changed it
  * @param version optimistic lock
  */
+@EVL.Database(value = "foodstack_promotion", table = "promotion_promotions")
 @Document("promotion_promotions")
 public record PromotionDocument(@Id String id, String owner, String brandId, String code, Map<String, String> title, String type,
         int percentBasisPoints, Long maxDiscountMinor, long amountMinor, long minOrderMinor, Instant startsAt, Instant endsAt,

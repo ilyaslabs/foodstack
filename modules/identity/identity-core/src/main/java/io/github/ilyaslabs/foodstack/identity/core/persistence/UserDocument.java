@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
 
@@ -19,6 +20,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * email lives in {@code identity_login_keys}, because a unique index here would have to start
  * with the shard key.
  */
+@EVL.Database(value = "foodstack_identity", table = "identity_users")
 @Document("identity_users")
 public class UserDocument {
 

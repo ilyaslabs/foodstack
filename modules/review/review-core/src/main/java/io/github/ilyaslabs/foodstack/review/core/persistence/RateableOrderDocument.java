@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.review.core.persistence;
 import java.time.Instant;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -26,6 +28,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param storeReviewId the review of the branch, once written
  * @param riderRated whether the rider was rated
  */
+@EVL.Database(value = "foodstack_review", table = "review_orders")
 @Document("review_orders")
 public record RateableOrderDocument(@Id String id, String number, String customerId, String storeId, String brandId,
         String storeName, Set<String> storeOwnerIds, String language, Instant completedAt, String riderId, String riderName,

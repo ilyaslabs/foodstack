@@ -1,11 +1,13 @@
 package io.github.ilyaslabs.foodstack.identity.api;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.moduleswitch.Param;
 
 /**
  * What other modules may ask the identity module. Tokens are never checked here: every module
  * validates them itself (TDD 9.1). Errors: {@code USER_NOT_FOUND} (404).
  */
+@EVL.Interface(value = "IdentityApi", description = "The identity module API: an in-process call, or HTTP when identity runs as its own service")
 public interface IdentityApi {
 
     /** A user by id, for example to address a notification. */

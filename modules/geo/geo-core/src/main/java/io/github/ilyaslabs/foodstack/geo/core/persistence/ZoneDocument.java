@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.geo.core.persistence;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.geo.GeoJsonPolygon;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -10,6 +12,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * A delivery zone of a self-delivery branch in {@code geo_zones} (unsharded: few, small, rarely
  * written). A ring zone keeps its centre and radius so the editor can show it again.
  */
+@EVL.Database(value = "foodstack_geo", table = "geo_zones")
 @Document("geo_zones")
 public class ZoneDocument {
 
