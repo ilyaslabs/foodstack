@@ -26,6 +26,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * messages. Each message is keyed by its event, so redelivery sends nothing twice.
  */
 @EVL.Queue("foodstack.order.events")
+@EVL.Queue("foodstack.payment.events")
 public class OrderNotificationsListener {
 
     private static final Map<String, Class<?>> ORDER_EVENTS = Map.of(

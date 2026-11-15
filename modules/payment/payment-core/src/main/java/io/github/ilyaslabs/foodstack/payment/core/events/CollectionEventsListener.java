@@ -17,6 +17,7 @@ import tools.jackson.databind.json.JsonMapper;
  * credit limit, from the ledger (PRD DP-2, DP-7, TDD 5.4).
  */
 @EVL.Queue("foodstack.store.events")
+@EVL.Queue("foodstack.ledger.events")
 public class CollectionEventsListener {
 
     private static final String COLLECTION = EventTypes.type("store", StorePaymentCollectionChanged.class);

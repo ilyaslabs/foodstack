@@ -16,6 +16,7 @@ import tools.jackson.databind.json.JsonMapper;
  * default limit, from settings (PRD DP-7).
  */
 @EVL.Queue("foodstack.store.events")
+@EVL.Queue("foodstack.settings.events")
 public class StoreEventsListener {
 
     private static final String COLLECTION = EventTypes.type("store", StorePaymentCollectionChanged.class);

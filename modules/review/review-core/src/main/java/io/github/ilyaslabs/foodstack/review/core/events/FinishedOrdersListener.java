@@ -25,6 +25,8 @@ import tools.jackson.databind.json.JsonMapper;
  * which is as safe to repeat.
  */
 @EVL.Queue("foodstack.order.events")
+@EVL.Queue("foodstack.dispatch.events")
+@EVL.Queue("foodstack.identity.events")
 public class FinishedOrdersListener {
 
     private static final String DELIVERED = EventTypes.type("order", OrderDelivered.class);

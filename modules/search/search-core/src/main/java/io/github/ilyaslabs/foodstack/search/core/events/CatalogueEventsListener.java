@@ -28,6 +28,8 @@ import tools.jackson.databind.json.JsonMapper;
  * topic (platform {@code DeadLetters}); the scheduled or manual rebuild repairs anything missed.
  */
 @EVL.Queue("foodstack.store.events")
+@EVL.Queue("foodstack.geo.events")
+@EVL.Queue("foodstack.review.events")
 public class CatalogueEventsListener {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogueEventsListener.class);
