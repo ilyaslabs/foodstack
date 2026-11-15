@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.promotion.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import org.bson.Document;
 
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -32,6 +33,7 @@ public class BrandRules {
     }
 
     /** Records the switch at the brand's {@code version}; an older version than the one kept is ignored. */
+    @Flow(value = "promotion-on-store>apply", label = "Keep the brand's branch-promotions rule, newest version wins")
     public void apply(String brandId, boolean allowed, long version) {
         Document current = this.mongo.findById(brandId, Document.class, COLLECTION);
         if (current != null && current.get("version") instanceof Number kept && kept.longValue() > version) {

@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.promotion.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCancelled;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderConfirmed;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderFailed;
@@ -17,6 +19,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * coupons; a cancelled, rejected or failed order gives its coupon use back. Counters are not
  * idempotent, so each event is handled once through the inbox.
  */
+@EVL.Queue("foodstack.order.events")
 public class OrderEventsListener {
 
     static final String CONSUMER = "promotion-orders";
@@ -44,9 +47,13 @@ public class OrderEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.promotion:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-promotion-orders", groupId = "${foodstack.namespace:foodstack}-promotion",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "promotion-on-order", label = "Redeem or release coupon uses", after = "order-place")
+    @EVL.Job(trigger = "OrderConfirmed, OrderCancelled, OrderRejected, OrderFailed")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow promotion-on-order>type?: Which order event?
+        // @flow promotion-on-order>type?>confirmed: Order confirmed [when OrderConfirmed]
         if (CONFIRMED.equals(type)) {
             OrderConfirmed confirmed = event.dataAs(OrderConfirmed.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> {

@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.promotion.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +53,8 @@ class PromotionsController {
     }
 
     @GetMapping
+    @Flow(value = "promotion-list", label = "List promotions", description = "Operator's, a brand's or a branch manager's own")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/promotions", caller = "Back office")
     List<PromotionResponse> list(@RequestParam(required = false) String brandId,
             @RequestParam(defaultValue = "200") int limit) {
         return this.promotions.listIn(this.access.listScope(brandId), limit).stream().map(PromotionsController::toResponse).toList();
@@ -58,12 +62,16 @@ class PromotionsController {
 
     /** Whether the brand lets branch managers create promotions for their branch (PRD BB-11). */
     @GetMapping("/brands/{brandId}/rules")
+    @Flow(value = "promotion-brand-rules", label = "Brand promotion rules", description = "Whether branch managers may create promotions")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/promotions/brands/{brandId}/rules", caller = "Back office")
     Map<String, Boolean> brandRules(@PathVariable String brandId) {
         this.access.listScope(brandId);
         return Map.of("branchPromotionsAllowed", this.access.branchPromotionsAllowed(brandId));
     }
 
     @GetMapping("/{id}")
+    @Flow(value = "promotion-get", label = "Show promotion", description = "With ETag for safe editing")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/promotions/{id}", caller = "Back office")
     ResponseEntity<PromotionResponse> get(@PathVariable String id) {
         PromotionDetails promotion = this.promotions.details(id);
         this.access.requireView(promotion);
@@ -71,26 +79,37 @@ class PromotionsController {
     }
 
     @PostMapping
+    @Flow(value = "promotion-create", label = "Create promotion", description = "Operator or brand coupon with limits and targeting")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/promotions", caller = "Back office")
     ResponseEntity<PromotionResponse> create(@RequestBody PromotionRequest request) {
+        // @flow promotion-create>access: Check who may create for this brand or branches
         this.access.requireCreate(request.brandId(), request.storeIds());
+        // @flow promotion-create>save: Validate and save the promotion with its unique code
         PromotionDetails created = this.promotions.create(request.brandId(), input(request), CurrentUser.id());
         return ResponseEntity.status(HttpStatus.CREATED).eTag(ETags.of("promotion", created.version())).body(toResponse(created));
     }
 
     @PutMapping("/{id}")
+    @Flow(value = "promotion-update", label = "Edit promotion", description = "Needs If-Match with the edited ETag")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/promotions/{id}", caller = "Back office")
     ResponseEntity<PromotionResponse> update(@PathVariable String id,
             @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch, @RequestBody PromotionRequest request) {
+        // @flow promotion-update>access: Check the caller may edit it
         this.access.requireEdit(this.promotions.details(id), request.storeIds());
         Long version = ETags.versionFromIfMatch("promotion", ifMatch);
+        // @flow promotion-update>if-match: Require If-Match [on error IF_MATCH_REQUIRED]
         if (version == null) {
             throw new ModuleException.BadRequest("Send If-Match with the ETag you edited, so changes are not lost",
                     "IF_MATCH_REQUIRED");
         }
+        // @flow promotion-update>save: Validate, move the code if changed, save if the version still matches
         PromotionDetails updated = this.promotions.update(id, input(request), version, CurrentUser.id());
         return ResponseEntity.ok().eTag(ETags.of("promotion", updated.version())).body(toResponse(updated));
     }
 
     @PostMapping("/{id}/active")
+    @Flow(value = "promotion-set-active", label = "Pause or resume promotion")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/promotions/{id}/active", caller = "Back office")
     PromotionResponse setActive(@PathVariable String id, @RequestBody ActiveRequest request) {
         PromotionDetails promotion = this.promotions.details(id);
         this.access.requireEdit(promotion, promotion.storeIds());

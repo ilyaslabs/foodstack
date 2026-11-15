@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.promotion.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
 import io.github.ilyaslabs.foodstack.platform.kafka.CloudEvents;
 import io.github.ilyaslabs.foodstack.promotion.core.application.BrandRules;
@@ -12,6 +14,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * Keeps each brand's branch-promotions switch (PRD BB-11) from the store module's events. Applying
  * an event twice, or an older one late, changes nothing, so no inbox is needed.
  */
+@EVL.Queue("foodstack.store.events")
 public class StoreEventsListener {
 
     private static final String BRANCH_PROMOTIONS = EventTypes.type("store", BranchPromotionsChanged.class);
@@ -28,6 +31,8 @@ public class StoreEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.promotion:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-promotion-stores", groupId = "${foodstack.namespace:foodstack}-promotion",
             topics = "${foodstack.namespace:foodstack}.store.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "promotion-on-store", label = "Follow brand promotion rules", after = "store-brand-branch-promotions")
+    @EVL.Job(trigger = "BranchPromotionsChanged")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         if (BRANCH_PROMOTIONS.equals(event.type())) {
