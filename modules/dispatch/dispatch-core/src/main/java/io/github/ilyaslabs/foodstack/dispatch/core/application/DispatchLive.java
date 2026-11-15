@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.dispatch.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +22,7 @@ import org.springframework.data.redis.core.script.RedisScript;
  * (the operator's live board, which follows the {@link GeoCells map cells} it shows, by the job's
  * pickup point; TDD 7.5). Messages carry ids and statuses only; screens reload what changed.
  */
+@EVL.Queue("Redis live channels")
 public class DispatchLive {
 
     private static final Logger log = LoggerFactory.getLogger(DispatchLive.class);

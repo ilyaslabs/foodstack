@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.dispatch.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.core.persistence.JobDocument;
 
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -23,6 +24,7 @@ public class CustomerErasure {
     }
 
     /** @return how many jobs were anonymised */
+    @Flow(value = "dispatch-on-user-deleted>erase", label = "Anonymise the customer's delivery jobs")
     public int erase(String customerId) {
         int erased = 0;
         for (JobDocument job : this.mongo.find(Query.query(Criteria.where("customerId").is(customerId)), JobDocument.class)) {

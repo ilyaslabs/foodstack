@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.dispatch.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.core.application.DispatchService;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderAccepted;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCancelled;
@@ -21,6 +23,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * itself close the job. Steps that came from dispatch (actor {@code rider:...}) are echoes and
  * ignored. Each event is applied once (inbox).
  */
+@EVL.Queue("foodstack.order.events")
 public class OrderEventsListener {
 
     static final String CONSUMER = "dispatch-orders";
@@ -54,9 +57,13 @@ public class OrderEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.dispatch:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-dispatch-orders", groupId = "${foodstack.namespace:foodstack}-dispatch",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "dispatch-on-order", label = "Follow orders for delivery", after = "order-store-action")
+    @EVL.Job(trigger = "order events")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow dispatch-on-order>inbox: Process each event once (inbox)
+        // @flow dispatch-on-order>type?: Which order event?
         if (ACCEPTED.equals(type)) {
             OrderAccepted e = event.dataAs(OrderAccepted.class, this.jsonMapper);
             if (e.delivery() != null) {

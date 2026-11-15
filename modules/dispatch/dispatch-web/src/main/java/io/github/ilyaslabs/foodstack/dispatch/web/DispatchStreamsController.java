@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.dispatch.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
@@ -49,17 +51,24 @@ class DispatchStreamsController {
 
     @GetMapping(value = "/api/v1/dispatch/rider/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("hasAuthority('rider:portal')")
+    @Flow(value = "dispatch-rider-watch", label = "Rider live stream", description = "Offers and job changes for the signed-in rider")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/dispatch/rider/stream", caller = "Rider app")
     SseEmitter rider() {
         String riderId = this.dispatch.requireRider();
+        // @flow dispatch-rider-watch>subscribe: Subscribe to the rider's live channel
         return stream((emitter) -> this.live.onRider(riderId, (message) -> send(emitter, message)));
     }
 
     @GetMapping(value = "/api/v1/dispatch/live/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("hasAuthority('dispatch:manage')")
+    @Flow(value = "dispatch-board-watch", label = "Dispatch map live stream", description = "Job changes in the map cells of the visible area")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/dispatch/live/stream", caller = "Back office")
     SseEmitter board(@RequestParam double south, @RequestParam double west, @RequestParam double north,
             @RequestParam double east) {
         this.dispatch.requireBoard();
+        // @flow dispatch-board-watch>cells: Turn the map view into geo cells; refuse a too-wide view
         List<String> cells = cells(south, west, north, east);
+        // @flow dispatch-board-watch>subscribe: Subscribe to each cell's live channel
         return stream((emitter) -> this.live.onCells(cells, (message) -> send(emitter, message)));
     }
 
