@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.rider.web;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.rider.api.RiderKind;
 import io.github.ilyaslabs.foodstack.rider.api.RiderStatus;
 import io.github.ilyaslabs.foodstack.rider.api.Vehicle;
@@ -68,12 +70,16 @@ class RidersController {
 
     // ---- the rider -----------------------------------------------------------------------------
 
+    @Flow(value = "rider-me", label = "My rider profile", description = "")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/rider/me", caller = "Rider app")
     @GetMapping("/api/v1/rider/me")
     @PreAuthorize("hasAuthority('rider:portal')")
     RiderDetails me() {
         return this.activity.me();
     }
 
+    @Flow(value = "rider-online", label = "Go online or offline", description = "Optionally with the current position")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/rider/me/online", caller = "Rider app")
     @PostMapping("/api/v1/rider/me/online")
     @PreAuthorize("hasAuthority('rider:portal')")
     RiderDetails online(@RequestBody OnlineRequest body) {
@@ -82,6 +88,8 @@ class RidersController {
         return this.activity.setOnline(body.online(), at);
     }
 
+    @Flow(value = "rider-locations", label = "Send my positions", description = "Up to 120 points per call, 30 calls a minute")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/rider/me/locations", caller = "Rider app")
     @PostMapping("/api/v1/rider/me/locations")
     @PreAuthorize("hasAuthority('rider:portal')")
     ResponseEntity<Void> locations(@RequestBody LocationsRequest body) {
@@ -89,6 +97,8 @@ class RidersController {
         return ResponseEntity.noContent().build();
     }
 
+    @Flow(value = "rider-my-earnings", label = "My earnings", description = "Per day in the rider's time zone")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/rider/me/earnings", caller = "Rider app")
     @GetMapping("/api/v1/rider/me/earnings")
     @PreAuthorize("hasAuthority('rider:portal')")
     Earnings myEarnings(@RequestParam(defaultValue = "7") int days, @RequestParam(required = false) String tz) {
@@ -97,6 +107,8 @@ class RidersController {
 
     // ---- operator ------------------------------------------------------------------------------
 
+    @Flow(value = "rider-list", label = "Find riders", description = "By kind, status, branch, name")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders", caller = "Back office (operator)")
     @GetMapping("/api/v1/riders")
     @PreAuthorize("hasAuthority('rider:manage')")
     List<RiderDetails> list(@RequestParam(required = false) RiderKind kind, @RequestParam(required = false) RiderStatus status,
@@ -104,12 +116,16 @@ class RidersController {
         return this.riders.list(kind, status, storeId, q);
     }
 
+    @Flow(value = "rider-add", label = "Add an operator rider", description = "Creates or upgrades the account")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/riders", caller = "Back office (operator)")
     @PostMapping("/api/v1/riders")
     @PreAuthorize("hasAuthority('rider:manage')")
     ResponseEntity<RiderDetails> add(@RequestBody RiderRequest body) {
         return ResponseEntity.status(HttpStatus.CREATED).body(this.riders.addOperatorRider(body.toInput()));
     }
 
+    @Flow(value = "rider-live", label = "Live rider map", description = "Online riders in the map view")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/live", caller = "Back office (operator)")
     @GetMapping("/api/v1/riders/live")
     @PreAuthorize("isAuthenticated()")
     List<LiveRider> live(@RequestParam(required = false) Double south, @RequestParam(required = false) Double west,
@@ -118,30 +134,40 @@ class RidersController {
         return this.activity.live(bounded ? new RiderActivity.MapBounds(south, west, north, east) : null);
     }
 
+    @Flow(value = "rider-tracking", label = "Track the rider of an order", description = "Position and ETA")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/tracking/{orderId}", caller = "Customer app, back office")
     @GetMapping("/api/v1/riders/tracking/{orderId}")
     @PreAuthorize("isAuthenticated()")
     Tracking tracking(@PathVariable String orderId) {
         return this.activity.tracking(orderId);
     }
 
+    @Flow(value = "rider-view", label = "View a rider", description = "")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/{riderId}", caller = "Back office")
     @GetMapping("/api/v1/riders/{riderId}")
     @PreAuthorize("isAuthenticated()")
     RiderDetails get(@PathVariable String riderId) {
         return this.riders.get(riderId);
     }
 
+    @Flow(value = "rider-update", label = "Change a rider", description = "Checks the version")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/riders/{riderId}", caller = "Back office")
     @PutMapping("/api/v1/riders/{riderId}")
     @PreAuthorize("isAuthenticated()")
     RiderDetails update(@PathVariable String riderId, @RequestBody RiderRequest body) {
         return this.riders.update(riderId, body.toInput());
     }
 
+    @Flow(value = "rider-status", label = "Suspend or activate a rider", description = "")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/riders/{riderId}/status", caller = "Back office")
     @PostMapping("/api/v1/riders/{riderId}/status")
     @PreAuthorize("isAuthenticated()")
     RiderDetails status(@PathVariable String riderId, @RequestBody StatusRequest body) {
         return this.riders.setStatus(riderId, body.status());
     }
 
+    @Flow(value = "rider-earnings", label = "A rider's earnings", description = "Operator or the rider's brand")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/{riderId}/earnings", caller = "Back office")
     @GetMapping("/api/v1/riders/{riderId}/earnings")
     @PreAuthorize("isAuthenticated()")
     Earnings earnings(@PathVariable String riderId, @RequestParam(defaultValue = "7") int days,
@@ -151,18 +177,24 @@ class RidersController {
 
     // ---- store ---------------------------------------------------------------------------------
 
+    @Flow(value = "rider-store-list", label = "Branch riders", description = "The branch's and brand's own riders")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/stores/{storeId}", caller = "Back office (store)")
     @GetMapping("/api/v1/riders/stores/{storeId}")
     @PreAuthorize("isAuthenticated()")
     List<RiderDetails> storeRiders(@PathVariable String storeId) {
         return this.riders.storeRiders(storeId);
     }
 
+    @Flow(value = "rider-store-add", label = "Add a branch rider", description = "For self-delivery")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/riders/stores/{storeId}", caller = "Back office (store)")
     @PostMapping("/api/v1/riders/stores/{storeId}")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<RiderDetails> addStoreRider(@PathVariable String storeId, @RequestBody RiderRequest body) {
         return ResponseEntity.status(HttpStatus.CREATED).body(this.riders.addStoreRider(storeId, body.toInput()));
     }
 
+    @Flow(value = "rider-store-remove", label = "Remove a branch rider", description = "Not while delivering")
+    @EVL.Endpoint(method = "DELETE", path = "/api/v1/riders/stores/{storeId}/{riderId}", caller = "Back office (store)")
     @DeleteMapping("/api/v1/riders/stores/{storeId}/{riderId}")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<Void> removeStoreRider(@PathVariable String storeId, @PathVariable String riderId) {

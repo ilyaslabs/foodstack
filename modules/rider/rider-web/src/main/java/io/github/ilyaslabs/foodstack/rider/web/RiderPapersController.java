@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.rider.web;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.rider.core.application.RiderOnboarding;
 import io.github.ilyaslabs.foodstack.rider.core.application.RiderOnboarding.DocumentInput;
 import io.github.ilyaslabs.foodstack.rider.core.application.RiderOnboarding.Papers;
@@ -48,18 +50,24 @@ class RiderPapersController {
         }
     }
 
+    @Flow(value = "rider-papers-complete", label = "Riders with complete papers", description = "")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/papers/complete", caller = "Back office (operator)")
     @GetMapping("/api/v1/riders/papers/complete")
     @PreAuthorize("hasAuthority('rider:manage')")
     List<String> complete() {
         return this.onboarding.completeRiders();
     }
 
+    @Flow(value = "rider-papers-view", label = "A rider's papers", description = "Documents and payout details")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/{riderId}/papers", caller = "Back office (operator)")
     @GetMapping("/api/v1/riders/{riderId}/papers")
     @PreAuthorize("hasAuthority('rider:manage')")
     Papers get(@PathVariable String riderId) {
         return this.onboarding.get(riderId);
     }
 
+    @Flow(value = "rider-papers-add", label = "Add a rider document", description = "With front and back photos")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/riders/{riderId}/papers/documents", caller = "Back office (operator)")
     @PostMapping("/api/v1/riders/{riderId}/papers/documents")
     @PreAuthorize("hasAuthority('rider:manage')")
     ResponseEntity<Papers> addDocument(@PathVariable String riderId, @RequestBody DocumentRequest body) {
@@ -67,18 +75,24 @@ class RiderPapersController {
                 new DocumentInput(body.type(), body.number(), body.frontMediaId(), body.backMediaId(), body.expiresOn())));
     }
 
+    @Flow(value = "rider-papers-verify", label = "Verify a rider document", description = "")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/riders/{riderId}/papers/documents/{documentId}/verify", caller = "Back office (operator)")
     @PostMapping("/api/v1/riders/{riderId}/papers/documents/{documentId}/verify")
     @PreAuthorize("hasAuthority('rider:manage')")
     Papers verify(@PathVariable String riderId, @PathVariable String documentId) {
         return this.onboarding.verifyDocument(riderId, documentId);
     }
 
+    @Flow(value = "rider-papers-remove", label = "Remove a rider document", description = "")
+    @EVL.Endpoint(method = "DELETE", path = "/api/v1/riders/{riderId}/papers/documents/{documentId}", caller = "Back office (operator)")
     @DeleteMapping("/api/v1/riders/{riderId}/papers/documents/{documentId}")
     @PreAuthorize("hasAuthority('rider:manage')")
     Papers removeDocument(@PathVariable String riderId, @PathVariable String documentId) {
         return this.onboarding.removeDocument(riderId, documentId);
     }
 
+    @Flow(value = "rider-papers-payout", label = "Set payout details", description = "")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/riders/{riderId}/papers/payout", caller = "Back office (operator)")
     @PutMapping("/api/v1/riders/{riderId}/papers/payout")
     @PreAuthorize("hasAuthority('rider:manage')")
     Papers payout(@PathVariable String riderId, @RequestBody PayoutRequest body) {

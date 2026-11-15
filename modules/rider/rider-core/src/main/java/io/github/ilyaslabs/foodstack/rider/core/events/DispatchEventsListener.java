@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.rider.core.events;
 
 import java.time.Clock;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.api.DeliverySummary;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryCancelled;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryCompleted;
@@ -58,12 +60,15 @@ public class DispatchEventsListener {
         this.clock = clock;
     }
 
+    @Flow(value = "rider-dispatch-events", label = "Keep riders' jobs and earnings in step with dispatch", description = "Each event once (inbox)")
+    @EVL.Job(trigger = "<ns>.dispatch.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.rider:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-rider-dispatch", groupId = "${foodstack.namespace:foodstack}-rider",
             topics = "${foodstack.namespace:foodstack}.dispatch.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow rider-dispatch-events>type?: Which event?
         if (OFFERED.equals(type)) {
             RiderOffered e = event.dataAs(RiderOffered.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> this.activity.offered(e.riderId()));

@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.rider.impl;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
 import io.github.ilyaslabs.foodstack.rider.api.RiderApi;
 import io.github.ilyaslabs.foodstack.rider.api.RiderCandidate;
@@ -31,6 +33,8 @@ class RiderApiImpl implements RiderApi {
     }
 
     @Override
+    @Flow(value = "rider-api-get-rider", label = "A rider for other modules", description = "")
+    @EVL.Endpoint(method = "API", path = "RiderApi.getRider", caller = "Dispatch module")
     public RiderView getRider(String riderId) {
         ModuleAccess.requireAuthenticated();
         RiderDetails r = ModuleAccess.isService() ? this.riders.details(riderId) : this.riders.get(riderId);
@@ -39,6 +43,8 @@ class RiderApiImpl implements RiderApi {
     }
 
     @Override
+    @Flow(value = "rider-api-find-available", label = "Riders free for a job", description = "Nearest first")
+    @EVL.Endpoint(method = "API", path = "RiderApi.findAvailable", caller = "Dispatch module")
     public List<RiderCandidate> findAvailable(RiderSearch search) {
         ModuleAccess.requireServiceOr(RiderService.DISPATCH);
         return this.activity.findAvailable(search);

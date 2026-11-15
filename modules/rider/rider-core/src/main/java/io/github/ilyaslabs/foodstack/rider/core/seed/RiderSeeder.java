@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.rider.core.seed;
 
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
 import io.github.ilyaslabs.foodstack.rider.api.Vehicle;
 import io.github.ilyaslabs.foodstack.rider.core.application.RiderInput;
@@ -50,6 +52,8 @@ class RiderSeeder {
         this.serviceCalls = serviceCalls;
     }
 
+    @Flow(value = "seed-rider", label = "Seed demo riders", description = "Two operator riders and two branch riders, once")
+    @EVL.Job(trigger = "application ready (test-seed profile)")
     @EventListener(ApplicationReadyEvent.class)
     @Order(40)
     void seed() {

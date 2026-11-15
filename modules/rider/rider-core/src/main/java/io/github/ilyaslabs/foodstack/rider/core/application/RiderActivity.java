@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 import io.github.ilyaslabs.foodstack.geo.api.RouteRequest;
@@ -106,11 +108,14 @@ public class RiderActivity {
     }
 
     /** Starts or ends a shift (PRD DR-2). A suspended rider cannot go online. */
+    @Flow(value = "rider-online>set", label = "Set online or offline")
     public RiderDetails setOnline(boolean online, LocationPing at) {
         RiderDocument rider = self();
+        // @flow rider-online>set>check: Not suspended [on error RIDER_SUSPENDED]
         if (online && !RiderStatus.ACTIVE.name().equals(rider.status())) {
             throw new ModuleException.Forbidden("Your account is suspended, contact the operator", "RIDER_SUSPENDED");
         }
+        // @flow rider-online>set>save: Save the flag, RiderStatusChanged [when it changed]
         Instant now = this.clock.instant();
         if (rider.online() != online) {
             this.transaction.executeWithoutResult((tx) -> {
@@ -123,6 +128,7 @@ public class RiderActivity {
                         RiderStatus.valueOf(rider.status()), online, "rider:" + rider.id()));
             });
         }
+        // @flow rider-online>set>offline: Leave the GEO set, tell the live map [when going offline]
         if (!online) {
             this.presence.forget(rider.id());
             this.presence.publishState(rider.id(), false, !rider.activeOrderIds().isEmpty());
@@ -137,6 +143,7 @@ public class RiderActivity {
      * Positions from the rider app, oldest first: the last one is where the rider is now, earlier
      * ones were queued while the phone was offline and only go to history (PRD DR-3).
      */
+    @Flow(value = "rider-locations>check", label = "Valid points, rate limit, online", onError = "LOCATION_INVALID, 429, RIDER_OFFLINE")
     public void locations(List<LocationPing> points) {
         if (points == null || points.isEmpty()) {
             return;
@@ -158,13 +165,17 @@ public class RiderActivity {
         ping(rider, points, this.clock.instant());
     }
 
+    @Flow(value = "rider-online>set>ping", label = "Record the position", when = "going online with a position")
+    @Flow(value = "rider-locations>ping", label = "Record the positions")
     private void ping(RiderDocument rider, List<LocationPing> points, Instant now) {
         LocationPing last = points.get(points.size() - 1);
         long at = (last.at() != null) ? Math.min(last.at(), now.getEpochSecond()) : now.getEpochSecond();
         RiderPresence.Position position = new RiderPresence.Position(last.lat(), last.lng(), at);
+        // @flow rider-online>set>ping>presence, rider-locations>ping>presence: Move in the GEO cell, publish to the live channels
         boolean busy = !rider.activeOrderIds().isEmpty();
         this.presence.moved(rider.id(), position, matchable(rider));
         this.presence.publish(rider.id(), position, busy, rider.kind(), rider.storeId(), rider.activeOrderIds());
+        // @flow rider-online>set>ping>sample, rider-locations>ping>sample: Save the last position and history to MongoDB, at most every 30 s
         if (points.size() > 1 || this.presence.firstIn(rider.id(), "sample", SAMPLE_EVERY)) {
             this.mongo.updateFirst(byId(rider.id()), new Update().set("lat", last.lat()).set("lng", last.lng())
                 .set("lastSeenAt", Instant.ofEpochSecond(at)), RiderDocument.class);
@@ -189,11 +200,15 @@ public class RiderActivity {
     }
 
     /** Takes riders whose phone went quiet offline; returns how many. */
+    @Flow(value = "rider-stale-sweep", label = "Take silent riders offline", description = "No position for 5 minutes")
+    @EVL.Job(schedule = "every 60 s")
     public int sweepStale() {
         Instant cutoff = this.clock.instant().minus(STALE_AFTER);
+        // @flow rider-stale-sweep>find: Online riders with no recent ping, 200 per run
         List<RiderDocument> stale = this.mongo.find(Query.query(Criteria.where("online").is(true).and("lastSeenAt").lt(cutoff))
             .limit(200), RiderDocument.class);
         int count = 0;
+        // @flow rider-stale-sweep>offline: Take offline, RiderStatusChanged, leave the GEO set [each stale rider]
         for (RiderDocument rider : stale) {
             boolean changed = this.transaction.execute((tx) -> {
                 long modified = this.mongo.updateFirst(Query.query(Criteria.where("_id").is(rider.id()).and("online").is(true)
@@ -216,6 +231,7 @@ public class RiderActivity {
     // ---- matching (dispatch) -------------------------------------------------------------------
 
     /** Free, online, active operator riders near a point, nearest first. */
+    @Flow(value = "rider-api-find-available>find", label = "Nearby online operator riders with a fresh position in the city", each = "nearby rider")
     public List<RiderCandidate> findAvailable(RiderSearch search) {
         int limit = Math.max(1, Math.min(search.limit(), 20));
         Set<String> exclude = (search.excludeRiderIds() != null) ? search.excludeRiderIds() : Set.of();
@@ -259,11 +275,13 @@ public class RiderActivity {
     // ---- deliveries (dispatch events) ----------------------------------------------------------
 
     /** An offer went to the rider: counts towards the acceptance rate. */
+    @Flow(value = "rider-dispatch-events>type?>offered", label = "Count the offer", when = "RiderOffered")
     public void offered(String riderId) {
         this.mongo.updateFirst(byId(riderId), new Update().inc("offers", 1), RiderDocument.class);
     }
 
     /** The rider has the delivery now. */
+    @Flow(value = "rider-dispatch-events>type?>assigned", label = "Save the assignment, add the job, count an accepted offer", when = "RiderAssigned")
     public void assigned(AssignmentDocument assignment, boolean acceptedOffer) {
         try {
             this.mongo.insert(assignment);
@@ -282,11 +300,14 @@ public class RiderActivity {
         }
     }
 
+    @Flow(value = "rider-dispatch-events>type?>picked-up", label = "Mark the assignment picked up", when = "DeliveryPickedUp")
     public void pickedUp(String orderId) {
         this.mongo.updateFirst(byId(orderId), new Update().set("pickedUp", true), AssignmentDocument.class);
     }
 
     /** The rider no longer has the delivery (unassigned, cancelled, handed back or delivered). */
+    @Flow(value = "rider-dispatch-events>type?>released", label = "Drop the assignment, free the rider", when = "RiderUnassigned, DeliveryCancelled, DeliveryHandedBack")
+    @Flow(value = "rider-dispatch-events>type?>delivered>release", label = "Drop the assignment, free the rider")
     public void released(String orderId, String riderId) {
         AssignmentDocument assignment = this.mongo.findById(orderId, AssignmentDocument.class);
         String rider = (riderId != null) ? riderId : (assignment != null) ? assignment.riderId() : null;
@@ -305,6 +326,7 @@ public class RiderActivity {
     }
 
     /** A delivery was completed: the rider's earning is recorded once (id = order id). */
+    @Flow(value = "rider-dispatch-events>type?>delivered", label = "Record the earning once, count the delivery", when = "DeliveryCompleted")
     public void delivered(EarningDocument earning) {
         try {
             this.mongo.insert(earning);
@@ -331,6 +353,7 @@ public class RiderActivity {
         return earnings(riderId, days, timeZone);
     }
 
+    @Flow(value = {"rider-my-earnings>sum", "rider-earnings>sum"}, label = "Sum earnings, tips and cash per day", onError = "TIME_ZONE_INVALID")
     private Earnings earnings(String riderId, int days, String timeZone) {
         int span = Math.max(1, Math.min(days, 31));
         ZoneId zone = zone(timeZone);
@@ -380,6 +403,7 @@ public class RiderActivity {
     // ---- following a delivery -------------------------------------------------------------------
 
     /** Checks the caller may follow a delivery: its customer, its store's people or operator staff. */
+    @Flow(value = {"rider-tracking>check", "rider-tracking-stream>check"}, label = "Customer, rider, branch or dispatch staff", onError = "TRACKING_NOT_FOUND")
     public AssignmentDocument requireFollow(String orderId) {
         AssignmentDocument assignment = this.mongo.findById(orderId, AssignmentDocument.class);
         String me = CurrentUser.id();
@@ -392,6 +416,7 @@ public class RiderActivity {
     }
 
     /** Where the rider is and how long until the customer has the food (PRD CU-9). */
+    @Flow(value = "rider-tracking>eta", label = "Last position and ETA by road (via the branch before pickup)")
     public Tracking tracking(String orderId) {
         AssignmentDocument a = requireFollow(orderId);
         RiderPresence.Position position = this.presence.position(a.riderId());
@@ -441,6 +466,7 @@ public class RiderActivity {
      * Online riders for a live map, those last seen inside {@code view} when given (TDD 7.5): a map
      * shows one area, so it never loads every rider of a country.
      */
+    @Flow(value = "rider-live>load", label = "Online riders in view with their last positions", onError = "RIDER_ACCESS_DENIED")
     public List<LiveRider> live(MapBounds view) {
         if (!CurrentUser.hasAuthority(RiderService.MANAGE) && !CurrentUser.hasAuthority(RiderService.DISPATCH)) {
             throw new ModuleException.Forbidden("Only operator staff can see the live map", "RIDER_ACCESS_DENIED");
@@ -471,6 +497,7 @@ public class RiderActivity {
     public record MapBounds(double south, double west, double north, double east) {
     }
 
+    @Flow(value = "rider-live-stream>check", label = "Operator staff only", onError = "RIDER_ACCESS_DENIED")
     public void requireLive() {
         if (!CurrentUser.hasAuthority(RiderService.MANAGE) && !CurrentUser.hasAuthority(RiderService.DISPATCH)) {
             throw new ModuleException.Forbidden("Only operator staff can see the live map", "RIDER_ACCESS_DENIED");

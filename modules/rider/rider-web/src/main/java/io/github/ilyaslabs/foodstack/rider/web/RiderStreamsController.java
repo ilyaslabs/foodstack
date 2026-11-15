@@ -9,6 +9,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.rider.core.application.RiderActivity;
 import io.github.ilyaslabs.foodstack.rider.core.application.RiderPresence;
 import jakarta.annotation.PreDestroy;
@@ -46,6 +48,8 @@ class RiderStreamsController {
         this.presence = presence;
     }
 
+    @Flow(value = "rider-live-stream", label = "Follow the live rider map", description = "Server-sent events for the map cells in view")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/live/stream", caller = "Back office (operator)")
     @GetMapping(value = "/api/v1/riders/live/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
     SseEmitter live(@RequestParam double south, @RequestParam double west, @RequestParam double north,
@@ -55,6 +59,8 @@ class RiderStreamsController {
         return stream((emitter) -> this.presence.onCells(cells, (message) -> send(emitter, message)));
     }
 
+    @Flow(value = "rider-tracking-stream", label = "Follow the rider of an order live", description = "Server-sent events")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/tracking/{orderId}/stream", caller = "Customer app, back office")
     @GetMapping(value = "/api/v1/riders/tracking/{orderId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
     SseEmitter tracking(@PathVariable String orderId) {

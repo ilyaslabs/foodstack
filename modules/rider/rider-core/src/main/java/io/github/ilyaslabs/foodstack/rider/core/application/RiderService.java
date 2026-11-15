@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.CityView;
 import io.github.ilyaslabs.foodstack.geo.api.GeoApi;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
@@ -88,6 +89,7 @@ public class RiderService {
     // ---- operator ------------------------------------------------------------------------------
 
     /** The fleet and store riders, filtered; operator staff only. */
+    @Flow(value = "rider-list>query", label = "Riders by filter, by name")
     public List<RiderDetails> list(RiderKind kind, RiderStatus status, String storeId, String text) {
         requireManage();
         Criteria criteria = new Criteria();
@@ -113,6 +115,7 @@ public class RiderService {
         return add(input, RiderKind.OPERATOR, null);
     }
 
+    @Flow(value = "rider-view>load", label = "The rider, for someone allowed to see it")
     public RiderDetails get(String riderId) {
         RiderDocument rider = require(riderId);
         requireView(rider);
@@ -120,6 +123,7 @@ public class RiderService {
     }
 
     /** Changes a rider's profile; operator staff, or the store for its own riders. */
+    @Flow(value = "rider-update>save", label = "Save at the expected version", onError = "stale version")
     public RiderDetails update(String riderId, RiderInput input) {
         RiderDocument rider = require(riderId);
         requireEdit(rider);
@@ -139,6 +143,7 @@ public class RiderService {
     }
 
     /** Takes a rider off the road or back on (PRD DR-1). A suspended rider goes offline at once. */
+    @Flow(value = "rider-status>save", label = "Save, RiderStatusChanged; a suspended rider goes offline")
     public RiderDetails setStatus(String riderId, RiderStatus status) {
         RiderDocument rider = require(riderId);
         requireEdit(rider);
@@ -168,6 +173,7 @@ public class RiderService {
      * The riders who can deliver a branch's orders, for its people and operator staff: its own
      * riders and those of the brand's other branches (PRD BB-12).
      */
+    @Flow(value = "rider-store-list>query", label = "Branch and brand riders")
     public List<RiderDetails> storeRiders(String storeId) {
         CurrentUser.requireStoreAccess(storeId, MANAGE);
         Criteria whose = CurrentUser.brandOf(storeId)
@@ -185,6 +191,7 @@ public class RiderService {
     }
 
     /** Removes a store's rider and their rider access; not while they have a delivery. */
+    @Flow(value = "rider-store-remove>remove", label = "Delete, RiderStatusChanged, take the rider role away", onError = "RIDER_BUSY")
     public void removeStoreRider(String storeId, String riderId) {
         CurrentUser.requireStoreAccess(storeId, MANAGE);
         RiderDocument rider = require(riderId);
@@ -244,14 +251,19 @@ public class RiderService {
 
     // ---- helpers -------------------------------------------------------------------------------
 
+    @Flow(value = {"rider-add>add", "rider-store-add>add"}, label = "Add the rider")
+    @Flow(value = "seed-rider>riders", label = "Add the demo rider", each = "demo rider")
     private RiderDetails add(RiderInput input, RiderKind kind, String storeId) {
+        // @flow rider-add>add>validate, rider-store-add>add>validate, seed-rider>riders>validate: Name, phone, vehicle, email [on error RIDER_INVALID, RIDER_PHONE_INVALID]
         Clean clean = clean(input);
         String email = (input.email() != null) ? input.email().strip().toLowerCase(Locale.ROOT) : "";
         if (!email.contains("@")) {
             throw new ModuleException.BadRequest("Enter the rider's email", "RIDER_INVALID");
         }
+        // @flow rider-add>add>grant, rider-store-add>add>grant, seed-rider>riders>grant: Rider role in identity; creates the account if new
         UserView user = this.serviceCalls.call(() -> this.identity.grantRiderAccess(
                 new RiderAccessGrant(email, clean.name(), input.initialPassword(), storeId, CurrentUser.id())));
+        // @flow rider-add>add>save, rider-store-add>add>save, seed-rider>riders>save: Insert the rider, RiderStatusChanged [on error RIDER_EXISTS]
         if (this.mongo.findById(user.id(), RiderDocument.class) != null) {
             throw new ModuleException.Conflict("This person is a rider already", "RIDER_EXISTS");
         }

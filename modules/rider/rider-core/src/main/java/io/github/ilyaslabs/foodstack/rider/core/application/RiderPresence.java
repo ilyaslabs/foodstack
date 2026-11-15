@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.function.Consumer;
 
 import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.core.GeoCells;
 import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import org.slf4j.Logger;
@@ -222,6 +223,7 @@ public class RiderPresence {
     }
 
     /** Receives the riders of these cells (a live map's view) until the returned handle is closed. */
+    @Flow(value = "rider-live-stream>subscribe", label = "Subscribe to the map cells' channels")
     public AutoCloseable onCells(List<String> cells, Consumer<String> receiver) {
         List<AutoCloseable> subscriptions = new ArrayList<>(cells.size());
         for (String cell : cells) {
@@ -234,6 +236,7 @@ public class RiderPresence {
         };
     }
 
+    @Flow(value = "rider-tracking-stream>subscribe", label = "Subscribe to the order's channel")
     public AutoCloseable onOrder(String orderId, Consumer<String> receiver) {
         return this.live.subscribe(this.prefix + "rt:order:" + orderId, receiver);
     }

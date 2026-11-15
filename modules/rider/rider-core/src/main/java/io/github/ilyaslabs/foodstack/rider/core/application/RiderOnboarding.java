@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.media.api.MediaApi;
 import io.github.ilyaslabs.foodstack.media.api.MediaAssetView;
 import io.github.ilyaslabs.foodstack.media.api.MediaOwner;
@@ -74,6 +75,7 @@ public class RiderOnboarding {
     }
 
     /** What a rider's papers look like to operator staff. */
+    @Flow(value = "rider-papers-view>load", label = "Documents and payout")
     public Papers get(String riderId) {
         requireManage();
         requireOperatorRider(riderId);
@@ -81,6 +83,7 @@ public class RiderOnboarding {
     }
 
     /** The operator riders whose papers are complete, for the "papers missing" mark on the fleet list. */
+    @Flow(value = "rider-papers-complete>query", label = "Riders with verified papers")
     public List<String> completeRiders() {
         requireManage();
         List<String> ids = new ArrayList<>();
@@ -93,6 +96,7 @@ public class RiderOnboarding {
     }
 
     /** Adds a document with its photos (uploaded first as {@code RIDER_DOCUMENT} media). */
+    @Flow(value = "rider-papers-add>add", label = "Check, claim the photos with media, save", onError = "RIDER_DOCUMENT_INVALID")
     public Papers addDocument(String riderId, DocumentInput input) {
         requireManage();
         requireOperatorRider(riderId);
@@ -139,6 +143,7 @@ public class RiderOnboarding {
     }
 
     /** Staff checked the document against its photos. */
+    @Flow(value = "rider-papers-verify>verify", label = "Mark verified")
     public Papers verifyDocument(String riderId, String documentId) {
         requireManage();
         OnboardingDocument current = load(riderId);
@@ -159,6 +164,7 @@ public class RiderOnboarding {
     }
 
     /** Removes a document; its photos are released for cleanup. */
+    @Flow(value = "rider-papers-remove>remove", label = "Remove, release the photos")
     public Papers removeDocument(String riderId, String documentId) {
         requireManage();
         OnboardingDocument current = load(riderId);
@@ -172,6 +178,7 @@ public class RiderOnboarding {
     }
 
     /** Sets where the rider's pay goes; the whole account number is entered again on every change. */
+    @Flow(value = "rider-papers-payout>save", label = "Save encrypted payout details", onError = "RIDER_PAYOUT_INVALID")
     public Papers setPayout(String riderId, PayoutInput input) {
         requireManage();
         requireOperatorRider(riderId);
