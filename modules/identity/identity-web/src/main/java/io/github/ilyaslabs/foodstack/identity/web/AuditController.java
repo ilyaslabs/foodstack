@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.identity.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.core.application.AuditLog;
 import io.github.ilyaslabs.foodstack.identity.core.application.AuditPage;
 
@@ -26,6 +28,8 @@ class AuditController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('identity:audit:read')")
+    @Flow(value = "identity-audit", label = "Search the audit log", description = "Who did what, newest first")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/audit", caller = "Back office")
     AuditPage list(@RequestParam(required = false) String actorId, @RequestParam(required = false) String kind,
             @RequestParam(required = false) String q, @RequestParam(required = false) String before,
             @RequestParam(defaultValue = "50") int limit) {

@@ -90,6 +90,7 @@ public class UserDirectory {
      * working at once (TDD 9.1). Nobody blocks themselves, and the last active admin stays.
      */
     public UserAccount block(String userId, String reason, String actorId) {
+        // @flow identity-user-block>check: Reason given, not yourself, not the last admin
         String why = (reason != null) ? reason.trim() : "";
         if (why.isEmpty() || why.length() > MAX_REASON) {
             throw new ModuleException.BadRequest("Give a reason of up to " + MAX_REASON + " characters", "BLOCK_REASON_REQUIRED");
@@ -106,12 +107,14 @@ public class UserDirectory {
             throw new ModuleException.Conflict("The last active admin cannot be blocked", "LAST_ADMIN");
         }
         Instant now = this.clock.instant();
+        // @flow identity-user-block>save: Save the block
         user.setStatus(UserStatus.BLOCKED);
         user.setBlockedBy(actorId);
         user.setBlockedAt(now);
         user.setBlockedReason(why);
         user.setUpdatedAt(now);
         this.repository.save(user);
+        // @flow identity-user-block>revoke: End every sign-in
         this.users.revokeTokens(userId, "BLOCKED");
         return this.users.get(userId);
     }

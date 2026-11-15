@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.identity.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
@@ -48,6 +50,8 @@ class UsersController {
     /** Newest first; {@code q} is a full email or part of a name. */
     @GetMapping
     @PreAuthorize("hasAuthority('identity:users:read')")
+    @Flow(value = "identity-users", label = "Search users")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/users", caller = "Back office")
     UserListResponse list(@RequestParam(required = false) String q, @RequestParam(required = false) Role role,
             @RequestParam(required = false) UserStatus status, @RequestParam(required = false) String after,
             @RequestParam(defaultValue = "50") int limit) {
@@ -57,18 +61,24 @@ class UsersController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('identity:users:read')")
+    @Flow(value = "identity-user-get", label = "Show a user")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/users/{id}", caller = "Back office")
     UserResponse get(@PathVariable String id) {
         return IdentityWebMapper.toResponse(this.userService.get(id));
     }
 
     @PostMapping("/{id}/block")
     @PreAuthorize("hasAuthority('identity:users:manage')")
+    @Flow(value = "identity-user-block", label = "Block a user")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/users/{id}/block", caller = "Back office")
     UserResponse block(@PathVariable String id, @Valid @RequestBody BlockUserRequest request) {
         return IdentityWebMapper.toResponse(this.directory.block(id, request.reason(), CurrentUser.id()));
     }
 
     @PostMapping("/{id}/unblock")
     @PreAuthorize("hasAuthority('identity:users:manage')")
+    @Flow(value = "identity-user-unblock", label = "Unblock a user")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/users/{id}/unblock", caller = "Back office")
     UserResponse unblock(@PathVariable String id) {
         return IdentityWebMapper.toResponse(this.directory.unblock(id));
     }
@@ -76,7 +86,10 @@ class UsersController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('identity:users:manage')")
+    @Flow(value = "identity-user-create", label = "Create a staff account", description = "Admin, finance or support only")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/users", caller = "Back office")
     UserResponse create(@Valid @RequestBody CreateUserRequest request) {
+        // @flow identity-user-create>roles: Staff roles only [on error USER_ROLES_INVALID]
         if (!STAFF_ROLES.containsAll(request.roles())) {
             // owners and riders need a brand, a branch or a rider profile: they are added from those pages
             throw new ModuleException.BadRequest("Only Admin, Finance and Support accounts are made here",

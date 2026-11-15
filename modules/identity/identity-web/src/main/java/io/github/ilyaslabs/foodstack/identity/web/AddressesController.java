@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.identity.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.identity.core.application.AddressBook;
@@ -32,23 +34,31 @@ class AddressesController {
     }
 
     @GetMapping
+    @Flow(value = "identity-addresses", label = "List saved addresses")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/me/addresses", caller = "Customer web")
     List<AddressResponse> list() {
         return this.book.list(CurrentUser.id()).stream().map(AddressesController::toResponse).toList();
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @Flow(value = "identity-address-add", label = "Save an address", description = "Up to 20 per customer")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/me/addresses", caller = "Customer web")
     AddressResponse add(@RequestBody AddressRequest request) {
         return toResponse(this.book.add(CurrentUser.id(), toInput(request)));
     }
 
     @PutMapping("/{addressId}")
+    @Flow(value = "identity-address-update", label = "Change a saved address")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/me/addresses/{addressId}", caller = "Customer web")
     AddressResponse update(@PathVariable String addressId, @RequestBody AddressRequest request) {
         return toResponse(this.book.update(CurrentUser.id(), addressId, toInput(request), request.version()));
     }
 
     @DeleteMapping("/{addressId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Flow(value = "identity-address-remove", label = "Delete a saved address")
+    @EVL.Endpoint(method = "DELETE", path = "/api/v1/me/addresses/{addressId}", caller = "Customer web")
     void remove(@PathVariable String addressId) {
         this.book.remove(CurrentUser.id(), addressId);
     }

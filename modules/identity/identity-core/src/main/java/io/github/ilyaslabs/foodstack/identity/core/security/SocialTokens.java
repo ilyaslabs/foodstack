@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.identity.core.security;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.text.ParseException;
@@ -28,6 +29,7 @@ import com.nimbusds.jwt.proc.DefaultJWTProcessor;
  * the provider's published keys, come from its issuer, be meant for one of this deployment's client
  * ids, not have run out, and carry a verified email.
  */
+@EVL.External("Google and Apple sign-in")
 public class SocialTokens {
 
     /** A provider FoodStack accepts tokens from. */
