@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.payment.api.MerchantView;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway;
 import io.github.ilyaslabs.foodstack.payment.core.gateway.CardGateway.GatewayException;
@@ -83,6 +84,7 @@ public class MerchantAccounts {
     // ---- choosing the account -------------------------------------------------------------------
 
     /** Whose account a card payment for the branch goes into now. */
+    @Flow(value = {"payment-api-resolve-merchant>resolve", "merchant-collection-view>load>resolve"}, label = "Branch account, else brand account, else the operator")
     public MerchantView resolve(String storeId) {
         if (this.operatorGateway == null || !this.settings.getOrdering().directCollectionEnabled()) {
             return MerchantView.BY_OPERATOR;
@@ -142,6 +144,7 @@ public class MerchantAccounts {
     // ---- what the store and ledger modules say ----------------------------------------------------
 
     /** Finance changed who collects for the branch. */
+    @Flow(value = "payment-collection-events>type?>mode", label = "Save the collection mode", when = "StorePaymentCollectionChanged")
     public void collectionChanged(String storeId, String brandId, String mode) {
         this.mongo.upsert(Query.query(Criteria.where("_id").is(storeId)),
                 new Update().set("brandId", brandId).set("mode", mode).set("updatedAt", this.clock.instant())
@@ -150,6 +153,7 @@ public class MerchantAccounts {
     }
 
     /** The ledger says the branch is over its credit limit, or back within it. */
+    @Flow(value = "payment-collection-events>type?>suspend", label = "Suspend or restore direct collection", when = "StoreCreditLimitExceeded, StoreCreditRestored")
     public void suspended(String storeId, String brandId, boolean suspended) {
         this.mongo.upsert(Query.query(Criteria.where("_id").is(storeId)),
                 new Update().set("suspended", suspended).set("updatedAt", this.clock.instant())
@@ -163,6 +167,7 @@ public class MerchantAccounts {
      * What the branch's owners and finance see: whether the branch may collect, the accounts and
      * where its card payments go now.
      */
+    @Flow(value = "merchant-collection-view>load", label = "Mode, accounts and webhook addresses", onError = "STORE_ACCESS_DENIED")
     public CollectionView view(String storeId) {
         requireView(storeId);
         StoreCollectionDocument collection = this.mongo.findById(storeId, StoreCollectionDocument.class);
@@ -185,7 +190,9 @@ public class MerchantAccounts {
      * replaces the owner's previous one. Errors: {@code DIRECT_COLLECTION_OFF} (400) when the deployment
      * or the branch may not collect, {@code MERCHANT_ACCOUNT_REFUSED} (400) with the gateway's reason.
      */
+    @Flow(value = "merchant-account-connect>connect", label = "Connect the account")
     public AccountView connect(String scope, String ownerId, String secretKey, String webhookSecret) {
+        // @flow merchant-account-connect>connect>check: Owner, gateway set up, direct collection allowed, keys look right [on error MERCHANT_ACCOUNT_DENIED, DIRECT_COLLECTION_OFF, MERCHANT_ACCOUNT_INVALID]
         requireOwner(scope, ownerId);
         if (this.operatorGateway == null || this.accountGateways == null) {
             throw new ModuleException.BadRequest("No card gateway is set up on this platform", "PAYMENT_UNAVAILABLE");
@@ -201,6 +208,7 @@ public class MerchantAccounts {
             throw new ModuleException.BadRequest("Enter the secret key and the webhook signing secret from the gateway",
                     "MERCHANT_ACCOUNT_INVALID");
         }
+        // @flow merchant-account-connect>connect>verify: Check the keys with the gateway [on error MERCHANT_ACCOUNT_REFUSED]
         try {
             this.accountGateways.open(key, hook).verify();
         }
@@ -208,6 +216,7 @@ public class MerchantAccounts {
             throw new ModuleException.BadRequest("The gateway refused these keys: " + ex.getMessage(),
                     "MERCHANT_ACCOUNT_REFUSED");
         }
+        // @flow merchant-account-connect>connect>save: Retire the old account, save the new one with encrypted keys
         Instant now = this.clock.instant();
         MerchantAccountDocument account = new MerchantAccountDocument(Ids.newId(), scope, ownerId,
                 this.operatorGateway.id(), this.cipher.encrypt(key), this.cipher.encrypt(hook),
@@ -226,6 +235,7 @@ public class MerchantAccounts {
     }
 
     /** Stops using the owner's account; payments already taken keep it for refunds. */
+    @Flow(value = "merchant-account-disconnect>retire", label = "Retire the current account")
     public void disconnect(String scope, String ownerId) {
         requireOwner(scope, ownerId);
         retire(scope, ownerId, this.clock.instant());

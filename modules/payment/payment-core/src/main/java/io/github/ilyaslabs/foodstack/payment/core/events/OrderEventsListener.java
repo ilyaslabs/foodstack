@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.payment.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCancelled;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderRefunded;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderRejected;
@@ -32,12 +34,15 @@ public class OrderEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "payment-order-events", label = "Refund card payments of cancelled, rejected or refunded orders", description = "")
+    @EVL.Job(trigger = "<ns>.order.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.payment:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-payment-orders", groupId = "${foodstack.namespace:foodstack}-payment",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow payment-order-events>type?: Which event?
         if (CANCELLED.equals(type)) {
             OrderCancelled cancelled = event.dataAs(OrderCancelled.class, this.jsonMapper);
             this.payments.refund(event.subject(), cancelled.refundMinor(), event.id(), "Order cancelled: " + cancelled.reason());

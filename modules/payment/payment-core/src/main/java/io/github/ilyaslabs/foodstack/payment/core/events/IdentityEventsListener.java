@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.payment.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.events.UserDeleted;
 import io.github.ilyaslabs.foodstack.payment.core.application.PaymentService;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
@@ -25,6 +27,8 @@ public class IdentityEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "payment-identity-events", label = "Erase a deleted customer's saved cards", description = "")
+    @EVL.Job(trigger = "<ns>.identity.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.payment:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-payment-identity", groupId = "${foodstack.namespace:foodstack}-payment",
             topics = "${foodstack.namespace:foodstack}.identity.events", properties = "auto.offset.reset=earliest")

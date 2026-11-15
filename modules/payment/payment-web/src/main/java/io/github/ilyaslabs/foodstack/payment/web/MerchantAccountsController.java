@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.payment.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts;
 import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts.AccountView;
 import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts.CollectionView;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  * card payments go.
  */
 @RestController
+@EVL.Endpoint(path = "/api/v1/payments/merchant-accounts")
 @RequestMapping("/api/v1/payments/merchant-accounts")
 class MerchantAccountsController {
 
@@ -33,18 +36,24 @@ class MerchantAccountsController {
         this.accounts = accounts;
     }
 
+    @Flow(value = "merchant-collection-view", label = "Where a branch's card payments go", description = "Operator, branch or brand account")
+    @EVL.Endpoint(method = "GET", path = "", caller = "Back office (operator, owner)")
     @GetMapping
     @PreAuthorize("isAuthenticated()")
     CollectionResponse view(@RequestParam String storeId) {
         return response(this.accounts.view(storeId));
     }
 
+    @Flow(value = "merchant-account-connect", label = "Connect an own merchant account", description = "A brand's or branch's gateway keys")
+    @EVL.Endpoint(method = "PUT", path = "/{scope}/{ownerId}", caller = "Back office (owner)")
     @PutMapping("/{scope}/{ownerId}")
     @PreAuthorize("hasAuthority('payment:account')")
     AccountResponse connect(@PathVariable String scope, @PathVariable String ownerId, @RequestBody ConnectRequest request) {
         return response(this.accounts.connect(scope(scope), ownerId, request.secretKey(), request.webhookSecret()));
     }
 
+    @Flow(value = "merchant-account-disconnect", label = "Disconnect the merchant account", description = "Payments go back to the operator")
+    @EVL.Endpoint(method = "DELETE", path = "/{scope}/{ownerId}", caller = "Back office (owner)")
     @DeleteMapping("/{scope}/{ownerId}")
     @PreAuthorize("hasAuthority('payment:account')")
     @ResponseStatus(HttpStatus.NO_CONTENT)

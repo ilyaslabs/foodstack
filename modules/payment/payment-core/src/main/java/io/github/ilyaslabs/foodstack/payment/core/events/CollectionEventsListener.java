@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.payment.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.ledger.api.events.StoreCreditLimitExceeded;
 import io.github.ilyaslabs.foodstack.ledger.api.events.StoreCreditRestored;
 import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts;
@@ -31,6 +33,8 @@ public class CollectionEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "payment-collection-events", label = "Track who collects a branch's card payments", description = "Collection mode from the store module, credit-limit suspension from the ledger")
+    @EVL.Job(trigger = "<ns>.store.events, <ns>.ledger.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.payment:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-payment-collection", groupId = "${foodstack.namespace:foodstack}-payment",
             topics = { "${foodstack.namespace:foodstack}.store.events", "${foodstack.namespace:foodstack}.ledger.events" },
@@ -38,6 +42,7 @@ public class CollectionEventsListener {
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow payment-collection-events>type?: Which event?
         if (COLLECTION.equals(type)) {
             StorePaymentCollectionChanged changed = event.dataAs(StorePaymentCollectionChanged.class, this.jsonMapper);
             this.accounts.collectionChanged(changed.storeId(), changed.brandId(), changed.mode());

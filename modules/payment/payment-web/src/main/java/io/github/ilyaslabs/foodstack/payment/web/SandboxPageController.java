@@ -5,6 +5,8 @@ import java.net.URI;
 import java.util.Currency;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.payment.core.application.SandboxCheckout.Page;
 import io.github.ilyaslabs.foodstack.payment.core.application.SandboxCheckout;
 
@@ -32,6 +34,8 @@ class SandboxPageController {
         this.sandbox = sandbox;
     }
 
+    @Flow(value = "payment-sandbox-page", label = "Sandbox payment page", description = "Test mode: pick what the gateway answers")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/payments/sandbox/{orderId}", caller = "Customer browser (sandbox)")
     @GetMapping(value = "/api/v1/payments/sandbox/{orderId}", produces = MediaType.TEXT_HTML_VALUE)
     ResponseEntity<String> page(@PathVariable String orderId, @RequestParam("t") String token) {
         Page page = this.sandbox.page(orderId, token);
@@ -89,6 +93,8 @@ class SandboxPageController {
         return ResponseEntity.ok().header("Cache-Control", "no-store").body(html);
     }
 
+    @Flow(value = "payment-sandbox-complete", label = "Pay or decline on the sandbox page", description = "Redirects back to the app")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/payments/sandbox/{orderId}", caller = "Customer browser (sandbox)")
     @PostMapping("/api/v1/payments/sandbox/{orderId}")
     ResponseEntity<Void> complete(@PathVariable String orderId, @RequestParam("t") String token,
             @RequestParam("outcome") String outcome, @RequestParam(name = "save", defaultValue = "false") boolean save) {
@@ -104,6 +110,8 @@ class SandboxPageController {
      * Completes a sandbox payment from the app's pretend embedded fields (PRD CO-5); the client
      * secret proves the server handed this payment to the customer.
      */
+    @Flow(value = "payment-sandbox-card", label = "Pay with sandbox embedded fields", description = "A number ending 0002 declines")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/payments/sandbox/{orderId}/card", caller = "Customer app")
     @PostMapping("/api/v1/payments/sandbox/{orderId}/card")
     Map<String, String> card(@PathVariable String orderId, @RequestBody CardPayment body) {
         return Map.of("next", this.sandbox.completeEmbedded(orderId, body.clientSecret(), body.cardNumber(),
