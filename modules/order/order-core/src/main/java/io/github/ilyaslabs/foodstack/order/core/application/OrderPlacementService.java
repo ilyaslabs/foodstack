@@ -108,21 +108,22 @@ public class OrderPlacementService {
     }
 
     public PlacedOrder place(String customerId, String idempotencyKey, PlaceOrder request) {
-        // @flow order-place>key: Require an Idempotency-Key
+        // @flow order-place>request: Check the request before pricing it
+        // @flow order-place>request>key: Require an Idempotency-Key
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
             throw new ModuleException.BadRequest("An Idempotency-Key header is required", "IDEMPOTENCY_KEY_REQUIRED");
         }
         String keyId = customerId + ":" + idempotencyKey.strip();
         String fingerprint = fingerprint(request);
-        // @flow order-place>repeat: Return the first order for a repeated key [when key already used]
+        // @flow order-place>request>repeat: Return the first order for a repeated key [when key already used]
         PlacedOrder earlier = earlier(keyId, fingerprint);
         if (earlier != null) {
             return earlier;
         }
-        // @flow order-place>validate: Check fulfilment, address and phone
+        // @flow order-place>request>validate: Check fulfilment, address and phone
         validate(request);
         if (this.rateLimiter != null) {
-            // @flow order-place>limit: Rate-limit placements per customer
+            // @flow order-place>request>limit: Rate-limit placements per customer
             this.rateLimiter.check("order", "place", customerId, PLACEMENTS_PER_WINDOW, PLACEMENT_WINDOW);
         }
 
@@ -130,8 +131,8 @@ public class OrderPlacementService {
                 ? new GeoPoint(request.address().lat(), request.address().lng()) : null;
         CheckoutView checkout = this.carts.checkout(new CheckoutRequest(customerId, request.fulfilment(), destination,
                 request.couponCode(), request.tipMinor(), request.paymentMethod()));
-        // @flow order-place>problems: Refuse when the checkout has problems or the total changed [on error Conflict]
         if (!checkout.orderable()) {
+            // @flow order-place>problems: Refuse when the checkout has problems or the total changed [on error Conflict]
             throw new ModuleException.Conflict("The order cannot be placed as it is", "CHECKOUT_PROBLEMS",
                     Map.of("problems", checkout.problems()));
         }
@@ -206,7 +207,7 @@ public class OrderPlacementService {
         if (confirmed.status() != OrderStatus.PLACED) {
             OrderLifecycleService.reached(confirmed.status());
         }
-        // @flow order-place>live: Push the new status to live watchers
+        // @flow order-place>save>live: Push the new status to live watchers
         this.live.publish(orderId, store.storeId(), confirmed.status().name(), confirmed.revision());
 
         // @flow order-place>payment?: Cash or card?
