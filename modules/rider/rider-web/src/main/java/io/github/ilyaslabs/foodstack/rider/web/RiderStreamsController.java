@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.rider.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
@@ -48,17 +50,25 @@ class RiderStreamsController {
 
     @GetMapping(value = "/api/v1/riders/live/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "rider-live-watch", label = "Live rider map stream", description = "Rider moves in the visible map cells")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/live/stream", caller = "Back office")
     SseEmitter live(@RequestParam double south, @RequestParam double west, @RequestParam double north,
             @RequestParam double east) {
+        // @flow rider-live-watch>access: Operator staff only
         this.activity.requireLive();
         List<String> cells = MapView.cells(south, west, north, east);
+        // @flow rider-live-watch>subscribe: Subscribe to each map cell's channel
         return stream((emitter) -> this.presence.onCells(cells, (message) -> send(emitter, message)));
     }
 
     @GetMapping(value = "/api/v1/riders/tracking/{orderId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "rider-tracking-watch", label = "Live order tracking stream", description = "Rider moves for one order")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/riders/tracking/{orderId}/stream", caller = "Customer web")
     SseEmitter tracking(@PathVariable String orderId) {
+        // @flow rider-tracking-watch>access: Customer, rider, branch staff or operator only
         this.activity.requireFollow(orderId);
+        // @flow rider-tracking-watch>subscribe: Subscribe to the order's tracking channel
         return stream((emitter) -> this.presence.onOrder(orderId, (message) -> send(emitter, message)));
     }
 

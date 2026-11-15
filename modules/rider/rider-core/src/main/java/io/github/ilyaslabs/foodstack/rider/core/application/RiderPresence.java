@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.rider.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -30,6 +31,7 @@ import org.springframework.data.redis.domain.geo.GeoReference;
  * they show) and {@code <ns>:rider:rt:order:<orderId>} (the customer and the store following one
  * delivery). Lost messages only delay a map until the next ping.
  */
+@EVL.Cache("Redis rider presence")
 public class RiderPresence {
 
     private static final Logger log = LoggerFactory.getLogger(RiderPresence.class);

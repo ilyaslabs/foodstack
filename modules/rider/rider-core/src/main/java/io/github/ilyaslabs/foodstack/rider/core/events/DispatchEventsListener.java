@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.rider.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 
 import io.github.ilyaslabs.foodstack.dispatch.api.DeliverySummary;
@@ -25,6 +27,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * rate, assignments decide who may follow the rider and keep a busy rider out of matching, and a
  * completed delivery records the rider's earning. Each event is applied once (inbox).
  */
+@EVL.Queue("foodstack.dispatch.events")
 public class DispatchEventsListener {
 
     static final String CONSUMER = "rider-dispatch";
@@ -61,9 +64,13 @@ public class DispatchEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.rider:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-rider-dispatch", groupId = "${foodstack.namespace:foodstack}-rider",
             topics = "${foodstack.namespace:foodstack}.dispatch.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "rider-on-dispatch", label = "Keep rider workload in step with deliveries", after = "dispatch-match")
+    @EVL.Job(trigger = "dispatch events")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow rider-on-dispatch>inbox: Process each event once (inbox)
+        // @flow rider-on-dispatch>type?: Which dispatch event?
         if (OFFERED.equals(type)) {
             RiderOffered e = event.dataAs(RiderOffered.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> this.activity.offered(e.riderId()));

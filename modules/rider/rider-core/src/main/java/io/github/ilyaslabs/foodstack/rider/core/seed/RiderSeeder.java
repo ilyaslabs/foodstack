@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.rider.core.seed;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Instant;
 
 import io.github.ilyaslabs.foodstack.platform.security.ServiceCalls;
@@ -52,6 +54,8 @@ class RiderSeeder {
 
     @EventListener(ApplicationReadyEvent.class)
     @Order(40)
+    @Flow(value = "rider-seed", label = "Seed demo riders", description = "Once per database: two operator riders and two store riders")
+    @EVL.Job(trigger = "application ready")
     void seed() {
         try {
             this.mongo.insert(new Document("_id", "v1").append("seededAt", Instant.now()), "rider_seed");
