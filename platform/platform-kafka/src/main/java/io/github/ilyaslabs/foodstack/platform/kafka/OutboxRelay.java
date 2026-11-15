@@ -11,6 +11,8 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.mongo.ModuleMongo;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.micrometer.core.instrument.Counter;
@@ -162,10 +164,13 @@ public class OutboxRelay implements SmartLifecycle {
         return this.running;
     }
 
+    @Flow(value = "outbox-relay", label = "Relay module events from the outbox to Kafka", description = "One relay per local module, over the outbox buckets this replica leases")
+    @EVL.Job(schedule = "continuous; waits the poll interval when a batch is not full")
     private void loop() {
         while (this.running) {
             int published = 0;
             try {
+                // @flow outbox-relay>lease: The outbox buckets this replica holds
                 Set<Integer> buckets = this.leases.current();
                 if (!buckets.isEmpty()) {
                     published = publishBatch(buckets);
@@ -189,7 +194,9 @@ public class OutboxRelay implements SmartLifecycle {
      * Sends one batch of pending rows of the given buckets.
      * @return how many rows were marked sent
      */
+    @Flow(value = "outbox-relay>publish", label = "Publish one batch", onError = "retry on the next loop")
     public int publishBatch(Set<Integer> buckets) {
+        // @flow outbox-relay>publish>find: NEW rows of the leased buckets, oldest first
         Query pending = Query.query(Criteria.where("status").is(OutboxWriter.STATUS_NEW).and("bucket").in(buckets))
             .with(Sort.by("_id"))
             .limit(this.settings.getBatchSize());
@@ -197,6 +204,7 @@ public class OutboxRelay implements SmartLifecycle {
         if (rows.isEmpty()) {
             return 0;
         }
+        // @flow outbox-relay>publish>send: Send each as a CloudEvent keyed by subject, with traceparent, to <ns>.<module>.events [each row]
         List<CompletableFuture<?>> sends = new ArrayList<>(rows.size());
         for (Document row : rows) {
             ProducerRecord<String, String> record = new ProducerRecord<>(this.topic, row.getString("subject"),
@@ -226,6 +234,7 @@ public class OutboxRelay implements SmartLifecycle {
                 break;
             }
         }
+        // @flow outbox-relay>publish>mark: Mark sent; count an attempt on the first failure
         if (!sent.isEmpty() && this.published != null) {
             this.published.increment(sent.size());
         }

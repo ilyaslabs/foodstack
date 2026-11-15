@@ -7,6 +7,8 @@ import com.mongodb.MongoCommandException;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.core.Buckets;
 import liquibase.Liquibase;
 import liquibase.database.DatabaseFactory;
@@ -47,11 +49,15 @@ public class ModuleMigrations implements InitializingBean {
     }
 
     @Override
+    @Flow(value = "module-migrations", label = "Migrate a module's database", description = "Each local module at start-up")
+    @EVL.Job(trigger = "application start (each local module)")
     public void afterPropertiesSet() throws Exception {
+        // @flow module-migrations>migrate: Liquibase changelog, then outbox bucket backfill [when migrations on]
         if (this.properties.getMigrations().isEnabled()) {
             migrate();
             backfillOutboxBuckets();
         }
+        // @flow module-migrations>shard: Shard keys for the module's collections [when sharding on]
         if (this.properties.getSharding().isEnabled()) {
             applyShardKeys();
         }
