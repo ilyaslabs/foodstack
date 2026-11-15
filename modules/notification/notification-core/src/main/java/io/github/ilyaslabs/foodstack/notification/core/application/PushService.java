@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.notification.core.persistence.DeviceDocument;
 import io.github.ilyaslabs.foodstack.notification.core.push.PushTransport;
 import io.github.ilyaslabs.foodstack.platform.security.PiiCipher;
@@ -59,6 +60,7 @@ public class PushService {
         return this.transport != null;
     }
 
+    @Flow(value = "device-register>save", label = "Save the device token")
     public void register(String userId, String token, String platform, String app) {
         if (token == null || token.isBlank() || token.length() > 4096) {
             throw new ModuleException.BadRequest("A device token is required", "DEVICE_INVALID");
@@ -85,6 +87,7 @@ public class PushService {
         }
     }
 
+    @Flow(value = "device-remove>delete", label = "Delete the device token")
     public void unregister(String userId, String token) {
         if (token == null || token.isBlank()) {
             return;

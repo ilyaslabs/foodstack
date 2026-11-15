@@ -8,6 +8,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
 import java.util.Locale;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
@@ -46,6 +47,7 @@ public class AccountMessages {
         this.serviceCalls = serviceCalls;
     }
 
+    @Flow(value = "notification-identity-events>type?>registered", label = "Welcome email", when = "UserRegistered", after = "auth-register>create")
     public void onRegistered(String eventId, UserRegistered registered) {
         if (registered.roles() == null || !registered.roles().contains(Role.CUSTOMER)) {
             return;
@@ -63,6 +65,7 @@ public class AccountMessages {
      * Emails a one-time code. It is required (sent whatever the preferences), email only, and never
      * goes to the notification centre; the delivery log keeps it sealed.
      */
+    @Flow(value = "notification-identity-events>type?>code", label = "Email the sign-in or reset code", when = "EmailCodeIssued", after = "auth-code>issue>event")
     public void onEmailCode(String eventId, EmailCodeIssued issued) {
         if (issued.expiresAt() != null && !issued.expiresAt().isAfter(this.clock.instant())) {
             return;
@@ -79,6 +82,7 @@ public class AccountMessages {
      * Tells a customer when their account will be deleted and that signing in cancels it (PRD
      * ID-7). Required: sent whatever the email preferences.
      */
+    @Flow(value = "notification-identity-events>type?>deletion", label = "Email the deletion date", when = "AccountDeletionScheduled", after = "me-deletion-request>schedule>save")
     public void onDeletionScheduled(String eventId, AccountDeletionScheduled scheduled) {
         UserView user = this.serviceCalls.call(() -> this.identity.getUser(scheduled.userId()));
         if (user == null || scheduled.deleteAfter() == null) {

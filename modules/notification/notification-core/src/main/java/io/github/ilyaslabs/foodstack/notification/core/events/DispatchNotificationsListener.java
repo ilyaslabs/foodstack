@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.notification.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DispatchAlert;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.RiderAssigned;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.RiderOffered;
@@ -37,12 +39,15 @@ public class DispatchNotificationsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "notification-dispatch-events", label = "Message riders, customers and dispatch about deliveries", description = "")
+    @EVL.Job(trigger = "<ns>.dispatch.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.notification:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-notification-dispatch",
             groupId = "${foodstack.namespace:foodstack}-notification",
             topics = "${foodstack.namespace:foodstack}.dispatch.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
+        // @flow notification-dispatch-events>type?: Which event?
         if (OFFERED.equals(event.type())) {
             RiderOffered e = event.dataAs(RiderOffered.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> this.messages.onOffered(event.id(), e));

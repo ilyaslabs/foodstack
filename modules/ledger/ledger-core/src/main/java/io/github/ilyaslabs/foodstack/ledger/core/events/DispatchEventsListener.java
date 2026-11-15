@@ -30,7 +30,7 @@ public class DispatchEventsListener {
         this.clock = clock;
     }
 
-    @Flow(value = "ledger-dispatch-events", label = "Post rider earnings", description = "On DeliveryCompleted")
+    @Flow(value = "ledger-dispatch-events", label = "Post rider earnings", description = "On DeliveryCompleted", after = "dispatch-delivered>deliver>complete")
     @EVL.Job(trigger = "<ns>.dispatch.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.ledger:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-ledger-dispatch", groupId = "${foodstack.namespace:foodstack}-ledger",

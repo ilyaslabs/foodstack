@@ -275,13 +275,13 @@ public class RiderActivity {
     // ---- deliveries (dispatch events) ----------------------------------------------------------
 
     /** An offer went to the rider: counts towards the acceptance rate. */
-    @Flow(value = "rider-dispatch-events>type?>offered", label = "Count the offer", when = "RiderOffered")
+    @Flow(value = "rider-dispatch-events>type?>offered", label = "Count the offer", when = "RiderOffered", after = "dispatch-match>offer>hold")
     public void offered(String riderId) {
         this.mongo.updateFirst(byId(riderId), new Update().inc("offers", 1), RiderDocument.class);
     }
 
     /** The rider has the delivery now. */
-    @Flow(value = "rider-dispatch-events>type?>assigned", label = "Save the assignment, add the job, count an accepted offer", when = "RiderAssigned")
+    @Flow(value = "rider-dispatch-events>type?>assigned", label = "Save the assignment, add the job, count an accepted offer", when = "RiderAssigned", after = "dispatch-offer-accept>accept>assign")
     public void assigned(AssignmentDocument assignment, boolean acceptedOffer) {
         try {
             this.mongo.insert(assignment);
@@ -326,7 +326,7 @@ public class RiderActivity {
     }
 
     /** A delivery was completed: the rider's earning is recorded once (id = order id). */
-    @Flow(value = "rider-dispatch-events>type?>delivered", label = "Record the earning once, count the delivery", when = "DeliveryCompleted")
+    @Flow(value = "rider-dispatch-events>type?>delivered", label = "Record the earning once, count the delivery", when = "DeliveryCompleted", after = "dispatch-delivered>deliver>complete")
     public void delivered(EarningDocument earning) {
         try {
             this.mongo.insert(earning);

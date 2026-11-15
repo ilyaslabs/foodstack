@@ -332,7 +332,7 @@ public class PaymentService {
      * Gives money back for an order. Idempotent per {@code refundId}; asks for at most what is left.
      * Throws {@link GatewayException} when the gateway may succeed later, so the event is retried.
      */
-    @Flow(value = "payment-order-events>type?>refund", label = "Refund the card payment", when = "OrderCancelled, OrderRejected, OrderRefunded")
+    @Flow(value = "payment-order-events>type?>refund", label = "Refund the card payment", when = "OrderCancelled, OrderRejected, OrderRefunded", after = "order-refund>request")
     public void refund(String orderId, long amountMinor, String refundId, String reason) {
         PaymentDocument payment = find(orderId);
         if (payment == null || amountMinor <= 0 || !PaymentDocument.SUCCEEDED.equals(payment.status())
@@ -450,7 +450,7 @@ public class PaymentService {
      * A deleted customer's saved cards (PRD ID-7, on {@code UserDeleted}): the gateway forgets the
      * customer, then the reference goes. Safe to run again.
      */
-    @Flow(value = "payment-identity-events>erase", label = "Delete the gateway customer and its saved cards", when = "UserDeleted")
+    @Flow(value = "payment-identity-events>erase", label = "Delete the gateway customer and its saved cards", when = "UserDeleted", after = "identity-account-deletions>erase")
     public void eraseCustomer(String userId) {
         Document customer = this.mongo.findById(userId, Document.class, CUSTOMERS);
         if (customer == null) {

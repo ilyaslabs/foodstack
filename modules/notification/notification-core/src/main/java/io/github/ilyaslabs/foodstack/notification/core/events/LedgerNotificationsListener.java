@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.notification.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.ledger.api.events.StoreCreditLimitExceeded;
 import io.github.ilyaslabs.foodstack.ledger.api.events.StoreCreditRestored;
 import io.github.ilyaslabs.foodstack.notification.core.application.FinanceMessages;
@@ -25,12 +27,15 @@ public class LedgerNotificationsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "notification-ledger-events", label = "Message owners and finance about credit limits", description = "")
+    @EVL.Job(trigger = "<ns>.ledger.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.notification:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-notification-ledger",
             groupId = "${foodstack.namespace:foodstack}-notification",
             topics = "${foodstack.namespace:foodstack}.ledger.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
+        // @flow notification-ledger-events>type?: Which event?
         if (EXCEEDED.equals(event.type())) {
             this.messages.onExceeded(event.id(), event.dataAs(StoreCreditLimitExceeded.class, this.jsonMapper));
         }

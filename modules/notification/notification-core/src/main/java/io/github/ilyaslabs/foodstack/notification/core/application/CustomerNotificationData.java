@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.notification.core.application;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.notification.core.persistence.DeliveryDocument;
 import io.github.ilyaslabs.foodstack.notification.core.persistence.DeviceDocument;
 import io.github.ilyaslabs.foodstack.notification.core.persistence.InboxDocument;
@@ -46,6 +47,7 @@ public class CustomerNotificationData {
         }
     }
 
+    @Flow(value = "notification-export>load", label = "Inbox, devices and preferences")
     public Export export(String userId) {
         List<InboxService.Item> messages = this.mongo
             .find(Query.query(Criteria.where("userId").is(userId))
@@ -63,6 +65,7 @@ public class CustomerNotificationData {
     }
 
     /** Removes everything this module keeps about the user. Safe to run again. */
+    @Flow(value = "notification-identity-events>type?>erase", label = "Delete the customer's inbox, devices and preferences", when = "UserDeleted", after = "identity-account-deletions>erase")
     public void erase(String userId) {
         Query mine = Query.query(Criteria.where("userId").is(userId));
         this.mongo.remove(mine, InboxDocument.class);

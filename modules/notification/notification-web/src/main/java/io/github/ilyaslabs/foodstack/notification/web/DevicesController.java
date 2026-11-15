@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.notification.web;
 
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.notification.core.application.PushService;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import tools.jackson.databind.json.JsonMapper;
@@ -42,12 +44,16 @@ class DevicesController {
     record PushConfig(boolean enabled, Map<String, Object> firebase, String vapidKey) {
     }
 
+    @Flow(value = "device-push-config", label = "Web push settings", description = "Public browser key and app config")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/devices/push-config", caller = "Customer app, back office, rider app")
     @GetMapping("/api/v1/devices/push-config")
     PushConfig config() {
         boolean web = this.push.enabled() && this.webConfig != null && this.vapidKey != null;
         return new PushConfig(web, web ? this.webConfig : null, web ? this.vapidKey : null);
     }
 
+    @Flow(value = "device-register", label = "Register a device for push", description = "")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/devices", caller = "Customer app, back office, rider app")
     @PostMapping("/api/v1/devices")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<Void> register(@RequestBody DeviceRequest request) {
@@ -55,6 +61,8 @@ class DevicesController {
         return ResponseEntity.noContent().build();
     }
 
+    @Flow(value = "device-remove", label = "Unregister a device", description = "")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/devices/remove", caller = "Customer app, back office, rider app")
     @PostMapping("/api/v1/devices/remove")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<Void> remove(@RequestBody DeviceRequest request) {

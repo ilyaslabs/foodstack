@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.api.DeliverySummary;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DispatchAlert;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.RiderAssigned;
@@ -44,6 +45,7 @@ public class DispatchMessages {
     }
 
     /** Push only: an offer is gone in seconds, so it has no place in the notification centre. */
+    @Flow(value = "notification-dispatch-events>type?>offered", label = "Push the job offer to the rider", when = "RiderOffered", after = "dispatch-match>offer>hold")
     public void onOffered(String eventId, RiderOffered e) {
         DeliverySummary d = e.delivery();
         this.notifications.send(new Message(eventId, e.riderId(), null, "rider-offer", operatorLanguage(),
@@ -52,6 +54,7 @@ public class DispatchMessages {
                 RIDER_LINK, true, false, false, false, true));
     }
 
+    @Flow(value = "notification-dispatch-events>type?>assigned", label = "Tell the customer a rider is coming", when = "RiderAssigned")
     public void onAssigned(String eventId, RiderAssigned e) {
         DeliverySummary d = e.delivery();
         String language = (d.language() != null) ? d.language() : operatorLanguage();
@@ -67,6 +70,7 @@ public class DispatchMessages {
         }
     }
 
+    @Flow(value = "notification-dispatch-events>type?>alert", label = "Alert dispatch staff: no rider found", when = "DispatchAlert", after = "dispatch-match>offer>widen")
     public void onAlert(String eventId, DispatchAlert e) {
         DeliverySummary d = e.delivery();
         List<String> staff = this.serviceCalls.call(() -> this.identity.userIdsWithRoles(Set.of(Role.ADMIN, Role.SUPPORT)));

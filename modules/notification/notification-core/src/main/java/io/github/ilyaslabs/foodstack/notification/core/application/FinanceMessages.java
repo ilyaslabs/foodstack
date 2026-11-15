@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.ledger.api.events.StoreCreditLimitExceeded;
@@ -40,6 +41,7 @@ public class FinanceMessages {
         this.serviceCalls = serviceCalls;
     }
 
+    @Flow(value = "notification-ledger-events>type?>exceeded", label = "Tell the owners and finance the credit limit is passed", when = "StoreCreditLimitExceeded")
     public void onExceeded(String eventId, StoreCreditLimitExceeded e) {
         Map<String, Object> params = Templates.params("store", name(e.storeName()), "owed",
                 Money.format(e.owedMinor(), e.currency()), "limit", Money.format(e.limitMinor(), e.currency()));
@@ -52,6 +54,7 @@ public class FinanceMessages {
         }
     }
 
+    @Flow(value = "notification-ledger-events>type?>restored", label = "Tell them collection is back", when = "StoreCreditRestored")
     public void onRestored(String eventId, StoreCreditRestored e) {
         Map<String, Object> params = Templates.params("store", name(e.storeName()));
         for (String userId : (e.ownerUserIds() != null) ? e.ownerUserIds() : Set.<String>of()) {

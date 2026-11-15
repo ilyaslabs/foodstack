@@ -160,7 +160,7 @@ public class ReviewService {
      * keep counting, under "Deleted user"; their photos are released for cleanup. Safe to run again.
      * @return how many reviews were changed
      */
-    @Flow(value = "review-order-events>type?>erase", label = "Anonymise the customer's reviews, release photos", when = "UserDeleted")
+    @Flow(value = "review-order-events>type?>erase", label = "Anonymise the customer's reviews, release photos", when = "UserDeleted", after = "identity-account-deletions>erase")
     public int eraseCustomer(String customerId) {
         List<ReviewDocument> reviews = this.mongo.find(Query.query(Criteria.where("customerId").is(customerId)),
                 ReviewDocument.class);
@@ -470,7 +470,7 @@ public class ReviewService {
     }
 
     /** Who delivered the order, so the customer can rate the rider. */
-    @Flow(value = "review-order-events>type?>rider", label = "Note the rider who delivered", when = "DeliveryCompleted")
+    @Flow(value = "review-order-events>type?>rider", label = "Note the rider who delivered", when = "DeliveryCompleted", after = "dispatch-delivered>deliver>complete")
     public void delivered(String orderId, String riderId, String riderName, String riderKind) {
         if (riderId == null) {
             return;

@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.notification.core.persistence.InboxDocument;
 
 import org.springframework.data.domain.Sort;
@@ -38,6 +39,7 @@ public class InboxService {
     public record Item(String id, String template, String title, String body, String link, long createdAt, boolean read) {
     }
 
+    @Flow(value = "notification-inbox>query", label = "Inbox rows")
     public List<Item> list(String userId, Long before, int limit) {
         Criteria criteria = Criteria.where("userId").is(userId);
         if (before != null) {
@@ -51,15 +53,18 @@ public class InboxService {
             .toList();
     }
 
+    @Flow(value = "notification-unread>count", label = "Count unread rows")
     public long unread(String userId) {
         return this.mongo.count(Query.query(Criteria.where("userId").is(userId).and("readAt").is(null)), InboxDocument.class);
     }
 
+    @Flow(value = "notification-read>save", label = "Set read time")
     public void markRead(String userId, String id) {
         this.mongo.updateFirst(Query.query(Criteria.where("userId").is(userId).and("_id").is(id).and("readAt").is(null)),
                 new Update().set("readAt", this.clock.instant()), InboxDocument.class);
     }
 
+    @Flow(value = "notification-read-all>save", label = "Set read time on every unread row")
     public void markAllRead(String userId) {
         this.mongo.updateMulti(Query.query(Criteria.where("userId").is(userId).and("readAt").is(null)),
                 new Update().set("readAt", this.clock.instant()), InboxDocument.class);

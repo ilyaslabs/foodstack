@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.notification.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.events.AccountDeletionScheduled;
 import io.github.ilyaslabs.foodstack.identity.api.events.EmailCodeIssued;
 import io.github.ilyaslabs.foodstack.identity.api.events.UserDeleted;
@@ -38,12 +40,15 @@ public class IdentityNotificationsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "notification-identity-events", label = "Account emails", description = "Welcome, codes, deletion; erases a deleted customer's data")
+    @EVL.Job(trigger = "<ns>.identity.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.notification:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-notification-identity",
             groupId = "${foodstack.namespace:foodstack}-notification",
             topics = "${foodstack.namespace:foodstack}.identity.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
+        // @flow notification-identity-events>type?: Which event?
         if (REGISTERED.equals(event.type())) {
             this.messages.onRegistered(event.id(), event.dataAs(UserRegistered.class, this.jsonMapper));
         }

@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Semaphore;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
 import io.github.ilyaslabs.foodstack.notification.core.channel.MailTransport;
@@ -135,6 +137,7 @@ public class NotificationService {
         this.push = push;
     }
 
+    @Flow(value = {"notification-order-events>type?>order>send", "notification-order-events>type?>refund>send", "notification-dispatch-events>type?>offered>send", "notification-dispatch-events>type?>assigned>send", "notification-dispatch-events>type?>alert>send", "notification-ledger-events>type?>exceeded>send", "notification-ledger-events>type?>restored>send", "notification-identity-events>type?>registered>send", "notification-identity-events>type?>code>send", "notification-identity-events>type?>deletion>send"}, label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
     public void send(Message message) {
         Instant now = this.clock.instant();
         Templates.Rendered rendered = this.templates.render(message.template(), message.language(), message.params());
@@ -237,6 +240,8 @@ public class NotificationService {
     }
 
     /** Sends emails and push messages that are due (queued, or a retry); returns how many went out. */
+    @Flow(value = "notification-senders", label = "Send queued emails and pushes", description = "Also picks up retries and sends a new message cannot start at once")
+    @EVL.Job(schedule = "every 5 s, first after 15 s")
     public int sendDue() {
         List<String> channels = new ArrayList<>();
         if (this.mail != null) {
@@ -249,6 +254,7 @@ public class NotificationService {
             return 0;
         }
         int sent = 0;
+        // @flow notification-senders>claim: Claim a due delivery, up to 200 per run [each delivery]
         for (int i = 0; i < 200; i++) {
             DeliveryDocument claimed = claim(Criteria.where("status").in(DeliveryDocument.QUEUED, DeliveryDocument.SENDING)
                 .and("nextAttemptAt").lte(this.clock.instant()).and("channel").in(channels));
@@ -263,6 +269,7 @@ public class NotificationService {
     }
 
     /** Puts a failed email back in the queue (PRD NO-4). */
+    @Flow(value = "notification-delivery-retry>requeue", label = "Queue it again and start a sender", onError = "DELIVERY_NOT_FAILED")
     public void retry(String deliveryId) {
         DeliveryDocument updated = this.mongo.findAndModify(
                 Query.query(Criteria.where("_id").is(deliveryId)
@@ -306,17 +313,20 @@ public class NotificationService {
             String lastError, long createdAt, Long sentAt) {
     }
 
+    @Flow(value = "notification-preferences-view>load", label = "Stored preferences or the defaults")
     public Preferences preferences(String userId) {
         PreferencesDocument stored = this.mongo.findById(userId, PreferencesDocument.class);
         return (stored != null) ? new Preferences(stored.orderEmails(), stored.marketingEmails()) : new Preferences(true, false);
     }
 
+    @Flow(value = "notification-preferences-update>save", label = "Save the preferences")
     public Preferences updatePreferences(String userId, boolean orderEmails, boolean marketingEmails) {
         this.mongo.save(new PreferencesDocument(userId, orderEmails, marketingEmails, this.clock.instant()));
         return new Preferences(orderEmails, marketingEmails);
     }
 
     /** The admin's view of the log, newest first. */
+    @Flow(value = "notification-deliveries>query", label = "Deliveries by status")
     public List<DeliveryItem> deliveries(String status, Long before, int limit) {
         Criteria criteria = Criteria.where("channel").is(EMAIL);
         if (status != null && !status.isBlank()) {
@@ -358,6 +368,7 @@ public class NotificationService {
                 FindAndModifyOptions.options().returnNew(true), DeliveryDocument.class);
     }
 
+    @Flow(value = "notification-senders>deliver", label = "Send by email (SMTP) or push (FCM); mark sent, or retry later with backoff")
     private boolean deliver(DeliveryDocument delivery) {
         if (PUSH.equals(delivery.channel())) {
             return deliverPush(delivery);

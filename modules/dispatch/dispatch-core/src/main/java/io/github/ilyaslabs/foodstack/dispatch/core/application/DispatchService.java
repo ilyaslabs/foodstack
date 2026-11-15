@@ -135,7 +135,7 @@ public class DispatchService {
     // ---- from order events ---------------------------------------------------------------------
 
     /** An accepted delivery order becomes a job (once; a replayed event finds it there). */
-    @Flow(value = "dispatch-order-events>type?>accepted", label = "Open the delivery job", when = "OrderAccepted with a delivery")
+    @Flow(value = "dispatch-order-events>type?>accepted", label = "Open the delivery job", when = "OrderAccepted with a delivery", after = "order-action>act>action?>accept")
     public void orderAccepted(OrderSummary order, OrderDelivery delivery, long readyByEpoch, String actor) {
         if (delivery == null || this.mongo.findById(order.orderId(), JobDocument.class) != null) {
             return;

@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.notification.core.events;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.notification.core.application.OrderMessages;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderAccepted;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCancelled;
@@ -46,6 +48,8 @@ public class OrderNotificationsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "notification-order-events", label = "Message customers and branches about orders", description = "Order events and card refunds")
+    @EVL.Job(trigger = "<ns>.order.events, <ns>.payment.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.notification:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-notification-orders",
             groupId = "${foodstack.namespace:foodstack}-notification",
@@ -54,6 +58,7 @@ public class OrderNotificationsListener {
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         Class<?> type = ORDER_EVENTS.get(event.type());
+        // @flow notification-order-events>type?: Which event?
         if (type != null) {
             this.messages.onOrderEvent(event.id(), event.dataAs(type, this.jsonMapper));
         }

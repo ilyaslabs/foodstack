@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.notification.core.persistence.TemplateOverrideDocument;
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
@@ -102,6 +103,7 @@ public class TemplateEditor {
     public record Preview(String subject, String title, String body, String html) {
     }
 
+    @Flow(value = "template-list>load", label = "Templates and saved changes")
     public List<Summary> list() {
         Map<String, List<String>> edited = new LinkedHashMap<>();
         for (TemplateOverrideDocument doc : this.mongo.findAll(TemplateOverrideDocument.class)) {
@@ -113,6 +115,7 @@ public class TemplateEditor {
             .toList();
     }
 
+    @Flow(value = "template-view>load", label = "Texts per language")
     public Details get(String template) {
         require(template);
         List<LanguageText> texts = new ArrayList<>();
@@ -128,6 +131,7 @@ public class TemplateEditor {
      * @param expectedVersion the version read ({@code 0} for a message not edited yet), or
      *     {@code null} to skip the check
      */
+    @Flow(value = "template-save>save", label = "Check placeholders and length, save at the version", onError = "invalid text, stale version")
     public LanguageText save(String template, String language, Text text, Long expectedVersion) {
         require(template);
         requireLanguage(language);
@@ -162,6 +166,7 @@ public class TemplateEditor {
     }
 
     /** Goes back to the built-in text of a message in a language. */
+    @Flow(value = "template-reset>delete", label = "Delete the change")
     public LanguageText reset(String template, String language) {
         require(template);
         requireLanguage(language);
@@ -171,6 +176,7 @@ public class TemplateEditor {
     }
 
     /** The email and in-app message as a customer would get them, with sample values. */
+    @Flow(value = "template-preview>render", label = "Render with sample values")
     public Preview preview(String template, String language, Text text) {
         require(template);
         Map<String, String> builtIn = builtInOrEnglish(template, language);

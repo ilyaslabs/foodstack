@@ -171,7 +171,7 @@ public class OrderLifecycleService {
      * through dispatch. A rider's pickup also counts as ready when the store forgot to say so.
      */
     @Flow(value = "order-action>act>action?>picked-up", label = "Delivery orders, OrderPickedUp", when = "PICKED_UP")
-    @Flow(value = "order-dispatch-events>type?>picked-up", label = "OrderPickedUp", when = "DeliveryPickedUp")
+    @Flow(value = "order-dispatch-events>type?>picked-up", label = "OrderPickedUp", when = "DeliveryPickedUp", after = "dispatch-picked-up>save")
     @Flow(value = "order-dispatch-events>type?>completed>picked-up", label = "Mark picked up first", when = "rider did not tap picked up")
     public OrderDocument pickedUp(String orderId, Actor actor) {
         Set<OrderStatus> from = Actor.RIDER.equals(actor.role())
@@ -257,7 +257,7 @@ public class OrderLifecycleService {
      *
      * @return the order when it moved to {@code CONFIRMED}, otherwise {@code null}
      */
-    @Flow(value = "order-payment-events>type?>paid", label = "Confirm the order; a payment for a closed order is refunded", when = "PaymentSucceeded")
+    @Flow(value = "order-payment-events>type?>paid", label = "Confirm the order; a payment for a closed order is refunded", when = "PaymentSucceeded", after = "payment-webhook>apply>outcome?>succeeded")
     public OrderDocument paymentSucceeded(String orderId, long amountMinor) {
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
             OrderDocument order = find(orderId);
@@ -286,7 +286,7 @@ public class OrderLifecycleService {
     }
 
     /** The card payment failed or its page expired: the order fails and its coupon use is given back. */
-    @Flow(value = "order-payment-events>type?>failed", label = "Close as failed, OrderFailed", when = "PaymentFailed")
+    @Flow(value = "order-payment-events>type?>failed", label = "Close as failed, OrderFailed", when = "PaymentFailed", after = "payment-webhook>apply>outcome?>failed")
     public void paymentFailed(String orderId, String reason) {
         try {
             step(orderId, EnumSet.of(OrderStatus.PAYMENT_PENDING), OrderStatus.FAILED, Actor.system(),

@@ -24,7 +24,7 @@ public class CustomerErasure {
     }
 
     /** @return how many jobs were anonymised */
-    @Flow(value = "dispatch-identity-events>erase", label = "Anonymise the customer on their deliveries", when = "UserDeleted")
+    @Flow(value = "dispatch-identity-events>erase", label = "Anonymise the customer on their deliveries", when = "UserDeleted", after = "identity-account-deletions>erase")
     public int erase(String customerId) {
         int erased = 0;
         for (JobDocument job : this.mongo.find(Query.query(Criteria.where("customerId").is(customerId)), JobDocument.class)) {

@@ -32,7 +32,7 @@ public class CustomerErasure {
     }
 
     /** @return how many orders were anonymised */
-    @Flow(value = "order-identity-events>erase", label = "Anonymise the customer's orders and history rows", when = "UserDeleted")
+    @Flow(value = "order-identity-events>erase", label = "Anonymise the customer's orders and history rows", when = "UserDeleted", after = "identity-account-deletions>erase")
     public int erase(String customerId) {
         Query mine = Query.query(Criteria.where("customerId").is(customerId));
         mine.fields().include("_id");
