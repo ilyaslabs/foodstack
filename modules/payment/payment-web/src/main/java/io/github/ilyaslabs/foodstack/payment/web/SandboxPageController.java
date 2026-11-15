@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.payment.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.util.Currency;
@@ -33,6 +35,8 @@ class SandboxPageController {
     }
 
     @GetMapping(value = "/api/v1/payments/sandbox/{orderId}", produces = MediaType.TEXT_HTML_VALUE)
+    @Flow(value = "payment-sandbox-page", label = "Sandbox payment page", description = "HTML test page standing in for a hosted gateway page")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/payments/sandbox/{orderId}", caller = "Customer web")
     ResponseEntity<String> page(@PathVariable String orderId, @RequestParam("t") String token) {
         Page page = this.sandbox.page(orderId, token);
         String amount = format(page.amountMinor(), page.currency());
@@ -90,6 +94,8 @@ class SandboxPageController {
     }
 
     @PostMapping("/api/v1/payments/sandbox/{orderId}")
+    @Flow(value = "payment-sandbox-pay", label = "Sandbox pay or cancel", description = "Pays or fails the test payment through a signed sandbox webhook")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/payments/sandbox/{orderId}", caller = "Customer web")
     ResponseEntity<Void> complete(@PathVariable String orderId, @RequestParam("t") String token,
             @RequestParam("outcome") String outcome, @RequestParam(name = "save", defaultValue = "false") boolean save) {
         String next = this.sandbox.complete(orderId, token, "pay".equals(outcome), save);
@@ -105,6 +111,8 @@ class SandboxPageController {
      * secret proves the server handed this payment to the customer.
      */
     @PostMapping("/api/v1/payments/sandbox/{orderId}/card")
+    @Flow(value = "payment-sandbox-card", label = "Sandbox embedded card", description = "Test card number or saved card from the embedded form")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/payments/sandbox/{orderId}/card", caller = "Customer web")
     Map<String, String> card(@PathVariable String orderId, @RequestBody CardPayment body) {
         return Map.of("next", this.sandbox.completeEmbedded(orderId, body.clientSecret(), body.cardNumber(),
                 body.savedCardId(), body.saveCard()));

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.payment.core.gateway;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.Map;
 
@@ -10,6 +11,7 @@ import java.util.Map;
  * the gateway's customer reference. Adapters exist for a local sandbox and for Stripe Checkout;
  * others implement this interface.
  */
+@EVL.External("Card gateway")
 public interface CardGateway {
 
     /** The id used in configuration and in the webhook URL, such as {@code stripe}. */

@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.payment.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCancelled;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderRefunded;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderRejected;
@@ -15,6 +17,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * by support. The event id is the refund id, so a redelivered event never refunds twice; a gateway
  * that may succeed later makes the handler throw, and the event is retried, then dead-lettered.
  */
+@EVL.Queue("foodstack.order.events")
 public class OrderEventsListener {
 
     private static final String CANCELLED = EventTypes.type("order", OrderCancelled.class);
@@ -35,6 +38,8 @@ public class OrderEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.payment:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-payment-orders", groupId = "${foodstack.namespace:foodstack}-payment",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "payment-on-order", label = "Refund closed or refunded orders", after = "order-cancel")
+    @EVL.Job(trigger = "OrderCancelled, OrderRejected, OrderRefunded")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
