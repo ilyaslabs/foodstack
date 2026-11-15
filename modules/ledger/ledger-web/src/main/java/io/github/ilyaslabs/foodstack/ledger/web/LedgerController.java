@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.ledger.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
@@ -48,6 +50,8 @@ class LedgerController {
 
     @GetMapping("/payouts")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "ledger-payouts", label = "Payout report", description = "What each branch, brand or rider is owed or owes for a period, from daily rollups plus fresh postings")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/ledger/payouts", caller = "Back office")
     PayoutReport payouts(@RequestParam(defaultValue = "STORE") String party, @RequestParam String from,
             @RequestParam String to, @RequestParam(required = false) String brandId) {
         return this.reports.payouts(party, from, to, brandId);
@@ -55,28 +59,38 @@ class LedgerController {
 
     @GetMapping("/payouts.csv")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "ledger-payouts-csv", label = "Payout report as CSV")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/ledger/payouts.csv", caller = "Back office")
     ResponseEntity<byte[]> payoutsCsv(@RequestParam(defaultValue = "STORE") String party, @RequestParam String from,
             @RequestParam String to, @RequestParam(required = false) String brandId) {
+        // @flow ledger-payouts-csv>report: Build the payout report and write it as CSV
         byte[] body = this.reports.payoutsCsv(party, from, to, brandId).getBytes(StandardCharsets.UTF_8);
         return download(body, new MediaType("text", "csv", StandardCharsets.UTF_8), name(party, from, to, brandId, "csv"));
     }
 
     @GetMapping("/payouts.pdf")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "ledger-payouts-pdf", label = "Payout report as PDF", description = "With the operator's name on top")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/ledger/payouts.pdf", caller = "Back office")
     ResponseEntity<byte[]> payoutsPdf(@RequestParam(defaultValue = "STORE") String party, @RequestParam String from,
             @RequestParam String to, @RequestParam(required = false) String brandId) {
+        // @flow ledger-payouts-pdf>report: Build the payout report and render it as PDF
         return download(this.reports.payoutsPdf(party, from, to, brandId), MediaType.APPLICATION_PDF,
                 name(party, from, to, brandId, "pdf"));
     }
 
     @GetMapping("/operator")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "ledger-operator-summary", label = "Operator summary", description = "What the operator earned and spent in a period; finance only")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/ledger/operator", caller = "Back office")
     OperatorSummary operator(@RequestParam String from, @RequestParam String to) {
         return this.reports.operator(from, to);
     }
 
     @GetMapping("/accounts/{accountId}/statement")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "ledger-statement", label = "Account statement", description = "Postings of one account, newest first")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/ledger/accounts/{accountId}/statement", caller = "Back office")
     StatementPage statement(@PathVariable String accountId, @RequestParam(required = false) String from,
             @RequestParam(required = false) String to, @RequestParam(required = false) String before,
             @RequestParam(defaultValue = "50") int limit) {
@@ -85,6 +99,8 @@ class LedgerController {
 
     @GetMapping("/settlements")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "ledger-settlements", label = "List settlements")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/ledger/settlements", caller = "Back office")
     List<SettlementView> settlements(@RequestParam(required = false) String accountId,
             @RequestParam(defaultValue = "50") int limit) {
         return this.reports.settlements(accountId, limit);
@@ -92,6 +108,8 @@ class LedgerController {
 
     @PostMapping("/settlements")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "ledger-settle", label = "Settle a balance", description = "Finance records a bank payment to or from a branch or rider")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/ledger/settlements", caller = "Back office")
     SettlementView settle(@RequestBody SettleRequest body) {
         return this.reports.settle(body.accountId(), body.to(), body.reference());
     }

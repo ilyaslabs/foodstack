@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.ledger.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Instant;
 
@@ -12,6 +14,7 @@ import tools.jackson.databind.json.JsonMapper;
 import org.springframework.kafka.annotation.KafkaListener;
 
 /** Posts operator riders' pay, tips and cash carried from dispatch's events (PRD FI-1, DR-7). */
+@EVL.Queue("foodstack.dispatch.events")
 public class DispatchEventsListener {
 
     private static final String COMPLETED = EventTypes.type("dispatch", DeliveryCompleted.class);
@@ -31,6 +34,8 @@ public class DispatchEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.ledger:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-ledger-dispatch", groupId = "${foodstack.namespace:foodstack}-ledger",
             topics = "${foodstack.namespace:foodstack}.dispatch.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "ledger-on-dispatch", label = "Post completed deliveries", after = "dispatch-delivered")
+    @EVL.Job(trigger = "DeliveryCompleted")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         if (COMPLETED.equals(event.type())) {

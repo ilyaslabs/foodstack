@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.ledger.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Instant;
 
@@ -13,6 +15,7 @@ import tools.jackson.databind.json.JsonMapper;
 import org.springframework.kafka.annotation.KafkaListener;
 
 /** Posts card money in and out of the operator's gateway from the payment module's events (PRD FI-1). */
+@EVL.Queue("foodstack.payment.events")
 public class PaymentEventsListener {
 
     private static final String SUCCEEDED = EventTypes.type("payment", PaymentSucceeded.class);
@@ -34,9 +37,12 @@ public class PaymentEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.ledger:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-ledger-payments", groupId = "${foodstack.namespace:foodstack}-ledger",
             topics = "${foodstack.namespace:foodstack}.payment.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "ledger-on-payment", label = "Post card payments and refunds", after = "payment-webhook")
+    @EVL.Job(trigger = "PaymentSucceeded, RefundSucceeded")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         Instant at = (event.time() != null) ? event.time() : this.clock.instant();
+        // @flow ledger-on-payment>type?: Which payment event?
         if (SUCCEEDED.equals(event.type())) {
             this.posting.paymentReceived(event.dataAs(PaymentSucceeded.class, this.jsonMapper), at);
         }

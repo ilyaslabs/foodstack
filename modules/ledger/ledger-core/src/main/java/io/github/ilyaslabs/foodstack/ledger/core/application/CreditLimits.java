@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.ledger.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Instant;
 
@@ -45,6 +46,7 @@ public class CreditLimits {
     }
 
     /** Finance changed who collects for the branch or its limit; then it is checked. */
+    @Flow(value = "ledger-on-store>type?>collection", label = "Save the branch's collection mode and limit, then check it", when = "StorePaymentCollectionChanged")
     public void collectionChanged(String storeId, String brandId, String storeName, java.util.Set<String> ownerUserIds,
             String mode, Long creditLimitMinor) {
         this.mongo.upsert(Query.query(Criteria.where("_id").is(storeId)),
@@ -56,6 +58,7 @@ public class CreditLimits {
     }
 
     /** The operator's default limit changed: every direct-collecting branch is checked again. */
+    @Flow(value = "ledger-on-store>type?>default", label = "Re-check every direct-collection branch", when = "ordering settings changed")
     public void defaultChanged() {
         for (CreditDocument credit : this.mongo.find(Query.query(Criteria.where("mode").is(CreditDocument.DIRECT)),
                 CreditDocument.class)) {

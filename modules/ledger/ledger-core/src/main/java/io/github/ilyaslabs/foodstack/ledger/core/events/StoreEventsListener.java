@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.ledger.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.ledger.core.application.CreditLimits;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
 import io.github.ilyaslabs.foodstack.platform.kafka.CloudEvents;
@@ -13,6 +15,7 @@ import tools.jackson.databind.json.JsonMapper;
  * Who collects for each branch and its credit limit, from the store module, and the operator's
  * default limit, from settings (PRD DP-7).
  */
+@EVL.Queue("foodstack.store.events")
 public class StoreEventsListener {
 
     private static final String COLLECTION = EventTypes.type("store", StorePaymentCollectionChanged.class);
@@ -32,8 +35,11 @@ public class StoreEventsListener {
             id = "${foodstack.namespace:foodstack}-ledger-stores", groupId = "${foodstack.namespace:foodstack}-ledger",
             topics = { "${foodstack.namespace:foodstack}.store.events", "${foodstack.namespace:foodstack}.settings.events" },
             properties = "auto.offset.reset=earliest")
+    @Flow(value = "ledger-on-store", label = "Track branch credit limits", description = "store and settings events", after = "store-payment-collection")
+    @EVL.Job(trigger = "StorePaymentCollectionChanged, ordering settings changed")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
+        // @flow ledger-on-store>type?: Which event?
         if (COLLECTION.equals(event.type())) {
             StorePaymentCollectionChanged changed = event.dataAs(StorePaymentCollectionChanged.class, this.jsonMapper);
             this.creditLimits.collectionChanged(changed.storeId(), changed.brandId(), changed.storeName(), changed.ownerUserIds(),

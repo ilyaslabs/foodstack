@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.ledger.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Set;
@@ -24,6 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
  * Posts orders to the ledger from the order module's events (PRD FI-1). Every posting has an id
  * from its event, so a redelivered event changes nothing and no inbox is needed.
  */
+@EVL.Queue("foodstack.order.events")
 public class OrderEventsListener {
 
     private static final String PLACED = EventTypes.type("order", OrderPlaced.class);
@@ -60,16 +63,20 @@ public class OrderEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.ledger:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-ledger-orders", groupId = "${foodstack.namespace:foodstack}-ledger",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "ledger-on-order", label = "Post order money to the ledger", after = "order-place")
+    @EVL.Job(trigger = "order events")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
         Instant at = (event.time() != null) ? event.time() : this.clock.instant();
+        // @flow ledger-on-order>type?: Which order event?
         if (PLACED.equals(type)) {
             this.posting.orderPlaced(event.dataAs(OrderPlaced.class, this.jsonMapper).order());
         }
         else if (DELIVERED.equals(type)) {
             OrderSummary order = event.dataAs(OrderDelivered.class, this.jsonMapper).order();
             this.posting.orderDone(order, at);
+            // @flow ledger-on-order>type?>done>credit: Check the branch's credit limit
             checkCredit(order.storeId());
         }
         else if (COLLECTED.equals(type)) {
@@ -80,6 +87,7 @@ public class OrderEventsListener {
         else if (REFUNDED.equals(type)) {
             OrderRefunded refunded = event.dataAs(OrderRefunded.class, this.jsonMapper);
             this.posting.orderRefunded(event.id(), refunded, at);
+            // @flow ledger-on-order>type?>refunded>credit: Check the branch's credit limit
             checkCredit(refunded.order().storeId());
         }
         else if (CLOSED.contains(type)) {
