@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.store.core.seed;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -91,8 +93,11 @@ class StoreSeeder {
 
     @EventListener(ApplicationReadyEvent.class)
     @Order(30)
+    @Flow(value = "store-seed", label = "Seed demo restaurants", description = "Once per database: two demo brands, a draft branch and their owners")
+    @EVL.Job(trigger = "application ready")
     void seed() {
         try {
+            // @flow store-seed>once: Record the seed; stop if it already ran
             this.mongo.template().insert(new Document("_id", "v1").append("seededAt", Instant.now()), "store_seed");
         }
         catch (DuplicateKeyException ex) {
@@ -100,9 +105,11 @@ class StoreSeeder {
         }
         // Seeding is the platform's own work: calls to identity and media run with a service token
         this.serviceCalls.run(() -> {
+            // @flow store-seed>restaurants: Create the demo brands, branches and menus
             spiceRoute();
             napoli();
             // A second Spice Route branch, still a draft, so the brand shows how branches share one menu
+            // @flow store-seed>branch: Add a draft second branch
             this.storeService.addBranch(DemoStores.SPICE_ROUTE_BRAND,
                     new NewBranch("DHA Phase 5", "Spice Route (Pvt) Ltd", null,
                             new Address("24 Khayaban-e-Iqbal", "DHA Phase 5", "Lahore", null), new GeoPoint(31.4625, 74.4085),
@@ -110,6 +117,7 @@ class StoreSeeder {
                     SEED);
             // Owners go through the identity module like the Owners tabs do, so they sign in to the back office:
             // Spice Route's owner runs the whole brand, Napoli's manager runs one branch
+            // @flow store-seed>owners: Add a brand owner and a branch manager through identity
             this.storeService.addBrandOwner(DemoStores.SPICE_ROUTE_BRAND,
                     new NewOwner("spiceroute@demo.foodstack.local", "Spice Route Owner", OWNER_PASSWORD), SEED);
             this.storeService.addOwner(DemoStores.NAPOLI_DHA,

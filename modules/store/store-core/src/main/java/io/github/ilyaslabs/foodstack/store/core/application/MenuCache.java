@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.store.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Duration;
 import java.util.Collection;
 import java.util.function.Supplier;
@@ -14,6 +15,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * entry, so a menu read that started before the change and finishes after it writes to the old
  * generation, which nobody reads any more, and can never hide the change.
  */
+@EVL.Cache(value = "Redis menu cache", ttl = "10m")
 public class MenuCache {
 
     private final StringRedisTemplate redis;

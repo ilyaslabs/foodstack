@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.store.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -20,6 +22,8 @@ public class SlugBackfill {
 
     @EventListener(ApplicationReadyEvent.class)
     @Order(40)
+    @Flow(value = "store-slug-backfill", label = "Give branches a web address", description = "At start: every branch without a slug gets one")
+    @EVL.Job(trigger = "application ready")
     public void assign() {
         int assigned = this.stores.assignMissingSlugs("system");
         if (assigned > 0) {

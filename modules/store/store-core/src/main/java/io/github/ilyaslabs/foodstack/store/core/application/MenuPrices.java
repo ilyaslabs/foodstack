@@ -170,6 +170,7 @@ public class MenuPrices {
      * {@code priceMinor} {@code null} goes back to the brand price.
      */
     public Outcome setBranchPrice(String storeId, String itemId, String optionId, Long priceMinor, String userId) {
+        // @flow store-branch-price-set>find: Find the item or option and check the price
         StoreDocument store = findStore(storeId);
         MenuItemDocument item = this.items.findById(itemId)
             .filter((i) -> i.getBrandId().equals(store.getBrandId()) && i.getDeletedAt() == null)
@@ -193,12 +194,15 @@ public class MenuPrices {
         long current = (existing != null && existing.getPriceOverrideMinor() != null) ? existing.getPriceOverrideMinor()
                 : brandPrice;
         Long wanted = (priceMinor != null && priceMinor == brandPrice) ? null : priceMinor;
+        // @flow store-branch-price-set>approval?: Does the price need approval?
+        // @flow store-branch-price-set>approval?>request: Save a price request [when approval is on]
         if (approvalNeeded()) {
             PriceChangeDocument request = request(store.getBrandId(), storeId, itemId, option, current, wanted, userId,
                     this.clock.instant());
             this.changes.save(request);
             return Outcome.PENDING;
         }
+        // @flow store-branch-price-set>approval?>apply: Save the override, record MenuChanged, drop the cached menu [when else]
         applyBranchPrice(store, itemId, option, wanted, userId);
         return Outcome.APPLIED;
     }
@@ -260,20 +264,25 @@ public class MenuPrices {
 
     /** Approves (applies the price) or rejects a waiting change. */
     public PriceChange decide(String requestId, boolean approve, String userId) {
+        // @flow store-price-change-approve>find, store-price-change-reject>find: Find the waiting request
         requireOperator();
         PriceChangeDocument request = this.changes.findById(requestId)
             .filter((c) -> PriceChangeDocument.PENDING.equals(c.status()))
             .orElseThrow(() -> new ModuleException.NotFound("No price change " + requestId + " is waiting",
                     "PRICE_CHANGE_NOT_FOUND"));
+        // @flow store-price-change-approve>apply?: Branch price or brand price?
         if (approve) {
             if (request.storeId() != null) {
+                // @flow store-price-change-approve>apply?>branch: Save the branch override and record MenuChanged [when branch price]
                 applyBranchPrice(findStore(request.storeId()), request.itemId(), request.optionId(), request.proposedMinor(),
                         userId);
             }
             else {
+                // @flow store-price-change-approve>apply?>brand: Change the brand price and record MenuChanged [when brand price]
                 applyBrandPrice(request, userId);
             }
         }
+        // @flow store-price-change-approve>record, store-price-change-reject>record: Mark the request approved or rejected
         PriceChangeDocument decided = this.changes.save(new PriceChangeDocument(request.id(), request.brandId(),
                 request.storeId(), request.itemId(), request.optionId(), request.currentMinor(), request.proposedMinor(),
                 approve ? PriceChangeDocument.APPROVED : PriceChangeDocument.REJECTED, request.requestedBy(),
