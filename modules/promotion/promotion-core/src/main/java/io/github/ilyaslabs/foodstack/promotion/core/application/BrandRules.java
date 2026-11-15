@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.promotion.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
+
 import org.bson.Document;
 
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -23,6 +25,7 @@ public class BrandRules {
     }
 
     /** Whether the brand lets its branch managers create promotions for their own branch. */
+    @Flow(value = "promotion-brand-rules>load", label = "Read the kept rule")
     public boolean branchPromotionsAllowed(String brandId) {
         if (brandId == null) {
             return false;
@@ -32,6 +35,7 @@ public class BrandRules {
     }
 
     /** Records the switch at the brand's {@code version}; an older version than the one kept is ignored. */
+    @Flow(value = "promotion-store-events>apply", label = "Keep the rule if newer than the stored version")
     public void apply(String brandId, boolean allowed, long version) {
         Document current = this.mongo.findById(brandId, Document.class, COLLECTION);
         if (current != null && current.get("version") instanceof Number kept && kept.longValue() > version) {

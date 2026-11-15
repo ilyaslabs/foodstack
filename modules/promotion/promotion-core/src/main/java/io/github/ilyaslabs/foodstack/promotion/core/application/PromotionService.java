@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
 import io.github.ilyaslabs.foodstack.promotion.core.domain.CouponRules;
 import io.github.ilyaslabs.foodstack.promotion.core.persistence.PromotionDocument;
@@ -52,6 +53,7 @@ public class PromotionService {
     }
 
     /** Creates an operator promotion ({@code brandId == null}) or a store promotion for {@code brandId}. */
+    @Flow(value = "promotion-create>save", label = "Validate, insert code and promotion", onError = "DuplicateKeyException -> code taken")
     public PromotionDetails create(String brandId, PromotionInput input, String userId) {
         boolean operator = brandId == null;
         String code = validate(input, operator);
@@ -69,6 +71,7 @@ public class PromotionService {
         }
     }
 
+    @Flow(value = "promotion-update>save", label = "Validate, move the code if changed, replace fields at the edited version", onError = "DuplicateKeyException -> code taken")
     public PromotionDetails update(String promotionId, PromotionInput input, long expectedVersion, String userId) {
         PromotionDocument current = get(promotionId);
         boolean operator = PromotionDocument.OPERATOR.equals(current.owner());
@@ -91,6 +94,7 @@ public class PromotionService {
         }
     }
 
+    @Flow(value = "promotion-set-active>save", label = "Set active")
     public PromotionDetails setActive(String promotionId, boolean active, String userId) {
         PromotionDocument saved = this.mongo.findAndModify(Query.query(Criteria.where("_id").is(promotionId)),
                 new Update().set("active", active).set("updatedAt", this.clock.instant()).set("updatedBy", userId),
@@ -110,6 +114,7 @@ public class PromotionService {
      * Promotions newest first within a scope ({@code null}: all): every promotion of the scope's
      * brands, and the promotions of its branches' brands that reach those branches (PRD BB-11).
      */
+    @Flow(value = "promotion-list>query", label = "Newest first within the scope")
     public List<PromotionDetails> listIn(PromotionAccess.Scope scope, int limit) {
         Query query;
         if (scope == null) {
@@ -143,6 +148,7 @@ public class PromotionService {
         return found.stream().map((p) -> details(p, unlimitedUses)).toList();
     }
 
+    @Flow(value = "promotion-view>load", label = "Load the promotion")
     public PromotionDetails details(String promotionId) {
         return details(get(promotionId));
     }

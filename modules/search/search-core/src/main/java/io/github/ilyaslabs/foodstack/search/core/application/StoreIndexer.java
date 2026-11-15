@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.search.core.application;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaRequest;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryAreaView;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
@@ -63,6 +64,13 @@ public class StoreIndexer {
         this.serviceCalls.run(() -> refreshAsService(storeId));
     }
 
+    @Flow(value = "search-catalogue-events>type?>store>index", label = "Index or remove one branch", description = "listing from store, rating from review, area from geo; removed when not LIVE or gone")
+    @Flow(value = "search-catalogue-events>type?>branch>index", label = "Index or remove one branch", description = "listing from store, rating from review, area from geo; removed when not LIVE or gone")
+    @Flow(value = "search-catalogue-events>type?>brand>index", label = "Index or remove one branch", description = "listing from store, rating from review, area from geo; removed when not LIVE or gone")
+    @Flow(value = "search-catalogue-events>type?>operator>index", label = "Index or remove one branch", description = "listing from store, rating from review, area from geo; removed when not LIVE or gone")
+    @Flow(value = "search-reindex>start>rebuild>page>index", label = "Index or remove one branch", description = "listing from store, rating from review, area from geo; removed when not LIVE or gone")
+    @Flow(value = "search-index-bootstrap>ensure>fill>rebuild>page>index", label = "Index or remove one branch", description = "listing from store, rating from review, area from geo; removed when not LIVE or gone")
+    @Flow(value = "search-scheduled-rebuild>rebuild>run>page>index", label = "Index or remove one branch", description = "listing from store, rating from review, area from geo; removed when not LIVE or gone")
     private void refreshAsService(String storeId) {
         StoreListingView listing;
         try {
@@ -104,11 +112,13 @@ public class StoreIndexer {
     }
 
     /** A brand change (name, images, menu) touches every indexed branch of the brand. */
+    @Flow(value = "search-catalogue-events>type?>brand>find", label = "Branch ids of the brand in the index")
     public void refreshBrand(String brandId) {
         this.engine.storeIdsOfBrand(brandId).forEach(this::refresh);
     }
 
     /** Operator delivery pricing sets the area of every branch delivered by operator riders. */
+    @Flow(value = "search-catalogue-events>type?>operator>find", label = "Branch ids with operator delivery in the index")
     public void refreshOperatorDelivery() {
         this.engine.storeIdsWithDeliveryMode(DeliveryMode.OPERATOR.name()).forEach(this::refresh);
     }
@@ -117,6 +127,9 @@ public class StoreIndexer {
      * Re-reads every branch. Runs at most once at a time per instance; returns the number of
      * branches read, or -1 when a rebuild was already running.
      */
+    @Flow(value = "search-reindex>start>rebuild", label = "Rebuild every branch", description = "one rebuild at a time per instance")
+    @Flow(value = "search-index-bootstrap>ensure>fill>rebuild", label = "Rebuild every branch", description = "one rebuild at a time per instance")
+    @Flow(value = "search-scheduled-rebuild>rebuild>run", label = "Rebuild every branch", description = "one rebuild at a time per instance")
     public int rebuild() {
         if (!this.rebuilding.compareAndSet(false, true)) {
             return -1;
@@ -134,6 +147,7 @@ public class StoreIndexer {
             int count = 0;
             String after = null;
             do {
+                // @flow search-reindex>start>rebuild>page, search-index-bootstrap>ensure>fill>rebuild>page, search-scheduled-rebuild>rebuild>run>page: Page of 200 branch ids from store [each page]
                 StoreIdPage page = this.stores.listStoreIds(after, PAGE);
                 for (String storeId : page.storeIds()) {
                     try {

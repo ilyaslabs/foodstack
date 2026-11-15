@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.mongo.OutboxWriter;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponEvaluation;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponRequest;
@@ -54,18 +55,25 @@ public class CouponService {
         this.clock = clock;
     }
 
+    @Flow(value = "promotion-api-evaluate>check", label = "Find by code, apply the rules")
+    @Flow(value = "promotion-api-reserve>reserve>found?>evaluate", label = "Evaluate the coupon", when = "no live reservation")
     public CouponEvaluation evaluate(CouponRequest request) {
+        // @flow promotion-api-evaluate>check>find: Look up the code
         String code = CouponRules.normalize(request.code());
         PromotionDocument promotion = findByCode(code);
         if (promotion == null) {
             return CouponEvaluation.rejected(code, null, CouponEvaluation.NOT_FOUND, Map.of());
         }
+        // @flow promotion-api-evaluate>check>rules: Dates, active, branches, cities, payment method, minimum order, first order, limits
         return CouponRules.evaluate(promotion, request, customerUses(promotion.id(), request.customerId()),
                 confirmedOrders(request.customerId()), this.clock.instant());
     }
 
     /** Holds one use for the order, or returns why the coupon does not apply. Repeat calls return the same hold. */
+    @Flow(value = "promotion-api-reserve>reserve", label = "Reserve")
     public CouponEvaluation reserve(String orderId, CouponRequest request) {
+        // @flow promotion-api-reserve>reserve>found?: Already reserved for this order?
+        // @flow promotion-api-reserve>reserve>found?>same: Return the reservation [when reserved, not released]
         RedemptionDocument existing = this.mongo.findById(orderId, RedemptionDocument.class);
         if (existing != null && !RedemptionDocument.RELEASED.equals(existing.status())) {
             return evaluation(existing);
@@ -77,9 +85,11 @@ public class CouponService {
         PromotionDocument promotion = this.mongo.findById(evaluation.promotionId(), PromotionDocument.class);
         Instant now = this.clock.instant();
         try {
+            // @flow promotion-api-reserve>reserve>found?>count: Count the use and save RESERVED in one transaction [when it applies]
             return this.transaction.execute((status) -> {
                 // Only a limited coupon counts uses on its own document; a nationwide unlimited coupon
                 // would make that one document the hottest write of every order (TDD 7.5).
+                // @flow promotion-api-reserve>reserve>found?>count>total: Increment used while under the total limit [when limited]
                 if (promotion.totalLimit() != null) {
                     Criteria limit = Criteria.where("_id").is(promotion.id()).and("used").lt(promotion.totalLimit());
                     if (this.mongo.findAndModify(Query.query(limit), new Update().inc("used", 1), Document.class,
@@ -87,6 +97,7 @@ public class CouponService {
                         throw new LimitReached(CouponEvaluation.USED_UP);
                     }
                 }
+                // @flow promotion-api-reserve>reserve>found?>count>customer: Increment the customer's uses while under their limit
                 Criteria usage = Criteria.where("_id").is(usageKey(promotion.id(), request.customerId()));
                 if (promotion.perCustomerLimit() != null) {
                     usage = usage.and("count").lt(promotion.perCustomerLimit());
@@ -103,12 +114,14 @@ public class CouponService {
                 return evaluation;
             });
         }
+        // @flow promotion-api-reserve>reserve>found?>limit: Reject USED_UP or CUSTOMER_LIMIT [on error LimitReached]
         catch (LimitReached ex) {
             return CouponEvaluation.rejected(evaluation.code(), promotion.id(), ex.reason, Map.of());
         }
     }
 
     /** The order was confirmed: the held use becomes a redemption. */
+    @Flow(value = "promotion-order-events>type?>confirmed>redeem", label = "RESERVED to REDEEMED, CouponRedeemed event")
     public void redeem(String orderId) {
         this.transaction.executeWithoutResult((status) -> {
             RedemptionDocument redeemed = this.mongo.findAndModify(
@@ -124,7 +137,10 @@ public class CouponService {
     }
 
     /** Gives the use back (placement failed, or the order was cancelled, rejected or failed). */
+    @Flow(value = "promotion-api-release>release", label = "Give the use back")
+    @Flow(value = "promotion-order-events>type?>ended>release", label = "Give the use back")
     public void release(String orderId) {
+        // @flow promotion-api-release>release>mark, promotion-order-events>type?>ended>release>mark: Mark RELEASED unless already [when not released]
         this.transaction.executeWithoutResult((status) -> {
             RedemptionDocument before = this.mongo.findAndModify(
                     Query.query(Criteria.where("_id").is(orderId).and("status").ne(RedemptionDocument.RELEASED)),
@@ -133,6 +149,7 @@ public class CouponService {
             if (before == null) {
                 return;
             }
+            // @flow promotion-api-release>release>uncount, promotion-order-events>type?>ended>release>uncount: Decrement total and customer uses, CouponReleased event
             this.mongo.updateFirst(Query.query(Criteria.where("_id").is(before.promotionId()).and("totalLimit").ne(null)
                 .and("used").gt(0)), new Update().inc("used", -1), PROMOTIONS);
             this.mongo.updateFirst(Query.query(Criteria.where("_id").is(usageKey(before.promotionId(), before.customerId()))
@@ -149,6 +166,7 @@ public class CouponService {
     }
 
     /** Counts a confirmed order for first-order-only coupons. */
+    @Flow(value = "promotion-order-events>type?>confirmed>count", label = "Count the customer's confirmed orders", description = "for first-order-only coupons")
     public void recordConfirmedOrder(String customerId) {
         this.mongo.upsert(Query.query(Criteria.where("_id").is(customerId)),
                 new Update().inc("confirmedOrders", 1).set("updatedAt", Date.from(this.clock.instant())), CUSTOMERS);

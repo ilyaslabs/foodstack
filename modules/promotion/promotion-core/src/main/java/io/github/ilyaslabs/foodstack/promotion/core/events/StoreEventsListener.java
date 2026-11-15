@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.promotion.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
 import io.github.ilyaslabs.foodstack.platform.kafka.CloudEvents;
 import io.github.ilyaslabs.foodstack.promotion.core.application.BrandRules;
@@ -25,6 +27,8 @@ public class StoreEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "promotion-store-events", label = "Keep brand promotion rules", description = "On BranchPromotionsChanged: whether branch managers may create promotions")
+    @EVL.Job(trigger = "<ns>.store.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.promotion:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-promotion-stores", groupId = "${foodstack.namespace:foodstack}-promotion",
             topics = "${foodstack.namespace:foodstack}.store.events", properties = "auto.offset.reset=earliest")

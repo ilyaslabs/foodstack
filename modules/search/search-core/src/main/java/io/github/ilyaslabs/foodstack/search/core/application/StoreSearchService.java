@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.search.api.Fulfilment;
 import io.github.ilyaslabs.foodstack.search.api.StoreCard;
 import io.github.ilyaslabs.foodstack.search.api.StoreSearchPage;
@@ -49,7 +50,10 @@ public class StoreSearchService {
         this.maxResults = properties.maxResults();
     }
 
+    @Flow(value = "search-stores>search", label = "Run the search")
+    @Flow(value = "search-api-stores>search", label = "Run the search")
     public StoreSearchPage search(StoreSearchQuery query) {
+        // @flow search-stores>search>validate: Point, text up to 100 characters, known cuisine
         if (query.lat() < -90 || query.lat() > 90 || query.lng() < -180 || query.lng() > 180) {
             throw new ModuleException.BadRequest("lat and lng must be a point on the map", "LOCATION_INVALID");
         }
@@ -64,10 +68,12 @@ public class StoreSearchService {
         int size = Math.min(Math.max(query.size(), 1), 50);
         int page = Math.max(query.page(), 0);
         Fulfilment fulfilment = (query.fulfilment() != null) ? query.fulfilment() : Fulfilment.DELIVERY;
+        // @flow search-stores>search>radius: Discovery radius step (e.g. 8, 15, 25 km) or pickup radius, and the next wider step
         int step = step(query.radiusMeters());
         int radius = (fulfilment == Fulfilment.PICKUP) ? this.pickupRadiusMeters : this.steps.get(step);
         Integer wider = (fulfilment == Fulfilment.PICKUP || step + 1 >= this.steps.size()) ? null : this.steps.get(step + 1);
         // results stop at a fixed depth: deep pages cost every shard more than anyone scrolls (TDD 7.5)
+        // @flow search-stores>search>depth: Stop at the page depth cap [when page beyond max results]
         int from = page * size;
         if (from >= this.maxResults) {
             return new StoreSearchPage(List.of(), List.of(), 0, page, size, false, radius, wider);
@@ -76,8 +82,10 @@ public class StoreSearchService {
         StoreSearchQuery clean = new StoreSearchQuery(query.lat(), query.lng(), text,
                 (cuisine != null) ? cuisine.toLowerCase(Locale.ROOT) : null, fulfilment, page, pageSize,
                 (fulfilment == Fulfilment.PICKUP) ? null : radius);
+        // @flow search-stores>search>query: Query Elasticsearch: in radius and zone contains point, text, cuisine, ranking
         StoreSearchEngine.Result result = (pageSize == size) ? this.engine.search(clean)
                 : this.engine.search(clean, from);
+        // @flow search-stores>search>cards: Cards with open now in each branch's time zone [each hit]
         Instant now = this.clock.instant();
         List<StoreCard> cards = result.hits()
             .stream()

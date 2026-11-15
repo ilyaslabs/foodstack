@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.promotion.impl;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponEvaluation;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponRequest;
@@ -21,18 +23,24 @@ class PromotionApiImpl implements PromotionApi {
         this.coupons = coupons;
     }
 
+    @Flow(value = "promotion-api-evaluate", label = "Check a coupon", description = "Discounts the coupon gives this cart, or why not; nothing is reserved")
+    @EVL.Endpoint(method = "API", path = "PromotionApi.evaluate", caller = "Cart module")
     @Override
     public CouponEvaluation evaluate(CouponRequest request) {
         ModuleAccess.requireServiceSelfOr(request.customerId());
         return this.coupons.evaluate(request);
     }
 
+    @Flow(value = "promotion-api-reserve", label = "Reserve a coupon for an order", description = "Counts the use against total and per-customer limits; idempotent per order")
+    @EVL.Endpoint(method = "API", path = "PromotionApi.reserve", caller = "Order module")
     @Override
     public CouponEvaluation reserve(String orderId, CouponRequest request) {
         ModuleAccess.requireServiceSelfOr(request.customerId());
         return this.coupons.reserve(orderId, request);
     }
 
+    @Flow(value = "promotion-api-release", label = "Release an order's coupon", description = "Gives the use back")
+    @EVL.Endpoint(method = "API", path = "PromotionApi.release", caller = "Order module")
     @Override
     public void release(String orderId) {
         String customerId = this.coupons.customerOf(orderId);

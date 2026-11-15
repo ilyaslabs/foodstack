@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.search.impl;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.search.api.SearchApi;
 import io.github.ilyaslabs.foodstack.search.api.StoreSearchPage;
 import io.github.ilyaslabs.foodstack.search.api.StoreSearchQuery;
@@ -20,6 +22,8 @@ class SearchApiImpl implements SearchApi {
         this.searchService = searchService;
     }
 
+    @Flow(value = "search-api-stores", label = "Search restaurants for other modules", description = "Same search as the customer app")
+    @EVL.Endpoint(method = "API", path = "SearchApi.searchStores", caller = "Other modules")
     @Override
     public StoreSearchPage searchStores(StoreSearchQuery query) {
         return this.searchService.search(query);

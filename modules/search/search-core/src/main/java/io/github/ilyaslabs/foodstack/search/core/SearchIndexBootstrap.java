@@ -5,6 +5,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.search.core.application.StoreIndexer;
 import io.github.ilyaslabs.foodstack.search.core.engine.StoreSearchEngine;
 import org.slf4j.Logger;
@@ -43,9 +45,13 @@ class SearchIndexBootstrap implements ApplicationListener<ApplicationReadyEvent>
         this.lock = lock;
     }
 
+    @Flow(value = "search-index-bootstrap", label = "Prepare the search index at start", description = "Creates the index when missing, then schedules rebuilds")
+    @EVL.Job(trigger = "application ready")
     @Override
     public void onApplicationEvent(ApplicationReadyEvent event) {
         try {
+            // @flow search-index-bootstrap>ensure: Create index and alias if missing
+            // @flow search-index-bootstrap>ensure>fill: Rebuild in the background [when the index is new]
             if (this.engine.ensureIndex()) {
                 Thread.ofVirtual().name("search-rebuild").start(this::rebuild);
             }
@@ -54,13 +60,18 @@ class SearchIndexBootstrap implements ApplicationListener<ApplicationReadyEvent>
             log.warn("Search index not ready, store search is unavailable until Elasticsearch is reachable: {}",
                     ex.getMessage());
         }
+        // @flow search-index-bootstrap>schedule: Schedule the periodic rebuild
         long seconds = this.interval.toSeconds();
         this.scheduler.scheduleAtFixedRate(this::scheduledRebuild, seconds, seconds, TimeUnit.SECONDS);
     }
 
+    @Flow(value = "search-scheduled-rebuild", label = "Scheduled search rebuild", description = "Catches anything an event missed; one instance per round", after = "search-index-bootstrap>schedule")
+    @EVL.Job(schedule = "every foodstack.search.rebuild-interval")
     void scheduledRebuild() {
         try {
+            // @flow search-scheduled-rebuild>lock: Take the Redis lock for this round [when free]
             if (this.lock.tryTake(this.interval)) {
+                // @flow search-scheduled-rebuild>rebuild: Ensure index, rebuild
                 this.engine.ensureIndex();
                 rebuild();
             }

@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.promotion.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCancelled;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderConfirmed;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderFailed;
@@ -41,12 +43,16 @@ public class OrderEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "promotion-order-events", label = "Settle coupons as orders end", description = "Once per event (inbox)")
+    @EVL.Job(trigger = "<ns>.order.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.promotion:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-promotion-orders", groupId = "${foodstack.namespace:foodstack}-promotion",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow promotion-order-events>type?: Which order event?
+        // @flow promotion-order-events>type?>confirmed: Redeem the coupon, count the order [when OrderConfirmed]
         if (CONFIRMED.equals(type)) {
             OrderConfirmed confirmed = event.dataAs(OrderConfirmed.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> {
@@ -54,6 +60,7 @@ public class OrderEventsListener {
                 this.coupons.recordConfirmedOrder(confirmed.order().customerId());
             });
         }
+        // @flow promotion-order-events>type?>ended: Release the coupon [when OrderCancelled, OrderRejected, OrderFailed]
         else if (CANCELLED.equals(type) || REJECTED.equals(type) || FAILED.equals(type)) {
             String orderId = event.subject();
             this.inbox.processOnce(event.id(), CONSUMER, () -> this.coupons.release(orderId));

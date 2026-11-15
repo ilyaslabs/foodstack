@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.search.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.events.CityChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.OperatorDeliveryPricingChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.ZoneChanged;
@@ -58,6 +60,8 @@ public class CatalogueEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "search-catalogue-events", label = "Keep search in step with the catalogue", description = "Store, geo and review events re-index the branches they touch")
+    @EVL.Job(trigger = "<ns>.store.events, <ns>.geo.events, <ns>.review.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.search:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-search-catalogue",
             groupId = "${foodstack.namespace:foodstack}-search",
@@ -67,6 +71,8 @@ public class CatalogueEventsListener {
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow search-catalogue-events>type?: Which event?
+        // @flow search-catalogue-events>type?>store: Re-index the branch [when StoreChanged, StoreAvailabilityChanged, ItemAvailabilityChanged]
         if (STORE_CHANGED.equals(type)) {
             this.indexer.refresh(event.dataAs(StoreChanged.class, this.jsonMapper).storeId());
         }
@@ -76,12 +82,14 @@ public class CatalogueEventsListener {
         else if (ITEM_AVAILABILITY.equals(type)) {
             this.indexer.refresh(event.dataAs(ItemAvailabilityChanged.class, this.jsonMapper).storeId());
         }
+        // @flow search-catalogue-events>type?>brand: Re-index every branch of the brand [when BrandChanged, MenuChanged]
         else if (BRAND_CHANGED.equals(type)) {
             this.indexer.refreshBrand(event.dataAs(BrandChanged.class, this.jsonMapper).brandId());
         }
         else if (MENU_CHANGED.equals(type)) {
             this.indexer.refreshBrand(event.dataAs(MenuChanged.class, this.jsonMapper).brandId());
         }
+        // @flow search-catalogue-events>type?>branch: Re-index the branch [when ZoneChanged, ReviewPublished, ReviewHidden]
         else if (ZONE_CHANGED.equals(type)) {
             this.indexer.refresh(event.dataAs(ZoneChanged.class, this.jsonMapper).storeId());
         }
@@ -91,9 +99,11 @@ public class CatalogueEventsListener {
         else if (REVIEW_HIDDEN.equals(type)) {
             this.indexer.refresh(event.dataAs(ReviewHidden.class, this.jsonMapper).storeId());
         }
+        // @flow search-catalogue-events>type?>operator: Re-index operator-delivery branches [when OperatorDeliveryPricingChanged, CityChanged]
         else if (PRICING_CHANGED.equals(type) || CITY_CHANGED.equals(type)) {
             this.indexer.refreshOperatorDelivery();
         }
+        // @flow search-catalogue-events>type?>ignore: Ignore [when other event]
         else {
             log.debug("Ignoring event {}", type);
         }
