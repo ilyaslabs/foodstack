@@ -73,7 +73,7 @@ public class QuoteService {
         // @flow cart-checkout>quote>fulfilment?>delivery>distance, order-place>checkout>fulfilment?>delivery>distance, store-delivery-quote>quote>distance: Road distance from the routing provider, cached, or estimated
         long distance = this.routing.route(request.storeLocation(), request.destination()).distanceMeters();
         // @flow cart-checkout>quote>fulfilment?>delivery>mode?, order-place>checkout>fulfilment?>delivery>mode?, store-delivery-quote>quote>mode?: Who delivers?
-        // @flow : Operator rate: base plus per km, city pricing, peak multiplier; refuse if off or too far [when OPERATOR]
+        // @flow cart-checkout>quote>fulfilment?>delivery>mode?>operator, order-place>checkout>fulfilment?>delivery>mode?>operator, store-delivery-quote>quote>mode?>operator: Operator rate: base plus per km, city pricing, peak multiplier; refuse if off or too far [when OPERATOR]
         if (request.deliveryMode() == DeliveryMode.OPERATOR) {
             OperatorPricing operator = effective(this.pricing.get(), request.cityId());
             if (!operator.enabled()) {
@@ -89,7 +89,7 @@ public class QuoteService {
             return new DeliveryQuoteView(true, null, charge, operator.minOrderMinor(), operator.freeDeliveryAboveMinor(),
                     distance, null, DeliveryMode.OPERATOR);
         }
-        // @flow : First of the branch's zones containing the address, else out of area [when SELF]
+        // @flow cart-checkout>quote>fulfilment?>delivery>mode?>self, order-place>checkout>fulfilment?>delivery>mode?>self, store-delivery-quote>quote>mode?>self: First of the branch's zones containing the address, else out of area [when SELF]
         for (ZoneDetails zone : this.zones.getZones(request.storeId())) {
             if (GeoMath.contains(zone.polygon(), request.destination())) {
                 return new DeliveryQuoteView(true, null, zone.chargeMinor(), zone.minOrderMinor(),

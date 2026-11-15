@@ -178,7 +178,7 @@ public class NotificationService {
         if (!message.required() && message.userId() != null && !preferences(message.userId()).orderEmails()) {
             return;
         }
-        // @flow : Find the address in identity [when not given]
+        // @flow notification-on-order>send>email>address, notification-on-dispatch>send>email>address, notification-on-identity>send>email>address, notification-on-ledger>send>email>address: Find the address in identity [when not given]
         String address = message.emailAddress();
         if (address == null && message.userId() != null) {
             UserView user = this.serviceCalls.call(() -> {
@@ -194,7 +194,7 @@ public class NotificationService {
         if (address == null || address.isBlank()) {
             return;
         }
-        // @flow : Lay out HTML and text with the operator's branding
+        // @flow notification-on-order>send>email>render, notification-on-dispatch>send>email>render, notification-on-identity>send>email>render, notification-on-ledger>send>email>render: Lay out HTML and text with the operator's branding
         BrandingView branding = this.settings.getBranding();
         String brand = (branding != null && branding.name() != null) ? branding.name() : "FoodStack";
         String url = (message.link() != null) ? (message.backOffice() ? this.adminUrl : this.webUrl) + message.link() : null;
@@ -207,7 +207,7 @@ public class NotificationService {
         try {
             // A code is a secret: the log shows only the title, and the email itself is kept encrypted
             boolean sealed = message.required();
-            // @flow : Queue the delivery, sealed for codes, and try it now
+            // @flow notification-on-order>send>email>queue, notification-on-dispatch>send>email>queue, notification-on-identity>send>email>queue, notification-on-ledger>send>email>queue: Queue the delivery, sealed for codes, and try it now
             this.mongo.insert(new DeliveryDocument(id, message.userId(), EMAIL, message.template(), this.pii.encrypt(address),
                     sealed ? rendered.title() : rendered.subject(), sealed ? this.pii.encrypt(html) : html,
                     sealed ? this.pii.encrypt(text) : text, ready ? DeliveryDocument.QUEUED : DeliveryDocument.SKIPPED, 0,
