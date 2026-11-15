@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.settings.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 import java.util.Set;
 
@@ -36,6 +38,8 @@ class DeadLetterController {
     }
 
     @GetMapping
+    @Flow(value = "settings-dead-letters", label = "List failed events")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/settings/dead-letters", caller = "Back office")
     ResponseEntity<List<DeadLetter>> list(@RequestParam(required = false) String status) {
         if (status != null && !status.isBlank() && !STATUSES.contains(status)) {
             throw new ModuleException.BadRequest("status must be OPEN, REPLAYED or DISMISSED", "STATUS_INVALID");
@@ -45,22 +49,30 @@ class DeadLetterController {
 
     /** The number waiting, for the navigation badge. */
     @GetMapping("/open-count")
+    @Flow(value = "settings-dead-letter-count", label = "Count open failed events")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/settings/dead-letters/open-count", caller = "Back office")
     long openCount() {
         return this.deadLetters.openCount();
     }
 
     /** The event as it was published (JSON, or the raw text if it could not be read). */
     @GetMapping("/{id}/event")
+    @Flow(value = "settings-dead-letter-event", label = "Show failed event", description = "Decrypted event body")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/settings/dead-letters/{id}/event", caller = "Back office")
     ResponseEntity<EventResponse> event(@PathVariable String id) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new EventResponse(this.deadLetters.event(id)));
     }
 
     @PostMapping("/{id}/replay")
+    @Flow(value = "settings-dead-letter-replay", label = "Replay failed event", description = "Sends it back to its topic for the consumer that failed")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/settings/dead-letters/{id}/replay", caller = "Back office")
     DeadLetter replay(@PathVariable String id) {
         return this.deadLetters.replay(id, CurrentUser.id());
     }
 
     @PostMapping("/{id}/dismiss")
+    @Flow(value = "settings-dead-letter-dismiss", label = "Dismiss failed event")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/settings/dead-letters/{id}/dismiss", caller = "Back office")
     DeadLetter dismiss(@PathVariable String id) {
         return this.deadLetters.dismiss(id, CurrentUser.id());
     }

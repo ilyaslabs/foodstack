@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.settings.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
@@ -68,6 +70,8 @@ class SettingsController {
     }
 
     @GetMapping("/branding")
+    @Flow(value = "settings-branding-get", label = "Show branding", description = "Name, colours, font and logo; public")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/settings/branding", caller = "Customer web")
     ResponseEntity<BrandingResponse> branding(@RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
         BrandingDetails branding = this.settingsService.getBranding();
         String etag = ETags.of("branding", branding.version());
@@ -79,6 +83,8 @@ class SettingsController {
 
     @PutMapping("/branding")
     @PreAuthorize("hasAuthority('settings:manage')")
+    @Flow(value = "settings-branding-update", label = "Change branding", description = "Needs If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/settings/branding", caller = "Back office")
     ResponseEntity<BrandingResponse> updateBranding(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @Valid @RequestBody BrandingRequest request) {
         BrandingDetails updated = this.settingsService.updateBranding(new UpdateBranding(request.name(), request.tagline(),
@@ -88,6 +94,8 @@ class SettingsController {
     }
 
     @GetMapping("/locale")
+    @Flow(value = "settings-locale-get", label = "Show language and currency")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/settings/locale", caller = "Customer web")
     ResponseEntity<LocaleResponse> locale(@RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
         LocaleDetails locale = this.settingsService.getLocale();
         String etag = ETags.of("locale", locale.version());
@@ -99,6 +107,8 @@ class SettingsController {
 
     @PutMapping("/locale")
     @PreAuthorize("hasAuthority('settings:manage')")
+    @Flow(value = "settings-locale-update", label = "Change language, currency and time zone", description = "Needs If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/settings/locale", caller = "Back office")
     ResponseEntity<LocaleResponse> updateLocale(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @Valid @RequestBody LocaleRequest request) {
         LocaleDetails updated = this.settingsService.updateLocale(
@@ -108,6 +118,8 @@ class SettingsController {
     }
 
     @GetMapping("/ordering")
+    @Flow(value = "settings-ordering-get", label = "Show ordering settings")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/settings/ordering", caller = "Back office")
     ResponseEntity<OrderingResponse> ordering() {
         OrderingDetails ordering = this.orderingService.get();
         return ResponseEntity.ok().eTag(ETags.of("ordering", ordering.version())).body(toResponse(ordering));
@@ -115,6 +127,8 @@ class SettingsController {
 
     @PutMapping("/ordering")
     @PreAuthorize("hasAuthority('settings:manage')")
+    @Flow(value = "settings-ordering-update", label = "Change ordering settings", description = "Payment methods, fees, tax, tips, accept timeout, direct collection, credit limit")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/settings/ordering", caller = "Back office")
     ResponseEntity<OrderingResponse> updateOrdering(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @Valid @RequestBody OrderingRequest request) {
         OrderingDetails current = this.orderingService.get();
@@ -133,6 +147,8 @@ class SettingsController {
     /** Rider pay and dispatch rules are for operator staff only, unlike the other sections. */
     @GetMapping("/delivery")
     @PreAuthorize("hasAuthority('settings:manage')")
+    @Flow(value = "settings-delivery-get", label = "Show delivery settings")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/settings/delivery", caller = "Back office")
     ResponseEntity<DeliveryResponse> delivery() {
         DeliveryDetails delivery = this.deliveryService.get();
         return ResponseEntity.ok().eTag(ETags.of("delivery", delivery.version())).body(toResponse(delivery));
@@ -140,6 +156,8 @@ class SettingsController {
 
     @PutMapping("/delivery")
     @PreAuthorize("hasAuthority('settings:manage')")
+    @Flow(value = "settings-delivery-update", label = "Change delivery settings", description = "Rider pay, offer timeout, search radius, proof code threshold, location retention")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/settings/delivery", caller = "Back office")
     ResponseEntity<DeliveryResponse> updateDelivery(@RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @RequestBody DeliveryRequest request) {
         DeliveryDetails updated = this.deliveryService.update(new UpdateDelivery(request.riderPayBasisPoints(),
