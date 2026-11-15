@@ -251,7 +251,8 @@ public class RiderService {
 
     // ---- helpers -------------------------------------------------------------------------------
 
-    @Flow(value = {"rider-add>add", "rider-store-add>add"}, label = "Add the rider")
+    @Flow(value = "rider-add>add", label = "Add the rider")
+    @Flow(value = "rider-store-add>add", label = "Add the rider")
     @Flow(value = "seed-rider>riders", label = "Add the demo rider", each = "demo rider")
     private RiderDetails add(RiderInput input, RiderKind kind, String storeId) {
         // @flow rider-add>add>validate, rider-store-add>add>validate, seed-rider>riders>validate: Name, phone, vehicle, email [on error RIDER_INVALID, RIDER_PHONE_INVALID]

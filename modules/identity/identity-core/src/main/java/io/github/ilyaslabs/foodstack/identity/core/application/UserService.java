@@ -79,10 +79,13 @@ public class UserService {
     }
 
     /** Creates a user with any roles; {@code createdBy} {@code null} means self sign-up. */
-    @Flow(value = {"auth-register>create", "users-create>create"}, label = "Save the account and login key, UserRegistered", onError = "EMAIL_TAKEN")
+    @Flow(value = "auth-register>create", label = "Save the account and login key, UserRegistered", onError = "EMAIL_TAKEN")
+    @Flow(value = "users-create>create", label = "Save the account and login key, UserRegistered", onError = "EMAIL_TAKEN")
     @Flow(value = "seed-identity>users", label = "Create the demo account", each = "demo user", when = "email is new")
     @Flow(value = "identity-bootstrap-admin>create", label = "Create the first administrator", when = "email set and no account yet")
-    @Flow(value = {"identity-api-grant-store-access>grant>create", "identity-api-grant-brand-access>grant>create", "identity-api-grant-rider-access>grant>create"}, label = "Create the account", when = "new email")
+    @Flow(value = "identity-api-grant-store-access>grant>create", label = "Create the account", when = "new email")
+    @Flow(value = "identity-api-grant-brand-access>grant>create", label = "Create the account", when = "new email")
+    @Flow(value = "identity-api-grant-rider-access>grant>create", label = "Create the account", when = "new email")
     public UserAccount create(NewUser user, String createdBy) {
         validate(user);
         Instant now = this.clock.instant();
@@ -261,7 +264,14 @@ public class UserService {
      * Invalidates every token the user holds, in every module, at once (TDD 9.1).
      * @return the new minimum token version
      */
-    @Flow(value = {"me-revoke-tokens>revoke", "users-block>block>revoke", "two-step-reset>reset>revoke", "me-deletion-request>schedule>sign-out", "auth-reset>reset>save>revoke", "identity-api-revoke-rider-access>revoke>tokens", "identity-api-revoke-store-access>revoke>tokens", "identity-api-revoke-brand-access>revoke>tokens"}, label = "Bump the token version, UserTokensRevoked, Redis revocation floor")
+    @Flow(value = "me-revoke-tokens>revoke", label = "Bump the token version, UserTokensRevoked, Redis revocation floor")
+    @Flow(value = "users-block>block>revoke", label = "Bump the token version, UserTokensRevoked, Redis revocation floor")
+    @Flow(value = "two-step-reset>reset>revoke", label = "Bump the token version, UserTokensRevoked, Redis revocation floor")
+    @Flow(value = "me-deletion-request>schedule>sign-out", label = "Bump the token version, UserTokensRevoked, Redis revocation floor")
+    @Flow(value = "auth-reset>reset>save>revoke", label = "Bump the token version, UserTokensRevoked, Redis revocation floor")
+    @Flow(value = "identity-api-revoke-rider-access>revoke>tokens", label = "Bump the token version, UserTokensRevoked, Redis revocation floor")
+    @Flow(value = "identity-api-revoke-store-access>revoke>tokens", label = "Bump the token version, UserTokensRevoked, Redis revocation floor")
+    @Flow(value = "identity-api-revoke-brand-access>revoke>tokens", label = "Bump the token version, UserTokensRevoked, Redis revocation floor")
     public long revokeTokens(String userId, String reason) {
         UserDocument user = find(userId);
         long next = user.getTokenVersion() + 1;

@@ -668,7 +668,8 @@ public class DispatchService {
     // ---- helpers -------------------------------------------------------------------------------
 
     @Flow(value = "dispatch-unassign>release", label = "Unassign before pickup, RiderUnassigned; search again or wait for the branch", onError = "DELIVERY_STATUS_CHANGED")
-    @Flow(value = {"dispatch-reassign>reassign>release", "dispatch-store-rider>assign>release"}, label = "Unassign the current rider", when = "a rider has it")
+    @Flow(value = "dispatch-reassign>reassign>release", label = "Unassign the current rider", when = "a rider has it")
+    @Flow(value = "dispatch-store-rider>assign>release", label = "Unassign the current rider", when = "a rider has it")
     private JobDocument release(JobDocument job, String reason, String actor) {
         if (!BEFORE_PICKUP.contains(status(job))) {
             throw new ModuleException.Conflict("The rider already has the food", "DELIVERY_STATUS_CHANGED");
@@ -686,7 +687,8 @@ public class DispatchService {
                 (a) -> List.of(new RiderUnassigned(summary(a), riderId, reason, actor))));
     }
 
-    @Flow(value = {"dispatch-delivered>deliver>complete", "dispatch-order-events>type?>delivered>complete"}, label = "DELIVERED with the proof and rider pay, DeliveryCompleted")
+    @Flow(value = "dispatch-delivered>deliver>complete", label = "DELIVERED with the proof and rider pay, DeliveryCompleted")
+    @Flow(value = "dispatch-order-events>type?>delivered>complete", label = "DELIVERED with the proof and rider pay, DeliveryCompleted")
     private JobDocument complete(JobDocument job, String actor, String proof, String photo, long cash) {
         String riderKind = job.riderKind();
         long earning = (riderKind != null) ? earningFor(job, RiderKind.valueOf(riderKind), rules()) : 0;

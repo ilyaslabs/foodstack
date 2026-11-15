@@ -105,7 +105,8 @@ public class TwoFactorService {
     }
 
     /** Starts setting up an authenticator app: a new secret, kept aside until a code confirms it. */
-    @Flow(value = {"auth-two-step-enroll>start>secret", "two-step-enroll>secret"}, label = "New secret kept aside until confirmed", onError = "TOTP_NOT_ALLOWED")
+    @Flow(value = "auth-two-step-enroll>start>secret", label = "New secret kept aside until confirmed", onError = "TOTP_NOT_ALLOWED")
+    @Flow(value = "two-step-enroll>secret", label = "New secret kept aside until confirmed", onError = "TOTP_NOT_ALLOWED")
     public Enrollment startEnrollment(String userId) {
         UserDocument user = this.users.document(userId);
         if (!allowed(user.getRoles())) {
@@ -122,7 +123,8 @@ public class TwoFactorService {
      * Confirms the app with a code from it, turns two-step sign-in on and returns the recovery
      * codes (shown once). A second confirmation replaces the secret and the recovery codes.
      */
-    @Flow(value = {"auth-two-step-confirm>confirm>app", "two-step-confirm>app"}, label = "Check a code from the new app, turn two-step on, new recovery codes", onError = "wrong code")
+    @Flow(value = "auth-two-step-confirm>confirm>app", label = "Check a code from the new app, turn two-step on, new recovery codes", onError = "wrong code")
+    @Flow(value = "two-step-confirm>app", label = "Check a code from the new app, turn two-step on, new recovery codes", onError = "wrong code")
     public List<String> confirmEnrollment(String userId, String code) {
         UserDocument user = this.users.document(userId);
         if (user.getTotpPendingCipher() == null) {
@@ -148,7 +150,9 @@ public class TwoFactorService {
      * Checks a code from the app, or one recovery code (used up). Five wrong codes per account in
      * 15 minutes answer 429.
      */
-    @Flow(value = {"auth-two-step>complete>code", "two-step-disable>disable>code", "two-step-recovery-codes>codes>code"}, label = "Check the app code or use up a recovery code", onError = "wrong code (five per 15 minutes, then 429)")
+    @Flow(value = "auth-two-step>complete>code", label = "Check the app code or use up a recovery code", onError = "wrong code (five per 15 minutes, then 429)")
+    @Flow(value = "two-step-disable>disable>code", label = "Check the app code or use up a recovery code", onError = "wrong code (five per 15 minutes, then 429)")
+    @Flow(value = "two-step-recovery-codes>codes>code", label = "Check the app code or use up a recovery code", onError = "wrong code (five per 15 minutes, then 429)")
     public void verify(String userId, String code) {
         refuseIfLocked(userId);
         UserDocument user = this.users.document(userId);

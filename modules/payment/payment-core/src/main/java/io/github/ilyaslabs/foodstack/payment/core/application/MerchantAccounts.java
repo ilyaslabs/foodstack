@@ -84,7 +84,8 @@ public class MerchantAccounts {
     // ---- choosing the account -------------------------------------------------------------------
 
     /** Whose account a card payment for the branch goes into now. */
-    @Flow(value = {"payment-api-resolve-merchant>resolve", "merchant-collection-view>load>resolve"}, label = "Branch account, else brand account, else the operator")
+    @Flow(value = "payment-api-resolve-merchant>resolve", label = "Branch account, else brand account, else the operator")
+    @Flow(value = "merchant-collection-view>load>resolve", label = "Branch account, else brand account, else the operator")
     public MerchantView resolve(String storeId) {
         if (this.operatorGateway == null || !this.settings.getOrdering().directCollectionEnabled()) {
             return MerchantView.BY_OPERATOR;

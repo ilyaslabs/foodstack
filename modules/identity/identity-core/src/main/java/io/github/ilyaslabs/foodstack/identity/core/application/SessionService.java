@@ -224,7 +224,9 @@ public class SessionService {
         return new EnrolledSession(finish(verified), recovery);
     }
 
-    @Flow(value = {"auth-two-step>complete>challenge", "auth-two-step-enroll>start>challenge", "auth-two-step-confirm>confirm>challenge"}, label = "Check the signed challenge token", onError = "CHALLENGE_INVALID")
+    @Flow(value = "auth-two-step>complete>challenge", label = "Check the signed challenge token", onError = "CHALLENGE_INVALID")
+    @Flow(value = "auth-two-step-enroll>start>challenge", label = "Check the signed challenge token", onError = "CHALLENGE_INVALID")
+    @Flow(value = "auth-two-step-confirm>confirm>challenge", label = "Check the signed challenge token", onError = "CHALLENGE_INVALID")
     private ChallengeTokens.Challenge challenge(String token, ChallengeTokens.Step step) {
         if (this.challenges == null) {
             throw new ModuleException.BadRequest("Two-step sign-in is not available", "TOTP_UNAVAILABLE");
@@ -234,7 +236,8 @@ public class SessionService {
                     "CHALLENGE_INVALID"));
     }
 
-    @Flow(value = {"auth-two-step>complete>session", "auth-two-step-confirm>confirm>session"}, label = "Issue tokens, audit the sign-in")
+    @Flow(value = "auth-two-step>complete>session", label = "Issue tokens, audit the sign-in")
+    @Flow(value = "auth-two-step-confirm>confirm>session", label = "Issue tokens, audit the sign-in")
     private Session finish(ChallengeTokens.Challenge challenge) {
         Session session = start(challenge.userId(), Client.parse(challenge.client()));
         audit(challenge.userId(), challenge.how() + " + authenticator");
@@ -286,7 +289,10 @@ public class SessionService {
         return signedIn(userId, client, "password reset");
     }
 
-    @Flow(value = {"auth-social>social>session", "auth-login>method?>password>session", "auth-login>method?>code>session", "auth-reset>reset>session"}, label = "Start the sign-in")
+    @Flow(value = "auth-social>social>session", label = "Start the sign-in")
+    @Flow(value = "auth-login>method?>password>session", label = "Start the sign-in")
+    @Flow(value = "auth-login>method?>code>session", label = "Start the sign-in")
+    @Flow(value = "auth-reset>reset>session", label = "Start the sign-in")
     private Session signedIn(String userId, Client client, String how) {
         if (this.twoFactor != null) {
             // @flow auth-social>social>session>second?, auth-login>method?>password>session>second?, auth-login>method?>code>session>second?, auth-reset>reset>session>second?: Second step needed?

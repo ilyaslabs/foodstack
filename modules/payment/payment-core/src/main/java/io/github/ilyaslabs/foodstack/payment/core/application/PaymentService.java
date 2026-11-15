@@ -110,7 +110,8 @@ public class PaymentService {
         return (merchantAccountId != null && !merchantAccountId.isBlank()) ? merchantAccountId : OPERATOR_ACCOUNT;
     }
 
-    @Flow(value = {"payment-options>options", "payment-api-options>options"}, label = "Card on, gateway set up, embedded fields, saved cards")
+    @Flow(value = "payment-options>options", label = "Card on, gateway set up, embedded fields, saved cards")
+    @Flow(value = "payment-api-options>options", label = "Card on, gateway set up, embedded fields, saved cards")
     public PaymentOptionsView options() {
         OrderingView ordering = this.settings.getOrdering();
         boolean card = ordering.cardEnabled() && this.gateway != null;
@@ -270,7 +271,10 @@ public class PaymentService {
         apply(payment.gateway(), payment.merchantAccount(), event);
     }
 
-    @Flow(value = {"payment-webhook>apply", "payment-owner-webhook>apply", "payment-sandbox-complete>pay>finish>apply", "payment-sandbox-card>finish>apply"}, label = "Apply the outcome")
+    @Flow(value = "payment-webhook>apply", label = "Apply the outcome")
+    @Flow(value = "payment-owner-webhook>apply", label = "Apply the outcome")
+    @Flow(value = "payment-sandbox-complete>pay>finish>apply", label = "Apply the outcome")
+    @Flow(value = "payment-sandbox-card>finish>apply", label = "Apply the outcome")
     private void apply(String gatewayId, String merchantAccount, WebhookEvent event) {
         if (event == null) {
             return;

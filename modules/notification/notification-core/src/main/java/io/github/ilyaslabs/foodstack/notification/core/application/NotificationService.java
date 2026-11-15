@@ -137,7 +137,16 @@ public class NotificationService {
         this.push = push;
     }
 
-    @Flow(value = {"notification-order-events>type?>order>send", "notification-order-events>type?>refund>send", "notification-dispatch-events>type?>offered>send", "notification-dispatch-events>type?>assigned>send", "notification-dispatch-events>type?>alert>send", "notification-ledger-events>type?>exceeded>send", "notification-ledger-events>type?>restored>send", "notification-identity-events>type?>registered>send", "notification-identity-events>type?>code>send", "notification-identity-events>type?>deletion>send"}, label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
+    @Flow(value = "notification-order-events>type?>order>send", label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
+    @Flow(value = "notification-order-events>type?>refund>send", label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
+    @Flow(value = "notification-dispatch-events>type?>offered>send", label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
+    @Flow(value = "notification-dispatch-events>type?>assigned>send", label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
+    @Flow(value = "notification-dispatch-events>type?>alert>send", label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
+    @Flow(value = "notification-ledger-events>type?>exceeded>send", label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
+    @Flow(value = "notification-ledger-events>type?>restored>send", label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
+    @Flow(value = "notification-identity-events>type?>registered>send", label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
+    @Flow(value = "notification-identity-events>type?>code>send", label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
+    @Flow(value = "notification-identity-events>type?>deletion>send", label = "Inbox row; queue push and email by preference; start a sender", each = "recipient")
     public void send(Message message) {
         Instant now = this.clock.instant();
         Templates.Rendered rendered = this.templates.render(message.template(), message.language(), message.params());

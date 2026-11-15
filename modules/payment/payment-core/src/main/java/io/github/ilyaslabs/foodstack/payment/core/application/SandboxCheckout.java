@@ -109,7 +109,8 @@ public class SandboxCheckout {
         return finish(payment, pay);
     }
 
-    @Flow(value = {"payment-sandbox-complete>pay>finish", "payment-sandbox-card>finish"}, label = "Send the sandbox webhook to the payment service")
+    @Flow(value = "payment-sandbox-complete>pay>finish", label = "Send the sandbox webhook to the payment service")
+    @Flow(value = "payment-sandbox-card>finish", label = "Send the sandbox webhook to the payment service")
     private String finish(PaymentDocument payment, boolean pay) {
         Map.Entry<byte[], Map<String, String>> webhook = this.gateway.webhook(
                 pay ? WebhookEvent.SUCCEEDED : WebhookEvent.FAILED, payment.id(), payment.sessionReference(),
@@ -118,7 +119,8 @@ public class SandboxCheckout {
         return pay ? payment.returnUrl() : payment.cancelUrl();
     }
 
-    @Flow(value = {"payment-sandbox-page>load>token", "payment-sandbox-complete>pay>token"}, label = "Check the page token", onError = "PAYMENT_PAGE_NOT_FOUND")
+    @Flow(value = "payment-sandbox-page>load>token", label = "Check the page token", onError = "PAYMENT_PAGE_NOT_FOUND")
+    @Flow(value = "payment-sandbox-complete>pay>token", label = "Check the page token", onError = "PAYMENT_PAGE_NOT_FOUND")
     private PaymentDocument require(String orderId, String token) {
         if (this.gateway == null || !this.gateway.validPageToken(orderId, token)) {
             throw new ModuleException.NotFound("No such payment page", "PAYMENT_PAGE_NOT_FOUND");

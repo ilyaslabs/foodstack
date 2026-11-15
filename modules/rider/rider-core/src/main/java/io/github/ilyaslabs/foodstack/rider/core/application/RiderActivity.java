@@ -353,7 +353,8 @@ public class RiderActivity {
         return earnings(riderId, days, timeZone);
     }
 
-    @Flow(value = {"rider-my-earnings>sum", "rider-earnings>sum"}, label = "Sum earnings, tips and cash per day", onError = "TIME_ZONE_INVALID")
+    @Flow(value = "rider-my-earnings>sum", label = "Sum earnings, tips and cash per day", onError = "TIME_ZONE_INVALID")
+    @Flow(value = "rider-earnings>sum", label = "Sum earnings, tips and cash per day", onError = "TIME_ZONE_INVALID")
     private Earnings earnings(String riderId, int days, String timeZone) {
         int span = Math.max(1, Math.min(days, 31));
         ZoneId zone = zone(timeZone);
@@ -403,7 +404,8 @@ public class RiderActivity {
     // ---- following a delivery -------------------------------------------------------------------
 
     /** Checks the caller may follow a delivery: its customer, its store's people or operator staff. */
-    @Flow(value = {"rider-tracking>check", "rider-tracking-stream>check"}, label = "Customer, rider, branch or dispatch staff", onError = "TRACKING_NOT_FOUND")
+    @Flow(value = "rider-tracking>check", label = "Customer, rider, branch or dispatch staff", onError = "TRACKING_NOT_FOUND")
+    @Flow(value = "rider-tracking-stream>check", label = "Customer, rider, branch or dispatch staff", onError = "TRACKING_NOT_FOUND")
     public AssignmentDocument requireFollow(String orderId) {
         AssignmentDocument assignment = this.mongo.findById(orderId, AssignmentDocument.class);
         String me = CurrentUser.id();
