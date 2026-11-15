@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.core.domain.Permissions;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.AuditLogDocument;
@@ -44,6 +45,7 @@ public class AuditLog {
     }
 
     /** Keeps a write sent by a module; a repeated delivery of the same entry is ignored. */
+    @Flow(value = "audit-collect>save", label = "Save the entry")
     public void record(AuditEntry entry) {
         AuditLogDocument previous = this.mongo.findOne(Query.query(Criteria.where("resource").is(entry.resource())
             .and("kind").is(AuditLogDocument.WRITE)
@@ -85,6 +87,7 @@ public class AuditLog {
      * @param limit most entries
      */
     /** {@link #search} as a page for the back office, with the marker of the next page when this one is full. */
+    @Flow(value = "audit-list>search", label = "Search the log")
     public AuditPage page(String actorId, String kind, String text, String beforeId, int limit) {
         List<AuditLogDocument> found = search(actorId, kind, text, beforeId, limit);
         String next = (!found.isEmpty() && found.size() == Math.clamp(limit, 1, 200)) ? found.getLast().id() : null;

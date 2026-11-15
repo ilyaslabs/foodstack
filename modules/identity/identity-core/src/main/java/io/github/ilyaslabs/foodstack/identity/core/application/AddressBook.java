@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.AddressDocument;
 import io.github.ilyaslabs.foodstack.platform.core.Ids;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
@@ -60,6 +61,7 @@ public class AddressBook {
         return toView(require(userId, addressId));
     }
 
+    @Flow(value = "addresses-add>save", label = "Insert; unset the old preferred one", onError = "ADDRESS_LIMIT")
     public SavedAddress add(String userId, AddressInput input) {
         Clean clean = clean(input);
         Instant now = this.clock.instant();
@@ -84,6 +86,7 @@ public class AddressBook {
      *
      * @param version the version the customer edited, or {@code null} to skip the check
      */
+    @Flow(value = "addresses-update>save", label = "Update at the expected version", onError = "stale version")
     public SavedAddress update(String userId, String addressId, AddressInput input, Long version) {
         Clean clean = clean(input);
         Instant now = this.clock.instant();
@@ -110,6 +113,7 @@ public class AddressBook {
     }
 
     /** Removes an address; when it was preferred, the next one in the list becomes preferred. */
+    @Flow(value = "addresses-remove>delete", label = "Delete the address")
     public void remove(String userId, String addressId) {
         Instant now = this.clock.instant();
         this.transaction.executeWithoutResult((status) -> {

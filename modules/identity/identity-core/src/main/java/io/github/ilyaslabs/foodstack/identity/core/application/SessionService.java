@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.events.EmailCodeIssued;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.RefreshTokenDocument;
 import io.github.ilyaslabs.foodstack.identity.core.security.AccessTokens;
@@ -181,10 +182,12 @@ public class SessionService {
      * operator switched that provider on. The account is found by the provider account, then by
      * the verified email, else a customer account is created.
      */
+    @Flow(value = "auth-social>social", label = "Social sign-in")
     public Session signInWithSocial(String provider, String idToken, String displayName, Client client) {
         if (this.social == null || !this.social.knows(provider)) {
             throw new ModuleException.BadRequest("Unknown sign-in provider", "SOCIAL_PROVIDER_UNKNOWN");
         }
+        // @flow auth-social>social>check: Provider on, verify the ID token [on error SOCIAL_PROVIDER_OFF, SOCIAL_TOKEN_INVALID]
         List<String> clientIds = this.signInSettings.clientIds(provider);
         if (clientIds.isEmpty()) {
             throw new ModuleException.Forbidden("Sign-in with " + provider + " is switched off", "SOCIAL_PROVIDER_OFF");
@@ -192,12 +195,14 @@ public class SessionService {
         SocialTokens.Identity identity = this.social.verify(provider, idToken, clientIds)
             .orElseThrow(() -> new ModuleException.Unauthorized("The sign-in with " + provider + " could not be checked",
                     "SOCIAL_TOKEN_INVALID"));
+        // @flow auth-social>social>account: Linked account, else by email, else a new customer
         String name = (displayName != null && !displayName.isBlank()) ? displayName : identity.name();
         String userId = this.users.socialAccount(identity.provider(), identity.subject(), identity.email(), name);
         return signedIn(userId, client, identity.provider());
     }
 
     /** The second step: a code from the authenticator app, or a recovery code. */
+    @Flow(value = "auth-two-step>complete", label = "Second step")
     public Session completeTwoStep(String challenge, String code) {
         ChallengeTokens.Challenge verified = challenge(challenge, ChallengeTokens.Step.TOTP);
         this.twoFactor.verify(verified.userId(), code);
@@ -205,18 +210,21 @@ public class SessionService {
     }
 
     /** For a required second step not set up yet: a new authenticator secret for the QR code. */
+    @Flow(value = "auth-two-step-enroll>start", label = "Start the authenticator setup")
     public TwoFactorService.Enrollment startTwoStepEnrollment(String challenge) {
         ChallengeTokens.Challenge verified = challenge(challenge, ChallengeTokens.Step.TOTP_ENROLL);
         return this.twoFactor.startEnrollment(verified.userId());
     }
 
     /** Confirms the new authenticator app with a code from it and signs in. */
+    @Flow(value = "auth-two-step-confirm>confirm", label = "Confirm the authenticator")
     public EnrolledSession confirmTwoStepEnrollment(String challenge, String code) {
         ChallengeTokens.Challenge verified = challenge(challenge, ChallengeTokens.Step.TOTP_ENROLL);
         List<String> recovery = this.twoFactor.confirmEnrollment(verified.userId(), code);
         return new EnrolledSession(finish(verified), recovery);
     }
 
+    @Flow(value = {"auth-two-step>complete>challenge", "auth-two-step-enroll>start>challenge", "auth-two-step-confirm>confirm>challenge"}, label = "Check the signed challenge token", onError = "CHALLENGE_INVALID")
     private ChallengeTokens.Challenge challenge(String token, ChallengeTokens.Step step) {
         if (this.challenges == null) {
             throw new ModuleException.BadRequest("Two-step sign-in is not available", "TOTP_UNAVAILABLE");
@@ -226,6 +234,7 @@ public class SessionService {
                     "CHALLENGE_INVALID"));
     }
 
+    @Flow(value = {"auth-two-step>complete>session", "auth-two-step-confirm>confirm>session"}, label = "Issue tokens, audit the sign-in")
     private Session finish(ChallengeTokens.Challenge challenge) {
         Session session = start(challenge.userId(), Client.parse(challenge.client()));
         audit(challenge.userId(), challenge.how() + " + authenticator");
@@ -233,11 +242,14 @@ public class SessionService {
     }
 
     /** Signs in with email and password. Ten wrong tries per email in 15 minutes answer 429. */
+    @Flow(value = "auth-login>method?>password", label = "Password sign-in", when = "password")
     public Session signInWithPassword(String email, String password, Client client) {
+        // @flow auth-login>method?>password>limit: Ten wrong tries per email in 15 minutes [on error 429]
         String tries = (email != null && !email.isBlank()) ? this.pii.blindIndex(email.trim()) : null;
         if (tries != null) {
             this.rateLimiter.refuseIfReached("identity", "password", tries, PASSWORD_TRIES, PASSWORD_WINDOW);
         }
+        // @flow auth-login>method?>password>check: Check the password, audit a failure [on error LOGIN_FAILED]
         Optional<String> userId = this.users.checkPassword(email, password);
         if (userId.isEmpty()) {
             if (tries != null) {
@@ -250,7 +262,9 @@ public class SessionService {
     }
 
     /** Signs in with a code emailed by {@code POST /auth/code}. */
+    @Flow(value = "auth-login>method?>code", label = "Code sign-in", when = "code")
     public Session signInWithCode(String email, String code, Client client) {
+        // @flow auth-login>method?>code>verify: Check the emailed code, mark the email verified [on error CODE_INVALID]
         Optional<String> verified = this.codes.verify(email, EmailCodeIssued.LOGIN, code);
         if (verified.isEmpty()) {
             auditFailure(email, "email code");
@@ -261,21 +275,28 @@ public class SessionService {
     }
 
     /** Sets a new password with an emailed reset code and signs in; every older sign-in ends. */
+    @Flow(value = "auth-reset>reset", label = "Reset with a code")
     public Session resetPassword(String email, String code, String newPassword, Client client) {
         UserService.requirePassword(newPassword);
+        // @flow auth-reset>reset>verify: Check the reset code [on error CODE_INVALID]
         String userId = this.codes.verify(email, EmailCodeIssued.PASSWORD_RESET, code)
             .orElseThrow(() -> new ModuleException.Unauthorized("The code is not correct or has expired", "CODE_INVALID"));
+        // @flow auth-reset>reset>save: Save the new password
         this.users.resetPassword(userId, newPassword);
         return signedIn(userId, client, "password reset");
     }
 
+    @Flow(value = {"auth-social>social>session", "auth-login>method?>password>session", "auth-login>method?>code>session", "auth-reset>reset>session"}, label = "Start the sign-in")
     private Session signedIn(String userId, Client client, String how) {
         if (this.twoFactor != null) {
+            // @flow auth-social>social>session>second?, auth-login>method?>password>session>second?, auth-login>method?>code>session>second?, auth-reset>reset>session>second?: Second step needed?
             Optional<ChallengeTokens.Step> step = this.twoFactor.secondStep(userId);
             if (step.isPresent()) {
+                // @flow auth-social>social>session>second?>challenge, auth-login>method?>password>session>second?>challenge, auth-login>method?>code>session>second?>challenge, auth-reset>reset>session>second?>challenge: Ask for the second step with a challenge token [when two-step is on]
                 throw new SecondStepRequired(step.get(), this.challenges.issue(userId, step.get(), client.name(), how));
             }
         }
+        // @flow auth-social>social>session>second?>tokens, auth-login>method?>password>session>second?>tokens, auth-login>method?>code>session>second?>tokens, auth-reset>reset>session>second?>tokens: Issue tokens, audit the sign-in [when else]
         Session session = start(userId, client);
         audit(userId, how);
         return session;
@@ -324,10 +345,12 @@ public class SessionService {
      * Swaps a refresh token for new tokens.
      * @param channel where the token came from: the cookie ({@code WEB}) or the body ({@code MOBILE})
      */
+    @Flow(value = "auth-refresh>rotate", label = "Rotate the refresh token")
     public Session refresh(String refreshToken, Client channel) {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw invalid();
         }
+        // @flow auth-refresh>rotate>find: Known, unexpired, same client type [on error REFRESH_WRONG_CHANNEL]
         String id = hash(refreshToken);
         Instant now = this.clock.instant();
         RefreshTokenDocument token = this.mongo.findById(id, RefreshTokenDocument.class);
@@ -338,6 +361,7 @@ public class SessionService {
             throw new ModuleException.BadRequest("This refresh token belongs to the other client type",
                     "REFRESH_WRONG_CHANNEL");
         }
+        // @flow auth-refresh>rotate>claim: Mark it used; a reused token ends the whole sign-in [on error REFRESH_REUSED]
         RefreshTokenDocument claimed = this.mongo.findAndModify(
                 Query.query(Criteria.where("_id").is(id).and("usedAt").is(null)), new Update().set("usedAt", now),
                 FindAndModifyOptions.options().returnNew(true), RefreshTokenDocument.class);
@@ -351,6 +375,7 @@ public class SessionService {
             endFamily(token.familyId());
             throw new ModuleException.Unauthorized("The session has ended; sign in again", "REFRESH_REUSED");
         }
+        // @flow auth-refresh>rotate>claims: Current roles; a blocked or revoked account ends the sign-in
         UserService.TokenClaims claims;
         try {
             claims = claims(token.userId());
@@ -363,10 +388,12 @@ public class SessionService {
             endFamily(token.familyId());
             throw invalid();
         }
+        // @flow auth-refresh>rotate>issue: New access and refresh tokens
         return issue(token.userId(), token.familyId(), channel, token.tokenVersion(), claims);
     }
 
     /** Ends one sign-in (sign out on this device). */
+    @Flow(value = "auth-logout>end", label = "Delete this sign-in's refresh tokens")
     public void end(String userId, String sessionId) {
         if (sessionId == null) {
             return;

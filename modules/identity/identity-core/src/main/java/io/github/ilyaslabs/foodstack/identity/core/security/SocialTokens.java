@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import io.github.ilyaslabs.evl.EVL;
+
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.jwk.source.JWKSource;
@@ -28,6 +30,7 @@ import com.nimbusds.jwt.proc.DefaultJWTProcessor;
  * the provider's published keys, come from its issuer, be meant for one of this deployment's client
  * ids, not have run out, and carry a verified email.
  */
+@EVL.External(value = "Google and Apple sign-in", description = "Public keys that verify the ID tokens")
 public class SocialTokens {
 
     /** A provider FoodStack accepts tokens from. */

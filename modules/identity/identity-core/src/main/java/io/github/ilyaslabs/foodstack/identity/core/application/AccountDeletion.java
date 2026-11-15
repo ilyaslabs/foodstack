@@ -6,6 +6,8 @@ import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
 import io.github.ilyaslabs.foodstack.identity.api.events.AccountDeletionScheduled;
@@ -69,11 +71,13 @@ public class AccountDeletion {
      * date.
      * @return when the account is deleted
      */
+    @Flow(value = "me-deletion-request>schedule", label = "Schedule the deletion")
     public Instant request(String userId) {
         UserDocument user = this.mongo.findById(userId, UserDocument.class);
         if (user == null) {
             throw new ModuleException.NotFound("User " + userId + " not found", "USER_NOT_FOUND");
         }
+        // @flow me-deletion-request>schedule>check: Active customer-only account [on error ACCOUNT_NOT_ACTIVE, ACCOUNT_HAS_STAFF_ROLES]
         if (user.getStatus() != UserStatus.ACTIVE) {
             throw new ModuleException.Conflict("The account is not active", "ACCOUNT_NOT_ACTIVE");
         }
@@ -84,6 +88,7 @@ public class AccountDeletion {
         if (user.getDeleteAfter() != null) {
             return user.getDeleteAfter();
         }
+        // @flow me-deletion-request>schedule>save: Set the delete date, AccountDeletionScheduled [when not asked before]
         Instant now = this.clock.instant();
         Instant deleteAfter = now.plus(this.grace);
         this.transaction.executeWithoutResult((status) -> {
@@ -105,8 +110,11 @@ public class AccountDeletion {
      * replicas at once: each account is taken by a conditional update.
      * @return how many accounts were deleted
      */
+    @Flow(value = "identity-account-deletions", label = "Erase accounts after the grace period", description = "Safe on several replicas: each account is taken by a conditional update")
+    @EVL.Job(schedule = "every foodstack.identity.deletion-sweep, first run within 2 minutes")
     public int runDue(int limit) {
         Instant now = this.clock.instant();
+        // @flow identity-account-deletions>due: Accounts past their delete date, 200 per run
         Query due = Query
             .query(Criteria.where("status").is(UserStatus.ACTIVE).and("deleteAfter").lte(now))
             .limit(limit);
@@ -122,6 +130,7 @@ public class AccountDeletion {
     }
 
     /** Erases one account whose grace period is over; {@code false} when it was cancelled or done already. */
+    @Flow(value = "identity-account-deletions>erase", label = "Wipe personal data, drop login key, addresses and refresh tokens, UserDeleted, revoke tokens", each = "due account")
     boolean erase(String userId) {
         Instant now = this.clock.instant();
         UserDocument before = this.transaction.execute((status) -> {

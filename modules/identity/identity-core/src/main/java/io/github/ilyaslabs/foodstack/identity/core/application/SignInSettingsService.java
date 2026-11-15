@@ -7,6 +7,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.SignInSettingsDocument;
 import io.github.ilyaslabs.moduleswitch.ModuleException;
 
@@ -29,6 +30,7 @@ public class SignInSettingsService {
         this.clock = clock;
     }
 
+    @Flow(value = "auth-providers-view>load", label = "Read the sign-in settings")
     public SignInProviders get() {
         SignInSettingsDocument settings = read();
         return new SignInProviders(settings.googleClientIds(), settings.appleClientIds());
@@ -48,6 +50,7 @@ public class SignInSettingsService {
         };
     }
 
+    @Flow(value = "auth-providers-update>save", label = "Save the client ids")
     public SignInProviders update(Collection<String> googleClientIds, Collection<String> appleClientIds, String by) {
         List<String> google = clean("googleClientIds", googleClientIds);
         List<String> apple = clean("appleClientIds", appleClientIds);

@@ -4,6 +4,8 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
 import io.github.ilyaslabs.foodstack.identity.core.application.NewUser;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** The operator's Users page: every account, back-office accounts created by admins, and blocking (PRD ID-4). */
 @RestController
+@EVL.Endpoint(path = "/api/v1/users")
 @RequestMapping("/api/v1/users")
 class UsersController {
 
@@ -46,6 +49,8 @@ class UsersController {
     }
 
     /** Newest first; {@code q} is a full email or part of a name. */
+    @Flow(value = "users-list", label = "Find users", description = "By email or name, role and status, newest first")
+    @EVL.Endpoint(method = "GET", path = "", caller = "Back office (admin, support)")
     @GetMapping
     @PreAuthorize("hasAuthority('identity:users:read')")
     UserListResponse list(@RequestParam(required = false) String q, @RequestParam(required = false) Role role,
@@ -55,28 +60,37 @@ class UsersController {
         return new UserListResponse(page.items().stream().map(IdentityWebMapper::toResponse).toList(), page.nextCursor());
     }
 
+    @Flow(value = "users-view", label = "View a user", description = "")
+    @EVL.Endpoint(method = "GET", path = "/{id}", caller = "Back office (admin, support)")
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('identity:users:read')")
     UserResponse get(@PathVariable String id) {
         return IdentityWebMapper.toResponse(this.userService.get(id));
     }
 
+    @Flow(value = "users-block", label = "Block a user", description = "With a reason; every token stops working at once")
+    @EVL.Endpoint(method = "POST", path = "/{id}/block", caller = "Back office (admin)")
     @PostMapping("/{id}/block")
     @PreAuthorize("hasAuthority('identity:users:manage')")
     UserResponse block(@PathVariable String id, @Valid @RequestBody BlockUserRequest request) {
         return IdentityWebMapper.toResponse(this.directory.block(id, request.reason(), CurrentUser.id()));
     }
 
+    @Flow(value = "users-unblock", label = "Unblock a user", description = "")
+    @EVL.Endpoint(method = "POST", path = "/{id}/unblock", caller = "Back office (admin)")
     @PostMapping("/{id}/unblock")
     @PreAuthorize("hasAuthority('identity:users:manage')")
     UserResponse unblock(@PathVariable String id) {
         return IdentityWebMapper.toResponse(this.directory.unblock(id));
     }
 
+    @Flow(value = "users-create", label = "Create a staff account", description = "Admin, finance or support only")
+    @EVL.Endpoint(method = "POST", path = "", caller = "Back office (admin)")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasAuthority('identity:users:manage')")
     UserResponse create(@Valid @RequestBody CreateUserRequest request) {
+        // @flow users-create>roles: Staff roles only [on error USER_ROLES_INVALID]
         if (!STAFF_ROLES.containsAll(request.roles())) {
             // owners and riders need a brand, a branch or a rider profile: they are added from those pages
             throw new ModuleException.BadRequest("Only Admin, Finance and Support accounts are made here",

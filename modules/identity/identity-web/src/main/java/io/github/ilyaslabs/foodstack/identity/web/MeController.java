@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.identity.web;
 import java.time.Instant;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.core.application.AccountDeletion;
 import io.github.ilyaslabs.foodstack.identity.core.application.AddressBook;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserAccount;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** The signed-in user. */
 @RestController
+@EVL.Endpoint(path = "/api/v1/me")
 @RequestMapping("/api/v1/me")
 class MeController {
 
@@ -37,6 +40,8 @@ class MeController {
         this.accountDeletion = accountDeletion;
     }
 
+    @Flow(value = "me-view", label = "My account", description = "The signed-in user")
+    @EVL.Endpoint(method = "GET", path = "", caller = "Customer app, back office, rider app")
     @GetMapping
     UserResponse me() {
         return IdentityWebMapper.toResponse(this.userService.get(CurrentUser.id()));
@@ -46,6 +51,8 @@ class MeController {
     }
 
     /** Changes the password; the user proves they know the current one. */
+    @Flow(value = "me-password", label = "Change my password", description = "Proves the current one")
+    @EVL.Endpoint(method = "PUT", path = "/password", caller = "Customer app, back office, rider app")
     @PutMapping("/password")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void changePassword(@RequestBody ChangePasswordRequest request) {
@@ -53,6 +60,8 @@ class MeController {
     }
 
     /** Logs out everywhere: every token of this user stops working in every module at once. */
+    @Flow(value = "me-revoke-tokens", label = "Sign out everywhere", description = "Every token stops working in every module at once")
+    @EVL.Endpoint(method = "POST", path = "/revoke-tokens", caller = "Customer app, back office, rider app")
     @PostMapping("/revoke-tokens")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void revokeTokens() {
@@ -70,6 +79,8 @@ class MeController {
         }
     }
 
+    @Flow(value = "me-export", label = "Export my account", description = "Account and saved addresses (identity's part of the data export)")
+    @EVL.Endpoint(method = "GET", path = "/export", caller = "Customer app")
     @GetMapping("/export")
     ExportResponse export() {
         String userId = CurrentUser.id();
@@ -84,6 +95,8 @@ class MeController {
     }
 
     /** How deletion works here: the grace period, so the account screen can say it before anyone asks. */
+    @Flow(value = "me-deletion-view", label = "How account deletion works", description = "The grace period")
+    @EVL.Endpoint(method = "GET", path = "/deletion", caller = "Customer app")
     @GetMapping("/deletion")
     DeletionResponse deletion() {
         CurrentUser.id();
@@ -94,6 +107,8 @@ class MeController {
      * Asks to delete the account (PRD ID-7). The customer is signed out everywhere; signing in
      * again before {@code deleteAfter} cancels it.
      */
+    @Flow(value = "me-deletion-request", label = "Delete my account", description = "Signed out everywhere; signing in again within the grace period cancels it")
+    @EVL.Endpoint(method = "POST", path = "/deletion", caller = "Customer app")
     @PostMapping("/deletion")
     @ResponseStatus(HttpStatus.ACCEPTED)
     DeletionResponse requestDeletion() {

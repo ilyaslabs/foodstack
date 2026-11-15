@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.identity.core.application;
 
 import java.util.EnumSet;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.core.IdentityProperties;
 import org.apache.commons.logging.Log;
@@ -29,9 +31,12 @@ public class BootstrapAdmin {
         this.settings = properties.getBootstrapAdmin();
     }
 
+    @Flow(value = "identity-bootstrap-admin", label = "Create the first administrator", description = "From foodstack.identity.bootstrap-admin on a fresh install")
+    @EVL.Job(trigger = "application ready")
     @EventListener(ApplicationReadyEvent.class)
     @Order(0)
     public void createIfMissing() {
+        // @flow identity-bootstrap-admin>key: Stop the start when the personal-data key cannot read stored accounts [on error IllegalStateException]
         if (!this.users.piiKeyOpensStoredData()) {
             throw new IllegalStateException("The personal-data key (foodstack.security.pii-key, FOODSTACK_PII_KEY) "
                     + "does not open the accounts already stored. Use the key the data was written with (from the "

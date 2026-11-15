@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.UserDocument;
 import io.github.ilyaslabs.foodstack.identity.core.security.ChallengeTokens.Step;
@@ -88,6 +89,7 @@ public class TwoFactorService {
         return required(user.getRoles()) ? Optional.of(Step.TOTP_ENROLL) : Optional.empty();
     }
 
+    @Flow(value = "two-step-status>load", label = "Enabled, required, recovery codes left")
     public Status status(String userId) {
         UserDocument user = this.users.document(userId);
         return new Status(user.getTotpSecretCipher() != null, required(user.getRoles()), user.getRecoveryCodeHashes().size());
@@ -103,6 +105,7 @@ public class TwoFactorService {
     }
 
     /** Starts setting up an authenticator app: a new secret, kept aside until a code confirms it. */
+    @Flow(value = {"auth-two-step-enroll>start>secret", "two-step-enroll>secret"}, label = "New secret kept aside until confirmed", onError = "TOTP_NOT_ALLOWED")
     public Enrollment startEnrollment(String userId) {
         UserDocument user = this.users.document(userId);
         if (!allowed(user.getRoles())) {
@@ -119,6 +122,7 @@ public class TwoFactorService {
      * Confirms the app with a code from it, turns two-step sign-in on and returns the recovery
      * codes (shown once). A second confirmation replaces the secret and the recovery codes.
      */
+    @Flow(value = {"auth-two-step-confirm>confirm>app", "two-step-confirm>app"}, label = "Check a code from the new app, turn two-step on, new recovery codes", onError = "wrong code")
     public List<String> confirmEnrollment(String userId, String code) {
         UserDocument user = this.users.document(userId);
         if (user.getTotpPendingCipher() == null) {
@@ -144,6 +148,7 @@ public class TwoFactorService {
      * Checks a code from the app, or one recovery code (used up). Five wrong codes per account in
      * 15 minutes answer 429.
      */
+    @Flow(value = {"auth-two-step>complete>code", "two-step-disable>disable>code", "two-step-recovery-codes>codes>code"}, label = "Check the app code or use up a recovery code", onError = "wrong code (five per 15 minutes, then 429)")
     public void verify(String userId, String code) {
         refuseIfLocked(userId);
         UserDocument user = this.users.document(userId);
@@ -168,18 +173,23 @@ public class TwoFactorService {
     }
 
     /** The user turns two-step sign-in off with a current code; not allowed where the role requires it. */
+    @Flow(value = "two-step-disable>disable", label = "Turn two-step off")
     public void disable(String userId, String code) {
         UserDocument user = this.users.document(userId);
+        // @flow two-step-disable>disable>required: Refuse where the role requires it [on error TOTP_REQUIRED]
         if (required(user.getRoles())) {
             throw new ModuleException.Conflict("Your role requires two-step sign-in", "TOTP_REQUIRED");
         }
+        // @flow two-step-disable>disable>clear: Remove the secret and recovery codes
         verify(userId, code);
         clear(userId);
     }
 
     /** New recovery codes, after a current code; the old ones stop working. */
+    @Flow(value = "two-step-recovery-codes>codes", label = "Replace the recovery codes")
     public List<String> regenerateRecoveryCodes(String userId, String code) {
         verify(userId, code);
+        // @flow two-step-recovery-codes>codes>new: New codes; the old ones stop working
         List<String> recovery = newRecoveryCodes();
         this.mongo.updateFirst(byId(userId), new Update().set("recoveryCodeHashes",
                 recovery.stream().map(TwoFactorService::hash).toList()), UserDocument.class);
@@ -190,7 +200,9 @@ public class TwoFactorService {
      * An administrator removes two-step sign-in from an account (lost phone and codes). Every
      * sign-in of the account ends; if its role requires it, it sets up a new app at the next sign-in.
      */
+    @Flow(value = "two-step-reset>reset", label = "Remove two-step sign-in")
     public void reset(String userId) {
+        // @flow two-step-reset>reset>clear: Remove the secret and recovery codes
         this.users.document(userId);
         clear(userId);
         this.users.revokeTokens(userId, "TOTP_RESET");

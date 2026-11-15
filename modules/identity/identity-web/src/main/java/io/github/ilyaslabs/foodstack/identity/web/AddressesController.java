@@ -2,6 +2,8 @@ package io.github.ilyaslabs.foodstack.identity.web;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.core.application.AddressBook;
 import io.github.ilyaslabs.foodstack.identity.core.application.AddressInput;
 import io.github.ilyaslabs.foodstack.identity.core.application.SavedAddress;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** The signed-in customer's saved addresses (PRD ID-6). Each person sees and edits only their own. */
 @RestController
+@EVL.Endpoint(path = "/api/v1/me/addresses")
 @RequestMapping("/api/v1/me/addresses")
 class AddressesController {
 
@@ -31,22 +34,30 @@ class AddressesController {
         this.book = book;
     }
 
+    @Flow(value = "addresses-list", label = "My saved addresses", description = "")
+    @EVL.Endpoint(method = "GET", path = "", caller = "Customer app")
     @GetMapping
     List<AddressResponse> list() {
         return this.book.list(CurrentUser.id()).stream().map(AddressesController::toResponse).toList();
     }
 
+    @Flow(value = "addresses-add", label = "Save an address", description = "Up to 20; one can be preferred")
+    @EVL.Endpoint(method = "POST", path = "", caller = "Customer app")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     AddressResponse add(@RequestBody AddressRequest request) {
         return toResponse(this.book.add(CurrentUser.id(), toInput(request)));
     }
 
+    @Flow(value = "addresses-update", label = "Change a saved address", description = "Checks the version")
+    @EVL.Endpoint(method = "PUT", path = "/{addressId}", caller = "Customer app")
     @PutMapping("/{addressId}")
     AddressResponse update(@PathVariable String addressId, @RequestBody AddressRequest request) {
         return toResponse(this.book.update(CurrentUser.id(), addressId, toInput(request), request.version()));
     }
 
+    @Flow(value = "addresses-remove", label = "Remove a saved address", description = "")
+    @EVL.Endpoint(method = "DELETE", path = "/{addressId}", caller = "Customer app")
     @DeleteMapping("/{addressId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void remove(@PathVariable String addressId) {

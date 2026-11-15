@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.core.application.NewUser;
 import io.github.ilyaslabs.foodstack.identity.core.application.UserService;
@@ -40,10 +42,13 @@ class IdentitySeeder {
         this.mongo = identityMongoTemplate;
     }
 
+    @Flow(value = "seed-identity", label = "Seed demo users", description = "Admin, finance, support and customer, once")
+    @EVL.Job(trigger = "application ready (test-seed profile)")
     @EventListener(ApplicationReadyEvent.class)
     @Order(10)
     void seed() {
         try {
+            // @flow seed-identity>once: Seed marker; stop when already seeded
             this.mongo.insert(new Document("_id", "v1").append("seededAt", Instant.now()), "identity_seed");
         }
         catch (DuplicateKeyException ex) {

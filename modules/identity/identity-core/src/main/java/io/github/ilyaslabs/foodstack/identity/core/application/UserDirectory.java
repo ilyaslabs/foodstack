@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.regex.Pattern;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.UserDocument;
@@ -48,6 +49,7 @@ public class UserDirectory {
      * @param afterId the last id of the previous page, or {@code null}
      * @param limit page size, 1 to 100
      */
+    @Flow(value = "users-list>search", label = "Search users")
     public UserPage search(String text, Role role, UserStatus status, String afterId, int limit) {
         int size = Math.min(Math.max(limit, 1), 100);
         Criteria criteria = new Criteria();
@@ -89,7 +91,9 @@ public class UserDirectory {
      * Blocks an account: it cannot sign in, gets no new tokens, and every token it holds stops
      * working at once (TDD 9.1). Nobody blocks themselves, and the last active admin stays.
      */
+    @Flow(value = "users-block>block", label = "Block the account")
     public UserAccount block(String userId, String reason, String actorId) {
+        // @flow users-block>block>check: A reason, not yourself, not the last admin [on error BLOCK_REASON_REQUIRED, CANNOT_BLOCK_SELF, LAST_ADMIN]
         String why = (reason != null) ? reason.trim() : "";
         if (why.isEmpty() || why.length() > MAX_REASON) {
             throw new ModuleException.BadRequest("Give a reason of up to " + MAX_REASON + " characters", "BLOCK_REASON_REQUIRED");
@@ -105,6 +109,7 @@ public class UserDirectory {
         if (user.getRoles().contains(Role.ADMIN) && activeAdmins() <= 1) {
             throw new ModuleException.Conflict("The last active admin cannot be blocked", "LAST_ADMIN");
         }
+        // @flow users-block>block>save: Mark blocked with who, when and why [when active]
         Instant now = this.clock.instant();
         user.setStatus(UserStatus.BLOCKED);
         user.setBlockedBy(actorId);
@@ -117,6 +122,7 @@ public class UserDirectory {
     }
 
     /** Lets a blocked account sign in again. */
+    @Flow(value = "users-unblock>unblock", label = "Mark active again")
     public UserAccount unblock(String userId) {
         UserDocument user = find(userId);
         requireNotDeleted(user);

@@ -11,6 +11,7 @@ import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
 import io.github.ilyaslabs.foodstack.identity.api.events.EmailCodeIssued;
 import io.github.ilyaslabs.foodstack.identity.core.persistence.UserDocument;
@@ -70,16 +71,19 @@ public class EmailCodeService {
      * Emails a new code to the account with this email, if there is an active one; a new code
      * replaces the last. Too many requests for one email answer 429.
      */
+    @Flow(value = "auth-code>issue", label = "Issue a code")
     public void issue(String email, String purpose) {
         requirePurpose(purpose);
         if (email == null || email.isBlank()) {
             return;
         }
+        // @flow auth-code>issue>limit: Rate limit per email [on error 429]
         this.rateLimiter.check("identity", "email-code", this.pii.blindIndex(email), CODES_PER_WINDOW, CODE_WINDOW);
         Optional<UserDocument> user = this.users.findByEmail(email).filter((u) -> u.getStatus() == UserStatus.ACTIVE);
         if (user.isEmpty()) {
             return;
         }
+        // @flow auth-code>issue>store: New six-digit code in Redis for 5 minutes [when active account]
         String userId = user.get().getId();
         String code = "%06d".formatted(RANDOM.nextInt(1_000_000));
         Instant expiresAt = this.clock.instant().plus(TTL);
@@ -87,6 +91,7 @@ public class EmailCodeService {
         this.redis.delete(key);
         this.redis.opsForHash().putAll(key, Map.of("hash", hash(userId, code), "attempts", "0"));
         this.redis.expire(key, TTL);
+        // @flow auth-code>issue>event: EmailCodeIssued, emailed by the notification module
         this.transaction.executeWithoutResult(
                 (status) -> this.outbox.append(new EmailCodeIssued(userId, purpose, this.pii.encrypt(code), expiresAt)));
     }

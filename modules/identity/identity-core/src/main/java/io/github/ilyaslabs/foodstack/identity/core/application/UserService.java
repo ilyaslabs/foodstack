@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.Role;
 import io.github.ilyaslabs.foodstack.identity.api.UserStatus;
 import io.github.ilyaslabs.foodstack.identity.api.events.UserRegistered;
@@ -78,6 +79,10 @@ public class UserService {
     }
 
     /** Creates a user with any roles; {@code createdBy} {@code null} means self sign-up. */
+    @Flow(value = {"auth-register>create", "users-create>create"}, label = "Save the account and login key, UserRegistered", onError = "EMAIL_TAKEN")
+    @Flow(value = "seed-identity>users", label = "Create the demo account", each = "demo user", when = "email is new")
+    @Flow(value = "identity-bootstrap-admin>create", label = "Create the first administrator", when = "email set and no account yet")
+    @Flow(value = {"identity-api-grant-store-access>grant>create", "identity-api-grant-brand-access>grant>create", "identity-api-grant-rider-access>grant>create"}, label = "Create the account", when = "new email")
     public UserAccount create(NewUser user, String createdBy) {
         validate(user);
         Instant now = this.clock.instant();
@@ -243,6 +248,7 @@ public class UserService {
     }
 
     /** Active users holding any of these roles, for staff alerts (at most 500). */
+    @Flow(value = "identity-api-user-ids-with-roles>query", label = "Active users with any of the roles")
     public List<String> activeUserIdsWithRoles(Set<Role> roles) {
         return this.users.findByRolesInOrderByIdDesc(List.copyOf(roles), Limit.of(500))
             .stream()
@@ -255,6 +261,7 @@ public class UserService {
      * Invalidates every token the user holds, in every module, at once (TDD 9.1).
      * @return the new minimum token version
      */
+    @Flow(value = {"me-revoke-tokens>revoke", "users-block>block>revoke", "two-step-reset>reset>revoke", "me-deletion-request>schedule>sign-out", "auth-reset>reset>save>revoke", "identity-api-revoke-rider-access>revoke>tokens", "identity-api-revoke-store-access>revoke>tokens", "identity-api-revoke-brand-access>revoke>tokens"}, label = "Bump the token version, UserTokensRevoked, Redis revocation floor")
     public long revokeTokens(String userId, String reason) {
         UserDocument user = find(userId);
         long next = user.getTokenVersion() + 1;
@@ -285,6 +292,7 @@ public class UserService {
     }
 
     /** A signed-in user changes their password, proving they know the current one. */
+    @Flow(value = "me-password>change", label = "Check the current password, save the new one", onError = "PASSWORD_WRONG")
     public void changePassword(String userId, String currentPassword, String newPassword) {
         UserDocument user = find(userId);
         if (currentPassword == null || user.getPasswordHash() == null
@@ -374,6 +382,7 @@ public class UserService {
      * Gives owner access to a brand and its branch (PRD 4.2.1). An existing account keeps its other
      * roles; a missing one is created. New tokens carry the ids; existing tokens are unaffected.
      */
+    @Flow(value = "identity-api-grant-store-access>grant", label = "Branch owner role and branch id")
     public UserAccount grantStoreAccess(String email, String displayName, String initialPassword, String storeId,
             String grantedBy) {
         if (storeId == null || storeId.isBlank()) {
@@ -386,6 +395,7 @@ public class UserService {
     }
 
     /** Brand owner access (PRD BB-5): the brand and, through it, every branch of it. */
+    @Flow(value = "identity-api-grant-brand-access>grant", label = "Brand owner role and brand id")
     public UserAccount grantBrandAccess(String email, String displayName, String initialPassword, String brandId,
             String grantedBy) {
         if (brandId == null || brandId.isBlank()) {
@@ -413,6 +423,7 @@ public class UserService {
      * Gives rider access (PRD DR-1): {@code RIDER} for the operator's fleet, {@code STORE_RIDER} for a
      * store's own rider. An existing account keeps its other roles; a missing one is created.
      */
+    @Flow(value = "identity-api-grant-rider-access>grant", label = "Rider or branch rider role")
     public UserAccount grantRiderAccess(String email, String displayName, String initialPassword, boolean storeRider,
             String grantedBy) {
         Role role = storeRider ? Role.STORE_RIDER : Role.RIDER;
@@ -428,6 +439,7 @@ public class UserService {
     }
 
     /** Takes both rider roles away and revokes the user's tokens so it takes effect now. */
+    @Flow(value = "identity-api-revoke-rider-access>revoke", label = "Take the rider roles away")
     public void revokeRiderAccess(String userId) {
         Optional<UserDocument> found = this.users.findById(userId);
         if (found.isEmpty()) {
@@ -445,6 +457,7 @@ public class UserService {
     }
 
     /** Removes a brand and branch from a user's claims and revokes their tokens so it takes effect now. */
+    @Flow(value = "identity-api-revoke-store-access>revoke", label = "Drop the branch, and the owner role with the last one")
     public void revokeStoreAccess(String userId, String storeId) {
         Optional<UserDocument> found = this.users.findById(userId);
         if (found.isEmpty()) {
@@ -458,6 +471,7 @@ public class UserService {
         saveWithoutOwnerRoles(user, userId, "STORE_ACCESS_REVOKED");
     }
 
+    @Flow(value = "identity-api-revoke-brand-access>revoke", label = "Drop the brand, and the owner role with the last one")
     public void revokeBrandAccess(String userId, String brandId) {
         Optional<UserDocument> found = this.users.findById(userId);
         if (found.isEmpty()) {
