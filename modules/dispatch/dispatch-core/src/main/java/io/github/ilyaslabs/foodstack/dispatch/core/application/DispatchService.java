@@ -16,6 +16,8 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.api.DeliveryStatus;
 import io.github.ilyaslabs.foodstack.dispatch.api.DeliverySummary;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryCancelled;
@@ -133,6 +135,7 @@ public class DispatchService {
     // ---- from order events ---------------------------------------------------------------------
 
     /** An accepted delivery order becomes a job (once; a replayed event finds it there). */
+    @Flow(value = "dispatch-order-events>type?>accepted", label = "Open the delivery job", when = "OrderAccepted with a delivery")
     public void orderAccepted(OrderSummary order, OrderDelivery delivery, long readyByEpoch, String actor) {
         if (delivery == null || this.mongo.findById(order.orderId(), JobDocument.class) != null) {
             return;
@@ -144,6 +147,7 @@ public class DispatchService {
         if (searchFrom.isBefore(now)) {
             searchFrom = now;
         }
+        // @flow dispatch-order-events>type?>accepted>distance: Road distance from the branch to the customer
         long distance = roadDistance(delivery.pickup(), delivery.dropoff());
         boolean operator = delivery.mode() == DeliveryMode.OPERATOR;
         JobDocument job = new JobDocument(order.orderId(), order.number(), order.customerId(), delivery.customerName(),
@@ -155,6 +159,7 @@ public class DispatchService {
                 order.language(), readyBy, searchFrom, null, rules.searchRadiusMeters(), 0, null, null, List.of(), null, null,
                 null, null, null, null, null, null, 0, 0, distance, delivery.riderPayBasisMinor(), now, now, 0,
                 delivery.cityId());
+        // @flow dispatch-order-events>type?>accepted>save: Job and active row: searching (operator riders) or waiting (branch riders), once
         try {
             this.transaction.executeWithoutResult((tx) -> {
                 this.mongo.insert(job);
@@ -164,6 +169,7 @@ public class DispatchService {
         catch (DuplicateKeyException ex) {
             return;
         }
+        // @flow dispatch-order-events>type?>accepted>live: Show on the dispatch board
         this.live.publish(job.id(), job.pickupLat(), job.pickupLng(), job.status(), null, "job");
         if (!operator && delivery.storeRiderId() != null) {
             try {
@@ -176,6 +182,7 @@ public class DispatchService {
     }
 
     /** The food is ready: an operator search that was waiting for the lead time starts now. */
+    @Flow(value = "dispatch-order-events>type?>ready", label = "Start searching now", when = "OrderReady")
     public void orderReady(String orderId) {
         Instant now = this.clock.instant();
         this.mongo.updateFirst(Query.query(Criteria.where("_id").is(orderId).and("status").is(DeliveryStatus.SEARCHING.name())
@@ -185,6 +192,7 @@ public class DispatchService {
     }
 
     /** The order ended before delivery: the job is cancelled and its rider freed. */
+    @Flow(value = "dispatch-order-events>type?>closed", label = "Cancel the job, DeliveryCancelled, release the rider hold", when = "OrderCancelled, OrderRejected, OrderFailed")
     public void orderClosed(String orderId, String reason) {
         JobDocument job = this.mongo.findById(orderId, JobDocument.class);
         if (job == null || status(job).isFinal()) {
@@ -197,6 +205,7 @@ public class DispatchService {
     }
 
     /** The store or support marked a step on the order itself (self delivery without the rider app). */
+    @Flow(value = "dispatch-order-events>type?>picked-up", label = "Picked up, DeliveryPickedUp", when = "OrderPickedUp not by the rider")
     public void orderPickedUpElsewhere(String orderId, String actor) {
         JobDocument job = this.mongo.findById(orderId, JobDocument.class);
         if (job == null || status(job).isFinal() || status(job) == DeliveryStatus.PICKED_UP || isRiderActor(actor)) {
@@ -209,6 +218,7 @@ public class DispatchService {
     }
 
     /** The store or support marked the order delivered: the job closes, and a rider on it is paid. */
+    @Flow(value = "dispatch-order-events>type?>delivered", label = "Close as delivered by support", when = "OrderDelivered not by the rider")
     public void orderDeliveredElsewhere(String orderId, String actor) {
         JobDocument job = this.mongo.findById(orderId, JobDocument.class);
         if (job == null || status(job).isFinal() || isRiderActor(actor)) {
@@ -229,9 +239,12 @@ public class DispatchService {
     }
 
     /** One round over the jobs of the given work buckets ({@code null} = every bucket). */
+    @Flow(value = "dispatch-match", label = "Offer searching jobs to riders", description = "Over the buckets this replica leases")
+    @EVL.Job(schedule = "every 2 s, first after 5 s")
     public int match(Set<Integer> buckets) {
         Instant now = this.clock.instant();
         expireOffers(now, buckets);
+        // @flow dispatch-match>due: Searching jobs due, 100 per run
         List<ActiveJobDocument> due = this.mongo.find(Query.query(inBuckets(Criteria.where("status")
             .is(DeliveryStatus.SEARCHING.name())
             .and("searchFrom")
@@ -259,12 +272,14 @@ public class DispatchService {
         return offers;
     }
 
+    @Flow(value = "dispatch-match>offer", label = "Offer the job", each = "due job")
     private boolean offer(JobDocument job, DeliveryView rules, Set<String> offeredThisRound, Instant now) {
         Instant started = (job.searchStartedAt() != null) ? job.searchStartedAt() : now;
         List<String> tried = job.triedRiderIds();
         if (!tried.isEmpty() && job.updatedAt().plus(RETRY_TRIED_AFTER).isBefore(now)) {
             tried = List.of();
         }
+        // @flow dispatch-match>offer>find: Free riders nearby from the rider module, ranked by distance, idle time and acceptance
         Set<String> exclude = new HashSet<>(tried);
         exclude.addAll(offeredThisRound);
         List<RiderCandidate> candidates = this.serviceCalls.call(() -> this.riders.findAvailable(
@@ -272,6 +287,7 @@ public class DispatchService {
         List<RiderCandidate> ranked = new ArrayList<>(candidates);
         ranked.sort(Comparator.comparingLong(DispatchService::score));
         long earning = earningFor(job, RiderKind.OPERATOR, rules);
+        // @flow dispatch-match>offer>hold: Hold the first free rider, OFFERED, RiderOffered [each candidate until one is held]
         for (RiderCandidate candidate : ranked) {
             Instant expires = now.plusSeconds(rules.offerTimeoutSeconds());
             if (!this.live.holdRider(candidate.riderId(), job.id(), Duration.ofSeconds(rules.offerTimeoutSeconds() + 5L))) {
@@ -292,6 +308,7 @@ public class DispatchService {
             return true;
         }
         // nobody free nearby: widen after a round, alert support once, keep searching
+        // @flow dispatch-match>offer>widen: Widen the radius after a round, DispatchAlert once [when nobody was held]
         Update update = new Update().set("searchStartedAt", started).set("triedRiderIds", tried);
         boolean widen = job.widenings() < MAX_WIDENINGS
                 && Duration.between(started, now).compareTo(ROUND.multipliedBy(job.widenings() + 1L)) >= 0;
@@ -321,6 +338,7 @@ public class DispatchService {
         return criteria.orOperator(Criteria.where("bucket").in(buckets), Criteria.where("bucket").exists(false));
     }
 
+    @Flow(value = "dispatch-match>expire", label = "Lapsed offers back to searching", each = "lapsed offer")
     private void expireOffers(Instant now, Set<Integer> buckets) {
         List<ActiveJobDocument> lapsed = this.mongo.find(Query.query(inBuckets(Criteria.where("status")
             .is(DeliveryStatus.OFFERED.name())
@@ -335,6 +353,8 @@ public class DispatchService {
         }
     }
 
+    @Flow(value = "dispatch-offer-decline>back", label = "Back to searching, release the rider hold", when = "offered to me")
+    @Flow(value = "dispatch-reassign>reassign>back", label = "Withdraw the open offer", when = "offered")
     private void backToSearch(JobDocument job, String riderId, String kind) {
         List<String> tried = new ArrayList<>(job.triedRiderIds());
         if (riderId != null && !tried.contains(riderId)) {
@@ -351,6 +371,7 @@ public class DispatchService {
     // ---- the rider -----------------------------------------------------------------------------
 
     /** The rider's open offer and current jobs (PRD DR-4). */
+    @Flow(value = "dispatch-my-jobs>load", label = "Jobs and offers of this rider")
     public List<JobDetails> myJobs() {
         String me = requireRider();
         List<ActiveJobDocument> mine = this.mongo.find(Query.query(new Criteria().orOperator(Criteria.where("riderId").is(me),
@@ -366,8 +387,10 @@ public class DispatchService {
         return jobs;
     }
 
+    @Flow(value = "dispatch-offer-accept>accept", label = "Take the job")
     public JobDetails accept(String orderId) {
         String me = requireRider();
+        // @flow dispatch-offer-accept>accept>check: My open offer, not lapsed [on error OFFER_GONE]
         JobDocument job = require(orderId);
         Instant now = this.clock.instant();
         if (status(job) != DeliveryStatus.OFFERED || !me.equals(job.offerRiderId())) {
@@ -377,6 +400,7 @@ public class DispatchService {
             backToSearch(job, me, "offer-expired");
             throw new ModuleException.Conflict("This offer has lapsed", "OFFER_GONE");
         }
+        // @flow dispatch-offer-accept>accept>assign: ASSIGNED, RiderAssigned, release the hold
         RiderView rider = this.serviceCalls.call(() -> this.riders.getRider(me));
         JobDocument after = change(job, EnumSet.of(DeliveryStatus.OFFERED), DeliveryStatus.ASSIGNED, (j, at) -> new Change(
                 assignment(rider, at).unset("offerRiderId").unset("offerExpiresAt").set("triedRiderIds", List.of()),
@@ -396,12 +420,14 @@ public class DispatchService {
         }
     }
 
+    @Flow(value = "dispatch-arrived>save", label = "AT_STORE")
     public JobDetails arrived(String orderId) {
         JobDocument job = requireMine(orderId);
         return details(changeOrFail(job, EnumSet.of(DeliveryStatus.ASSIGNED), DeliveryStatus.AT_STORE,
                 (j, now) -> new Change(new Update().set("atStoreAt", now), (a) -> List.of())), true);
     }
 
+    @Flow(value = "dispatch-picked-up>save", label = "PICKED_UP, DeliveryPickedUp")
     public JobDetails pickedUp(String orderId) {
         JobDocument job = requireMine(orderId);
         String actor = "rider:" + job.riderId();
@@ -413,8 +439,10 @@ public class DispatchService {
      * The rider hands the food over (PRD DR-6): the customer's code when the order needs one, cash
      * for a cash order. Support may finish a job for the rider without the code.
      */
+    @Flow(value = "dispatch-delivered>deliver", label = "Close the delivery")
     public JobDetails delivered(String orderId, Delivered proof) {
         JobDocument job = require(orderId);
+        // @flow dispatch-delivered>deliver>check: The rider or support; on its way [on error DELIVERY_STATUS_CHANGED]
         boolean support = CurrentUser.hasAuthority(MANAGE);
         String me = CurrentUser.id();
         if (!support && (me == null || !me.equals(job.riderId()))) {
@@ -424,8 +452,10 @@ public class DispatchService {
         if (status != DeliveryStatus.PICKED_UP && !BEFORE_PICKUP.contains(status)) {
             throw new ModuleException.Conflict("This delivery is not on its way", "DELIVERY_STATUS_CHANGED");
         }
+        // @flow dispatch-delivered>deliver>proof?: Which proof?
         String kind = "NONE";
         if (!support && job.codeHash() != null) {
+            // @flow dispatch-delivered>deliver>proof?>code: The customer's delivery code, five tries per 10 minutes [when code set] [on error DELIVERY_CODE_REQUIRED, DELIVERY_CODE_WRONG]
             this.rateLimiter.check("dispatch", "code", orderId, 5, Duration.ofMinutes(10));
             String code = (proof != null && proof.code() != null) ? proof.code().strip() : "";
             if (code.isEmpty()) {
@@ -437,6 +467,7 @@ public class DispatchService {
             }
             kind = "CODE";
         }
+        // @flow dispatch-delivered>deliver>proof?>other: Support, photo or none [when else]
         else if (support) {
             kind = "SUPPORT";
         }
@@ -444,6 +475,7 @@ public class DispatchService {
         if ("NONE".equals(kind) && photo != null) {
             kind = "PHOTO";
         }
+        // @flow dispatch-delivered>deliver>cash: Cash collected within bounds [on error CASH_INVALID]
         long cash = (proof != null && proof.cashCollectedMinor() != null) ? proof.cashCollectedMinor() : job.cashToCollectMinor();
         if (cash < 0 || cash > job.cashToCollectMinor() * 2 + 1_000_000) {
             throw new ModuleException.BadRequest("The cash amount is not valid", "CASH_INVALID");
@@ -471,6 +503,8 @@ public class DispatchService {
         return details(assignStoreRiderAs(orderId, riderId, actor()), true);
     }
 
+    @Flow(value = "dispatch-store-rider>assign", label = "The branch's active rider: ASSIGNED, RiderAssigned", onError = "OPERATOR_DELIVERY, STORE_RIDER_INVALID")
+    @Flow(value = "dispatch-order-events>type?>accepted>store-rider", label = "Give it to the named branch rider", when = "branch rider named")
     private JobDocument assignStoreRiderAs(String orderId, String riderId, String actor) {
         JobDocument job = require(orderId);
         if (!DeliveryMode.SELF.name().equals(job.mode())) {
@@ -497,6 +531,7 @@ public class DispatchService {
     // ---- support -------------------------------------------------------------------------------
 
     /** Open jobs for support's dispatch board (PRD AD-9), oldest first. */
+    @Flow(value = "dispatch-open-jobs>load", label = "Active jobs by status, oldest first")
     public List<JobDetails> open(DeliveryStatus status) {
         requireSupport();
         Criteria criteria = (status != null) ? Criteria.where("status").is(status.name()) : new Criteria();
@@ -513,6 +548,7 @@ public class DispatchService {
     }
 
     /** Takes the rider off a job before pickup and, if named, gives it to another rider at once. */
+    @Flow(value = "dispatch-reassign>reassign", label = "Reassign")
     public JobDetails reassign(String orderId, String riderId, String reason) {
         requireSupport();
         String why = requireReason(reason);
@@ -528,6 +564,7 @@ public class DispatchService {
         if (riderId == null || riderId.isBlank()) {
             return details(job, true);
         }
+        // @flow dispatch-reassign>reassign>assign: Suitable active rider: ASSIGNED, RiderAssigned [when a rider is given] [on error RIDER_NOT_SUITABLE]
         RiderView rider = this.serviceCalls.call(() -> this.riders.getRider(riderId));
         boolean fits = DeliveryMode.OPERATOR.name().equals(job.mode()) ? rider.kind() == RiderKind.OPERATOR
                 : rider.kind() == RiderKind.STORE && CurrentUser.sameBrand(job.storeId(), rider.storeId());
@@ -545,6 +582,7 @@ public class DispatchService {
      * Gives an operator delivery back to the store to deliver itself (PRD OF-8), when no rider can be
      * found or the rider cannot go on. Not after pickup.
      */
+    @Flow(value = "dispatch-hand-back>save", label = "Branch delivers: WAITING, DeliveryHandedBack, release the hold", onError = "NOT_OPERATOR_DELIVERY")
     public JobDetails handBack(String orderId, String reason) {
         requireSupport();
         String why = requireReason(reason);
@@ -567,6 +605,7 @@ public class DispatchService {
     // ---- reading -------------------------------------------------------------------------------
 
     /** A job for the rider on it, its store or support. */
+    @Flow(value = "dispatch-job-view>load", label = "The job, for someone allowed to see it")
     public JobDetails get(String orderId) {
         JobDocument job = require(orderId);
         String me = CurrentUser.id();
@@ -578,10 +617,12 @@ public class DispatchService {
         throw notFound();
     }
 
+    @Flow(value = "dispatch-live-stream>check", label = "Dispatch staff only")
     public void requireBoard() {
         requireSupport();
     }
 
+    @Flow(value = "dispatch-rider-stream>check", label = "Riders only", onError = "RIDER_ONLY")
     public String requireRider() {
         String me = CurrentUser.id();
         if (me == null || !CurrentUser.hasAuthority(RIDER_PORTAL)) {
@@ -626,6 +667,8 @@ public class DispatchService {
 
     // ---- helpers -------------------------------------------------------------------------------
 
+    @Flow(value = "dispatch-unassign>release", label = "Unassign before pickup, RiderUnassigned; search again or wait for the branch", onError = "DELIVERY_STATUS_CHANGED")
+    @Flow(value = {"dispatch-reassign>reassign>release", "dispatch-store-rider>assign>release"}, label = "Unassign the current rider", when = "a rider has it")
     private JobDocument release(JobDocument job, String reason, String actor) {
         if (!BEFORE_PICKUP.contains(status(job))) {
             throw new ModuleException.Conflict("The rider already has the food", "DELIVERY_STATUS_CHANGED");
@@ -643,6 +686,7 @@ public class DispatchService {
                 (a) -> List.of(new RiderUnassigned(summary(a), riderId, reason, actor))));
     }
 
+    @Flow(value = {"dispatch-delivered>deliver>complete", "dispatch-order-events>type?>delivered>complete"}, label = "DELIVERED with the proof and rider pay, DeliveryCompleted")
     private JobDocument complete(JobDocument job, String actor, String proof, String photo, long cash) {
         String riderKind = job.riderKind();
         long earning = (riderKind != null) ? earningFor(job, RiderKind.valueOf(riderKind), rules()) : 0;

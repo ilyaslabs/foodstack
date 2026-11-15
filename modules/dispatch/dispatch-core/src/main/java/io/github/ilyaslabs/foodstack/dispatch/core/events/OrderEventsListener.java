@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.dispatch.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.core.application.DispatchService;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderAccepted;
 import io.github.ilyaslabs.foodstack.order.api.events.OrderCancelled;
@@ -51,12 +53,15 @@ public class OrderEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "dispatch-order-events", label = "Open and close delivery jobs from order events", description = "Each event once (inbox)")
+    @EVL.Job(trigger = "<ns>.order.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.dispatch:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-dispatch-orders", groupId = "${foodstack.namespace:foodstack}-dispatch",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow dispatch-order-events>type?: Which event?
         if (ACCEPTED.equals(type)) {
             OrderAccepted e = event.dataAs(OrderAccepted.class, this.jsonMapper);
             if (e.delivery() != null) {

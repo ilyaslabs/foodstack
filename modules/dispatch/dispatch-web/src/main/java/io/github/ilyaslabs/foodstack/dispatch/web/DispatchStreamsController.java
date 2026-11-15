@@ -9,6 +9,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.core.application.DispatchLive;
 import io.github.ilyaslabs.foodstack.dispatch.core.application.DispatchService;
 import io.github.ilyaslabs.foodstack.platform.core.GeoCells;
@@ -47,6 +49,8 @@ class DispatchStreamsController {
         this.live = live;
     }
 
+    @Flow(value = "dispatch-rider-stream", label = "Follow my offers live", description = "Server-sent events")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/dispatch/rider/stream", caller = "Rider app")
     @GetMapping(value = "/api/v1/dispatch/rider/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("hasAuthority('rider:portal')")
     SseEmitter rider() {
@@ -54,6 +58,8 @@ class DispatchStreamsController {
         return stream((emitter) -> this.live.onRider(riderId, (message) -> send(emitter, message)));
     }
 
+    @Flow(value = "dispatch-live-stream", label = "Follow the dispatch board live", description = "Server-sent events for the map cells in view")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/dispatch/live/stream", caller = "Back office (dispatch)")
     @GetMapping(value = "/api/v1/dispatch/live/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("hasAuthority('dispatch:manage')")
     SseEmitter board(@RequestParam double south, @RequestParam double west, @RequestParam double north,

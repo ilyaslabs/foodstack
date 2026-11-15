@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.core.GeoCells;
 import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 import org.slf4j.Logger;
@@ -89,11 +90,13 @@ public class DispatchLive {
         this.live.publish(this.prefix + "rt:cell:" + GeoCells.of(pickupLat, pickupLng), message);
     }
 
+    @Flow(value = "dispatch-rider-stream>subscribe", label = "Subscribe to the rider's channel")
     public AutoCloseable onRider(String riderId, Consumer<String> receiver) {
         return this.live.subscribe(this.prefix + "rt:rider:" + riderId, receiver);
     }
 
     /** Receives job changes with a pickup in these cells (a live board's view) until closed. */
+    @Flow(value = "dispatch-live-stream>subscribe", label = "Subscribe to the map cells' channels")
     public AutoCloseable onCells(List<String> cells, Consumer<String> receiver) {
         List<AutoCloseable> subscriptions = new ArrayList<>(cells.size());
         for (String cell : cells) {
