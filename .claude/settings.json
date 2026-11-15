@@ -1,6 +1,0 @@
-{
-  "extraKnownMarketplaces": {
-    "evl-skills": { "source": { "source": "github", "repo": "ilyaslabs/evl-skills" } }
-  },
-  "enabledPlugins": { "evl@evl-skills": true }
-}
