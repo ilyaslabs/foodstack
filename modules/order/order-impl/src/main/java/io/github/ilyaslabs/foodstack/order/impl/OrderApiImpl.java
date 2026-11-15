@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.impl;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.api.OrderApi;
 import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderService;
@@ -18,6 +20,8 @@ class OrderApiImpl implements OrderApi {
     }
 
     @Override
+    @Flow(value = "order-api-get-summary", label = "An order summary for other modules", description = "")
+    @EVL.Endpoint(method = "API", path = "OrderApi.getSummary", caller = "Notification module")
     public OrderSummary getSummary(String orderId) {
         ModuleAccess.requireAuthenticated();
         return this.orders.summary(orderId);

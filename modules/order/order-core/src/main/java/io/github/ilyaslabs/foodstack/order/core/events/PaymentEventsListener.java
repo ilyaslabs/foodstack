@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderLifecycleService;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderPlacementService;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument;
@@ -51,12 +53,15 @@ public class PaymentEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "order-payment-events", label = "Follow card payments and refunds", description = "Each event once (inbox)")
+    @EVL.Job(trigger = "<ns>.payment.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.order:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-order-payments", groupId = "${foodstack.namespace:foodstack}-order",
             topics = "${foodstack.namespace:foodstack}.payment.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow order-payment-events>type?: Which event?
         if (SUCCEEDED.equals(type)) {
             PaymentSucceeded paid = event.dataAs(PaymentSucceeded.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> {

@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderProjections;
 import io.github.ilyaslabs.foodstack.platform.kafka.CloudEvents;
 import tools.jackson.databind.json.JsonMapper;
@@ -18,6 +20,8 @@ public class OrderProjectionListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "order-projections", label = "Keep order history rows current", description = "Every order event rewrites the order's rows")
+    @EVL.Job(trigger = "<ns>.order.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.order:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-order-projections",
             groupId = "${foodstack.namespace:foodstack}-order-projections",

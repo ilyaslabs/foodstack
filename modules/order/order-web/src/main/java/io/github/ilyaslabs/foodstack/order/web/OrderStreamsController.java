@@ -8,6 +8,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderLiveUpdates;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderService;
 import jakarta.annotation.PreDestroy;
@@ -44,6 +46,8 @@ class OrderStreamsController {
         this.live = live;
     }
 
+    @Flow(value = "order-watch", label = "Follow an order live", description = "Server-sent events with a 15 s keep-alive")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/orders/{orderId}/stream", caller = "Customer app")
     @GetMapping(value = "/api/v1/orders/{orderId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
     SseEmitter order(@PathVariable String orderId) {
@@ -51,6 +55,8 @@ class OrderStreamsController {
         return stream((emitter) -> this.live.onOrder(orderId, (message) -> send(emitter, message)));
     }
 
+    @Flow(value = "order-board-stream", label = "Follow the kitchen board live", description = "Server-sent events with a 15 s keep-alive")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/orders/stores/{storeId}/stream", caller = "Back office (store)")
     @GetMapping(value = "/api/v1/orders/stores/{storeId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
     SseEmitter store(@PathVariable String storeId) {

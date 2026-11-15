@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.order.core.application;
 
 import java.util.List;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderSummaryDocument;
 import org.bson.Document;
@@ -31,6 +32,7 @@ public class CustomerErasure {
     }
 
     /** @return how many orders were anonymised */
+    @Flow(value = "order-identity-events>erase", label = "Anonymise the customer's orders and history rows", when = "UserDeleted")
     public int erase(String customerId) {
         Query mine = Query.query(Criteria.where("customerId").is(customerId));
         mine.fields().include("_id");

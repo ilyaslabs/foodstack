@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.cart.api.CartApi;
 import io.github.ilyaslabs.foodstack.cart.api.CheckoutRequest;
 import io.github.ilyaslabs.foodstack.cart.api.CheckoutView;
@@ -107,7 +108,9 @@ public class OrderPlacementService {
         this.clock = clock;
     }
 
+    @Flow(value = "order-place>place", label = "Place the order")
     public PlacedOrder place(String customerId, String idempotencyKey, PlaceOrder request) {
+        // @flow order-place>place>key: Idempotency-Key; a repeat returns the first order [on error IDEMPOTENCY_KEY_REQUIRED, IDEMPOTENCY_KEY_REUSED]
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
             throw new ModuleException.BadRequest("An Idempotency-Key header is required", "IDEMPOTENCY_KEY_REQUIRED");
         }
@@ -117,11 +120,13 @@ public class OrderPlacementService {
         if (earlier != null) {
             return earlier;
         }
+        // @flow order-place>place>validate: Fulfilment, address, phone; ten orders per window [on error ORDER_INVALID, ADDRESS_REQUIRED, 429]
         validate(request);
         if (this.rateLimiter != null) {
             this.rateLimiter.check("order", "place", customerId, PLACEMENTS_PER_WINDOW, PLACEMENT_WINDOW);
         }
 
+        // @flow order-place>place>price: Price again in the cart; the total must match [on error CHECKOUT_PROBLEMS, PRICE_CHANGED]
         GeoPoint destination = (request.fulfilment() == Fulfilment.DELIVERY)
                 ? new GeoPoint(request.address().lat(), request.address().lng()) : null;
         CheckoutView checkout = this.carts.checkout(new CheckoutRequest(customerId, request.fulfilment(), destination,
@@ -135,10 +140,12 @@ public class OrderPlacementService {
                     Map.of("totalMinor", checkout.totalMinor()));
         }
 
+        // @flow order-place>place>merchant: Who collects the card payment [when card]
         String orderId = Ids.newId();
         StoreSnapshot store = checkout.store();
         MerchantView merchant = (request.paymentMethod() == PaymentMethod.CARD) ? this.payments.resolveMerchant(store.storeId())
                 : MerchantView.BY_OPERATOR;
+        // @flow order-place>place>coupon: Hold the coupon use [when coupon] [on error PRICE_CHANGED]
         CouponEvaluation coupon = checkout.coupon();
         if (coupon != null) {
             CouponEvaluation held = this.promotions.reserve(orderId, new CouponRequest(coupon.code(), customerId, store.storeId(),
@@ -154,6 +161,7 @@ public class OrderPlacementService {
             }
         }
 
+        // @flow order-place>place>save: Key, order, active row and OrderPlaced (plus OrderConfirmed for cash) in one transaction [on error release the coupon]
         Instant now = this.clock.instant();
         boolean cash = request.paymentMethod() == PaymentMethod.CASH;
         OrderDocument order = newOrder(orderId, customerId, request, checkout, merchant, now);
@@ -192,16 +200,20 @@ public class OrderPlacementService {
             }
             throw ex;
         }
+        // @flow order-place>place>live: Tell the live streams
         OrderLifecycleService.reached(OrderStatus.PLACED);
         if (confirmed.status() != OrderStatus.PLACED) {
             OrderLifecycleService.reached(confirmed.status());
         }
         this.live.publish(orderId, store.storeId(), confirmed.status().name(), confirmed.revision());
 
+        // @flow order-place>place>pay?: Cash or card?
         if (cash) {
+            // @flow order-place>place>pay?>cash: Empty the cart [when cash]
             clearCart(customerId, checkout.cartVersion());
             return new PlacedOrder(orderId, confirmed.number(), confirmed.status(), null);
         }
+        // @flow order-place>place>pay?>card: Open the card payment, keep its URL [when card] [on error mark the order failed]
         CardSessionView session;
         try {
             session = this.payments.startCard(new StartCardRequest(orderId, confirmed.number(), customerId,
@@ -222,6 +234,7 @@ public class OrderPlacementService {
     }
 
     /** Empties the cart that was ordered, unless the customer changed it since. */
+    @Flow(value = "order-payment-events>type?>paid>clear-cart", label = "Empty the cart", when = "confirmed by this payment")
     public void clearCart(String customerId, long cartVersion) {
         try {
             this.carts.clear(customerId, cartVersion);

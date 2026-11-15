@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryCompleted;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryHandedBack;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryPickedUp;
@@ -51,12 +53,15 @@ public class DispatchEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "order-dispatch-events", label = "Follow the delivery", description = "Each event once (inbox)")
+    @EVL.Job(trigger = "<ns>.dispatch.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.order:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-order-dispatch", groupId = "${foodstack.namespace:foodstack}-order",
             topics = "${foodstack.namespace:foodstack}.dispatch.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow order-dispatch-events>type?: Which event?
         if (ASSIGNED.equals(type)) {
             RiderAssigned e = event.dataAs(RiderAssigned.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> this.lifecycle.riderAssigned(e.delivery().orderId(), e.riderId(),
@@ -75,6 +80,7 @@ public class DispatchEventsListener {
         else if (COMPLETED.equals(type)) {
             DeliveryCompleted e = event.dataAs(DeliveryCompleted.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> tolerate(e.delivery().orderId(), () -> {
+                // @flow order-dispatch-events>type?>completed: Delivered [when DeliveryCompleted]
                 Actor actor = Actor.fromEvent(e.actor());
                 String orderId = e.delivery().orderId();
                 // a rider who forgot to tap "picked up" still delivered it

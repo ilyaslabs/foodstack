@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.order.core.application;
 
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderSummaryDocument;
 
@@ -23,6 +24,7 @@ public class OrderProjections {
         this.mongo = mongo;
     }
 
+    @Flow(value = "order-projections>refresh", label = "Rewrite the customer and branch history rows")
     public void refresh(String orderId) {
         OrderDocument order = this.mongo.findById(orderId, OrderDocument.class);
         if (order != null) {
@@ -31,6 +33,7 @@ public class OrderProjections {
     }
 
     /** Rebuilds both lists from the orders; returns how many orders were copied. */
+    @Flow(value = "order-projections-rebuild>rebuild", label = "Rewrite every history row", each = "order")
     public long rebuild() {
         long[] count = { 0 };
         try (var orders = this.mongo.stream(new Query(), OrderDocument.class)) {

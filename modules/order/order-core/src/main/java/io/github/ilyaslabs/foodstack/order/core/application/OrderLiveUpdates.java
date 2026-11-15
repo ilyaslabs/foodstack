@@ -2,6 +2,7 @@ package io.github.ilyaslabs.foodstack.order.core.application;
 
 import java.util.function.Consumer;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
 
 /**
@@ -29,11 +30,13 @@ public class OrderLiveUpdates {
     }
 
     /** Receives changes of one order until the returned handle is closed. */
+    @Flow(value = "order-watch>subscribe", label = "Subscribe to the order's channel")
     public AutoCloseable onOrder(String orderId, Consumer<String> receiver) {
         return this.live.subscribe(this.prefix + "order:" + orderId, receiver);
     }
 
     /** Receives changes of a branch's orders until the returned handle is closed. */
+    @Flow(value = "order-board-stream>subscribe", label = "Subscribe to the branch's channel")
     public AutoCloseable onStore(String storeId, Consumer<String> receiver) {
         return this.live.subscribe(this.prefix + "store:" + storeId, receiver);
     }

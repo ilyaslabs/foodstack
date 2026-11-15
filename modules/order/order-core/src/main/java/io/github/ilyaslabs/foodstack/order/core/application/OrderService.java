@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.DeliveryMode;
 import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
 import io.github.ilyaslabs.foodstack.order.core.persistence.ActiveOrderDocument;
@@ -48,6 +49,7 @@ public class OrderService {
 
     // ---- reading -------------------------------------------------------------------------------
 
+    @Flow(value = "order-view>load", label = "The order, for someone allowed to see it")
     public OrderDetails get(String orderId) {
         OrderDocument order = this.lifecycle.require(orderId);
         requireViewer(order);
@@ -55,6 +57,7 @@ public class OrderService {
     }
 
     /** An order's summary for other modules: the platform, its customer, its branch's people or support. */
+    @Flow(value = "order-api-get-summary>load", label = "The order summary")
     public io.github.ilyaslabs.foodstack.order.api.OrderSummary summary(String orderId) {
         OrderDocument order = this.lifecycle.require(orderId);
         if (!io.github.ilyaslabs.foodstack.platform.security.ModuleAccess.isService()) {
@@ -64,6 +67,7 @@ public class OrderService {
     }
 
     /** The signed-in customer's orders, newest first. */
+    @Flow(value = "order-mine>query", label = "Customer history rows")
     public OrderPage mine(String before, int limit) {
         String customerId = CurrentUser.id();
         Criteria criteria = Criteria.where("customerId").is(customerId);
@@ -74,6 +78,7 @@ public class OrderService {
      * Every order of the signed-in customer, newest first, in full: their part of the data export
      * (PRD ID-7).
      */
+    @Flow(value = "order-export>load", label = "Every order of the customer")
     public List<OrderDetails> export() {
         String customerId = CurrentUser.id();
         Query mine = Query.query(Criteria.where("customerId").is(customerId))
@@ -99,6 +104,7 @@ public class OrderService {
     }
 
     /** A branch's orders still in progress, oldest first (the live board, PRD OF-1). */
+    @Flow(value = "order-board>load", label = "The branch's active orders")
     public List<OrderDetails> board(String storeId) {
         CurrentUser.requireStoreAccess(storeId, ORDER_MANAGE);
         List<String> ids = this.mongo.find(Query.query(Criteria.where("storeId").is(storeId)).with(Sort.by("placedAt")).limit(200),
@@ -115,12 +121,14 @@ public class OrderService {
     }
 
     /** A branch's orders, newest first. */
+    @Flow(value = "order-store-history>query", label = "Branch history rows")
     public OrderPage storeHistory(String storeId, String before, int limit) {
         CurrentUser.requireStoreAccess(storeId, ORDER_MANAGE);
         return page(OrderSummaryDocument.BY_STORE, Criteria.where("storeId").is(storeId), before, limit);
     }
 
     /** All orders for support, newest first, optionally of one status or branch. */
+    @Flow(value = "order-all>query", label = "Orders by status and branch")
     public OrderPage all(OrderStatus status, String storeId, String before, int limit) {
         requireSupport();
         Criteria criteria = new Criteria();
@@ -134,6 +142,7 @@ public class OrderService {
     }
 
     /** Checks the caller may watch an order's live updates; returns its branch. */
+    @Flow(value = "order-watch>check", label = "Allowed to see the order")
     public String requireWatch(String orderId) {
         OrderDocument order = this.lifecycle.require(orderId);
         requireViewer(order);
@@ -141,6 +150,7 @@ public class OrderService {
     }
 
     /** Checks the caller may watch a branch's board. */
+    @Flow(value = "order-board-stream>check", label = "Allowed to see the branch")
     public void requireBoard(String storeId) {
         CurrentUser.requireStoreAccess(storeId, ORDER_MANAGE);
     }
@@ -163,12 +173,14 @@ public class OrderService {
      * A store step; when accepting a self-delivery order the store may name one of its own riders,
      * who then gets the job in the rider app (PRD DR-2).
      */
+    @Flow(value = "order-action>act", label = "Apply the action", onError = "ORDER_ACCESS_DENIED")
     public OrderDetails storeAction(String orderId, String action, Integer prepMinutes, String reason, String storeRiderId) {
         OrderDocument order = this.lifecycle.require(orderId);
         Actor actor = actor(order);
         if (Actor.CUSTOMER.equals(actor.role())) {
             throw new ModuleException.Forbidden("Only the store can do this", "ORDER_ACCESS_DENIED");
         }
+        // @flow order-action>act>action?: Which action? [on error ACTION_INVALID]
         OrderDocument after = switch (action) {
             case OrderLifecycleService.ACCEPT -> this.lifecycle.accept(orderId, actor,
                     (prepMinutes != null) ? prepMinutes : order.prepMinutes(), storeRiderId);

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
 import io.github.ilyaslabs.foodstack.platform.core.Fulfilment;
 import io.github.ilyaslabs.foodstack.platform.core.PaymentMethod;
@@ -35,6 +36,7 @@ import org.springframework.data.annotation.Id;
  * @param updatedAt last change of the order
  * @param revision the order's revision
  */
+@EVL.Database(value = "foodstack_order", table = "order_by_customer, order_by_store")
 public record OrderSummaryDocument(@Id String id, String number, String customerId, String customerName, String storeId,
         String storeName, String storeSlug, Map<String, String> logoUrls, OrderStatus status, Fulfilment fulfilment,
         PaymentMethod paymentMethod, List<Map<String, String>> itemNames, int itemCount, long totalMinor, String currency,

@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.order.web;
 import java.util.List;
 import java.util.Locale;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderDetails;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderPage;
@@ -71,6 +73,8 @@ class OrdersController {
     record RefundRequest(Long amountMinor, String reason, String fundedBy) {
     }
 
+    @Flow(value = "order-place", label = "Place an order", description = "From the cart; a repeated Idempotency-Key returns the first order")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/orders", caller = "Customer app")
     @PostMapping("/api/v1/orders")
     @PreAuthorize("isAuthenticated()")
     ResponseEntity<PlacedOrder> place(@RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
@@ -87,6 +91,8 @@ class OrdersController {
         return ResponseEntity.status(HttpStatus.CREATED).body(placed);
     }
 
+    @Flow(value = "order-mine", label = "My orders", description = "Newest first")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/orders/mine", caller = "Customer app")
     @GetMapping("/api/v1/orders/mine")
     @PreAuthorize("isAuthenticated()")
     OrderPage mine(@RequestParam(required = false) String before, @RequestParam(defaultValue = "20") int limit) {
@@ -94,12 +100,16 @@ class OrdersController {
     }
 
     /** The customer's orders in full, for their data export (PRD ID-7). */
+    @Flow(value = "order-export", label = "Export my orders", description = "Personal data export")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/orders/mine/export", caller = "Customer app")
     @GetMapping("/api/v1/orders/mine/export")
     @PreAuthorize("isAuthenticated()")
     List<OrderDetails> export() {
         return this.orders.export();
     }
 
+    @Flow(value = "order-all", label = "All orders", description = "By status and branch")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/orders", caller = "Back office (support)")
     @GetMapping("/api/v1/orders")
     @PreAuthorize("hasAuthority('order:manage')")
     OrderPage all(@RequestParam(required = false) OrderStatus status, @RequestParam(required = false) String storeId,
@@ -107,18 +117,24 @@ class OrdersController {
         return this.orders.all(status, storeId, before, limit);
     }
 
+    @Flow(value = "order-view", label = "View an order", description = "Customer, branch staff, rider or support")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/orders/{orderId}", caller = "Customer app, back office")
     @GetMapping("/api/v1/orders/{orderId}")
     @PreAuthorize("isAuthenticated()")
     OrderDetails get(@PathVariable String orderId) {
         return this.orders.get(orderId);
     }
 
+    @Flow(value = "order-cancel", label = "Cancel an order", description = "Customer before acceptance; branch or support later")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/orders/{orderId}/cancel", caller = "Customer app, back office")
     @PostMapping("/api/v1/orders/{orderId}/cancel")
     @PreAuthorize("isAuthenticated()")
     OrderDetails cancel(@PathVariable String orderId, @RequestBody(required = false) ReasonRequest body) {
         return this.orders.cancel(orderId, (body != null) ? body.reason() : null);
     }
 
+    @Flow(value = "order-action", label = "Move an order on", description = "Accept, reject, preparing, ready, collected, picked up, delivered")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/orders/{orderId}/actions/{action}", caller = "Back office (store)")
     @PostMapping("/api/v1/orders/{orderId}/actions/{action}")
     @PreAuthorize("isAuthenticated()")
     OrderDetails action(@PathVariable String orderId, @PathVariable String action,
@@ -128,6 +144,8 @@ class OrdersController {
                 (body != null) ? body.storeRiderId() : null);
     }
 
+    @Flow(value = "order-refund", label = "Refund an order", description = "Support picks the amount and who bears it")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/orders/{orderId}/refund", caller = "Back office (support)")
     @PostMapping("/api/v1/orders/{orderId}/refund")
     @PreAuthorize("hasAuthority('order:manage')")
     OrderDetails refund(@PathVariable String orderId, @RequestBody RefundRequest body) {
@@ -135,12 +153,16 @@ class OrdersController {
                 body.fundedBy());
     }
 
+    @Flow(value = "order-board", label = "Kitchen board", description = "The branch's open orders")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/orders/stores/{storeId}/board", caller = "Back office (store)")
     @GetMapping("/api/v1/orders/stores/{storeId}/board")
     @PreAuthorize("isAuthenticated()")
     List<OrderDetails> board(@PathVariable String storeId) {
         return this.orders.board(storeId);
     }
 
+    @Flow(value = "order-store-history", label = "Branch order history", description = "Newest first")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/orders/stores/{storeId}", caller = "Back office (store)")
     @GetMapping("/api/v1/orders/stores/{storeId}")
     @PreAuthorize("isAuthenticated()")
     OrderPage storeHistory(@PathVariable String storeId, @RequestParam(required = false) String before,
@@ -148,6 +170,8 @@ class OrdersController {
         return this.orders.storeHistory(storeId, before, limit);
     }
 
+    @Flow(value = "order-projections-rebuild", label = "Rebuild order history rows", description = "Customer and branch history read models")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/orders/projections/rebuild", caller = "Back office (support)")
     @PostMapping("/api/v1/orders/projections/rebuild")
     @PreAuthorize("hasAuthority('order:manage')")
     java.util.Map<String, Long> rebuild() {

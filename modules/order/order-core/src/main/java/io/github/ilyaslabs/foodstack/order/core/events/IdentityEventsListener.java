@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.events.UserDeleted;
 import io.github.ilyaslabs.foodstack.order.core.application.CustomerErasure;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
@@ -22,6 +24,8 @@ public class IdentityEventsListener {
         this.jsonMapper = jsonMapper;
     }
 
+    @Flow(value = "order-identity-events", label = "Anonymise a deleted customer's orders", description = "")
+    @EVL.Job(trigger = "<ns>.identity.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.order:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-order-identity", groupId = "${foodstack.namespace:foodstack}-order",
             topics = "${foodstack.namespace:foodstack}.identity.events", properties = "auto.offset.reset=earliest")
