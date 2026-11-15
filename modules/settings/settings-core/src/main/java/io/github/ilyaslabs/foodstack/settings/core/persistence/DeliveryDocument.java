@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.settings.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -23,6 +24,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param version optimistic lock
  */
 @Document("settings_settings")
+@EVL.Database("foodstack_settings")
 public record DeliveryDocument(@Id String id, int riderPayBasisPoints, long riderPayMinMinor, int offerTimeoutSeconds,
         int searchRadiusMeters, int searchLeadMinutes, int noRiderAlertSeconds, Long proofCodeAboveMinor,
         int locationRetentionDays, Instant updatedAt, String updatedBy, @Version Long version) {

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.promotion.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param version optimistic lock
  */
 @Document("promotion_promotions")
+@EVL.Database("foodstack_promotion")
 public record PromotionDocument(@Id String id, String owner, String brandId, String code, Map<String, String> title, String type,
         int percentBasisPoints, Long maxDiscountMinor, long amountMinor, long minOrderMinor, Instant startsAt, Instant endsAt,
         Integer totalLimit, Integer perCustomerLimit, boolean firstOrderOnly, List<String> storeIds, List<String> cities,

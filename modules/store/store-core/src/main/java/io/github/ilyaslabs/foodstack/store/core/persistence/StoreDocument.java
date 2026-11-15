@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.store.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.DayOfWeek;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -28,6 +29,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * Orders, zones, riders and payouts all stay keyed by this id (TDD 5.7).
  */
 @Document("store_stores")
+@EVL.Database("foodstack_store")
 public class StoreDocument {
 
     @Id

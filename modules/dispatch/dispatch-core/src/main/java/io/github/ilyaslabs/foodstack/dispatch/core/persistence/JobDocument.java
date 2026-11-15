@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.dispatch.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -65,6 +66,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param cityId the store's city, to look for riders of that city only, or {@code null}
  */
 @Document("dispatch_jobs")
+@EVL.Database("foodstack_dispatch")
 public record JobDocument(@Id String id, String orderNumber, String customerId, String customerName, String contactPhoneCipher,
         String storeId, String storeName, Set<String> storeOwnerIds, String mode, String status, String riderId, String riderName,
         String riderKind, String vehicle, double pickupLat, double pickupLng, String pickupAddress, double dropoffLat,

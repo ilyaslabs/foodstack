@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.cart.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.cart.api.CartApi;
 import io.github.ilyaslabs.foodstack.cart.api.CheckoutRequest;
 import io.github.ilyaslabs.foodstack.cart.api.CheckoutView;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * with the customer's token at placement) or the platform may price or empty it (TDD 9.1).
  */
 @Component
+@EVL.Service("cart module")
 class CartApiImpl implements CartApi {
 
     private final CheckoutService checkout;

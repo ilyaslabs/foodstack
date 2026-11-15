@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.dispatch.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import io.github.ilyaslabs.foodstack.platform.core.Buckets;
@@ -25,6 +26,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param bucket work bucket of the branch
  */
 @Document("dispatch_active")
+@EVL.Database("foodstack_dispatch")
 public record ActiveJobDocument(@Id String id, String status, String mode, String storeId, String riderId, String offerRiderId,
         Instant offerExpiresAt, Instant searchFrom, Instant createdAt, int bucket) {
 

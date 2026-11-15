@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.rider.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
  * dispatch staff only (TDD 9.1).
  */
 @Component
+@EVL.Service("rider module")
 class RiderApiImpl implements RiderApi {
 
     private final RiderService riders;

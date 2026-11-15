@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.concurrent.Executors;
@@ -46,15 +48,23 @@ class OrderStreamsController {
 
     @GetMapping(value = "/api/v1/orders/{orderId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "order-watch", label = "Watch order live", description = "Server-sent events for one order")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/orders/{orderId}/stream", caller = "Customer web")
     SseEmitter order(@PathVariable String orderId) {
+        // @flow order-watch>access: Check the caller may see this order
         this.orders.requireWatch(orderId);
+        // @flow order-watch>subscribe: Subscribe to the order's live channel and stream changes with heartbeats
         return stream((emitter) -> this.live.onOrder(orderId, (message) -> send(emitter, message)));
     }
 
     @GetMapping(value = "/api/v1/orders/stores/{storeId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "order-board-watch", label = "Watch store board live", description = "Server-sent events for one branch's board")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/orders/stores/{storeId}/stream", caller = "Back office")
     SseEmitter store(@PathVariable String storeId) {
+        // @flow order-board-watch>access: Check the caller works for this branch
         this.orders.requireBoard(storeId);
+        // @flow order-board-watch>subscribe: Subscribe to the branch's live channel and stream changes with heartbeats
         return stream((emitter) -> this.live.onStore(storeId, (message) -> send(emitter, message)));
     }
 

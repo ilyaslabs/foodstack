@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.rider.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 
@@ -19,6 +20,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param version optimistic lock
  */
 @Document("rider_onboarding")
+@EVL.Database("foodstack_rider")
 public record OnboardingDocument(@Id String id, List<IdDocument> documents, Payout payout, Instant updatedAt,
         @Version Long version) {
 

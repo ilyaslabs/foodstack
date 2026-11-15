@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.ledger.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.ledger.api.LedgerApi;
 import io.github.ilyaslabs.foodstack.ledger.api.StoreBalance;
 import io.github.ilyaslabs.foodstack.ledger.core.application.LedgerReports;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 /** {@link LedgerApi} for other modules: only the platform, or finance, may read a branch's balance. */
 @Component
+@EVL.Service("ledger module")
 class LedgerApiImpl implements LedgerApi {
 
     private final LedgerReports reports;

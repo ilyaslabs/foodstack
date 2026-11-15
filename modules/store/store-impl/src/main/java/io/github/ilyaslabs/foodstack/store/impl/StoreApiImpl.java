@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.store.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
 import io.github.ilyaslabs.foodstack.store.api.OrderValidationRequest;
 import io.github.ilyaslabs.foodstack.store.api.OrderValidationView;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
  * (the cart prices on behalf of the customer).
  */
 @Component
+@EVL.Service("store module")
 class StoreApiImpl implements StoreApi {
 
     private static final String STORE_MANAGE = "store:manage";

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.payment.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -28,6 +29,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedAt last change
  */
 @Document("payment_merchant_accounts")
+@EVL.Database("foodstack_payment")
 public record MerchantAccountDocument(@Id String id, String scope, String ownerId, String gateway, String secretKey,
         String webhookSecret, String keyHint, String status, boolean current, String lastError, Instant verifiedAt,
         String connectedBy, Instant updatedAt) {

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.rider.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -23,6 +24,7 @@ import org.springframework.data.mongodb.core.mapping.Sharded;
  */
 @Document("rider_earnings")
 @Sharded(shardKey = "riderId", immutableKey = true)
+@EVL.Database("foodstack_rider")
 public record EarningDocument(@Id String id, String riderId, String orderNumber, String storeName, long earningMinor,
         long tipMinor, long cashCollectedMinor, String currency, long distanceMeters, Instant at) {
 }

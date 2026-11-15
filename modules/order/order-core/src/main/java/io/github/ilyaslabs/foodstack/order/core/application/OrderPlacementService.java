@@ -108,17 +108,21 @@ public class OrderPlacementService {
     }
 
     public PlacedOrder place(String customerId, String idempotencyKey, PlaceOrder request) {
+        // @flow order-place>key: Require an Idempotency-Key
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
             throw new ModuleException.BadRequest("An Idempotency-Key header is required", "IDEMPOTENCY_KEY_REQUIRED");
         }
         String keyId = customerId + ":" + idempotencyKey.strip();
         String fingerprint = fingerprint(request);
+        // @flow order-place>repeat: Return the first order for a repeated key [when key already used]
         PlacedOrder earlier = earlier(keyId, fingerprint);
         if (earlier != null) {
             return earlier;
         }
+        // @flow order-place>validate: Check fulfilment, address and phone
         validate(request);
         if (this.rateLimiter != null) {
+            // @flow order-place>limit: Rate-limit placements per customer
             this.rateLimiter.check("order", "place", customerId, PLACEMENTS_PER_WINDOW, PLACEMENT_WINDOW);
         }
 
@@ -126,6 +130,7 @@ public class OrderPlacementService {
                 ? new GeoPoint(request.address().lat(), request.address().lng()) : null;
         CheckoutView checkout = this.carts.checkout(new CheckoutRequest(customerId, request.fulfilment(), destination,
                 request.couponCode(), request.tipMinor(), request.paymentMethod()));
+        // @flow order-place>problems: Refuse when the checkout has problems or the total changed [on error Conflict]
         if (!checkout.orderable()) {
             throw new ModuleException.Conflict("The order cannot be placed as it is", "CHECKOUT_PROBLEMS",
                     Map.of("problems", checkout.problems()));
@@ -137,9 +142,11 @@ public class OrderPlacementService {
 
         String orderId = Ids.newId();
         StoreSnapshot store = checkout.store();
+        // @flow order-place>merchant: Find who collects a card payment, operator or store
         MerchantView merchant = (request.paymentMethod() == PaymentMethod.CARD) ? this.payments.resolveMerchant(store.storeId())
                 : MerchantView.BY_OPERATOR;
         CouponEvaluation coupon = checkout.coupon();
+        // @flow order-place>coupon: Hold the coupon use for this order [when coupon applies]
         if (coupon != null) {
             CouponEvaluation held = this.promotions.reserve(orderId, new CouponRequest(coupon.code(), customerId, store.storeId(),
                     store.brandId(), store.city(), checkout.subtotalMinor(), checkout.deliveryChargeMinor(),
@@ -156,12 +163,14 @@ public class OrderPlacementService {
 
         Instant now = this.clock.instant();
         boolean cash = request.paymentMethod() == PaymentMethod.CASH;
+        // @flow order-place>save: Save placement key, order, active row and OrderPlaced in one transaction
         OrderDocument order = newOrder(orderId, customerId, request, checkout, merchant, now);
         OrderDocument confirmed = null;
         try {
             OrderDocument saved = this.transaction.execute((status) -> {
                 this.mongo.insert(new PlacementKeyDocument(keyId, orderId, fingerprint, now));
                 OrderDocument placed = order;
+                // @flow order-place>save>cash: Confirm at once and add OrderConfirmed [when cash]
                 if (cash) {
                     placed = withConfirmed(order, now);
                 }
@@ -176,6 +185,7 @@ public class OrderPlacementService {
             });
             confirmed = saved;
         }
+        // @flow order-place>save>race: Release the coupon and return the order that won [on error DuplicateKeyException]
         catch (DuplicateKeyException ex) {
             if (coupon != null) {
                 this.promotions.release(orderId);
@@ -196,12 +206,16 @@ public class OrderPlacementService {
         if (confirmed.status() != OrderStatus.PLACED) {
             OrderLifecycleService.reached(confirmed.status());
         }
+        // @flow order-place>live: Push the new status to live watchers
         this.live.publish(orderId, store.storeId(), confirmed.status().name(), confirmed.revision());
 
+        // @flow order-place>payment?: Cash or card?
+        // @flow order-place>payment?>cash: Empty the cart and answer the order [when CASH]
         if (cash) {
             clearCart(customerId, checkout.cartVersion());
             return new PlacedOrder(orderId, confirmed.number(), confirmed.status(), null);
         }
+        // @flow order-place>payment?>card: Start the gateway's hosted payment page and store its URL [when CARD]
         CardSessionView session;
         try {
             session = this.payments.startCard(new StartCardRequest(orderId, confirmed.number(), customerId,
@@ -210,6 +224,7 @@ public class OrderPlacementService {
                     this.webUrl + "/pay/" + orderId));
         }
         catch (ModuleException ex) {
+            // @flow order-place>payment?>card>unavailable: Fail the order when the gateway cannot start [on error ModuleException]
             this.lifecycle.paymentFailed(orderId, "UNAVAILABLE");
             throw ex;
         }

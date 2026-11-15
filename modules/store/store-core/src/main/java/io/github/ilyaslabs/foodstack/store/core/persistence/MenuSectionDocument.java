@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.store.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -13,6 +14,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * {@code { brandId: hashed }} (menus are read per brand).
  */
 @Document("store_menu_sections")
+@EVL.Database("foodstack_store")
 public class MenuSectionDocument {
 
     @Id

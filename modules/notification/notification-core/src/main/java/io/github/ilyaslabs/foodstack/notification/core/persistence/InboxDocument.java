@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.notification.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -20,6 +21,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param readAt read, or {@code null}
  */
 @Document("notification_inbox")
+@EVL.Database("foodstack_notification")
 public record InboxDocument(@Id String id, String userId, String template, String title, String body, String link,
         Instant createdAt, Instant readAt) {
 }

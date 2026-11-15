@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.identity.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -23,6 +24,7 @@ import org.springframework.data.mongodb.core.mapping.ShardingStrategy;
  */
 @Document("identity_refresh_tokens")
 @Sharded(shardKey = "_id", shardingStrategy = ShardingStrategy.HASH, immutableKey = true)
+@EVL.Database("foodstack_identity")
 public record RefreshTokenDocument(@Id String id, String familyId, String userId, String client, long tokenVersion,
         Instant issuedAt, Instant expiresAt, Instant usedAt) {
 }

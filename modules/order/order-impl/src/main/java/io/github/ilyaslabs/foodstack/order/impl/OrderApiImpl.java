@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.order.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.order.api.OrderApi;
 import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderService;
@@ -9,6 +10,7 @@ import org.springframework.stereotype.Component;
 
 /** {@link OrderApi} for other modules; the order service checks who may read the order. */
 @Component
+@EVL.Service("order module")
 class OrderApiImpl implements OrderApi {
 
     private final OrderService orders;

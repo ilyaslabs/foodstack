@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.ledger.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 
@@ -32,6 +33,7 @@ import org.springframework.data.mongodb.core.mapping.Sharded;
  */
 @Document("ledger_transactions")
 @Sharded(shardKey = "partition", immutableKey = true)
+@EVL.Database("foodstack_ledger")
 public record TransactionDocument(@Id String id, String partition, int bucket, String type, String storeId, String brandId,
         String orderId, List<Leg> legs, String currency, String day, Instant at, String note, boolean rolled) {
 }

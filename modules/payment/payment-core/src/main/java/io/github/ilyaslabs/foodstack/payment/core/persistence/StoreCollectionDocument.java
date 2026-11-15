@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.payment.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -17,6 +18,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedAt last change
  */
 @Document("payment_store_collection")
+@EVL.Database("foodstack_payment")
 public record StoreCollectionDocument(@Id String id, String brandId, String mode, boolean suspended, Instant updatedAt) {
 
     public static final String DIRECT = "DIRECT";

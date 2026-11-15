@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.geo.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 
@@ -15,6 +16,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * minimum order, a free-delivery threshold and dearer peak hours (PRD DR-1b).
  */
 @Document("geo_settings")
+@EVL.Database("foodstack_geo")
 public class OperatorPricingDocument {
 
     public static final String ID = "operator-delivery";

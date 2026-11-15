@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.promotion.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.security.ModuleAccess;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponEvaluation;
 import io.github.ilyaslabs.foodstack.promotion.api.CouponRequest;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
  * caller may check and hold coupons only for themself; the platform may do it for anyone (TDD 9.1).
  */
 @Component
+@EVL.Service("promotion module")
 class PromotionApiImpl implements PromotionApi {
 
     private final CouponService coupons;

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.identity.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.identity.api.BrandAccessGrant;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.RiderAccessGrant;
@@ -19,6 +20,7 @@ import org.springframework.stereotype.Component;
  * owners); store access is granted and revoked only for operator staff who manage stores (TDD 9.1).
  */
 @Component
+@EVL.Service("identity module")
 class IdentityApiImpl implements IdentityApi {
 
     private final UserService userService;

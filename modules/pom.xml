@@ -14,6 +14,15 @@
     <packaging>pom</packaging>
     <name>FoodStack modules</name>
 
+    <dependencies>
+        <!-- EVL flow tags; compile-time only, never shipped -->
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>evl-annotations</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
     <modules>
         <module>identity</module>
         <module>settings</module>

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.search.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.search.api.SearchApi;
 import io.github.ilyaslabs.foodstack.search.api.StoreSearchPage;
 import io.github.ilyaslabs.foodstack.search.api.StoreSearchQuery;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
  * store search is public (TDD 9.1).
  */
 @Component
+@EVL.Service("search module")
 class SearchApiImpl implements SearchApi {
 
     private final StoreSearchService searchService;

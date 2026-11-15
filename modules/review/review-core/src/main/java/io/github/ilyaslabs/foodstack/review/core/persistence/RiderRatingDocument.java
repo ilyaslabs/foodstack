@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.review.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 
@@ -20,6 +21,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param createdAt when
  */
 @Document("review_rider_ratings")
+@EVL.Database("foodstack_review")
 public record RiderRatingDocument(@Id String id, String riderId, String riderKind, String storeId, String customerId, int rating,
         List<String> tags, Instant createdAt) {
 }

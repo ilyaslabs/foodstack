@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderLifecycleService;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderPlacementService;
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument;
@@ -20,6 +22,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * cart emptied, failed or expired payments fail the order, refund outcomes go on the timeline. Each
  * event is applied once (inbox).
  */
+@EVL.Queue("foodstack.payment.events")
 public class PaymentEventsListener {
 
     static final String CONSUMER = "order-payments";
@@ -54,14 +57,19 @@ public class PaymentEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.order:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-order-payments", groupId = "${foodstack.namespace:foodstack}-order",
             topics = "${foodstack.namespace:foodstack}.payment.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "order-on-payment", label = "Apply payment results to orders", after = "payment-webhook")
+    @EVL.Job(trigger = "payment events")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow order-on-payment>inbox: Process each event once (inbox)
+        // @flow order-on-payment>type?: Which payment event?
         if (SUCCEEDED.equals(type)) {
             PaymentSucceeded paid = event.dataAs(PaymentSucceeded.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> {
                 OrderDocument confirmed = this.lifecycle.paymentSucceeded(paid.orderId(), paid.amountMinor());
                 if (confirmed != null) {
+                    // @flow order-on-payment>type?>succeeded>clear-cart: Empty the cart once paid [when confirmed]
                     this.serviceCalls.run(() -> this.placement.clearCart(confirmed.customerId(), confirmed.cartVersion()));
                 }
             });

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.order.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,7 @@ import org.springframework.data.annotation.Id;
  * @param updatedAt last change of the order
  * @param revision the order's revision
  */
+@EVL.Database("foodstack_order")
 public record OrderSummaryDocument(@Id String id, String number, String customerId, String customerName, String storeId,
         String storeName, String storeSlug, Map<String, String> logoUrls, OrderStatus status, Fulfilment fulfilment,
         PaymentMethod paymentMethod, List<Map<String, String>> itemNames, int itemCount, long totalMinor, String currency,

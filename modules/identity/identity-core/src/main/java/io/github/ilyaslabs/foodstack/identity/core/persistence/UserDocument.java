@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.identity.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
@@ -20,6 +21,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * with the shard key.
  */
 @Document("identity_users")
+@EVL.Database("foodstack_identity")
 public class UserDocument {
 
     @Id

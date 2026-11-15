@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.notification.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -31,6 +32,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param link push only: the URL the message opens, or {@code null}
  */
 @Document("notification_deliveries")
+@EVL.Database("foodstack_notification")
 public record DeliveryDocument(@Id String id, String userId, String channel, String template, String recipient, String subject,
         String html, String text, String status, int attempts, String lastError, Instant nextAttemptAt, Instant sentAt,
         Instant createdAt, String sealedSubject, String app, String link) {
