@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.IdentityApi;
 import io.github.ilyaslabs.foodstack.identity.api.UserView;
 import io.github.ilyaslabs.foodstack.media.api.MediaApi;
@@ -105,6 +106,7 @@ public class ReviewService {
     // ---- the customer -------------------------------------------------------------------------
 
     /** What the signed-in customer can still rate on an order. */
+    @Flow(value = "review-order-state>load", label = "The customer's rateable order and its ratings")
     public OrderReviewState orderState(String orderId) {
         RateableOrderDocument order = ownOrder(orderId);
         if (order == null) {
@@ -134,6 +136,7 @@ public class ReviewService {
      * The signed-in customer's reviews, hidden ones included, and rider ratings: their part of the
      * data export (PRD ID-7).
      */
+    @Flow(value = "review-export>load", label = "The customer's reviews and rider ratings")
     public CustomerReviews export() {
         String userId = CurrentUser.id();
         List<ReviewView> reviews = this.mongo
@@ -157,6 +160,7 @@ public class ReviewService {
      * keep counting, under "Deleted user"; their photos are released for cleanup. Safe to run again.
      * @return how many reviews were changed
      */
+    @Flow(value = "review-order-events>type?>erase", label = "Anonymise the customer's reviews, release photos", when = "UserDeleted")
     public int eraseCustomer(String customerId) {
         List<ReviewDocument> reviews = this.mongo.find(Query.query(Criteria.where("customerId").is(customerId)),
                 ReviewDocument.class);
@@ -178,11 +182,13 @@ public class ReviewService {
     }
 
     /** Rates a finished order of the signed-in customer: the branch, the rider, or both. */
+    @Flow(value = "review-submit>save", label = "Save the ratings")
     public OrderReviewState submit(SubmitReview request) {
         String userId = CurrentUser.id();
         if (request.storeRating() == null && request.riderRating() == null) {
             throw new ModuleException.BadRequest("Rate the store or the rider", "REVIEW_EMPTY");
         }
+        // @flow review-submit>save>order: Own order, finished, within the window [on error REVIEW_NOT_YET, REVIEW_WINDOW_CLOSED]
         RateableOrderDocument order = ownOrder(request.orderId());
         if (order == null || order.completedAt() == null) {
             throw new ModuleException.Conflict("You can rate an order once it is delivered or collected",
@@ -192,6 +198,7 @@ public class ReviewService {
         if (!now.isBefore(order.completedAt().plus(this.window))) {
             throw new ModuleException.Conflict("Ratings for this order have closed", "REVIEW_WINDOW_CLOSED");
         }
+        // @flow review-submit>save>validate: 1-5 stars, text length, rider tags, not rated before
         Map<String, String> errors = new LinkedHashMap<>();
         if (request.storeRating() != null) {
             stars(request.storeRating(), "storeRating", errors);
@@ -220,6 +227,7 @@ public class ReviewService {
             throw new ModuleException.BadRequest("The rating is not valid", "REVIEW_INVALID", Map.of("errors", errors));
         }
 
+        // @flow review-submit>save>build: Mask blocked words (flags the review), claim the photo with media [when branch rated]
         ReviewDocument review = null;
         if (request.storeRating() != null) {
             String reviewId = Ids.newId();
@@ -232,6 +240,7 @@ public class ReviewService {
         }
         ReviewDocument newReview = review;
         List<String> riderTags = tags;
+        // @flow review-submit>save>store: Mark the order rated, insert review, count stars, ReviewPublished [when branch rated]
         this.transactions.executeWithoutResult((status) -> {
             if (newReview != null) {
                 RateableOrderDocument before = this.mongo.findAndModify(
@@ -246,6 +255,7 @@ public class ReviewService {
                         newReview.brandId(), newReview.storeName(), owners(order), newReview.rating(), newReview.flagged(),
                         stats.count(), average(stats.count(), stats.sum())));
             }
+            // @flow review-submit>save>rider: Mark rider rated, insert rating, count stars and tags [when rider rated]
             if (request.riderRating() != null) {
                 RateableOrderDocument before = this.mongo.findAndModify(
                         Query.query(Criteria.where("_id").is(order.id()).and("riderRated").ne(true)),
@@ -266,6 +276,7 @@ public class ReviewService {
     // ---- the branch ---------------------------------------------------------------------------
 
     /** The branch's one public reply (PRD RV-2). */
+    @Flow(value = "review-reply>save", label = "Branch staff only; one reply up to the limit")
     public ReviewView reply(String reviewId, String text) {
         ReviewDocument review = find(reviewId);
         if (!CurrentUser.managesStore(review.storeId()) && !CurrentUser.hasAuthority(STORE_MANAGE)) {
@@ -290,6 +301,7 @@ public class ReviewService {
     // ---- moderation ---------------------------------------------------------------------------
 
     /** Hides a review with a reason; it stops counting in the rating (PRD RV-3). */
+    @Flow(value = "review-hide>save", label = "Hide, take it out of the stars, ReviewHidden")
     public ReviewView hide(String reviewId, String reason) {
         requireModerator();
         String clean = (reason == null) ? "" : reason.strip();
@@ -318,6 +330,7 @@ public class ReviewService {
     }
 
     /** Shows a hidden review again; it counts in the rating again. */
+    @Flow(value = "review-show>save", label = "Show, count it again, ReviewPublished")
     public ReviewView show(String reviewId) {
         requireModerator();
         ReviewDocument review = find(reviewId);
@@ -342,6 +355,7 @@ public class ReviewService {
     }
 
     /** Takes a flagged review out of the queue and leaves it shown. */
+    @Flow(value = "review-keep>save", label = "Clear the flag")
     public ReviewView keep(String reviewId) {
         requireModerator();
         ReviewDocument review = find(reviewId);
@@ -358,6 +372,7 @@ public class ReviewService {
      * @param storeId one branch, or {@code null}
      * @param before the {@code next} of the previous page
      */
+    @Flow(value = "review-moderation>query", label = "Reviews by filter, newest first")
     public ReviewPage moderation(String filter, String storeId, String before, int limit) {
         requireModerator();
         Criteria criteria = new Criteria();
@@ -381,6 +396,7 @@ public class ReviewService {
      * A branch's reviews, newest first. Everyone sees the published ones; the branch and
      * moderators also see hidden ones.
      */
+    @Flow(value = "review-store-list>query", label = "Published reviews, newest first")
     public ReviewPage storeReviews(String storeId, String before, int limit) {
         Audience audience = audience(storeId);
         Criteria criteria = Criteria.where("storeId").is(storeId);
@@ -391,6 +407,7 @@ public class ReviewService {
     }
 
     /** A branch's rating with its brand's (PRD RV-4, BB-10). Public. */
+    @Flow(value = "review-store-summary>load", label = "Branch stats and the brand average")
     public RatingSummary summary(String storeId) {
         StoreStatsDocument stats = this.mongo.findById(storeId, StoreStatsDocument.class);
         if (stats == null) {
@@ -418,6 +435,7 @@ public class ReviewService {
     }
 
     /** For search: a branch's published rating. */
+    @Flow(value = "review-api-store-rating>load", label = "Branch stats")
     public StoreRating storeRating(String storeId) {
         StoreStatsDocument stats = this.mongo.findById(storeId, StoreStatsDocument.class);
         return (stats == null) ? StoreRating.none(storeId)
@@ -425,6 +443,7 @@ public class ReviewService {
     }
 
     /** A rider's private rating, for the operator (PRD RV-4). */
+    @Flow(value = "review-rider-summary>load", label = "Rider stats")
     public RiderRatingSummary riderSummary(String riderId) {
         if (!CurrentUser.hasAuthority(RIDER_MANAGE)) {
             throw new ModuleException.Forbidden("Rider ratings are for the operator", "REVIEW_ACCESS_DENIED");
@@ -440,6 +459,7 @@ public class ReviewService {
     // ---- events -------------------------------------------------------------------------------
 
     /** The order was delivered or collected: the customer may rate it now. */
+    @Flow(value = "review-order-events>type?>finished", label = "Open the order for rating", when = "OrderDelivered, OrderCollected")
     public void orderFinished(String orderId, String number, String customerId, String storeId, String brandId,
             String storeName, Set<String> storeOwnerIds, String language, Instant at) {
         this.mongo.upsert(Query.query(Criteria.where("_id").is(orderId)),
@@ -450,6 +470,7 @@ public class ReviewService {
     }
 
     /** Who delivered the order, so the customer can rate the rider. */
+    @Flow(value = "review-order-events>type?>rider", label = "Note the rider who delivered", when = "DeliveryCompleted")
     public void delivered(String orderId, String riderId, String riderName, String riderKind) {
         if (riderId == null) {
             return;

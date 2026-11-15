@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.review.core.events;
 import java.time.Clock;
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.api.DeliverySummary;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryCompleted;
 import io.github.ilyaslabs.foodstack.identity.api.events.UserDeleted;
@@ -44,6 +46,8 @@ public class FinishedOrdersListener {
         this.clock = clock;
     }
 
+    @Flow(value = "review-order-events", label = "Open finished orders for rating", description = "Also erases a deleted customer's reviews")
+    @EVL.Job(trigger = "<ns>.order.events, <ns>.dispatch.events, <ns>.identity.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.review:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-review-orders", groupId = "${foodstack.namespace:foodstack}-review",
             topics = { "${foodstack.namespace:foodstack}.order.events", "${foodstack.namespace:foodstack}.dispatch.events",
@@ -53,6 +57,7 @@ public class FinishedOrdersListener {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
         Instant at = (event.time() != null) ? event.time() : this.clock.instant();
+        // @flow review-order-events>type?: Which event?
         if (DELIVERED.equals(type)) {
             finished(event.dataAs(OrderDelivered.class, this.jsonMapper).order(), at);
         }
