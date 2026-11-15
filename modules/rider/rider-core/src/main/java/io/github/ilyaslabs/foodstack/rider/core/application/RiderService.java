@@ -195,8 +195,8 @@ public class RiderService {
         if (!RiderKind.STORE.name().equals(rider.kind()) || !storeId.equals(rider.storeId())) {
             throw notFound();
         }
-        // @flow rider-remove-store>busy: Refuse while the rider has a delivery [on error Conflict]
         if (!rider.activeOrderIds().isEmpty()) {
+            // @flow rider-remove-store>busy: Refuse while the rider has a delivery [on error Conflict]
             throw new ModuleException.Conflict("The rider has a delivery now", "RIDER_BUSY");
         }
         // @flow rider-remove-store>delete: Delete the rider and record RiderStatusChanged

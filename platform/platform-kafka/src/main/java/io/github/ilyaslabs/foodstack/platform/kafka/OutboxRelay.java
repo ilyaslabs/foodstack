@@ -217,7 +217,7 @@ public class OutboxRelay implements SmartLifecycle {
         }
         List<String> sent = new ArrayList<>();
         String failedId = null;
-        // @flow outbox-relay>wait: Wait for Kafka to confirm, stop at the first failure [on error send timeout]
+        // @flow outbox-relay>wait: Wait for Kafka to confirm each send
         for (int i = 0; i < rows.size(); i++) {
             try {
                 sends.get(i).get(this.settings.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
@@ -229,6 +229,7 @@ public class OutboxRelay implements SmartLifecycle {
                 break;
             }
             catch (Exception ex) {
+                // @flow outbox-relay>stop: Stop at the first failed send [on error send failure]
                 failedId = rows.get(i).getString("_id");
                 logger.warn("Could not publish event " + failedId + " of module '" + this.module + "'", ex);
                 break;

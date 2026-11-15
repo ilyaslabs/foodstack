@@ -106,17 +106,19 @@ public class MediaService {
         if (asset.getStatus() == MediaStatus.FAILED) {
             throw new ModuleException.Conflict("The upload was rejected: " + asset.getFailureCode(), asset.getFailureCode());
         }
-        // @flow media-complete-upload>read: Read the uploaded file from the private bucket [on error MEDIA_NOT_UPLOADED]
+        // @flow media-complete-upload>read: Read the uploaded file from the private bucket
         byte[] raw = this.storage.read(this.properties.getPrivateBucket(), asset.getUploadKey());
         if (raw == null) {
+            // @flow media-complete-upload>missing: Refuse when nothing was uploaded [on error MEDIA_NOT_UPLOADED]
             throw new ModuleException.Conflict("Nothing was uploaded yet", "MEDIA_NOT_UPLOADED");
         }
-        // @flow media-complete-upload>process: Make WebP variants [on error ImageRejectedException]
+        // @flow media-complete-upload>process: Make WebP variants
         List<ProcessedImage> images;
         try {
             images = this.processor.process(raw);
         }
         catch (ImageRejectedException ex) {
+            // @flow media-complete-upload>rejected: Mark the asset failed, delete the upload, answer BadRequest [on error ImageRejectedException]
             asset.setStatus(MediaStatus.FAILED);
             asset.setFailureCode(ex.code());
             asset.setUpdatedAt(this.clock.instant());

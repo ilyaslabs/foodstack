@@ -97,8 +97,8 @@ class PromotionsController {
         // @flow promotion-update>access: Check the caller may edit it
         this.access.requireEdit(this.promotions.details(id), request.storeIds());
         Long version = ETags.versionFromIfMatch("promotion", ifMatch);
-        // @flow promotion-update>if-match: Require If-Match [on error IF_MATCH_REQUIRED]
         if (version == null) {
+            // @flow promotion-update>if-match: Refuse without If-Match [on error IF_MATCH_REQUIRED]
             throw new ModuleException.BadRequest("Send If-Match with the ETag you edited, so changes are not lost",
                     "IF_MATCH_REQUIRED");
         }

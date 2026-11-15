@@ -175,10 +175,11 @@ class AuthController {
     @EVL.Endpoint(method = "POST", path = "/api/v1/auth/login", caller = "Customer web")
     ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         Client client = Client.parse(request.client());
-        // @flow identity-login>one: Password or code, not both [on error LOGIN_INVALID]
+        // @flow identity-login>one: Check that a password or a code is sent
         boolean withCode = request.code() != null && !request.code().isBlank();
         boolean withPassword = request.password() != null && !request.password().isEmpty();
         if (withCode == withPassword) {
+            // @flow identity-login>both: Refuse both or neither [on error LOGIN_INVALID]
             throw new ModuleException.BadRequest("Send either a password or a code", "LOGIN_INVALID",
                     Map.of("errors", Map.of("password", "send a password or a code")));
         }
@@ -220,10 +221,11 @@ class AuthController {
     ResponseEntity<?> refresh(@CookieValue(name = REFRESH_COOKIE, required = false) String cookie,
             @RequestBody(required = false) RefreshRequest body) {
         String fromBody = (body != null) ? body.refreshToken() : null;
-        // @flow identity-refresh>channel: Cookie or body, not both [on error REFRESH_TWO_CHANNELS]
+        // @flow identity-refresh>channel: Read the token from the cookie or the body
         boolean hasCookie = cookie != null && !cookie.isBlank();
         boolean hasBody = fromBody != null && !fromBody.isBlank();
         if (hasCookie && hasBody) {
+            // @flow identity-refresh>both: Refuse both at once [on error REFRESH_TWO_CHANNELS]
             throw new ModuleException.BadRequest("Send the refresh token in the cookie or the body, not both",
                     "REFRESH_TWO_CHANNELS");
         }

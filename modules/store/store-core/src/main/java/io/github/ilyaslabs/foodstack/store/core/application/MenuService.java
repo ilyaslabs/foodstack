@@ -180,8 +180,8 @@ public class MenuService {
     /** Deletes an empty section; move or delete its items first. */
     public void deleteSection(String brandId, String sectionId, String userId) {
         MenuSectionDocument section = findSection(brandId, sectionId);
-        // @flow store-menu-section-delete>empty: Refuse a section with items [on error SECTION_NOT_EMPTY]
         if (this.items.countByBrandIdAndSectionIdAndDeletedAtIsNull(brandId, sectionId) > 0) {
+            // @flow store-menu-section-delete>empty: Refuse a section with items [on error SECTION_NOT_EMPTY]
             throw new ModuleException.Conflict("Move or delete the section's items first", "SECTION_NOT_EMPTY");
         }
         // @flow store-menu-section-delete>delete: Delete section, record MenuChanged, drop cached branch menus

@@ -39,9 +39,9 @@ class MediaController {
     @Flow(value = "media-start-upload", label = "Start image upload", description = "Checks purpose, saves a pending asset and returns a signed upload URL")
     @EVL.Endpoint(method = "POST", path = "/api/v1/media/uploads", caller = "Back office and customer web")
     UploadTicketResponse startUpload(@Valid @RequestBody StartUploadRequest request) {
-        // @flow media-start-upload>purpose: Customers may upload review photos only [on error MEDIA_PURPOSE_DENIED]
         if (!CurrentUser.hasAuthority("media:upload") && request.purpose() != MediaPurpose.REVIEW) {
             // customers upload review photos only
+            // @flow media-start-upload>purpose: Refuse customers anything but review photos [on error MEDIA_PURPOSE_DENIED]
             throw new ModuleException.Forbidden("Only review photos can be uploaded", "MEDIA_PURPOSE_DENIED");
         }
         return MediaWebMapper.toResponse(this.mediaService.startUpload(

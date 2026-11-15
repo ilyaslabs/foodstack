@@ -391,8 +391,8 @@ public class DispatchService {
         String me = requireRider();
         JobDocument job = require(orderId);
         Instant now = this.clock.instant();
-        // @flow dispatch-rider-accept>check: Check the offer is the rider's and still open [on error Conflict]
         if (status(job) != DeliveryStatus.OFFERED || !me.equals(job.offerRiderId())) {
+            // @flow dispatch-rider-accept>check: Refuse an offer that is gone or not the rider's [on error Conflict]
             throw new ModuleException.Conflict("This offer is no longer open", "OFFER_GONE");
         }
         // @flow dispatch-rider-accept>lapsed: Put a lapsed offer back to searching [when offer expired]
@@ -599,8 +599,8 @@ public class DispatchService {
         String why = requireReason(reason);
         String actor = "support:" + CurrentUser.id();
         JobDocument job = require(orderId);
-        // @flow dispatch-hand-back>check: Only operator deliveries [on error Conflict]
         if (!DeliveryMode.OPERATOR.name().equals(job.mode())) {
+            // @flow dispatch-hand-back>check: Refuse when the store delivers already [on error Conflict]
             throw new ModuleException.Conflict("The store delivers this order already", "NOT_OPERATOR_DELIVERY");
         }
         String offered = job.offerRiderId();

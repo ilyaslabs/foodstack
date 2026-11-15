@@ -161,8 +161,8 @@ public class RiderActivity {
         // @flow rider-locations>limit: Rate-limit to 30 batches a minute
         this.rateLimiter.check("rider", "location", riderId, 30, Duration.ofMinutes(1));
         RiderDocument rider = self();
-        // @flow rider-locations>offline: Refuse when offline [on error Conflict]
         if (!rider.online()) {
+            // @flow rider-locations>offline: Refuse when offline [on error Conflict]
             throw new ModuleException.Conflict("Go online to share your position", "RIDER_OFFLINE");
         }
         ping(rider, points, this.clock.instant());

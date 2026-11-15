@@ -202,7 +202,7 @@ public class StoreService {
         store.setUpdatedBy(userId);
         store.setSlug(freeSlug(Slugs.of(brand.getName(), store.getBranchName())));
 
-        // @flow store-onboard>save: Save slug, brand and branch; record BrandChanged and StoreChanged [on error SLUG_TAKEN]
+        // @flow store-onboard>save: Save slug, brand and branch; record BrandChanged and StoreChanged
         StoreDocument saved = claimingSlug(() -> this.transaction.execute((status) -> {
             this.slugs.insert(new StoreSlugDocument(store.getSlug(), store.getId(), now));
             BrandDocument savedBrand = this.brands.insert(brand);
@@ -269,7 +269,7 @@ public class StoreService {
         brand.setBranchCount(existing.size() + 1);
         brand.setUpdatedAt(now);
         brand.setUpdatedBy(userId);
-        // @flow store-brand-add-branch>save: Save slug, brand and branch; record BrandChanged and StoreChanged [on error SLUG_TAKEN]
+        // @flow store-brand-add-branch>save: Save slug, brand and branch; record BrandChanged and StoreChanged
         StoreDocument saved = claimingSlug(() -> this.transaction.execute((status) -> {
             this.slugs.insert(new StoreSlugDocument(store.getSlug(), store.getId(), now));
             BrandDocument savedBrand = this.brands.save(brand);
@@ -369,8 +369,8 @@ public class StoreService {
         if (wanted.equals(store.getSlug())) {
             return details(store, findBrand(store.getBrandId()), this.settings.getLocale());
         }
-        // @flow store-update-slug>taken: Refuse a slug in use [on error SLUG_TAKEN]
         if (this.slugs.existsById(wanted)) {
+            // @flow store-update-slug>taken: Refuse a slug in use [on error SLUG_TAKEN]
             throw slugTaken();
         }
         // @flow store-update-slug>save: Claim the new slug, free the old one, save and record StoreChanged
@@ -430,6 +430,7 @@ public class StoreService {
             return write.get();
         }
         catch (DuplicateKeyException ex) {
+            // @flow store-onboard>save>taken, store-brand-add-branch>save>taken: Answer that the web address is taken [on error DuplicateKeyException]
             throw slugTaken();
         }
     }
@@ -733,8 +734,8 @@ public class StoreService {
         failIfAny(errors, "STORE_INVALID");
         StoreDocument store = findStore(storeId);
         requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
-        // @flow store-update-branch>operator-delivery: Refuse operator delivery unless the operator allowed it [on error OPERATOR_DELIVERY_NOT_ALLOWED]
         if (update.deliveryMode() == DeliveryMode.OPERATOR && !store.isOperatorDeliveryAllowed()) {
+            // @flow store-update-branch>operator-delivery: Refuse operator delivery the operator has not allowed [on error OPERATOR_DELIVERY_NOT_ALLOWED]
             throw new ModuleException.Conflict("The operator has not enabled operator delivery for this branch",
                     "OPERATOR_DELIVERY_NOT_ALLOWED");
         }
@@ -856,10 +857,11 @@ public class StoreService {
      */
     public StoreDetails setStatus(String storeId, StoreStatus status, String userId) {
         StoreDocument store = findStore(storeId);
-        // @flow store-status>readiness: Check location, menu and delivery area [when going live] [on error STORE_NOT_READY]
+        // @flow store-status>readiness: Check location, menu and delivery area [when going live]
         if (status == StoreStatus.LIVE) {
             List<String> missing = readiness(store);
             if (!missing.isEmpty()) {
+                // @flow store-status>not-ready: Refuse with what is missing [on error STORE_NOT_READY]
                 throw new ModuleException.Conflict("The branch is not ready to go live", "STORE_NOT_READY",
                         Map.of("missing", missing));
             }
@@ -924,8 +926,8 @@ public class StoreService {
      */
     public OwnerDetails addOwner(String storeId, NewOwner owner, String userId) {
         StoreDocument store = findStore(storeId);
-        // @flow store-add-owner>limit: Check the owner limit [on error OWNER_LIMIT]
         if (store.getOwnerUserIds().size() >= MAX_OWNERS) {
+            // @flow store-add-owner>limit: Refuse past the owner limit [on error OWNER_LIMIT]
             throw new ModuleException.Conflict("A branch can have at most " + MAX_OWNERS + " owners", "OWNER_LIMIT");
         }
         // @flow store-add-owner>grant: Grant branch access in identity
@@ -962,8 +964,8 @@ public class StoreService {
     /** Gives a person brand owner access (PRD BB-5): the brand, its menu and every branch. */
     public OwnerDetails addBrandOwner(String brandId, NewOwner owner, String userId) {
         BrandDocument brand = findBrand(brandId);
-        // @flow store-brand-add-owner>limit: Check the owner limit [on error OWNER_LIMIT]
         if (brand.getOwnerUserIds().size() >= MAX_OWNERS) {
+            // @flow store-brand-add-owner>limit: Refuse past the owner limit [on error OWNER_LIMIT]
             throw new ModuleException.Conflict("A brand can have at most " + MAX_OWNERS + " owners", "OWNER_LIMIT");
         }
         // @flow store-brand-add-owner>grant: Grant brand access in identity

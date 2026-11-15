@@ -313,9 +313,9 @@ class StoresController {
     StoreDtos.QuoteResponse quote(@PathVariable String key, @RequestParam double lat, @RequestParam double lng) {
         String storeId = this.storeService.resolve(key);
         visible(storeId);
-        // @flow store-delivery-quote>point: Check the point is on the map [on error LOCATION_INVALID]
         GeoPoint destination = new GeoPoint(lat, lng);
         if (!destination.isValid()) {
+            // @flow store-delivery-quote>point: Refuse a point off the map [on error LOCATION_INVALID]
             throw new ModuleException.BadRequest("lat and lng must be a point on the map", "LOCATION_INVALID");
         }
         return StoreMapper.quote(this.storeService.quote(storeId, destination));

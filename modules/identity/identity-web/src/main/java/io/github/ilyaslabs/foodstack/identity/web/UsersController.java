@@ -89,9 +89,9 @@ class UsersController {
     @Flow(value = "identity-user-create", label = "Create a staff account", description = "Admin, finance or support only")
     @EVL.Endpoint(method = "POST", path = "/api/v1/users", caller = "Back office")
     UserResponse create(@Valid @RequestBody CreateUserRequest request) {
-        // @flow identity-user-create>roles: Staff roles only [on error USER_ROLES_INVALID]
         if (!STAFF_ROLES.containsAll(request.roles())) {
             // owners and riders need a brand, a branch or a rider profile: they are added from those pages
+            // @flow identity-user-create>roles: Refuse other roles than staff [on error USER_ROLES_INVALID]
             throw new ModuleException.BadRequest("Only Admin, Finance and Support accounts are made here",
                     "USER_ROLES_INVALID", Map.of("errors", Map.of("roles", "use Admin, Finance or Support")));
         }

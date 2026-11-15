@@ -97,7 +97,7 @@ public class UserService {
         document.setCreatedAt(now);
         document.setUpdatedAt(now);
         try {
-            // @flow identity-register>save, identity-user-create>save: Save login key and user, record UserRegistered [on error EMAIL_TAKEN]
+            // @flow identity-register>save, identity-user-create>save: Save login key and user, record UserRegistered
             UserDocument saved = this.transaction.execute((status) -> {
                 this.loginKeys.insert(new LoginKeyDocument(Ids.newId(), document.getEmailIndex(), id));
                 UserDocument result = this.users.insert(document);
@@ -107,6 +107,7 @@ public class UserService {
             return toAccount(saved);
         }
         catch (DuplicateKeyException ex) {
+            // @flow identity-register>taken, identity-user-create>taken: Answer that the email is taken [on error DuplicateKeyException]
             throw new ModuleException.Conflict("An account with this email already exists", "EMAIL_TAKEN");
         }
     }
@@ -292,9 +293,9 @@ public class UserService {
     /** A signed-in user changes their password, proving they know the current one. */
     public void changePassword(String userId, String currentPassword, String newPassword) {
         UserDocument user = find(userId);
-        // @flow identity-change-password>check: Check the current password [on error PASSWORD_WRONG]
         if (currentPassword == null || user.getPasswordHash() == null
                 || !this.passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            // @flow identity-change-password>check: Refuse a wrong current password [on error PASSWORD_WRONG]
             throw new ModuleException.BadRequest("The current password is not correct", "PASSWORD_WRONG",
                     Map.of("errors", Map.of("currentPassword", "is not correct")));
         }
