@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.notification.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.ZoneId;
@@ -46,6 +47,7 @@ public class AccountMessages {
         this.serviceCalls = serviceCalls;
     }
 
+    @Flow(value = "notification-on-identity>type?>registered", label = "Welcome email", when = "UserRegistered")
     public void onRegistered(String eventId, UserRegistered registered) {
         if (registered.roles() == null || !registered.roles().contains(Role.CUSTOMER)) {
             return;
@@ -63,6 +65,7 @@ public class AccountMessages {
      * Emails a one-time code. It is required (sent whatever the preferences), email only, and never
      * goes to the notification centre; the delivery log keeps it sealed.
      */
+    @Flow(value = "notification-on-identity>type?>code", label = "Email the sign-in or reset code", when = "EmailCodeIssued")
     public void onEmailCode(String eventId, EmailCodeIssued issued) {
         if (issued.expiresAt() != null && !issued.expiresAt().isAfter(this.clock.instant())) {
             return;
@@ -79,6 +82,7 @@ public class AccountMessages {
      * Tells a customer when their account will be deleted and that signing in cancels it (PRD
      * ID-7). Required: sent whatever the email preferences.
      */
+    @Flow(value = "notification-on-identity>type?>deletion", label = "Confirm the scheduled account deletion", when = "AccountDeletionScheduled")
     public void onDeletionScheduled(String eventId, AccountDeletionScheduled scheduled) {
         UserView user = this.serviceCalls.call(() -> this.identity.getUser(scheduled.userId()));
         if (user == null || scheduled.deleteAfter() == null) {

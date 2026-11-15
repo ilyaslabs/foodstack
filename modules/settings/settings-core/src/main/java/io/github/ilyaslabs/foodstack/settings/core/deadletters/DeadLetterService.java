@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.settings.core.deadletters;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
@@ -80,6 +81,7 @@ public class DeadLetterService {
     }
 
     /** Keeps a record read from a dead-letter topic; reading it again changes nothing. */
+    @Flow(value = "settings-on-dead-letter>record", label = "Store the failed event, body encrypted, kept for a while")
     public void record(ConsumerRecord<String, String> record) {
         String originalTopic = header(record.headers(), KafkaHeaders.DLT_ORIGINAL_TOPIC)
             .orElse(DeadLetters.originalTopic(record.topic()));
@@ -134,6 +136,7 @@ public class DeadLetterService {
     /** Publishes the event again for the consumer group that failed on it, and marks the entry replayed. */
     public DeadLetter replay(String id, String userId) {
         DeadLetterDocument document = find(id);
+        // @flow settings-dead-letter-replay>check: Only open events of this installation with a known consumer
         if (!DeadLetterDocument.OPEN.equals(document.status())) {
             throw new ModuleException.Conflict("This event was already " + document.status().toLowerCase(),
                     "DEAD_LETTER_HANDLED");
@@ -145,6 +148,7 @@ public class DeadLetterService {
         if (!document.originalTopic().startsWith(this.namespace + ".")) {
             throw new ModuleException.Conflict("This event belongs to another installation", "DEAD_LETTER_FOREIGN");
         }
+        // @flow settings-dead-letter-replay>send: Send it back to the original topic, marked for the failed consumer only
         ProducerRecord<String, String> replay = new ProducerRecord<>(document.originalTopic(), document.key(),
                 document.valueCipher() != null ? this.pii.decrypt(document.valueCipher()) : null);
         replay.headers().add(DeadLetters.REPLAY_FOR, document.consumerGroup().getBytes(StandardCharsets.UTF_8));

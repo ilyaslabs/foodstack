@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.geo.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Duration;
 import java.util.List;
 import java.util.function.Supplier;
@@ -21,6 +22,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * nobody reads, so it can never hide the change. Shared by every replica, so a change is seen
  * everywhere at once. When Redis is down, reads go to the database.
  */
+@EVL.Cache(value = "Redis geo cache", ttl = "10m")
 public class GeoCache {
 
     private static final TypeReference<List<ZoneDetails>> ZONES = new TypeReference<>() {

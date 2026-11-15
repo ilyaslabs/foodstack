@@ -63,18 +63,21 @@ public class ZoneService {
 
     /** Replaces every zone of the branch and publishes {@link ZoneChanged}. */
     public List<ZoneDetails> replaceZones(String storeId, List<ZoneInput> inputs, String userId) {
+        // @flow geo-zones-replace>validate: Check the branch delivers itself and each zone's shape and charges
         validate(storeId, inputs);
         Instant now = this.clock.instant();
         List<ZoneDocument> documents = new ArrayList<>();
         for (int i = 0; i < inputs.size(); i++) {
             documents.add(toDocument(storeId, i, inputs.get(i), now, userId));
         }
+        // @flow geo-zones-replace>save: Replace the zones and record ZoneChanged
         List<ZoneDocument> saved = this.transaction.execute((status) -> {
             this.zones.deleteByStoreId(storeId);
             List<ZoneDocument> result = this.zones.saveAll(documents);
             this.outbox.append(new ZoneChanged(storeId, result.size(), userId));
             return result;
         });
+        // @flow geo-zones-replace>evict: Drop the cached zones
         this.cache.evictZones(storeId);
         return saved.stream().map(ZoneService::toDetails).toList();
     }

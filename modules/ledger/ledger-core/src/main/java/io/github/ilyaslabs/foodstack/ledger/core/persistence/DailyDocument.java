@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.ledger.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Sharded;
@@ -22,6 +23,7 @@ import org.springframework.data.mongodb.core.mapping.Sharded;
  */
 @Document("ledger_daily")
 @Sharded(shardKey = "accountId", immutableKey = true)
+@EVL.Database("foodstack_ledger")
 public record DailyDocument(@Id String id, String accountId, String partyType, String brandId, String day, String kind,
         int bucket, long amountMinor, long lines, String currency) {
 }

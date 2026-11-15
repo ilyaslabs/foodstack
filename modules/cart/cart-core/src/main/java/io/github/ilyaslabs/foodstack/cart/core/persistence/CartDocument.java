@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.cart.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 
@@ -19,6 +20,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param version optimistic lock, also the cart version an order was priced at
  */
 @Document("cart_carts")
+@EVL.Database("foodstack_cart")
 public record CartDocument(@Id String id, String storeId, List<CartLine> lines, Instant updatedAt, @Version Long version) {
 
     /**

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.identity.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -183,37 +184,49 @@ public class SessionService {
      */
     public Session signInWithSocial(String provider, String idToken, String displayName, Client client) {
         if (this.social == null || !this.social.knows(provider)) {
+            // @flow identity-social>provider: Refuse an unknown or switched-off provider [on error SOCIAL_PROVIDER_OFF]
             throw new ModuleException.BadRequest("Unknown sign-in provider", "SOCIAL_PROVIDER_UNKNOWN");
         }
         List<String> clientIds = this.signInSettings.clientIds(provider);
         if (clientIds.isEmpty()) {
             throw new ModuleException.Forbidden("Sign-in with " + provider + " is switched off", "SOCIAL_PROVIDER_OFF");
         }
+        // @flow identity-social>verify: Verify the provider's ID token
         SocialTokens.Identity identity = this.social.verify(provider, idToken, clientIds)
+            // @flow identity-social>rejected: Refuse a token that does not check out [on error SOCIAL_TOKEN_INVALID]
             .orElseThrow(() -> new ModuleException.Unauthorized("The sign-in with " + provider + " could not be checked",
                     "SOCIAL_TOKEN_INVALID"));
         String name = (displayName != null && !displayName.isBlank()) ? displayName : identity.name();
+        // @flow identity-social>account: Find or create the account
         String userId = this.users.socialAccount(identity.provider(), identity.subject(), identity.email(), name);
         return signedIn(userId, client, identity.provider());
     }
 
     /** The second step: a code from the authenticator app, or a recovery code. */
     public Session completeTwoStep(String challenge, String code) {
+        // @flow identity-two-step>challenge: Check the signed challenge
         ChallengeTokens.Challenge verified = challenge(challenge, ChallengeTokens.Step.TOTP);
+        // @flow identity-two-step>verify: Check the authenticator or recovery code
         this.twoFactor.verify(verified.userId(), code);
+        // @flow identity-two-step>session: Start the session and audit the sign-in
         return finish(verified);
     }
 
     /** For a required second step not set up yet: a new authenticator secret for the QR code. */
     public TwoFactorService.Enrollment startTwoStepEnrollment(String challenge) {
+        // @flow identity-two-step-enroll>challenge: Check the signed challenge
         ChallengeTokens.Challenge verified = challenge(challenge, ChallengeTokens.Step.TOTP_ENROLL);
+        // @flow identity-two-step-enroll>secret: Make and keep a new authenticator secret
         return this.twoFactor.startEnrollment(verified.userId());
     }
 
     /** Confirms the new authenticator app with a code from it and signs in. */
     public EnrolledSession confirmTwoStepEnrollment(String challenge, String code) {
+        // @flow identity-two-step-confirm>challenge: Check the signed challenge
         ChallengeTokens.Challenge verified = challenge(challenge, ChallengeTokens.Step.TOTP_ENROLL);
+        // @flow identity-two-step-confirm>confirm: Check the code, turn two-step on, make recovery codes
         List<String> recovery = this.twoFactor.confirmEnrollment(verified.userId(), code);
+        // @flow identity-two-step-confirm>session: Start the session and audit the sign-in
         return new EnrolledSession(finish(verified), recovery);
     }
 
@@ -222,6 +235,7 @@ public class SessionService {
             throw new ModuleException.BadRequest("Two-step sign-in is not available", "TOTP_UNAVAILABLE");
         }
         return this.challenges.verify(token, step)
+            // @flow identity-two-step>challenge>expired, identity-two-step-enroll>challenge>expired, identity-two-step-confirm>challenge>expired: Refuse an expired or forged challenge [on error CHALLENGE_INVALID]
             .orElseThrow(() -> new ModuleException.Unauthorized("The sign-in took too long or is not valid; start again",
                     "CHALLENGE_INVALID"));
     }
@@ -233,13 +247,17 @@ public class SessionService {
     }
 
     /** Signs in with email and password. Ten wrong tries per email in 15 minutes answer 429. */
+    @Flow(value = "identity-login>method?>password", label = "Sign in with password", when = "password")
     public Session signInWithPassword(String email, String password, Client client) {
         String tries = (email != null && !email.isBlank()) ? this.pii.blindIndex(email.trim()) : null;
+        // @flow identity-login>method?>password>limit: Refuse after 10 wrong tries in 15 minutes (429)
         if (tries != null) {
             this.rateLimiter.refuseIfReached("identity", "password", tries, PASSWORD_TRIES, PASSWORD_WINDOW);
         }
+        // @flow identity-login>method?>password>check: Check email and password
         Optional<String> userId = this.users.checkPassword(email, password);
         if (userId.isEmpty()) {
+            // @flow identity-login>method?>password>wrong: Count the wrong try, audit it and refuse [on error LOGIN_FAILED]
             if (tries != null) {
                 this.rateLimiter.check("identity", "password", tries, PASSWORD_TRIES, PASSWORD_WINDOW);
             }
@@ -250,32 +268,46 @@ public class SessionService {
     }
 
     /** Signs in with a code emailed by {@code POST /auth/code}. */
+    @Flow(value = "identity-login>method?>code", label = "Sign in with emailed code", when = "code")
     public Session signInWithCode(String email, String code, Client client) {
+        // @flow identity-login>method?>code>verify: Check the emailed code
         Optional<String> verified = this.codes.verify(email, EmailCodeIssued.LOGIN, code);
         if (verified.isEmpty()) {
+            // @flow identity-login>method?>code>wrong: Audit and refuse a wrong or expired code [on error CODE_INVALID]
             auditFailure(email, "email code");
             throw new ModuleException.Unauthorized("The code is not correct or has expired", "CODE_INVALID");
         }
+        // @flow identity-login>method?>code>verified: Mark the email verified
         this.users.markEmailVerified(verified.get());
         return signedIn(verified.get(), client, "email code");
     }
 
     /** Sets a new password with an emailed reset code and signs in; every older sign-in ends. */
     public Session resetPassword(String email, String code, String newPassword, Client client) {
+        // @flow identity-reset>verify: Check the new password and the reset code
         UserService.requirePassword(newPassword);
         String userId = this.codes.verify(email, EmailCodeIssued.PASSWORD_RESET, code)
+            // @flow identity-reset>wrong: Refuse a wrong or expired code [on error CODE_INVALID]
             .orElseThrow(() -> new ModuleException.Unauthorized("The code is not correct or has expired", "CODE_INVALID"));
+        // @flow identity-reset>password: Set the new password and end every older sign-in
         this.users.resetPassword(userId, newPassword);
         return signedIn(userId, client, "password reset");
     }
 
+    @Flow(value = "identity-login>method?>password>session", label = "Second step or tokens")
+    @Flow(value = "identity-login>method?>code>session", label = "Second step or tokens")
+    @Flow(value = "identity-social>session", label = "Second step or tokens")
+    @Flow(value = "identity-reset>session", label = "Second step or tokens")
     private Session signedIn(String userId, Client client, String how) {
+        // @flow identity-login>method?>password>session>second-step?, identity-login>method?>code>session>second-step?, identity-social>session>second-step?, identity-reset>session>second-step?: Does the account need a second step?
         if (this.twoFactor != null) {
             Optional<ChallengeTokens.Step> step = this.twoFactor.secondStep(userId);
             if (step.isPresent()) {
+                // @flow identity-login>method?>password>session>second-step?>challenge, identity-login>method?>code>session>second-step?>challenge, identity-social>session>second-step?>challenge, identity-reset>session>second-step?>challenge: Answer with a signed challenge for the authenticator step [when two-step is on or required]
                 throw new SecondStepRequired(step.get(), this.challenges.issue(userId, step.get(), client.name(), how));
             }
         }
+        // @flow identity-login>method?>password>session>second-step?>tokens, identity-login>method?>code>session>second-step?>tokens, identity-social>session>second-step?>tokens, identity-reset>session>second-step?>tokens: Start the session and audit the sign-in [when else]
         Session session = start(userId, client);
         audit(userId, how);
         return session;
@@ -328,29 +360,37 @@ public class SessionService {
         if (refreshToken == null || refreshToken.isBlank()) {
             throw invalid();
         }
+        // @flow identity-refresh>find: Find the unexpired token by its hash
         String id = hash(refreshToken);
         Instant now = this.clock.instant();
         RefreshTokenDocument token = this.mongo.findById(id, RefreshTokenDocument.class);
         if (token == null || !token.expiresAt().isAfter(now)) {
+            // @flow identity-refresh>invalid: Refuse an unknown or expired token [on error REFRESH_INVALID]
             throw invalid();
         }
         if (!token.client().equals(channel.name())) {
+            // @flow identity-refresh>client: Refuse a token of the other client type [on error REFRESH_WRONG_CHANNEL]
             throw new ModuleException.BadRequest("This refresh token belongs to the other client type",
                     "REFRESH_WRONG_CHANNEL");
         }
+        // @flow identity-refresh>claim: Mark the token used, once
         RefreshTokenDocument claimed = this.mongo.findAndModify(
                 Query.query(Criteria.where("_id").is(id).and("usedAt").is(null)), new Update().set("usedAt", now),
                 FindAndModifyOptions.options().returnNew(true), RefreshTokenDocument.class);
+        // @flow identity-refresh>reused: Was the token already used? [when already used]
         if (claimed == null) {
             RefreshTokenDocument used = this.mongo.findById(id, RefreshTokenDocument.class);
             if (used != null && used.usedAt() != null && used.usedAt().plus(REUSE_GRACE).isAfter(now)) {
+                // @flow identity-refresh>reused>race: Ask to try again when it was refreshed moments ago [on error REFRESH_RACE]
                 throw new ModuleException.Conflict("The session was just refreshed elsewhere; try again",
                         "REFRESH_RACE");
             }
+            // @flow identity-refresh>reused>end: End the whole sign-in and refuse [on error REFRESH_REUSED]
             logger.warn("A used refresh token came back; ending sign-in " + token.familyId() + " of " + token.userId());
             endFamily(token.familyId());
             throw new ModuleException.Unauthorized("The session has ended; sign in again", "REFRESH_REUSED");
         }
+        // @flow identity-refresh>claims: Re-read roles; end the sign-in if blocked or revoked
         UserService.TokenClaims claims;
         try {
             claims = claims(token.userId());
@@ -363,6 +403,7 @@ public class SessionService {
             endFamily(token.familyId());
             throw invalid();
         }
+        // @flow identity-refresh>issue: Issue new access and refresh tokens
         return issue(token.userId(), token.familyId(), channel, token.tokenVersion(), claims);
     }
 
@@ -371,6 +412,7 @@ public class SessionService {
         if (sessionId == null) {
             return;
         }
+        // @flow identity-logout>end: Delete this sign-in's refresh tokens
         this.mongo.remove(Query.query(Criteria.where("familyId").is(sessionId).and("userId").is(userId)),
                 RefreshTokenDocument.class);
     }

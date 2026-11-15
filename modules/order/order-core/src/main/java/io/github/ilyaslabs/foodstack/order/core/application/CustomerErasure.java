@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.order.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.order.core.persistence.OrderDocument;
@@ -31,6 +32,7 @@ public class CustomerErasure {
     }
 
     /** @return how many orders were anonymised */
+    @Flow(value = "order-on-user-deleted>erase", label = "Anonymise the customer's orders", description = "name, phone, notes and address; location rounded to about 1 km")
     public int erase(String customerId) {
         Query mine = Query.query(Criteria.where("customerId").is(customerId));
         mine.fields().include("_id");
@@ -39,6 +41,7 @@ public class CustomerErasure {
             .map((row) -> row.getString("_id"))
             .toList();
         int erased = 0;
+        // @flow order-on-user-deleted>erase>each: Blank personal fields on each order [each order of the customer]
         for (String id : ids) {
             OrderDocument order = this.mongo.findById(id, OrderDocument.class);
             if (order == null || !customerId.equals(order.customerId())) {

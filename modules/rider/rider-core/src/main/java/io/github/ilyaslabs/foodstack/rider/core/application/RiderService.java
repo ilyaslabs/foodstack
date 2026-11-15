@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.rider.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -146,8 +147,10 @@ public class RiderService {
             return details(rider);
         }
         Instant now = this.clock.instant();
+        // @flow rider-set-status>save: Save the status and record RiderStatusChanged
         this.transaction.executeWithoutResult((tx) -> {
             Update update = new Update().set("status", status.name()).set("updatedAt", now);
+            // @flow rider-set-status>suspend: Drop a suspended rider from presence [when SUSPENDED]
             if (status == RiderStatus.SUSPENDED) {
                 update.set("online", false);
             }
@@ -186,19 +189,23 @@ public class RiderService {
 
     /** Removes a store's rider and their rider access; not while they have a delivery. */
     public void removeStoreRider(String storeId, String riderId) {
+        // @flow rider-remove-store>access: Check the caller manages the branch
         CurrentUser.requireStoreAccess(storeId, MANAGE);
         RiderDocument rider = require(riderId);
         if (!RiderKind.STORE.name().equals(rider.kind()) || !storeId.equals(rider.storeId())) {
             throw notFound();
         }
         if (!rider.activeOrderIds().isEmpty()) {
+            // @flow rider-remove-store>busy: Refuse while the rider has a delivery [on error Conflict]
             throw new ModuleException.Conflict("The rider has a delivery now", "RIDER_BUSY");
         }
+        // @flow rider-remove-store>delete: Delete the rider and record RiderStatusChanged
         this.transaction.executeWithoutResult((tx) -> {
             this.mongo.remove(Query.query(Criteria.where("_id").is(riderId)), RiderDocument.class);
             this.outbox.append(new RiderStatusChanged(riderId, RiderKind.STORE, storeId, RiderStatus.SUSPENDED, false, actor()));
         });
         this.presence.forget(riderId);
+        // @flow rider-remove-store>revoke: Revoke rider access in identity
         this.serviceCalls.run(() -> this.identity.revokeRiderAccess(riderId));
     }
 
@@ -244,12 +251,16 @@ public class RiderService {
 
     // ---- helpers -------------------------------------------------------------------------------
 
+    @Flow(value = "rider-add-operator>add", label = "Create the rider")
+    @Flow(value = "rider-add-store>add", label = "Create the rider")
     private RiderDetails add(RiderInput input, RiderKind kind, String storeId) {
+        // @flow rider-add-operator>add>validate, rider-add-store>add>validate: Check name, phone, vehicle, plate and city
         Clean clean = clean(input);
         String email = (input.email() != null) ? input.email().strip().toLowerCase(Locale.ROOT) : "";
         if (!email.contains("@")) {
             throw new ModuleException.BadRequest("Enter the rider's email", "RIDER_INVALID");
         }
+        // @flow rider-add-operator>add>grant, rider-add-store>add>grant: Create or find the sign-in and grant rider access in identity
         UserView user = this.serviceCalls.call(() -> this.identity.grantRiderAccess(
                 new RiderAccessGrant(email, clean.name(), input.initialPassword(), storeId, CurrentUser.id())));
         if (this.mongo.findById(user.id(), RiderDocument.class) != null) {
@@ -260,6 +271,7 @@ public class RiderService {
         RiderDocument rider = new RiderDocument(user.id(), kind.name(), storeId, brandId, clean.name(), this.pii.encrypt(clean.phone()),
                 clean.vehicle().name(), clean.plate(), clean.city(), clean.cityId(), RiderStatus.ACTIVE.name(), false, now, null, null, null,
                 new ArrayList<>(), 0, 0, 0, now, now, null);
+        // @flow rider-add-operator>add>save, rider-add-store>add>save: Save the rider, phone encrypted, and record RiderStatusChanged
         RiderDocument saved = this.transaction.execute((tx) -> {
             RiderDocument inserted = this.mongo.insert(rider);
             this.outbox.append(new RiderStatusChanged(inserted.id(), kind, storeId, RiderStatus.ACTIVE, false, actor()));

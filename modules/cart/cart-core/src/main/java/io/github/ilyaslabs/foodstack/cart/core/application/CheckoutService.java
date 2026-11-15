@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.cart.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -57,7 +58,10 @@ public class CheckoutService {
         this.payments = payments;
     }
 
+    @Flow(value = "cart-checkout>quote", label = "Price the checkout")
+    @Flow(value = "order-place>checkout", label = "Re-price the cart exactly like the checkout quote")
     public CheckoutView checkout(CheckoutRequest request) {
+        // @flow cart-checkout>quote>methods, order-place>checkout>methods: Read ordering settings and allowed payment methods
         OrderingView ordering = this.settings.getOrdering();
         List<PaymentMethod> methods = new ArrayList<>();
         if (ordering.cashEnabled()) {
@@ -68,6 +72,7 @@ public class CheckoutService {
         }
         Fulfilment fulfilment = (request.fulfilment() != null) ? request.fulfilment() : Fulfilment.DELIVERY;
         CartDocument cart = this.carts.find(request.customerId());
+        // @flow cart-checkout>quote>empty, order-place>checkout>empty: Answer CART_EMPTY [when cart is empty]
         if (cart == null || cart.lines() == null || cart.lines().isEmpty()) {
             return new CheckoutView(request.customerId(), (cart != null) ? cart.versionOrZero() : 0, null, null, fulfilment,
                     List.of(), 0, null, null, 0, 0, 0, 0, 0, 0, 0, 0, List.copyOf(methods), ordering.tipsEnabled(),
@@ -77,6 +82,7 @@ public class CheckoutService {
         OrderValidationView.StoreSnapshot store = priced.store();
         long subtotal = priced.subtotalMinor();
         List<CheckoutView.Problem> problems = new ArrayList<>(CartService.lineProblems(cart, priced));
+        // @flow cart-checkout>quote>open, order-place>checkout>open: Check branch is live and open now
         if (!store.live()) {
             problems.add(problem(CheckoutView.STORE_NOT_LIVE));
         }
@@ -87,6 +93,8 @@ public class CheckoutService {
         CheckoutView.Delivery delivery = null;
         long deliveryCharge = 0;
         long distance = 0;
+        // @flow cart-checkout>quote>fulfilment?, order-place>checkout>fulfilment?: Pickup or delivery?
+        // @flow cart-checkout>quote>fulfilment?>pickup, order-place>checkout>fulfilment?>pickup: Check branch allows pickup [when PICKUP]
         if (fulfilment == Fulfilment.PICKUP) {
             if (!store.pickupEnabled()) {
                 problems.add(problem(CheckoutView.PICKUP_UNAVAILABLE));
@@ -99,6 +107,7 @@ public class CheckoutService {
             problems.add(problem(CheckoutView.NOT_DELIVERABLE, "reason", DeliveryQuoteView.OUT_OF_AREA));
         }
         else {
+            // @flow cart-checkout>quote>fulfilment?>delivery, order-place>checkout>fulfilment?>delivery: Quote delivery charge, minimum order and distance with geo [when DELIVERY]
             DeliveryQuoteView quote = this.geo.quote(new QuoteRequest(store.storeId(), store.location(), store.deliveryMode(),
                     request.destination(), store.timezone(), store.cityId()));
             delivery = new CheckoutView.Delivery(quote.deliverable(), quote.reason(), quote.deliveryMode(), quote.chargeMinor(),
@@ -118,6 +127,7 @@ public class CheckoutService {
         CouponEvaluation coupon = null;
         long itemsDiscount = 0;
         long deliveryDiscount = 0;
+        // @flow cart-checkout>quote>coupon, order-place>checkout>coupon: Evaluate the coupon with promotions [when coupon code given]
         if (request.couponCode() != null && !request.couponCode().isBlank()) {
             coupon = this.promotions.evaluate(new CouponRequest(request.couponCode().strip(), request.customerId(),
                     store.storeId(), store.brandId(), store.city(), subtotal, deliveryCharge, fulfilment,
@@ -133,6 +143,7 @@ public class CheckoutService {
             }
         }
 
+        // @flow cart-checkout>quote>totals, order-place>checkout>totals: Add service fee, tax and tip, check payment method, compute total and ETA
         long serviceFee = CheckoutMath.serviceFee(ordering.serviceFeeMinor(), ordering.serviceFeeBasisPoints(), subtotal);
         long tax = CheckoutMath.tax(subtotal, itemsDiscount, ordering.taxBasisPoints());
         long tip = 0;

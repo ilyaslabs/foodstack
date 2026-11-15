@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.dispatch.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.core.application.CustomerErasure;
 import io.github.ilyaslabs.foodstack.identity.api.events.UserDeleted;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
@@ -9,6 +11,7 @@ import tools.jackson.databind.json.JsonMapper;
 import org.springframework.kafka.annotation.KafkaListener;
 
 /** Anonymises a deleted customer's delivery jobs (PRD ID-7). Erasure is idempotent, so no inbox guard. */
+@EVL.Queue("foodstack.identity.events")
 public class IdentityEventsListener {
 
     private static final String DELETED = EventTypes.type("identity", UserDeleted.class);
@@ -25,6 +28,8 @@ public class IdentityEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.dispatch:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-dispatch-identity", groupId = "${foodstack.namespace:foodstack}-dispatch",
             topics = "${foodstack.namespace:foodstack}.identity.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "dispatch-on-user-deleted", label = "Anonymise jobs of a deleted account", after = "identity-account-deletion")
+    @EVL.Job(trigger = "UserDeleted")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         if (DELETED.equals(event.type())) {

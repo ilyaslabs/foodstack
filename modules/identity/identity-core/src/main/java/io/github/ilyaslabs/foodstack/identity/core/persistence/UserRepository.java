@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.identity.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.identity.api.Role;
@@ -7,6 +8,7 @@ import io.github.ilyaslabs.foodstack.identity.api.Role;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
+@EVL.Database("foodstack_identity")
 public interface UserRepository extends MongoRepository<UserDocument, String> {
 
     /** Back-office listing; scatter-gather is fine for this rare admin query (TDD 6.3). */

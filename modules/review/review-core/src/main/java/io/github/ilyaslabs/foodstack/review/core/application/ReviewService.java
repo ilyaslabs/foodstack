@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.review.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -157,6 +158,7 @@ public class ReviewService {
      * keep counting, under "Deleted user"; their photos are released for cleanup. Safe to run again.
      * @return how many reviews were changed
      */
+    @Flow(value = "review-on-event>type?>user-deleted", label = "Anonymise the customer's reviews", when = "UserDeleted")
     public int eraseCustomer(String customerId) {
         List<ReviewDocument> reviews = this.mongo.find(Query.query(Criteria.where("customerId").is(customerId)),
                 ReviewDocument.class);
@@ -183,6 +185,7 @@ public class ReviewService {
         if (request.storeRating() == null && request.riderRating() == null) {
             throw new ModuleException.BadRequest("Rate the store or the rider", "REVIEW_EMPTY");
         }
+        // @flow review-submit>order: Check the order is the customer's, finished, and inside the rating window
         RateableOrderDocument order = ownOrder(request.orderId());
         if (order == null || order.completedAt() == null) {
             throw new ModuleException.Conflict("You can rate an order once it is delivered or collected",
@@ -192,6 +195,7 @@ public class ReviewService {
         if (!now.isBefore(order.completedAt().plus(this.window))) {
             throw new ModuleException.Conflict("Ratings for this order have closed", "REVIEW_WINDOW_CLOSED");
         }
+        // @flow review-submit>validate: Check stars, text length, rider tags; refuse a second rating
         Map<String, String> errors = new LinkedHashMap<>();
         if (request.storeRating() != null) {
             stars(request.storeRating(), "storeRating", errors);
@@ -221,6 +225,7 @@ public class ReviewService {
         }
 
         ReviewDocument review = null;
+        // @flow review-submit>prepare: Mask blocked words (flagging the review) and claim the photo in media [when store rated]
         if (request.storeRating() != null) {
             String reviewId = Ids.newId();
             BlockedWords.Result text = this.blockedWords.mask(hasText(request.text()) ? request.text().strip() : null);
@@ -232,7 +237,9 @@ public class ReviewService {
         }
         ReviewDocument newReview = review;
         List<String> riderTags = tags;
+        // @flow review-submit>save: Save in one transaction
         this.transactions.executeWithoutResult((status) -> {
+            // @flow review-submit>save>store: Save the review, update branch stats, record ReviewPublished [when store rated]
             if (newReview != null) {
                 RateableOrderDocument before = this.mongo.findAndModify(
                         Query.query(Criteria.where("_id").is(order.id()).and("storeReviewId").is(null)),
@@ -246,6 +253,7 @@ public class ReviewService {
                         newReview.brandId(), newReview.storeName(), owners(order), newReview.rating(), newReview.flagged(),
                         stats.count(), average(stats.count(), stats.sum())));
             }
+            // @flow review-submit>save>rider: Save the rider rating and update rider stats [when rider rated]
             if (request.riderRating() != null) {
                 RateableOrderDocument before = this.mongo.findAndModify(
                         Query.query(Criteria.where("_id").is(order.id()).and("riderRated").ne(true)),
@@ -268,6 +276,7 @@ public class ReviewService {
     /** The branch's one public reply (PRD RV-2). */
     public ReviewView reply(String reviewId, String text) {
         ReviewDocument review = find(reviewId);
+        // @flow review-reply>access: Only the branch's staff
         if (!CurrentUser.managesStore(review.storeId()) && !CurrentUser.hasAuthority(STORE_MANAGE)) {
             throw new ModuleException.Forbidden("Only the branch can reply", "REVIEW_ACCESS_DENIED");
         }
@@ -276,6 +285,7 @@ public class ReviewService {
             throw new ModuleException.BadRequest("Write a reply of up to " + MAX_TEXT + " characters", "REVIEW_INVALID",
                     Map.of("errors", Map.of("text", "Up to " + MAX_TEXT + " characters")));
         }
+        // @flow review-reply>save: Mask blocked words and save the reply if none yet
         ReviewDocument.Reply reply = new ReviewDocument.Reply(this.blockedWords.mask(clean).text(), CurrentUser.id(),
                 this.clock.instant());
         ReviewDocument updated = this.mongo.findAndModify(
@@ -291,6 +301,7 @@ public class ReviewService {
 
     /** Hides a review with a reason; it stops counting in the rating (PRD RV-3). */
     public ReviewView hide(String reviewId, String reason) {
+        // @flow review-hide>access: Moderators only, with a reason
         requireModerator();
         String clean = (reason == null) ? "" : reason.strip();
         if (clean.isEmpty() || clean.length() > MAX_REASON) {
@@ -299,6 +310,7 @@ public class ReviewService {
         }
         ReviewDocument review = find(reviewId);
         String actor = CurrentUser.id();
+        // @flow review-hide>save: Hide, update branch stats and record ReviewHidden
         ReviewDocument hidden = this.transactions.execute((status) -> {
             ReviewDocument updated = this.mongo.findAndModify(
                     Query.query(Criteria.where("storeId").is(review.storeId()).and("_id").is(reviewId)
@@ -440,6 +452,7 @@ public class ReviewService {
     // ---- events -------------------------------------------------------------------------------
 
     /** The order was delivered or collected: the customer may rate it now. */
+    @Flow(value = "review-on-event>type?>finished", label = "Open the order for rating", when = "OrderDelivered, OrderCollected")
     public void orderFinished(String orderId, String number, String customerId, String storeId, String brandId,
             String storeName, Set<String> storeOwnerIds, String language, Instant at) {
         this.mongo.upsert(Query.query(Criteria.where("_id").is(orderId)),
@@ -450,6 +463,7 @@ public class ReviewService {
     }
 
     /** Who delivered the order, so the customer can rate the rider. */
+    @Flow(value = "review-on-event>type?>delivered", label = "Remember the rider who delivered", when = "DeliveryCompleted")
     public void delivered(String orderId, String riderId, String riderName, String riderKind) {
         if (riderId == null) {
             return;

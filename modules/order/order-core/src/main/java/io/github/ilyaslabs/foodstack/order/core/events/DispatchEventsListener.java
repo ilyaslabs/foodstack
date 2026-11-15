@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryCompleted;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryHandedBack;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryPickedUp;
@@ -23,6 +25,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * delivered, and support handing a delivery back to the store. Each event is applied once (inbox); an
  * event that no longer fits the order (cancelled meanwhile) is logged and dropped.
  */
+@EVL.Queue("foodstack.dispatch.events")
 public class DispatchEventsListener {
 
     static final String CONSUMER = "order-dispatch";
@@ -54,9 +57,13 @@ public class DispatchEventsListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.order:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-order-dispatch", groupId = "${foodstack.namespace:foodstack}-order",
             topics = "${foodstack.namespace:foodstack}.dispatch.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "order-on-dispatch", label = "Apply delivery progress to orders", after = "dispatch-match")
+    @EVL.Job(trigger = "dispatch events")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow order-on-dispatch>inbox: Process each event once (inbox)
+        // @flow order-on-dispatch>type?: Which dispatch event?
         if (ASSIGNED.equals(type)) {
             RiderAssigned e = event.dataAs(RiderAssigned.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> this.lifecycle.riderAssigned(e.delivery().orderId(), e.riderId(),
@@ -72,6 +79,7 @@ public class DispatchEventsListener {
             this.inbox.processOnce(event.id(), CONSUMER,
                     () -> tolerate(e.delivery().orderId(), () -> this.lifecycle.pickedUp(e.delivery().orderId(), Actor.fromEvent(e.actor()))));
         }
+        // @flow order-on-dispatch>type?>completed: Delivery completed [when DeliveryCompleted]
         else if (COMPLETED.equals(type)) {
             DeliveryCompleted e = event.dataAs(DeliveryCompleted.class, this.jsonMapper);
             this.inbox.processOnce(event.id(), CONSUMER, () -> tolerate(e.delivery().orderId(), () -> {

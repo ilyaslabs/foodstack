@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.geo.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.geo.api.CityView;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
  * signed in or not: quotes and delivery areas are what any customer sees (TDD 9.1).
  */
 @Component
+@EVL.Service("geo module")
 class GeoApiImpl implements GeoApi {
 
     private final QuoteService quoteService;

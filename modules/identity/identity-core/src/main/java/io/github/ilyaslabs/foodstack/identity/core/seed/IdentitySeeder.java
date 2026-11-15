@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.identity.core.seed;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Instant;
 import java.util.EnumSet;
 import java.util.List;
@@ -42,8 +44,11 @@ class IdentitySeeder {
 
     @EventListener(ApplicationReadyEvent.class)
     @Order(10)
+    @Flow(value = "identity-seed", label = "Seed demo users", description = "Once per database: admin, finance, support and customer")
+    @EVL.Job(trigger = "application ready")
     void seed() {
         try {
+            // @flow identity-seed>once: Record the seed; stop if it already ran
             this.mongo.insert(new Document("_id", "v1").append("seededAt", Instant.now()), "identity_seed");
         }
         catch (DuplicateKeyException ex) {
@@ -55,6 +60,7 @@ class IdentitySeeder {
                 new NewUser("support@demo.foodstack.local", PASSWORD, "Demo Support", EnumSet.of(Role.SUPPORT)),
                 new NewUser("customer@demo.foodstack.local", PASSWORD, "Demo Customer", EnumSet.of(Role.CUSTOMER)));
         StringBuilder logins = new StringBuilder("Seeded demo users (password '" + PASSWORD + "'):");
+        // @flow identity-seed>users: Create each demo user [each user in demo]
         for (NewUser user : demo) {
             if (!this.users.emailExists(user.email())) {
                 this.users.create(user, "seed");

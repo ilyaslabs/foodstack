@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.identity.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.core.application.TwoFactorService;
 import io.github.ilyaslabs.foodstack.identity.web.dto.CodeOnlyRequest;
 import io.github.ilyaslabs.foodstack.identity.web.dto.EnrollmentResponse;
@@ -32,24 +34,32 @@ class TwoStepController {
     }
 
     @GetMapping("/api/v1/me/two-step")
+    @Flow(value = "identity-two-step-status", label = "Show my two-step status")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/me/two-step", caller = "Back office")
     TwoFactorService.Status status() {
         return this.twoFactor.status(CurrentUser.id());
     }
 
     /** A new secret for the app; nothing changes until a code from it confirms it. */
     @PostMapping("/api/v1/me/two-step/enroll")
+    @Flow(value = "identity-two-step-setup", label = "Start setting up two-step")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/me/two-step/enroll", caller = "Back office")
     EnrollmentResponse enroll() {
         TwoFactorService.Enrollment enrollment = this.twoFactor.startEnrollment(CurrentUser.id());
         return new EnrollmentResponse(enrollment.secret(), enrollment.uri());
     }
 
     @PostMapping("/api/v1/me/two-step/confirm")
+    @Flow(value = "identity-two-step-setup-confirm", label = "Confirm two-step setup", description = "Returns recovery codes")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/me/two-step/confirm", caller = "Back office")
     RecoveryCodesResponse confirm(@Valid @RequestBody CodeOnlyRequest request) {
         return new RecoveryCodesResponse(null, null, null, null, null,
                 this.twoFactor.confirmEnrollment(CurrentUser.id(), request.code()));
     }
 
     @PostMapping("/api/v1/me/two-step/recovery-codes")
+    @Flow(value = "identity-recovery-codes", label = "Make new recovery codes")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/me/two-step/recovery-codes", caller = "Back office")
     RecoveryCodesResponse recoveryCodes(@Valid @RequestBody CodeOnlyRequest request) {
         return new RecoveryCodesResponse(null, null, null, null, null,
                 this.twoFactor.regenerateRecoveryCodes(CurrentUser.id(), request.code()));
@@ -58,6 +68,8 @@ class TwoStepController {
     /** Turns it off with a current code; refused where the role requires it. */
     @PostMapping("/api/v1/me/two-step/disable")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Flow(value = "identity-two-step-disable", label = "Turn off two-step", description = "Refused when the role requires it")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/me/two-step/disable", caller = "Back office")
     void disable(@Valid @RequestBody CodeOnlyRequest request) {
         this.twoFactor.disable(CurrentUser.id(), request.code());
     }
@@ -66,6 +78,8 @@ class TwoStepController {
     @DeleteMapping("/api/v1/users/{userId}/two-step")
     @PreAuthorize("hasAuthority('identity:users:manage')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Flow(value = "identity-two-step-reset", label = "Reset a user's two-step", description = "Admin; ends the user's sign-ins")
+    @EVL.Endpoint(method = "DELETE", path = "/api/v1/users/{userId}/two-step", caller = "Back office")
     void reset(@PathVariable String userId) {
         this.twoFactor.reset(userId);
     }

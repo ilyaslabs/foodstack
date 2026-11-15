@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.identity.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -8,6 +9,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * with a unique index on it, so each email belongs to at most one user.
  */
 @Document("identity_login_keys")
+@EVL.Database("foodstack_identity")
 public class LoginKeyDocument {
 
     @Id

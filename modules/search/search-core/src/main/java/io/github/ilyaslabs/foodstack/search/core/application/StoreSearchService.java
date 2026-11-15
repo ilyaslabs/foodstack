@@ -50,6 +50,7 @@ public class StoreSearchService {
     }
 
     public StoreSearchPage search(StoreSearchQuery query) {
+        // @flow search-stores>validate: Check point, text and cuisine
         if (query.lat() < -90 || query.lat() > 90 || query.lng() < -180 || query.lng() > 180) {
             throw new ModuleException.BadRequest("lat and lng must be a point on the map", "LOCATION_INVALID");
         }
@@ -64,11 +65,13 @@ public class StoreSearchService {
         int size = Math.min(Math.max(query.size(), 1), 50);
         int page = Math.max(query.page(), 0);
         Fulfilment fulfilment = (query.fulfilment() != null) ? query.fulfilment() : Fulfilment.DELIVERY;
+        // @flow search-stores>radius: Pick the radius step and the next wider one; pickup uses its own radius
         int step = step(query.radiusMeters());
         int radius = (fulfilment == Fulfilment.PICKUP) ? this.pickupRadiusMeters : this.steps.get(step);
         Integer wider = (fulfilment == Fulfilment.PICKUP || step + 1 >= this.steps.size()) ? null : this.steps.get(step + 1);
         // results stop at a fixed depth: deep pages cost every shard more than anyone scrolls (TDD 7.5)
         int from = page * size;
+        // @flow search-stores>depth: Stop at the result depth cap [when page too deep]
         if (from >= this.maxResults) {
             return new StoreSearchPage(List.of(), List.of(), 0, page, size, false, radius, wider);
         }
@@ -76,9 +79,11 @@ public class StoreSearchService {
         StoreSearchQuery clean = new StoreSearchQuery(query.lat(), query.lng(), text,
                 (cuisine != null) ? cuisine.toLowerCase(Locale.ROOT) : null, fulfilment, page, pageSize,
                 (fulfilment == Fulfilment.PICKUP) ? null : radius);
+        // @flow search-stores>query: Query Elasticsearch: in discovery radius and inside a delivery zone
         StoreSearchEngine.Result result = (pageSize == size) ? this.engine.search(clean)
                 : this.engine.search(clean, from);
         Instant now = this.clock.instant();
+        // @flow search-stores>cards: Build cards with open-now in each branch's time zone
         List<StoreCard> cards = result.hits()
             .stream()
             .map((hit) -> card(hit, now))

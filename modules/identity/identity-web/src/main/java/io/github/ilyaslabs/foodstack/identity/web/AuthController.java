@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.identity.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
@@ -100,6 +102,8 @@ class AuthController {
 
     /** Sign in with Google or Apple: the app hands over the provider's ID token (PRD ID-2). */
     @PostMapping(value = "/social", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Flow(value = "identity-social", label = "Sign in with Google or Apple", description = "The app hands over the provider's ID token")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/auth/social", caller = "Customer web")
     ResponseEntity<TokenResponse> social(@Valid @RequestBody SocialLoginRequest request) {
         Client client = Client.parse(request.client());
         return tokens(this.sessions.signInWithSocial(request.provider(), request.idToken(), request.displayName(), client));
@@ -107,12 +111,16 @@ class AuthController {
 
     /** The second step: a code from the authenticator app, or a recovery code. */
     @PostMapping(value = "/two-step", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Flow(value = "identity-two-step", label = "Finish sign-in with a second step", description = "Authenticator or recovery code")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/auth/two-step", caller = "Back office")
     ResponseEntity<TokenResponse> twoStep(@Valid @RequestBody TwoStepRequest request) {
         return tokens(this.sessions.completeTwoStep(request.challenge(), request.code()));
     }
 
     /** A role that requires two-step sign-in, not set up yet: the secret for the authenticator app. */
     @PostMapping(value = "/two-step/enroll", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Flow(value = "identity-two-step-enroll", label = "Set up the required second step", description = "New authenticator secret during sign-in")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/auth/two-step/enroll", caller = "Back office")
     ResponseEntity<EnrollmentResponse> enroll(@Valid @RequestBody TwoStepRequest request) {
         TwoFactorService.Enrollment enrollment = this.sessions.startTwoStepEnrollment(request.challenge());
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
@@ -121,6 +129,8 @@ class AuthController {
 
     /** Confirms the new app with a code from it: signs in and shows the recovery codes once. */
     @PostMapping(value = "/two-step/confirm", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Flow(value = "identity-two-step-confirm", label = "Confirm the authenticator and sign in", description = "Shows recovery codes once")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/auth/two-step/confirm", caller = "Back office")
     ResponseEntity<RecoveryCodesResponse> confirm(@Valid @RequestBody TwoStepRequest request) {
         SessionService.EnrolledSession enrolled = this.sessions.confirmTwoStepEnrollment(request.challenge(), request.code());
         ResponseEntity<TokenResponse> tokens = tokens(enrolled.session());
@@ -132,6 +142,8 @@ class AuthController {
 
     /** Which social sign-in buttons to show (public). */
     @GetMapping("/providers")
+    @Flow(value = "identity-providers", label = "Show social sign-in buttons", description = "Public")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/auth/providers", caller = "Customer web")
     ResponseEntity<SignInProvidersResponse> providers() {
         SignInProviders settings = this.signInSettings.get();
         return ResponseEntity.ok()
@@ -142,6 +154,8 @@ class AuthController {
     /** An administrator turns social sign-in on or off (PRD SG-6). */
     @PutMapping(value = "/providers", consumes = MediaType.APPLICATION_JSON_VALUE)
     @PreAuthorize("hasAuthority('settings:manage')")
+    @Flow(value = "identity-providers-update", label = "Turn social sign-in on or off")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/auth/providers", caller = "Back office")
     SignInProvidersResponse updateProviders(@RequestBody SignInProvidersRequest request) {
         SignInProviders saved = this.signInSettings.update(request.googleClientIds(), request.appleClientIds(),
                 CurrentUser.id());
@@ -150,19 +164,26 @@ class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
+    @Flow(value = "identity-register", label = "Register a customer account")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/auth/register", caller = "Customer web")
     UserResponse register(@Valid @RequestBody RegisterRequest request) {
         return IdentityWebMapper.toResponse(this.userService.register(request.email(), request.password(), request.displayName()));
     }
 
     @PostMapping(value = "/login", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Flow(value = "identity-login", label = "Sign in with email", description = "Password or emailed code; web gets a refresh cookie, mobile gets it in the body")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/auth/login", caller = "Customer web")
     ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         Client client = Client.parse(request.client());
+        // @flow identity-login>one: Check that a password or a code is sent
         boolean withCode = request.code() != null && !request.code().isBlank();
         boolean withPassword = request.password() != null && !request.password().isEmpty();
         if (withCode == withPassword) {
+            // @flow identity-login>both: Refuse both or neither [on error LOGIN_INVALID]
             throw new ModuleException.BadRequest("Send either a password or a code", "LOGIN_INVALID",
                     Map.of("errors", Map.of("password", "send a password or a code")));
         }
+        // @flow identity-login>method?: Password or emailed code?
         Session session = withCode ? this.sessions.signInWithCode(request.email(), request.code(), client)
                 : this.sessions.signInWithPassword(request.email(), request.password(), client);
         return tokens(session);
@@ -171,6 +192,8 @@ class AuthController {
     /** Emails a code; the answer is the same whether or not the email has an account. */
     @PostMapping(value = "/code", consumes = MediaType.APPLICATION_JSON_VALUE)
     @ResponseStatus(HttpStatus.ACCEPTED)
+    @Flow(value = "identity-code", label = "Email a sign-in or reset code", description = "Same answer whether or not the email has an account")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/auth/code", caller = "Customer web")
     void code(@Valid @RequestBody CodeRequest request) {
         String purpose = request.purpose().trim().toUpperCase(Locale.ROOT);
         if (!EmailCodeIssued.LOGIN.equals(purpose) && !EmailCodeIssued.PASSWORD_RESET.equals(purpose)) {
@@ -180,6 +203,8 @@ class AuthController {
     }
 
     @PostMapping(value = "/reset", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Flow(value = "identity-reset", label = "Reset password with an emailed code", description = "Signs in and ends every older sign-in")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/auth/reset", caller = "Customer web")
     ResponseEntity<TokenResponse> reset(@Valid @RequestBody ResetPasswordRequest request) {
         Client client = Client.parse(request.client());
         return tokens(this.sessions.resetPassword(request.email(), request.code(), request.newPassword(), client));
@@ -191,12 +216,16 @@ class AuthController {
      * from another site cannot trigger it.
      */
     @PostMapping(value = "/refresh", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @Flow(value = "identity-refresh", label = "Refresh the session", description = "Rotates the refresh token; a reused token ends the sign-in")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/auth/refresh", caller = "Customer web")
     ResponseEntity<?> refresh(@CookieValue(name = REFRESH_COOKIE, required = false) String cookie,
             @RequestBody(required = false) RefreshRequest body) {
         String fromBody = (body != null) ? body.refreshToken() : null;
+        // @flow identity-refresh>channel: Read the token from the cookie or the body
         boolean hasCookie = cookie != null && !cookie.isBlank();
         boolean hasBody = fromBody != null && !fromBody.isBlank();
         if (hasCookie && hasBody) {
+            // @flow identity-refresh>both: Refuse both at once [on error REFRESH_TWO_CHANNELS]
             throw new ModuleException.BadRequest("Send the refresh token in the cookie or the body, not both",
                     "REFRESH_TWO_CHANNELS");
         }
@@ -219,6 +248,8 @@ class AuthController {
 
     /** Ends this sign-in (the {@code sid} of the access token) and clears the browser's cookie. */
     @PostMapping("/logout")
+    @Flow(value = "identity-logout", label = "Sign out on this device")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/auth/logout", caller = "Customer web")
     ResponseEntity<Void> logout() {
         this.sessions.end(CurrentUser.id(), CurrentUser.sessionId());
         return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, clearCookie().toString()).build();

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.platform.kafka;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.core.AuditEntry;
 import io.github.ilyaslabs.foodstack.platform.core.AuditSink;
 import org.apache.commons.logging.Log;
@@ -14,6 +15,7 @@ import org.springframework.kafka.core.KafkaTemplate;
  * happened, outside its transaction, so there is no outbox: if Kafka refuses it, the whole entry is
  * written to the application log at {@code ERROR} instead, where it can be recovered.
  */
+@EVL.Queue("foodstack.audit")
 public class KafkaAuditSink implements AuditSink {
 
     private static final Log logger = LogFactory.getLog(KafkaAuditSink.class);

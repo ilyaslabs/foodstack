@@ -56,6 +56,7 @@ public class OrderingSettingsService {
     }
 
     public OrderingDetails update(UpdateOrdering update, long expectedVersion, String userId) {
+        // @flow settings-ordering-update>validate: Check values and that the version still matches
         validate(update);
         OrderingDocument current = this.repository.findById(OrderingDocument.ID).orElse(DEFAULTS);
         long currentVersion = (current.version() != null) ? current.version() : 0L;
@@ -67,11 +68,13 @@ public class OrderingSettingsService {
                 update.serviceFeeMinor(), update.serviceFeeBasisPoints(), update.taxBasisPoints(), update.tipsEnabled(),
                 update.acceptTimeoutSeconds(), this.clock.instant(), userId, current.version(), update.priceApprovalRequired(),
                 update.directCollectionEnabled(), update.creditLimitMinor(), update.cardStyle(), update.savedCardsEnabled());
+        // @flow settings-ordering-update>save: Save and record SettingsChanged
         OrderingDocument saved = this.transaction.execute((status) -> {
             OrderingDocument result = this.repository.save(changed);
             this.outbox.append(new SettingsChanged(SettingsChanged.ORDERING, result.version(), userId));
             return result;
         });
+        // @flow settings-ordering-update>evict: Drop the cached settings
         this.cache.evict(SettingsChanged.ORDERING);
         return details(saved);
     }

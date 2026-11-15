@@ -21,6 +21,12 @@
     </properties>
 
     <dependencies>
+        <!-- EVL flow tags; compile-time only, never shipped -->
+        <dependency>
+            <groupId>io.github.ilyaslabs</groupId>
+            <artifactId>evl-annotations</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>io.github.ilyaslabs</groupId>
             <artifactId>foodstack-server</artifactId>

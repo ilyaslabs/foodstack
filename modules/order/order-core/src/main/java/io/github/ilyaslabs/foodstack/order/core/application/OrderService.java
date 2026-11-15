@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.order.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
@@ -150,7 +151,9 @@ public class OrderService {
     /** The customer cancels before the store accepts; store people and support as {@link #storeAction}. */
     public OrderDetails cancel(String orderId, String reason) {
         OrderDocument order = this.lifecycle.require(orderId);
+        // @flow order-cancel>role: Work out the caller's role for this order
         Actor actor = actor(order);
+        // @flow order-cancel>close: Close the order with a reason; a paid order is refunded in full
         return details(this.lifecycle.cancel(orderId, actor, reason));
     }
 
@@ -165,10 +168,12 @@ public class OrderService {
      */
     public OrderDetails storeAction(String orderId, String action, Integer prepMinutes, String reason, String storeRiderId) {
         OrderDocument order = this.lifecycle.require(orderId);
+        // @flow order-store-action>role: Work out the caller's role; customers are refused
         Actor actor = actor(order);
         if (Actor.CUSTOMER.equals(actor.role())) {
             throw new ModuleException.Forbidden("Only the store can do this", "ORDER_ACCESS_DENIED");
         }
+        // @flow order-store-action>action?: Which step?
         OrderDocument after = switch (action) {
             case OrderLifecycleService.ACCEPT -> this.lifecycle.accept(orderId, actor,
                     (prepMinutes != null) ? prepMinutes : order.prepMinutes(), storeRiderId);
@@ -190,7 +195,9 @@ public class OrderService {
 
     /** Support gives money back and picks who bears it, the store (default) or the operator. */
     public OrderDetails refund(String orderId, long amountMinor, String reason, String fundedBy) {
+        // @flow order-refund>support: Require support rights
         requireSupport();
+        // @flow order-refund>request: Check the refundable amount and record OrderRefunded for payment
         return details(this.lifecycle.refund(orderId, Actor.support(CurrentUser.id()), amountMinor, reason, fundedBy));
     }
 

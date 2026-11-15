@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.platform.mongo;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Clock;
 import java.time.Instant;
 
@@ -26,6 +27,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * replica reads only the buckets it holds while keeping the order of one aggregate's events.
  * Rows also keep the W3C {@code traceparent} of the writing request, when tracing is on.
  */
+@EVL.Queue("module events (outbox)")
 public class OutboxWriter {
 
     public static final String STATUS_NEW = "NEW";

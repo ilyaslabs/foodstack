@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.order.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +61,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  *        for the operator's (snapshotted at placement, so refunds use the same account)
  */
 @Document("order_orders")
+@EVL.Database("foodstack_order")
 public record OrderDocument(@Id String id, String number, String customerId, String customerName, String contactPhone,
         Store store, OrderStatus status, Fulfilment fulfilment, DeliveryMode deliveryMode, Destination destination,
         PaymentMethod paymentMethod, String currency, String language, List<Line> lines, Totals totals, Coupon coupon,

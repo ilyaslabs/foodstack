@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.search.core.engine;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.search.api.CuisineCount;
@@ -9,6 +10,7 @@ import io.github.ilyaslabs.foodstack.search.api.StoreSearchQuery;
  * The search engine behind store discovery (TDD 11). Elasticsearch is the one implementation; the
  * interface keeps it replaceable.
  */
+@EVL.Database("Elasticsearch")
 public interface StoreSearchEngine {
 
     /** Creates the index and its alias when missing; {@code true} when it had to (the caller then rebuilds). */

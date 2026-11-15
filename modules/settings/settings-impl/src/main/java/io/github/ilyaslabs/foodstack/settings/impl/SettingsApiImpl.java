@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.settings.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.platform.core.EpochSeconds;
 import io.github.ilyaslabs.foodstack.settings.api.BrandingView;
 import io.github.ilyaslabs.foodstack.settings.api.DeliveryView;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Component;
  * every caller: branding, languages and ordering rules are public (TDD 9.1).
  */
 @Component
+@EVL.Service("settings module")
 class SettingsApiImpl implements SettingsApi {
 
     private final SettingsService settingsService;

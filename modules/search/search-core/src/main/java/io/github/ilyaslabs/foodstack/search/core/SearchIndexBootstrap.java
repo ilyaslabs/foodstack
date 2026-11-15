@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.search.core;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Duration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -44,8 +46,11 @@ class SearchIndexBootstrap implements ApplicationListener<ApplicationReadyEvent>
     }
 
     @Override
+    @Flow(value = "search-bootstrap", label = "Prepare the search index at start", description = "Creates the index and alias if missing, then schedules rebuilds")
+    @EVL.Job(trigger = "application ready")
     public void onApplicationEvent(ApplicationReadyEvent event) {
         try {
+            // @flow search-bootstrap>ensure: Create the index and alias if missing; rebuild in the background when new
             if (this.engine.ensureIndex()) {
                 Thread.ofVirtual().name("search-rebuild").start(this::rebuild);
             }
@@ -58,8 +63,11 @@ class SearchIndexBootstrap implements ApplicationListener<ApplicationReadyEvent>
         this.scheduler.scheduleAtFixedRate(this::scheduledRebuild, seconds, seconds, TimeUnit.SECONDS);
     }
 
+    @Flow(value = "search-scheduled-rebuild", label = "Scheduled index rebuild", description = "One replica at a time, by a Redis lock")
+    @EVL.Job(schedule = "every rebuild interval (config)")
     void scheduledRebuild() {
         try {
+            // @flow search-scheduled-rebuild>lock: Take the rebuild lock in Redis
             if (this.lock.tryTake(this.interval)) {
                 this.engine.ensureIndex();
                 rebuild();

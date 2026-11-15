@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.order.core.application.OrderProjections;
 import io.github.ilyaslabs.foodstack.platform.kafka.CloudEvents;
 import tools.jackson.databind.json.JsonMapper;
@@ -7,6 +9,7 @@ import tools.jackson.databind.json.JsonMapper;
 import org.springframework.kafka.annotation.KafkaListener;
 
 /** Feeds the order lists from the module's own events (TDD 6.3: projections follow the outbox). */
+@EVL.Queue("foodstack.order.events")
 public class OrderProjectionListener {
 
     private final OrderProjections projections;
@@ -22,6 +25,8 @@ public class OrderProjectionListener {
             id = "${foodstack.namespace:foodstack}-order-projections",
             groupId = "${foodstack.namespace:foodstack}-order-projections",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "order-on-order-event", label = "Keep order lists in step", description = "Every order event refreshes the order's list rows", after = "order-place")
+    @EVL.Job(trigger = "order events")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         if (event.subject() != null) {

@@ -1,8 +1,10 @@
 package io.github.ilyaslabs.foodstack.notification.core.push;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.util.Map;
 
 /** Sends one push message to one device (TDD 8.3, FCM). */
+@EVL.External("Firebase Cloud Messaging")
 public interface PushTransport {
 
     /**

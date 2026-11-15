@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.search.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.Locale;
 import java.util.Map;
 
@@ -37,6 +39,8 @@ class SearchController {
     }
 
     @GetMapping("/stores")
+    @Flow(value = "search-stores", label = "Search branches nearby", description = "Text, cuisine and delivery or pickup around a point, widening on request")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/search/stores", caller = "Customer web")
     StoreSearchPage stores(@RequestParam double lat, @RequestParam double lng, @RequestParam(required = false) String q,
             @RequestParam(required = false) String cuisine, @RequestParam(defaultValue = "DELIVERY") String fulfilment,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
@@ -54,6 +58,8 @@ class SearchController {
     /** Re-reads every branch into the index in the background. */
     @PostMapping("/reindex")
     @PreAuthorize("hasAuthority('search:manage')")
+    @Flow(value = "search-reindex", label = "Rebuild search index", description = "Starts a background rebuild of every branch")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/search/reindex", caller = "Back office")
     ResponseEntity<Map<String, String>> reindex() {
         Thread.ofVirtual().name("search-rebuild").start(this.indexer::rebuild);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("status", "STARTED"));

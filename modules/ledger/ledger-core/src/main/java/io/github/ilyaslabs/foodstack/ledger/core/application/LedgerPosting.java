@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.ledger.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -66,6 +67,7 @@ public class LedgerPosting {
     // ---- order events -------------------------------------------------------------------------
 
     /** Remembers the order's branch, for payment postings that do not carry it. */
+    @Flow(value = "ledger-on-order>type?>placed", label = "Remember who collects the order's money", when = "OrderPlaced")
     public void orderPlaced(OrderSummary order) {
         OrderMoney money = order.money();
         Update update = new Update().setOnInsert("storeId", order.storeId())
@@ -77,16 +79,19 @@ public class LedgerPosting {
     }
 
     /** The order was delivered or collected: what the customer paid is shared out, then any refund asked before. */
+    @Flow(value = "ledger-on-order>type?>done", label = "Post the finished order", when = "OrderDelivered, OrderCollected")
     public void orderDone(OrderSummary order, Instant at) {
         OrderMoney money = order.money();
         if (money == null) {
             log.warn("Order {} has no money breakdown (sent before the ledger existed); nothing posted", order.orderId());
             return;
         }
+        // @flow ledger-on-order>type?>done>post: Post commission, fees and the store's share once
         List<Leg> legs = Postings.orderCompleted(order.storeId(), order.paymentMethod(), money);
         post("order:" + order.orderId() + ":done", order.storeId(), ORDER_DONE, order.storeId(), money.brandId(),
                 order.orderId(), legs, order.currency(), at, null);
         account(Accounts.store(order.storeId()), order.storeName(), money.brandId(), order.currency(), at);
+        // @flow ledger-on-order>type?>done>pending: Post refunds that waited for the order to finish [each pending refund]
         OrderDocument kept = this.mongo.findAndModify(Query.query(Criteria.where("_id").is(order.orderId())),
                 new Update().set("done", true).setOnInsert("storeId", order.storeId()).setOnInsert("brandId", money.brandId())
                     .setOnInsert("collectedBy", money.collectedBy()),
@@ -104,6 +109,7 @@ public class LedgerPosting {
      * on an order still in progress it waits for the order to be done, and is dropped if the order
      * is cancelled instead (the customer simply gets the money back).
      */
+    @Flow(value = "ledger-on-order>type?>refunded", label = "Post or hold the refund", when = "OrderRefunded")
     public void orderRefunded(String eventId, OrderRefunded event, Instant at) {
         OrderSummary order = event.order();
         if (event.fundedBy() == null || event.amountMinor() <= 0) {
@@ -111,6 +117,8 @@ public class LedgerPosting {
         }
         String brandId = (order.money() != null) ? order.money().brandId() : null;
         String collectedBy = (order.money() != null) ? order.money().collectedBy() : OrderMoney.OPERATOR;
+        // @flow ledger-on-order>type?>refunded>finished?: Order finished?
+        // @flow ledger-on-order>type?>refunded>finished?>post: Post the refund against whoever funds it [when DELIVERED or COLLECTED]
         if (order.status() == OrderStatus.DELIVERED || order.status() == OrderStatus.COLLECTED) {
             postRefund(eventId, order.storeId(), brandId, order.orderId(), event.amountMinor(), event.fundedBy(), collectedBy,
                     order.currency(), at, event.reason());
@@ -119,6 +127,7 @@ public class LedgerPosting {
         if (order.status().isFinal()) {
             return;
         }
+        // @flow ledger-on-order>type?>refunded>finished?>hold: Keep it pending until the order finishes [when still open]
         OrderDocument.PendingRefund pending = new OrderDocument.PendingRefund(eventId, event.amountMinor(), event.fundedBy(),
                 event.reason());
         try {
@@ -134,6 +143,7 @@ public class LedgerPosting {
     }
 
     /** The order was cancelled, rejected or failed: refunds waiting for it are not posted. */
+    @Flow(value = "ledger-on-order>type?>closed", label = "Mark the order closed", when = "cancelled, rejected or failed")
     public void orderClosed(String orderId) {
         this.mongo.updateFirst(Query.query(Criteria.where("_id").is(orderId)), new Update().set("closed", true),
                 OrderDocument.class);
@@ -148,6 +158,7 @@ public class LedgerPosting {
     // ---- payment events -----------------------------------------------------------------------
 
     /** Card money reached the operator's gateway. */
+    @Flow(value = "ledger-on-payment>type?>paid", label = "Post card money received by the operator", when = "PaymentSucceeded, operator collects")
     public void paymentReceived(PaymentSucceeded event, Instant at) {
         OrderDocument order = order(event.orderId());
         if (order != null && OrderMoney.STORE.equals(order.collectedBy())) {
@@ -160,6 +171,7 @@ public class LedgerPosting {
     }
 
     /** Card money went back to the customer from the operator's gateway. */
+    @Flow(value = "ledger-on-payment>type?>refund-paid", label = "Post the refund paid out", when = "RefundSucceeded, operator collects")
     public void refundPaidOut(RefundSucceeded event, Instant at) {
         OrderDocument order = order(event.orderId());
         if (order != null && OrderMoney.STORE.equals(order.collectedBy())) {
@@ -174,6 +186,7 @@ public class LedgerPosting {
     // ---- dispatch events ----------------------------------------------------------------------
 
     /** An operator rider delivered: pay, tip and cash carried move onto their account. */
+    @Flow(value = "ledger-on-dispatch>post", label = "Post rider pay, tip and cash collected")
     public void deliveryCompleted(DeliveryCompleted event, Instant at) {
         String riderId = event.delivery().riderId();
         List<Leg> legs = Postings.deliveryCompleted(riderId, event.riderKind(), event.earningMinor(), event.tipMinor(),

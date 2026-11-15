@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.store.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.platform.security.CurrentUser;
@@ -52,6 +54,8 @@ class BrandsController {
 
     @GetMapping("/{brandId}")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-brand-get", label = "Show brand")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/brands/{brandId}", caller = "Back office")
     ResponseEntity<StoreDtos.BrandResponse> brand(@PathVariable String brandId) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
         BrandDetails brand = this.storeService.getBrand(brandId);
@@ -60,6 +64,8 @@ class BrandsController {
 
     @PutMapping("/{brandId}")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-brand-update", label = "Change brand", description = "Name, description, cuisines, logo and cover; needs If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/brands/{brandId}", caller = "Back office")
     ResponseEntity<StoreDtos.BrandResponse> update(@PathVariable String brandId,
             @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @Valid @RequestBody StoreDtos.BrandRequest request) {
@@ -74,6 +80,8 @@ class BrandsController {
     /** The brand's commission, now or from a date (operator only, PRD FI-2, BB-8). */
     @PutMapping("/{brandId}/commission")
     @PreAuthorize("hasAuthority('store:manage')")
+    @Flow(value = "store-brand-commission", label = "Plan brand commission", description = "Operator sets the brand's default commission from a date")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/brands/{brandId}/commission", caller = "Back office")
     ResponseEntity<StoreDtos.BrandResponse> commission(@PathVariable String brandId,
             @Valid @RequestBody StoreDtos.CommissionChangeRequest request) {
         if (request.commission() == null) {
@@ -89,12 +97,16 @@ class BrandsController {
     /** How far the operator moves the brand up in search, 0 to 3 (operator only, TDD 11). */
     @GetMapping("/{brandId}/search-boost")
     @PreAuthorize("hasAuthority('store:manage')")
+    @Flow(value = "store-brand-search-boost-get", label = "Show brand search boost")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/brands/{brandId}/search-boost", caller = "Back office")
     StoreDtos.SearchBoost searchBoost(@PathVariable String brandId) {
         return new StoreDtos.SearchBoost(this.storeService.searchBoost(brandId));
     }
 
     @PutMapping("/{brandId}/search-boost")
     @PreAuthorize("hasAuthority('store:manage')")
+    @Flow(value = "store-brand-search-boost", label = "Change brand search boost", description = "0 to 3; search ranks the brand's branches higher")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/brands/{brandId}/search-boost", caller = "Back office")
     StoreDtos.SearchBoost updateSearchBoost(@PathVariable String brandId, @Valid @RequestBody StoreDtos.SearchBoost request) {
         return new StoreDtos.SearchBoost(this.storeService.updateSearchBoost(brandId, request.level(), CurrentUser.id()));
     }
@@ -103,6 +115,8 @@ class BrandsController {
 
     @GetMapping("/{brandId}/branches")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-brand-branches", label = "List brand branches")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/brands/{brandId}/branches", caller = "Back office")
     StoreDtos.StoreListResponse branches(@PathVariable String brandId) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
         return new StoreDtos.StoreListResponse(this.storeService.branches(brandId).stream().map(StoreMapper::summary).toList());
@@ -111,6 +125,8 @@ class BrandsController {
     /** Adds a branch in draft; the operator makes it live. Operator staff and the brand's owners. */
     @PostMapping("/{brandId}/branches")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-brand-add-branch", label = "Add branch to brand", description = "New branch starts as a draft and shares the brand menu")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/brands/{brandId}/branches", caller = "Back office")
     ResponseEntity<StoreDtos.StoreResponse> addBranch(@PathVariable String brandId,
             @Valid @RequestBody StoreDtos.NewBranchRequest request) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
@@ -124,6 +140,8 @@ class BrandsController {
 
     @GetMapping("/{brandId}/owners")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-brand-owners", label = "List brand owners")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/brands/{brandId}/owners", caller = "Back office")
     List<StoreDtos.OwnerResponse> owners(@PathVariable String brandId) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
         return this.storeService.brandOwners(brandId).stream().map(StoreMapper::owner).toList();
@@ -133,6 +151,8 @@ class BrandsController {
     @PostMapping("/{brandId}/owners")
     @PreAuthorize("hasAuthority('store:manage')")
     @ResponseStatus(HttpStatus.CREATED)
+    @Flow(value = "store-brand-add-owner", label = "Add brand owner", description = "Creates or finds the account in identity and gives it brand access")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/brands/{brandId}/owners", caller = "Back office")
     StoreDtos.OwnerResponse addOwner(@PathVariable String brandId, @Valid @RequestBody StoreDtos.OwnerRequest request) {
         return StoreMapper.owner(this.storeService.addBrandOwner(brandId,
                 new NewOwner(request.email(), request.displayName(), request.initialPassword()), CurrentUser.id()));
@@ -141,12 +161,16 @@ class BrandsController {
     @DeleteMapping("/{brandId}/owners/{userId}")
     @PreAuthorize("hasAuthority('store:manage')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Flow(value = "store-brand-remove-owner", label = "Remove brand owner")
+    @EVL.Endpoint(method = "DELETE", path = "/api/v1/brands/{brandId}/owners/{userId}", caller = "Back office")
     void removeOwner(@PathVariable String brandId, @PathVariable String userId) {
         this.storeService.removeBrandOwner(brandId, userId, CurrentUser.id());
     }
 
     @PutMapping("/{brandId}/branch-promotions")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-brand-branch-promotions", label = "Allow branch promotions", description = "Whether branch managers may create their own promotions")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/brands/{brandId}/branch-promotions", caller = "Back office")
     StoreDtos.BrandResponse branchPromotions(@PathVariable String brandId,
             @Valid @RequestBody StoreDtos.BranchPromotionsRequest request) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
@@ -161,6 +185,8 @@ class BrandsController {
      */
     @GetMapping("/{brandId}/menu")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-menu-editor", label = "Show menu editor", description = "Brand menu, or one branch's view of it with storeId")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/brands/{brandId}/menu", caller = "Back office")
     MenuDtos.EditorMenuResponse menu(@PathVariable String brandId,
             @org.springframework.web.bind.annotation.RequestParam(required = false) String storeId) {
         if (storeId == null) {
@@ -174,6 +200,8 @@ class BrandsController {
     @PostMapping("/{brandId}/menu/sections")
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.CREATED)
+    @Flow(value = "store-menu-section-create", label = "Add menu section")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/brands/{brandId}/menu/sections", caller = "Back office")
     MenuDtos.SectionResponse createSection(@PathVariable String brandId, @Valid @RequestBody MenuDtos.SectionRequest request) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
         return StoreMapper.section(this.menuService.createSection(brandId, request.name(), CurrentUser.id()));
@@ -181,6 +209,8 @@ class BrandsController {
 
     @PutMapping("/{brandId}/menu/sections/{sectionId}")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-menu-section-update", label = "Change menu section")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/brands/{brandId}/menu/sections/{sectionId}", caller = "Back office")
     MenuDtos.SectionResponse updateSection(@PathVariable String brandId, @PathVariable String sectionId,
             @Valid @RequestBody MenuDtos.SectionRequest request) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
@@ -192,6 +222,8 @@ class BrandsController {
     @DeleteMapping("/{brandId}/menu/sections/{sectionId}")
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Flow(value = "store-menu-section-delete", label = "Delete menu section", description = "Only an empty section")
+    @EVL.Endpoint(method = "DELETE", path = "/api/v1/brands/{brandId}/menu/sections/{sectionId}", caller = "Back office")
     void deleteSection(@PathVariable String brandId, @PathVariable String sectionId) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
         this.menuService.deleteSection(brandId, sectionId, CurrentUser.id());
@@ -200,6 +232,8 @@ class BrandsController {
     @PostMapping("/{brandId}/menu/items")
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.CREATED)
+    @Flow(value = "store-menu-item-create", label = "Add menu item")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/brands/{brandId}/menu/items", caller = "Back office")
     MenuDtos.ItemResponse createItem(@PathVariable String brandId, @Valid @RequestBody MenuDtos.ItemRequest request) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
         return StoreMapper.item(this.menuService.createItem(brandId, StoreMapper.item(request), CurrentUser.id()));
@@ -207,6 +241,8 @@ class BrandsController {
 
     @PutMapping("/{brandId}/menu/items/{itemId}")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-menu-item-update", label = "Change menu item", description = "Price changes may wait for operator approval")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/brands/{brandId}/menu/items/{itemId}", caller = "Back office")
     MenuDtos.ItemResponse updateItem(@PathVariable String brandId, @PathVariable String itemId,
             @Valid @RequestBody MenuDtos.ItemRequest request) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
@@ -218,6 +254,8 @@ class BrandsController {
     @DeleteMapping("/{brandId}/menu/items/{itemId}")
     @PreAuthorize("isAuthenticated()")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Flow(value = "store-menu-item-delete", label = "Delete menu item", description = "Soft delete; past orders keep their copy")
+    @EVL.Endpoint(method = "DELETE", path = "/api/v1/brands/{brandId}/menu/items/{itemId}", caller = "Back office")
     void deleteItem(@PathVariable String brandId, @PathVariable String itemId) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
         this.menuService.deleteItem(brandId, itemId, CurrentUser.id());

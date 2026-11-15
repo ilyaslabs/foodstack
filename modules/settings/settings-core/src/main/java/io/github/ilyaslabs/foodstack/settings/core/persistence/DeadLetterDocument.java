@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.settings.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -27,6 +28,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param expiresAt TTL: 30 days after it failed
  */
 @Document("settings_dead_letters")
+@EVL.Database("foodstack_settings")
 public record DeadLetterDocument(@Id String id, String module, String originalTopic, String consumerGroup, String key,
         String eventType, String eventId, String error, String valueCipher, Instant failedAt, String status,
         String handledBy, Instant handledAt, Instant expiresAt) {

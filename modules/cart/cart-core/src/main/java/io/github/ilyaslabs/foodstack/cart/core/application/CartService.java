@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.cart.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -73,8 +74,10 @@ public class CartService {
         if (add.quantity() < 1 || add.quantity() > MAX_QUANTITY) {
             throw invalid("quantity", "must be between 1 and " + MAX_QUANTITY);
         }
+        // @flow cart-add-line>validate: Check item, options and branch with the store module
         OrderValidationView check = this.store.validateOrder(new OrderValidationRequest(add.storeId(),
                 List.of(new OrderLineRequest(add.itemId(), add.quantity(), options))));
+        // @flow cart-add-line>validate>reject: Reject when branch is not live or the line is invalid [on error BadRequest]
         if (!check.store().live()) {
             throw new ModuleException.BadRequest("This restaurant is not taking orders", "STORE_NOT_LIVE");
         }
@@ -82,15 +85,21 @@ public class CartService {
             throw new ModuleException.BadRequest("This item cannot be added as chosen", "LINE_INVALID",
                     Map.of("problems", check.problems().stream().map(CartService::problem).toList()));
         }
+        // @flow cart-add-line>write: Add or merge the line, retrying on concurrent change
         write(customerId, (cart) -> {
             List<CartLine> lines = new ArrayList<>((cart != null && cart.lines() != null) ? cart.lines() : List.of());
             if (cart != null && cart.storeId() != null && !cart.storeId().equals(add.storeId()) && !lines.isEmpty()) {
+                // @flow cart-add-line>write>other-store?: Cart holds another branch?
+                // @flow cart-add-line>write>other-store?>conflict: Refuse with CART_OTHER_STORE [when replaceOtherStore is false]
                 if (!add.replaceOtherStore()) {
                     throw new ModuleException.Conflict("Your cart has items from another restaurant", "CART_OTHER_STORE",
                             Map.of("storeId", cart.storeId()));
                 }
+                // @flow cart-add-line>write>other-store?>replace: Drop the other branch's lines [when replaceOtherStore is true]
                 lines.clear();
             }
+            // @flow cart-add-line>write>merge?: Same item, options and note already in cart?
+            // @flow cart-add-line>write>merge?>increase: Increase that line's quantity [when same line exists]
             int same = indexOfSame(lines, add.itemId(), options, note);
             if (same >= 0) {
                 CartLine existing = lines.get(same);
@@ -100,6 +109,7 @@ public class CartService {
                 }
                 lines.set(same, new CartLine(existing.lineId(), existing.itemId(), quantity, existing.optionIds(), note));
             }
+            // @flow cart-add-line>write>merge?>append: Append a new line [when else]
             else {
                 if (lines.size() >= MAX_LINES) {
                     throw new ModuleException.BadRequest("A cart holds at most " + MAX_LINES + " lines", "CART_FULL");
@@ -109,6 +119,7 @@ public class CartService {
             return new CartDocument(customerId, add.storeId(), List.copyOf(lines), this.clock.instant(),
                     (cart != null) ? cart.version() : null);
         });
+        // @flow cart-add-line>reprice: Reprice the cart for the answer
         return get(customerId);
     }
 
@@ -117,6 +128,7 @@ public class CartService {
         if (quantity < 0 || quantity > MAX_QUANTITY) {
             throw invalid("quantity", "must be between 0 and " + MAX_QUANTITY);
         }
+        // @flow cart-set-quantity>write, cart-remove-line>write: Update or remove the line, retrying on concurrent change
         write(customerId, (cart) -> {
             List<CartLine> lines = new ArrayList<>((cart != null && cart.lines() != null) ? cart.lines() : List.of());
             int index = -1;
@@ -129,9 +141,12 @@ public class CartService {
                 throw new ModuleException.NotFound("This line is no longer in your cart", "CART_LINE_NOT_FOUND");
             }
             CartLine line = lines.get(index);
+            // @flow cart-set-quantity>write>zero?: Quantity is 0?
+            // @flow cart-set-quantity>write>zero?>remove: Remove the line [when 0]
             if (quantity == 0) {
                 lines.remove(index);
             }
+            // @flow cart-set-quantity>write>zero?>set: Set the new quantity [when else]
             else {
                 lines.set(index, new CartLine(line.lineId(), line.itemId(), quantity, line.optionIds(), line.note()));
             }
@@ -158,6 +173,9 @@ public class CartService {
     }
 
     /** Prices the cart's lines through the store module. */
+    @Flow(value = "cart-get>price", label = "Price lines through the store module")
+    @Flow(value = "cart-checkout>quote>price", label = "Price lines through the store module")
+    @Flow(value = "order-place>checkout>price", label = "Price lines through the store module")
     OrderValidationView price(CartDocument cart) {
         List<OrderLineRequest> lines = cart.lines()
             .stream()

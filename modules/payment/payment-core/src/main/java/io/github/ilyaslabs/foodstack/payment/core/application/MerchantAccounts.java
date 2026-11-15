@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.payment.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -142,6 +143,7 @@ public class MerchantAccounts {
     // ---- what the store and ledger modules say ----------------------------------------------------
 
     /** Finance changed who collects for the branch. */
+    @Flow(value = "payment-on-collection>type?>mode", label = "Save the branch's collection mode", when = "StorePaymentCollectionChanged")
     public void collectionChanged(String storeId, String brandId, String mode) {
         this.mongo.upsert(Query.query(Criteria.where("_id").is(storeId)),
                 new Update().set("brandId", brandId).set("mode", mode).set("updatedAt", this.clock.instant())
@@ -150,6 +152,7 @@ public class MerchantAccounts {
     }
 
     /** The ledger says the branch is over its credit limit, or back within it. */
+    @Flow(value = "payment-on-collection>type?>suspend", label = "Suspend or restore direct collection", when = "credit limit exceeded or restored")
     public void suspended(String storeId, String brandId, boolean suspended) {
         this.mongo.upsert(Query.query(Criteria.where("_id").is(storeId)),
                 new Update().set("suspended", suspended).set("updatedAt", this.clock.instant())
@@ -186,6 +189,7 @@ public class MerchantAccounts {
      * or the branch may not collect, {@code MERCHANT_ACCOUNT_REFUSED} (400) with the gateway's reason.
      */
     public AccountView connect(String scope, String ownerId, String secretKey, String webhookSecret) {
+        // @flow payment-account-connect>owner: Check the caller owns the brand or branch
         requireOwner(scope, ownerId);
         if (this.operatorGateway == null || this.accountGateways == null) {
             throw new ModuleException.BadRequest("No card gateway is set up on this platform", "PAYMENT_UNAVAILABLE");
@@ -194,6 +198,7 @@ public class MerchantAccounts {
             throw new ModuleException.Unavailable("Merchant accounts need FOODSTACK_PII_KEY on the server",
                     "MERCHANT_ACCOUNTS_UNAVAILABLE");
         }
+        // @flow payment-account-connect>allowed: Check the operator allows direct collection here
         requireAllowed(scope, ownerId);
         String key = (secretKey != null) ? secretKey.strip() : "";
         String hook = (webhookSecret != null) ? webhookSecret.strip() : "";
@@ -202,6 +207,7 @@ public class MerchantAccounts {
                     "MERCHANT_ACCOUNT_INVALID");
         }
         try {
+            // @flow payment-account-connect>verify: Verify the keys with the gateway
             this.accountGateways.open(key, hook).verify();
         }
         catch (GatewayException ex) {
@@ -213,6 +219,7 @@ public class MerchantAccounts {
                 this.operatorGateway.id(), this.cipher.encrypt(key), this.cipher.encrypt(hook),
                 key.substring(key.length() - 4), MerchantAccountDocument.ACTIVE, true, null, now, CurrentUser.id(), now);
         try {
+            // @flow payment-account-connect>save: Retire the old account and save the new one, keys encrypted
             this.transaction.executeWithoutResult((status) -> {
                 retire(scope, ownerId, now);
                 this.mongo.insert(account);
@@ -227,7 +234,9 @@ public class MerchantAccounts {
 
     /** Stops using the owner's account; payments already taken keep it for refunds. */
     public void disconnect(String scope, String ownerId) {
+        // @flow payment-account-disconnect>owner: Check the caller owns the brand or branch
         requireOwner(scope, ownerId);
+        // @flow payment-account-disconnect>retire: Retire the account
         retire(scope, ownerId, this.clock.instant());
     }
 

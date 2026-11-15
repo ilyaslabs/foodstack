@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.settings.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -46,6 +47,7 @@ public class DeliverySettingsService {
                 () -> details(this.repository.findById(DeliveryDocument.ID).orElse(DEFAULTS)));
     }
 
+    @Flow(value = "settings-delivery-update>save", label = "Validate, save if the version matches, record SettingsChanged and drop the cache")
     public DeliveryDetails update(UpdateDelivery update, long expectedVersion, String userId) {
         validate(update);
         DeliveryDocument current = this.repository.findById(DeliveryDocument.ID).orElse(DEFAULTS);

@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.order.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -115,6 +117,7 @@ public class OrderLifecycleService {
      * The store takes the order with a prep-time estimate (PRD OF-2) and, for a self-delivery order,
      * optionally one of its own riders (PRD OF-8). Dispatch takes it from the event.
      */
+    @Flow(value = "order-store-action>action?>accept", label = "Accept with prep time, optionally naming a store rider", when = "ACCEPT")
     public OrderDocument accept(String orderId, Actor actor, int prepMinutes, String storeRiderId) {
         if (prepMinutes < 1 || prepMinutes > 180) {
             throw new ModuleException.BadRequest("Prep time must be 1 to 180 minutes", "PREP_TIME_INVALID");
@@ -132,6 +135,7 @@ public class OrderLifecycleService {
     }
 
     /** The store says no; a paid order is refunded (PRD OF-2). */
+    @Flow(value = "order-store-action>action?>reject", label = "Reject with a reason; a paid order is refunded", when = "REJECT")
     public OrderDocument reject(String orderId, Actor actor, String reason) {
         String why = requireReason(reason);
         return step(orderId, EnumSet.of(OrderStatus.CONFIRMED), OrderStatus.REJECTED, actor, why, (order, now) -> {
@@ -141,17 +145,20 @@ public class OrderLifecycleService {
         });
     }
 
+    @Flow(value = "order-store-action>action?>preparing", label = "Mark preparing", when = "PREPARING")
     public OrderDocument preparing(String orderId, Actor actor) {
         return step(orderId, EnumSet.of(OrderStatus.ACCEPTED), OrderStatus.PREPARING, actor, null,
                 (order, now) -> new Change(new Update(), (after) -> new OrderPreparing(summary(after), actor.asEventActor())));
     }
 
+    @Flow(value = "order-store-action>action?>ready", label = "Mark ready", when = "READY")
     public OrderDocument ready(String orderId, Actor actor) {
         return step(orderId, EnumSet.of(OrderStatus.ACCEPTED, OrderStatus.PREPARING), OrderStatus.READY, actor, null,
                 (order, now) -> new Change(new Update(), (after) -> new OrderReady(summary(after), actor.asEventActor())));
     }
 
     /** The customer collected a pickup order. */
+    @Flow(value = "order-store-action>action?>collected", label = "Pickup order collected", when = "COLLECTED")
     public OrderDocument collected(String orderId, Actor actor) {
         return step(orderId, EnumSet.of(OrderStatus.READY), OrderStatus.COLLECTED, actor, null, (order, now) -> {
             requireFulfilment(order, Fulfilment.PICKUP);
@@ -163,6 +170,9 @@ public class OrderLifecycleService {
      * A delivery order left the store: self-delivery stores mark it themselves (PRD OF-4), riders
      * through dispatch. A rider's pickup also counts as ready when the store forgot to say so.
      */
+    @Flow(value = "order-store-action>action?>picked-up", label = "Delivery left the store", when = "PICKED_UP")
+    @Flow(value = "order-on-dispatch>type?>picked-up", label = "Mark picked up", when = "DeliveryPickedUp")
+    @Flow(value = "order-on-dispatch>type?>completed>picked-up", label = "Mark picked up first if the rider forgot", when = "not picked up yet")
     public OrderDocument pickedUp(String orderId, Actor actor) {
         Set<OrderStatus> from = Actor.RIDER.equals(actor.role())
                 ? EnumSet.of(OrderStatus.ACCEPTED, OrderStatus.PREPARING, OrderStatus.READY) : EnumSet.of(OrderStatus.READY);
@@ -173,6 +183,8 @@ public class OrderLifecycleService {
         });
     }
 
+    @Flow(value = "order-store-action>action?>delivered", label = "Mark delivered", when = "DELIVERED")
+    @Flow(value = "order-on-dispatch>type?>completed>delivered", label = "Mark delivered")
     public OrderDocument delivered(String orderId, Actor actor) {
         return step(orderId, EnumSet.of(OrderStatus.PICKED_UP), OrderStatus.DELIVERED, actor, null, (order, now) -> {
             requireSelfDeliveryOrSupport(order, actor);
@@ -243,12 +255,15 @@ public class OrderLifecycleService {
      *
      * @return the order when it moved to {@code CONFIRMED}, otherwise {@code null}
      */
+    @Flow(value = "order-on-payment>type?>succeeded", label = "Confirm the waiting order", when = "PaymentSucceeded")
     public OrderDocument paymentSucceeded(String orderId, long amountMinor) {
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
             OrderDocument order = find(orderId);
             if (order == null || order.paidMinor() > 0) {
                 return null;
             }
+            // @flow order-on-payment>type?>succeeded>pending?: Order still waiting for payment?
+            // @flow order-on-payment>type?>succeeded>pending?>confirm: Confirm and set the accept deadline [when PAYMENT_PENDING]
             if (order.status() == OrderStatus.PAYMENT_PENDING) {
                 Instant now = this.clock.instant();
                 OrderDocument after = apply(order, OrderStatus.CONFIRMED, Actor.system(), "Paid by card",
@@ -259,6 +274,7 @@ public class OrderLifecycleService {
                 }
                 continue;
             }
+            // @flow order-on-payment>type?>succeeded>pending?>refund: Refund at once, the order already closed [when else]
             OrderDocument after = note(order, Actor.system(), "Payment arrived after the order closed; refunding",
                     new Update().set("paidMinor", amountMinor).inc("refundRequestedMinor", amountMinor),
                     (changed) -> new OrderRefunded(summary(changed), "payment", amountMinor,
@@ -271,6 +287,7 @@ public class OrderLifecycleService {
     }
 
     /** The card payment failed or its page expired: the order fails and its coupon use is given back. */
+    @Flow(value = "order-on-payment>type?>failed", label = "Fail the order", when = "PaymentFailed")
     public void paymentFailed(String orderId, String reason) {
         try {
             step(orderId, EnumSet.of(OrderStatus.PAYMENT_PENDING), OrderStatus.FAILED, Actor.system(),
@@ -284,6 +301,7 @@ public class OrderLifecycleService {
     }
 
     /** Money went back to the customer. */
+    @Flow(value = "order-on-payment>type?>refunded", label = "Record the refunded amount", when = "RefundSucceeded")
     public void refundSucceeded(String orderId, long amountMinor) {
         OrderDocument order = find(orderId);
         if (order == null) {
@@ -293,6 +311,7 @@ public class OrderLifecycleService {
     }
 
     /** The gateway refused a refund: support sees it on the timeline and the amount can be asked again. */
+    @Flow(value = "order-on-payment>type?>refund-failed", label = "Note the failed refund so it can be asked again", when = "RefundFailed")
     public void refundFailed(String orderId, long amountMinor, String reason) {
         OrderDocument order = find(orderId);
         if (order == null) {
@@ -305,6 +324,7 @@ public class OrderLifecycleService {
     // ---- dispatch ------------------------------------------------------------------------------
 
     /** A rider took the delivery (dispatch {@code RiderAssigned}): shown to the customer and the store. */
+    @Flow(value = "order-on-dispatch>type?>assigned", label = "Show the rider on the order", when = "RiderAssigned")
     public void riderAssigned(String orderId, String riderId, String name, String vehicle, String eventActor) {
         OrderDocument order = find(orderId);
         if (order == null || order.status().isFinal()
@@ -317,6 +337,7 @@ public class OrderLifecycleService {
     }
 
     /** The rider was taken off the delivery before pickup (dispatch {@code RiderUnassigned}). */
+    @Flow(value = "order-on-dispatch>type?>unassigned", label = "Remove the rider from the order", when = "RiderUnassigned")
     public void riderUnassigned(String orderId, String riderId, String reason, String eventActor) {
         OrderDocument order = find(orderId);
         if (order == null || order.status().isFinal() || order.rider() == null || !order.rider().riderId().equals(riderId)) {
@@ -329,6 +350,7 @@ public class OrderLifecycleService {
      * Support gave an operator delivery back to the store (PRD OF-8): from now on the store delivers
      * it and gets the delivery charge, so the order counts as self-delivered.
      */
+    @Flow(value = "order-on-dispatch>type?>handed-back", label = "Switch the order to store delivery", when = "DeliveryHandedBack")
     public void handedBack(String orderId, String reason, String eventActor) {
         OrderDocument order = find(orderId);
         if (order == null || order.status().isFinal() || order.handedBackAt() != null) {
@@ -375,6 +397,8 @@ public class OrderLifecycleService {
     }
 
     /** Rejects late orders of the given work buckets ({@code null} = every bucket). */
+    @Flow(value = "order-accept-timeout", label = "Reject unanswered orders", description = "Confirmed orders past their accept deadline, for the buckets this replica leases")
+    @EVL.Job(schedule = "every 15 s, partitioned by order bucket")
     public int rejectUnanswered(java.util.Set<Integer> buckets) {
         Instant now = this.clock.instant();
         Criteria late = Criteria.where("status").is(OrderStatus.CONFIRMED).and("acceptBy").lt(now);
@@ -382,8 +406,10 @@ public class OrderLifecycleService {
             // rows written before buckets existed have none; every replica may take those (the step is conditional)
             late = late.orOperator(Criteria.where("bucket").in(buckets), Criteria.where("bucket").exists(false));
         }
+        // @flow order-accept-timeout>find: Find up to 100 late active orders
         List<ActiveOrderDocument> lateOrders = this.mongo.find(Query.query(late).limit(100), ActiveOrderDocument.class);
         int count = 0;
+        // @flow order-accept-timeout>reject: Reject each and refund if paid [each order in lateOrders]
         for (ActiveOrderDocument active : lateOrders) {
             try {
                 step(active.id(), EnumSet.of(OrderStatus.CONFIRMED), OrderStatus.REJECTED, Actor.system(),

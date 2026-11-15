@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.identity.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.EnumSet;
 
 import io.github.ilyaslabs.foodstack.identity.api.Role;
@@ -31,7 +33,10 @@ public class BootstrapAdmin {
 
     @EventListener(ApplicationReadyEvent.class)
     @Order(0)
+    @Flow(value = "identity-bootstrap-admin", label = "Create the first admin", description = "At start: check the personal-data key opens stored accounts, then create the configured admin once")
+    @EVL.Job(trigger = "application ready")
     public void createIfMissing() {
+        // @flow identity-bootstrap-admin>key: Refuse to start when the personal-data key does not open stored data
         if (!this.users.piiKeyOpensStoredData()) {
             throw new IllegalStateException("The personal-data key (foodstack.security.pii-key, FOODSTACK_PII_KEY) "
                     + "does not open the accounts already stored. Use the key the data was written with (from the "
@@ -45,6 +50,7 @@ public class BootstrapAdmin {
         if (this.users.emailExists(email)) {
             return;
         }
+        // @flow identity-bootstrap-admin>create: Create the admin account [when configured and missing]
         this.users.create(new NewUser(email, this.settings.getPassword(), this.settings.getDisplayName(),
                 EnumSet.of(Role.ADMIN)), "bootstrap");
         logger.info("Created the first administrator account " + email);

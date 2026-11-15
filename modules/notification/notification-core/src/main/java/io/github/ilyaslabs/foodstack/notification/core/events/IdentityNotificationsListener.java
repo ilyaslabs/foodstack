@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.notification.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.identity.api.events.AccountDeletionScheduled;
 import io.github.ilyaslabs.foodstack.identity.api.events.EmailCodeIssued;
 import io.github.ilyaslabs.foodstack.identity.api.events.UserDeleted;
@@ -16,6 +18,7 @@ import tools.jackson.databind.json.JsonMapper;
  * Account messages from identity events: a welcome for new customers, emailed one-time codes and
  * the notice of a requested account deletion; a deleted account's notification data is removed.
  */
+@EVL.Queue("foodstack.identity.events")
 public class IdentityNotificationsListener {
 
     private static final String REGISTERED = EventTypes.type("identity", UserRegistered.class);
@@ -42,8 +45,11 @@ public class IdentityNotificationsListener {
             id = "${foodstack.namespace:foodstack}-notification-identity",
             groupId = "${foodstack.namespace:foodstack}-notification",
             topics = "${foodstack.namespace:foodstack}.identity.events", properties = "auto.offset.reset=earliest")
+    @Flow(value = "notification-on-identity", label = "Send account emails", after = "identity-register")
+    @EVL.Job(trigger = "UserRegistered, EmailCodeIssued, AccountDeletionScheduled, UserDeleted")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
+        // @flow notification-on-identity>type?: Which event?
         if (REGISTERED.equals(event.type())) {
             this.messages.onRegistered(event.id(), event.dataAs(UserRegistered.class, this.jsonMapper));
         }

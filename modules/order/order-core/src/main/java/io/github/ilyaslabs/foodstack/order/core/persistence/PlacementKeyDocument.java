@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.order.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -16,5 +17,6 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param createdAt used at
  */
 @Document("order_placement_keys")
+@EVL.Database("foodstack_order")
 public record PlacementKeyDocument(@Id String id, String orderId, String fingerprint, Instant createdAt) {
 }

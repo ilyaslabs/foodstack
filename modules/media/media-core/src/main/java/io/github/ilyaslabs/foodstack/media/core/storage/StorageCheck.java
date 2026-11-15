@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.media.core.storage;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -57,7 +59,10 @@ public class StorageCheck {
      * the same site, as on a trial install)
      * @throws IllegalStateException naming the first thing to fix
      */
+    @Flow(value = "media-storage-check", label = "Check image storage", description = "At start: write a test file to both buckets, read it from the public address, test browser uploads (CORS). Refuses to start on failure")
+    @EVL.Job(trigger = "application start")
     public void check(String publicBucket, String privateBucket, String publicBaseUrl, List<String> origins) {
+        // @flow media-storage-check>write: Write a test file to both buckets [each bucket]
         String key = PREFIX + UUID.randomUUID() + ".txt";
         List<String> written = new ArrayList<>();
         try {
@@ -65,7 +70,9 @@ public class StorageCheck {
                 write(bucket, key);
                 written.add(bucket);
             }
+            // @flow media-storage-check>public-read: Read it back from the public address
             publicRead(publicBaseUrl, key);
+            // @flow media-storage-check>cors: Test browser upload from each site [each origin in origins]
             for (String origin : origins) {
                 for (String bucket : List.of(publicBucket, privateBucket)) {
                     browserUpload(bucket, origin);

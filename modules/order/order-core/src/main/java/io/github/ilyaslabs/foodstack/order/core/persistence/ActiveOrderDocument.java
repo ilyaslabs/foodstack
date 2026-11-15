@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.order.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import io.github.ilyaslabs.foodstack.order.api.OrderStatus;
@@ -26,6 +27,7 @@ import org.springframework.data.mongodb.core.mapping.ShardingStrategy;
  */
 @Document("order_active")
 @Sharded(shardKey = "storeId", shardingStrategy = ShardingStrategy.HASH, immutableKey = true)
+@EVL.Database("foodstack_order")
 public record ActiveOrderDocument(@Id String id, String storeId, OrderStatus status, Instant acceptBy, Instant placedAt,
         int bucket) {
 

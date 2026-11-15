@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.review.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -31,6 +32,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param createdAt when it was written
  */
 @Document("review_reviews")
+@EVL.Database("foodstack_review")
 public record ReviewDocument(@Id String id, String orderId, String orderNumber, String storeId, String brandId,
         String storeName, String customerId, String customerName, int rating, String text, String originalText, Photo photo,
         String language, String status, boolean flagged, String hiddenReason, String hiddenBy, Instant hiddenAt, Reply reply,

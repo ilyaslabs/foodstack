@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.ledger.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -21,6 +22,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param checkedAt the last check
  */
 @Document("ledger_credit")
+@EVL.Database("foodstack_ledger")
 public record CreditDocument(@Id String id, String brandId, String storeName, java.util.Set<String> ownerUserIds, String mode, Long creditLimitMinor, boolean exceeded,
         long owedMinor, Instant checkedAt) {
 

@@ -1,10 +1,12 @@
 package io.github.ilyaslabs.foodstack.geo.core.geocoding;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.geo.core.application.AddressSuggestion;
 
 /** Maps provider SPI for addresses (TDD 12). Nominatim (OpenStreetMap) is the default adapter. */
+@EVL.External("Geocoding provider")
 public interface GeocodingProvider {
 
     /** Addresses matching free text, best first, at most five. */

@@ -79,7 +79,9 @@ public class UserService {
 
     /** Creates a user with any roles; {@code createdBy} {@code null} means self sign-up. */
     public UserAccount create(NewUser user, String createdBy) {
+        // @flow identity-register>validate, identity-user-create>validate: Check email, password and name
         validate(user);
+        // @flow identity-register>build, identity-user-create>build: Encrypt the email, hash the password
         Instant now = this.clock.instant();
         String id = Ids.newId();
         UserDocument document = new UserDocument();
@@ -95,6 +97,7 @@ public class UserService {
         document.setCreatedAt(now);
         document.setUpdatedAt(now);
         try {
+            // @flow identity-register>save, identity-user-create>save: Save login key and user, record UserRegistered
             UserDocument saved = this.transaction.execute((status) -> {
                 this.loginKeys.insert(new LoginKeyDocument(Ids.newId(), document.getEmailIndex(), id));
                 UserDocument result = this.users.insert(document);
@@ -104,6 +107,7 @@ public class UserService {
             return toAccount(saved);
         }
         catch (DuplicateKeyException ex) {
+            // @flow identity-register>taken, identity-user-create>taken: Answer that the email is taken [on error DuplicateKeyException]
             throw new ModuleException.Conflict("An account with this email already exists", "EMAIL_TAKEN");
         }
     }
@@ -257,6 +261,7 @@ public class UserService {
      */
     public long revokeTokens(String userId, String reason) {
         UserDocument user = find(userId);
+        // @flow identity-revoke-tokens>bump: Raise the token version and record UserTokensRevoked
         long next = user.getTokenVersion() + 1;
         user.setTokenVersion(next);
         user.setUpdatedAt(this.clock.instant());
@@ -264,6 +269,7 @@ public class UserService {
             this.users.save(user);
             this.outbox.append(new UserTokensRevoked(userId, next, reason));
         });
+        // @flow identity-revoke-tokens>floor: Set the revocation floor so every module refuses older tokens
         this.revocations.revokeBefore(userId, next);
         return next;
     }
@@ -289,9 +295,11 @@ public class UserService {
         UserDocument user = find(userId);
         if (currentPassword == null || user.getPasswordHash() == null
                 || !this.passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            // @flow identity-change-password>check: Refuse a wrong current password [on error PASSWORD_WRONG]
             throw new ModuleException.BadRequest("The current password is not correct", "PASSWORD_WRONG",
                     Map.of("errors", Map.of("currentPassword", "is not correct")));
         }
+        // @flow identity-change-password>save: Check and save the new password
         requirePassword(newPassword);
         user.setPasswordHash(this.passwordEncoder.encode(newPassword));
         user.setUpdatedAt(this.clock.instant());

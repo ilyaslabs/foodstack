@@ -63,8 +63,10 @@ public class SandboxCheckout {
      * page may keep a pretend Visa ending 4242 for the customer.
      */
     public String complete(String orderId, String token, boolean pay, boolean saveCard) {
+        // @flow payment-sandbox-pay>token: Check the page token
         PaymentDocument payment = require(orderId, token);
         if (pay && saveCard && PaymentDocument.PENDING.equals(payment.status())) {
+            // @flow payment-sandbox-pay>save-card: Save a test card [when pay and save card]
             this.gateway.saveCard(payment.customerReference(), "4242");
         }
         return finish(payment, pay);
@@ -76,12 +78,15 @@ public class SandboxCheckout {
      */
     public String completeEmbedded(String orderId, String clientSecret, String cardNumber, String savedCardId,
             boolean saveCard) {
+        // @flow payment-sandbox-card>secret: Check the client secret
         PaymentDocument payment = (this.gateway != null) ? this.mongo.findById(orderId, PaymentDocument.class) : null;
         if (payment == null || payment.clientSecret() == null || clientSecret == null
                 || !java.security.MessageDigest.isEqual(payment.clientSecret().getBytes(StandardCharsets.UTF_8),
                         clientSecret.getBytes(StandardCharsets.UTF_8))) {
             throw new ModuleException.NotFound("No such payment page", "PAYMENT_PAGE_NOT_FOUND");
         }
+        // @flow payment-sandbox-card>card?: Saved card or typed number?
+        // @flow payment-sandbox-card>card?>saved: Check the saved card belongs to the customer [when saved card]
         if (savedCardId != null && !savedCardId.isBlank()) {
             String customer = payment.customerReference();
             if (customer == null || this.gateway.cards(customer).stream().noneMatch((c) -> c.id().equals(savedCardId))) {
@@ -89,6 +94,7 @@ public class SandboxCheckout {
             }
             return finish(payment, true);
         }
+        // @flow payment-sandbox-card>card?>typed: Check the number; ending 0002 is declined [when card number]
         String digits = (cardNumber != null) ? cardNumber.replaceAll("[\\s-]", "") : "";
         if (!digits.matches("\\d{12,19}")) {
             throw new ModuleException.BadRequest("The card number is not valid", "CARD_INVALID",
@@ -102,6 +108,7 @@ public class SandboxCheckout {
     }
 
     private String finish(PaymentDocument payment, boolean pay) {
+        // @flow payment-sandbox-pay>webhook, payment-sandbox-card>webhook: Sign a sandbox webhook and apply it like the gateway's
         Map.Entry<byte[], Map<String, String>> webhook = this.gateway.webhook(
                 pay ? WebhookEvent.SUCCEEDED : WebhookEvent.FAILED, payment.id(), payment.sessionReference(),
                 payment.amountMinor());

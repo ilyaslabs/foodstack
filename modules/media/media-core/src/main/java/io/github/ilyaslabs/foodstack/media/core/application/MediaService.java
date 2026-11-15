@@ -62,6 +62,7 @@ public class MediaService {
     }
 
     public UploadTicket startUpload(StartUpload request, String userId) {
+        // @flow media-start-upload>validate: Check purpose, image type and size
         if (request.purpose() == null) {
             throw new ModuleException.BadRequest("purpose is required", "MEDIA_PURPOSE_REQUIRED");
         }
@@ -72,6 +73,7 @@ public class MediaService {
             throw new ModuleException.BadRequest("Images must be between 1 byte and "
                     + this.properties.getMaxUploadBytes() + " bytes", "MEDIA_TOO_LARGE");
         }
+        // @flow media-start-upload>save: Save asset as pending upload
         Instant now = this.clock.instant();
         MediaAssetDocument asset = new MediaAssetDocument();
         asset.setId(Ids.newId());
@@ -84,6 +86,7 @@ public class MediaService {
         asset.setCreatedAt(now);
         asset.setUpdatedAt(now);
         MediaAssetDocument saved = this.repository.save(asset);
+        // @flow media-start-upload>presign: Sign an upload URL for the private bucket
         URI url = this.storage.presignUpload(this.properties.getPrivateBucket(), saved.getUploadKey(),
                 saved.getContentType(), saved.getDeclaredBytes(), this.properties.getSignedUrlTtl());
         return new UploadTicket(details(saved), url, Map.of("Content-Type", saved.getContentType()),
@@ -92,6 +95,7 @@ public class MediaService {
 
     /** Validates and processes the uploaded bytes. Only the uploader may complete. */
     public MediaAssetDetails completeUpload(String mediaId, String userId) {
+        // @flow media-complete-upload>check: Load asset; only the uploader may finish, an asset already ready is returned as is
         MediaAssetDocument asset = find(mediaId);
         if (!Objects.equals(asset.getCreatedBy(), userId)) {
             throw new ModuleException.Forbidden("Only the uploader can complete an upload", "MEDIA_NOT_UPLOADER");
@@ -102,15 +106,19 @@ public class MediaService {
         if (asset.getStatus() == MediaStatus.FAILED) {
             throw new ModuleException.Conflict("The upload was rejected: " + asset.getFailureCode(), asset.getFailureCode());
         }
+        // @flow media-complete-upload>read: Read the uploaded file from the private bucket
         byte[] raw = this.storage.read(this.properties.getPrivateBucket(), asset.getUploadKey());
         if (raw == null) {
+            // @flow media-complete-upload>missing: Refuse when nothing was uploaded [on error MEDIA_NOT_UPLOADED]
             throw new ModuleException.Conflict("Nothing was uploaded yet", "MEDIA_NOT_UPLOADED");
         }
+        // @flow media-complete-upload>process: Make WebP variants
         List<ProcessedImage> images;
         try {
             images = this.processor.process(raw);
         }
         catch (ImageRejectedException ex) {
+            // @flow media-complete-upload>rejected: Mark the asset failed, delete the upload, answer BadRequest [on error ImageRejectedException]
             asset.setStatus(MediaStatus.FAILED);
             asset.setFailureCode(ex.code());
             asset.setUpdatedAt(this.clock.instant());
@@ -118,6 +126,7 @@ public class MediaService {
             this.storage.delete(this.properties.getPrivateBucket(), asset.getUploadKey());
             throw new ModuleException.BadRequest(ex.getMessage(), ex.code());
         }
+        // @flow media-complete-upload>write: Write each variant to the public or private bucket [each image in images]
         String bucket = asset.getPurpose().isPublic() ? this.properties.getPublicBucket() : this.properties.getPrivateBucket();
         Map<String, MediaAssetDocument.Variant> variants = new LinkedHashMap<>();
         for (ProcessedImage image : images) {
@@ -127,6 +136,7 @@ public class MediaService {
             variants.put(image.variant().key(),
                     new MediaAssetDocument.Variant(bucket, key, image.width(), image.height(), image.webp().length));
         }
+        // @flow media-complete-upload>ready: Mark ready and record MediaReady
         asset.setVariants(variants);
         asset.setStatus(MediaStatus.READY);
         asset.setUpdatedAt(this.clock.instant());
@@ -136,6 +146,7 @@ public class MediaService {
                     result.getCreatedBy()));
             return result;
         });
+        // @flow media-complete-upload>cleanup: Delete the original upload [when originals are not kept]
         if (!this.properties.isKeepOriginals()) {
             this.storage.delete(this.properties.getPrivateBucket(), asset.getUploadKey());
         }

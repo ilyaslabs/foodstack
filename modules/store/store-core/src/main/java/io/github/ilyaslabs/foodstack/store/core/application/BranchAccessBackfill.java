@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.store.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -25,6 +27,8 @@ public class BranchAccessBackfill {
     // after the store seed (30) and before the rider seed (40), which reads each branch's brand
     @EventListener(ApplicationReadyEvent.class)
     @Order(35)
+    @Flow(value = "store-branch-access-backfill", label = "Move brand owners off branches", description = "At start: publish each branch's brand and move owners kept on both to the brand")
+    @EVL.Job(trigger = "application ready")
     public void run() {
         try {
             int moved = this.stores.backfillBranchAccess();

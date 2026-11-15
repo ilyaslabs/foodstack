@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.geo.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 import java.util.Map;
 
@@ -48,6 +50,8 @@ class GeoController {
 
     @GetMapping("/operator-pricing")
     @PreAuthorize("hasAnyAuthority('geo:manage', 'store:manage', 'store:portal')")
+    @Flow(value = "geo-pricing-get", label = "Operator delivery pricing")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/geo/operator-pricing", caller = "Back office")
     ResponseEntity<OperatorPricingResponse> pricing() {
         OperatorPricing pricing = this.pricingService.get();
         return ResponseEntity.ok().eTag(ETags.of(PRICING, pricing.version())).body(toResponse(pricing));
@@ -55,6 +59,8 @@ class GeoController {
 
     @PutMapping("/operator-pricing")
     @PreAuthorize("hasAuthority('geo:manage')")
+    @Flow(value = "geo-pricing-update", label = "Change operator delivery pricing", description = "Base, per km, max distance, peak windows; needs If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/geo/operator-pricing", caller = "Back office")
     ResponseEntity<OperatorPricingResponse> updatePricing(
             @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @Valid @RequestBody OperatorPricingRequest request) {
@@ -75,6 +81,8 @@ class GeoController {
 
     /** Address search for the location picker (PRD SE-6). */
     @GetMapping("/addresses")
+    @Flow(value = "geo-address-search", label = "Search addresses", description = "Location picker, cached")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/geo/addresses", caller = "Customer web")
     List<AddressResponse> search(@RequestParam("q") String query,
             @RequestHeader(value = HttpHeaders.ACCEPT_LANGUAGE, required = false) String language) {
         return toResponse(this.geocodingService.search(query, language));
@@ -82,6 +90,8 @@ class GeoController {
 
     /** The address at a map pin or the device location. */
     @GetMapping("/addresses/reverse")
+    @Flow(value = "geo-address-reverse", label = "Address at a point", description = "Map pin or device location, cached")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/geo/addresses/reverse", caller = "Customer web")
     List<AddressResponse> reverse(@RequestParam double lat, @RequestParam double lng,
             @RequestHeader(value = HttpHeaders.ACCEPT_LANGUAGE, required = false) String language) {
         return toResponse(this.geocodingService.reverse(lat, lng, language));
@@ -89,6 +99,8 @@ class GeoController {
 
     /** Whether address search is configured, so the apps can hide the search box. */
     @GetMapping("/addresses/availability")
+    @Flow(value = "geo-address-availability", label = "Is address search set up")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/geo/addresses/availability", caller = "Customer web")
     Map<String, Boolean> availability() {
         return Map.of("available", this.geocodingService.isAvailable());
     }

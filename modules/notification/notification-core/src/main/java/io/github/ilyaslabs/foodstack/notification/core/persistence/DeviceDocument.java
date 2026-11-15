@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.notification.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
@@ -20,6 +21,7 @@ import org.springframework.data.mongodb.core.mapping.Sharded;
  */
 @Document("notification_devices")
 @Sharded(shardKey = "userId", immutableKey = true)
+@EVL.Database("foodstack_notification")
 public record DeviceDocument(@Id String id, String userId, String tokenCipher, String platform, String app, Instant createdAt,
         Instant seenAt) {
 }

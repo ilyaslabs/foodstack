@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.geo.core.seed;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -55,6 +57,8 @@ class GeoSeeder {
 
     @EventListener(ApplicationReadyEvent.class)
     @Order(25)
+    @Flow(value = "geo-seed", label = "Seed demo cities, pricing and zones", description = "Once per database")
+    @EVL.Job(trigger = "application ready")
     void seed() {
         try {
             this.mongo.insert(new Document("_id", "v1").append("seededAt", Instant.now()), "geo_seed");

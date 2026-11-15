@@ -146,6 +146,7 @@ public class StoreService {
      */
     public StoreDetails onboard(NewStore command, String userId) {
         LocaleView locale = this.settings.getLocale();
+        // @flow store-onboard>validate: Check names, address, location, prep time, commission and city
         Map<String, String> errors = new LinkedHashMap<>();
         requireText(errors, "brandName", command.brandName(), 1, 80);
         optionalText(errors, "branchName", command.branchName(), 60);
@@ -165,6 +166,7 @@ public class StoreService {
         }
         failIfAny(errors, "STORE_INVALID");
 
+        // @flow store-onboard>build: Build the brand and a draft branch with a free web address and time zone
         Instant now = this.clock.instant();
         BrandDocument brand = new BrandDocument();
         brand.setId(Ids.newId());
@@ -200,6 +202,7 @@ public class StoreService {
         store.setUpdatedBy(userId);
         store.setSlug(freeSlug(Slugs.of(brand.getName(), store.getBranchName())));
 
+        // @flow store-onboard>save: Save slug, brand and branch; record BrandChanged and StoreChanged
         StoreDocument saved = claimingSlug(() -> this.transaction.execute((status) -> {
             this.slugs.insert(new StoreSlugDocument(store.getSlug(), store.getId(), now));
             BrandDocument savedBrand = this.brands.insert(brand);
@@ -208,6 +211,7 @@ public class StoreService {
             this.outbox.append(new StoreChanged(result.getId(), result.getBrandId(), version(result.getVersion()), userId));
             return result;
         }));
+        // @flow store-onboard>remember, store-brand-add-branch>remember: Publish the branch's brand for access checks
         rememberBrand(saved);
         return details(saved, brand, locale);
     }
@@ -219,6 +223,7 @@ public class StoreService {
      */
     public StoreDetails addBranch(String brandId, NewBranch command, String userId) {
         LocaleView locale = this.settings.getLocale();
+        // @flow store-brand-add-branch>validate: Check fields, unique branch name and the branch limit
         BrandDocument brand = findBrand(brandId);
         Map<String, String> errors = new LinkedHashMap<>();
         requireText(errors, "branchName", command.branchName(), 1, 60);
@@ -238,6 +243,7 @@ public class StoreService {
         if (existing.size() >= MAX_BRANCHES) {
             throw new ModuleException.Conflict("A brand can have at most " + MAX_BRANCHES + " branches", "BRANCH_LIMIT");
         }
+        // @flow store-brand-add-branch>build: Build a draft branch with a free web address and time zone
         Instant now = this.clock.instant();
         StoreDocument store = new StoreDocument();
         store.setId(Ids.newId());
@@ -263,6 +269,7 @@ public class StoreService {
         brand.setBranchCount(existing.size() + 1);
         brand.setUpdatedAt(now);
         brand.setUpdatedBy(userId);
+        // @flow store-brand-add-branch>save: Save slug, brand and branch; record BrandChanged and StoreChanged
         StoreDocument saved = claimingSlug(() -> this.transaction.execute((status) -> {
             this.slugs.insert(new StoreSlugDocument(store.getSlug(), store.getId(), now));
             BrandDocument savedBrand = this.brands.save(brand);
@@ -289,12 +296,15 @@ public class StoreService {
         int moved = 0;
         String after = "";
         while (true) {
+            // @flow store-branch-access-backfill>page: Read branches page by page [each page of 200]
             List<StoreDocument> page = this.stores.findByIdGreaterThanOrderByIdAsc(after, Limit.of(200));
             if (page.isEmpty()) {
                 return moved;
             }
             for (StoreDocument store : page) {
+                // @flow store-branch-access-backfill>remember: Publish each branch's brand for access checks
                 rememberBrand(store);
+                // @flow store-branch-access-backfill>move: Move brand owners off the branch [when kept on both]
                 moved += moveBrandOwnersOffBranch(store);
             }
             after = page.getLast().getId();
@@ -348,6 +358,7 @@ public class StoreService {
 
     /** Sets the branch's web address (operator only); the old slug is freed. */
     public StoreDetails updateSlug(String storeId, String slug, long expectedVersion, String userId) {
+        // @flow store-update-slug>validate: Check the slug format and version
         String wanted = (slug != null) ? slug.trim().toLowerCase(Locale.ROOT) : null;
         if (!Slugs.isValid(wanted)) {
             failIfAny(Map.of("slug", "use 3 to " + Slugs.MAX_LENGTH + " lower-case letters, digits and single hyphens"),
@@ -359,8 +370,10 @@ public class StoreService {
             return details(store, findBrand(store.getBrandId()), this.settings.getLocale());
         }
         if (this.slugs.existsById(wanted)) {
+            // @flow store-update-slug>taken: Refuse a slug in use [on error SLUG_TAKEN]
             throw slugTaken();
         }
+        // @flow store-update-slug>save: Claim the new slug, free the old one, save and record StoreChanged
         String old = store.getSlug();
         store.setSlug(wanted);
         return claimingSlug(() -> saveBranch(store, () -> {
@@ -379,11 +392,13 @@ public class StoreService {
     public int assignMissingSlugs(String userId) {
         int assigned = 0;
         for (int attempt = 0; attempt < 1000; attempt++) {
+            // @flow store-slug-backfill>find: Find branches without a web address [each batch of 100]
             List<StoreDocument> batch = this.stores.findBySlugIsNull(Limit.of(100));
             if (batch.isEmpty()) {
                 break;
             }
             for (StoreDocument store : batch) {
+                // @flow store-slug-backfill>assign: Give each a free slug and save [each store in batch]
                 String slug = freeSlug(Slugs.of(store.getBrandName(), store.getBranchName()));
                 store.setSlug(slug);
                 try {
@@ -415,6 +430,7 @@ public class StoreService {
             return write.get();
         }
         catch (DuplicateKeyException ex) {
+            // @flow store-onboard>save>taken, store-brand-add-branch>save>taken: Answer that the web address is taken [on error DuplicateKeyException]
             throw slugTaken();
         }
     }
@@ -488,6 +504,7 @@ public class StoreService {
     /** Replaces the brand's name, description, cuisines and images (PRD BB-2). */
     public BrandDetails updateBrand(String brandId, UpdateBrand update, long expectedVersion, String userId) {
         LocaleView locale = this.settings.getLocale();
+        // @flow store-brand-update>validate: Check name, description, cuisines and version
         Map<String, String> errors = new LinkedHashMap<>();
         requireText(errors, "name", update.name(), 1, 80);
         Translations.validate("description", update.description(), locale.languages(), locale.defaultLanguage(), false, 500,
@@ -501,6 +518,7 @@ public class StoreService {
         String oldCover = brand.getCoverMediaId();
         String newLogo = blankToNull(update.logoMediaId());
         String newCover = blankToNull(update.coverMediaId());
+        // @flow store-brand-update>claim: Claim new logo and cover in media [when changed]
         if (newLogo != null && !newLogo.equals(oldLogo)) {
             brand.setLogoUrls(urls(this.media.claim(newLogo, MediaPurpose.STORE, owner)));
         }
@@ -520,6 +538,7 @@ public class StoreService {
         brand.setCuisines(cuisines);
         brand.setUpdatedAt(this.clock.instant());
         brand.setUpdatedBy(userId);
+        // @flow store-brand-update>save: Save brand, copy the name to its branches, record BrandChanged
         List<StoreDocument> branches = this.stores.findByBrandId(brandId);
         BrandDocument saved = this.transaction.execute((status) -> {
             BrandDocument result = this.brands.save(brand);
@@ -532,6 +551,7 @@ public class StoreService {
             this.outbox.append(new BrandChanged(brandId, version(result.getVersion()), userId));
             return result;
         });
+        // @flow store-brand-update>release: Release replaced images in media [when replaced]
         releaseIfReplaced(oldLogo, newLogo, owner);
         releaseIfReplaced(oldCover, newCover, owner);
         return brandDetails(saved);
@@ -548,16 +568,19 @@ public class StoreService {
      * planned on or after its date.
      */
     public BrandDetails updateCommission(String brandId, Commission commission, Instant effectiveFrom, String userId) {
+        // @flow store-brand-commission>validate: Check rates and start date
         Map<String, String> errors = new LinkedHashMap<>();
         validate(errors, commission);
         Instant now = this.clock.instant();
         Instant from = effectiveFrom(errors, effectiveFrom, now);
         failIfAny(errors, "COMMISSION_INVALID");
         BrandDocument brand = findBrand(brandId);
+        // @flow store-brand-commission>plan: Plan the change in the commission schedule
         brand.setCommissionChanges(new ArrayList<>(CommissionSchedule.plan(brand.getCommissionChanges(),
                 new CommissionChange(commission, from, userId, now))));
         brand.setUpdatedAt(now);
         brand.setUpdatedBy(userId);
+        // @flow store-brand-commission>save: Save brand and record BrandChanged
         BrandDocument saved = this.transaction.execute((status) -> {
             BrandDocument result = this.brands.save(brand);
             this.outbox.append(new BrandChanged(brandId, version(result.getVersion()), userId));
@@ -579,6 +602,7 @@ public class StoreService {
      * higher among those equally open, near and well rated. Search re-reads its branches.
      */
     public int updateSearchBoost(String brandId, int level, String userId) {
+        // @flow store-brand-search-boost>validate: Check the level is 0 to 3
         if (level < 0 || level > MAX_SEARCH_BOOST) {
             throw new ModuleException.BadRequest("The boost is 0 to " + MAX_SEARCH_BOOST, "SEARCH_BOOST_INVALID",
                     Map.of("errors", Map.of("level", "must be 0 to " + MAX_SEARCH_BOOST)));
@@ -588,6 +612,7 @@ public class StoreService {
         brand.setSearchBoost(level);
         brand.setUpdatedAt(now);
         brand.setUpdatedBy(userId);
+        // @flow store-brand-search-boost>save: Save brand and record BrandChanged
         this.transaction.execute((status) -> {
             BrandDocument result = this.brands.save(brand);
             this.outbox.append(new BrandChanged(brandId, version(result.getVersion()), userId));
@@ -601,6 +626,7 @@ public class StoreService {
      * commission goes back to the brand's from that date.
      */
     public StoreDetails updateBranchCommission(String storeId, Commission commission, Instant effectiveFrom, String userId) {
+        // @flow store-branch-commission>validate: Check rates and start date
         Map<String, String> errors = new LinkedHashMap<>();
         if (commission != null) {
             validate(errors, commission);
@@ -609,8 +635,10 @@ public class StoreService {
         Instant from = effectiveFrom(errors, effectiveFrom, now);
         failIfAny(errors, "COMMISSION_INVALID");
         StoreDocument store = findStore(storeId);
+        // @flow store-branch-commission>plan: Plan the change in the branch's commission schedule
         store.setCommissionChanges(new ArrayList<>(CommissionSchedule.plan(store.getCommissionChanges(),
                 new CommissionChange(commission, from, userId, now))));
+        // @flow store-branch-commission>save: Save branch and record StoreChanged
         return saveBranch(store, userId);
     }
 
@@ -621,6 +649,7 @@ public class StoreService {
      * @param creditLimitMinor the branch's own limit, or {@code null} for the operator's default
      */
     public StoreDetails setPaymentCollection(String storeId, String mode, Long creditLimitMinor, String reason, String userId) {
+        // @flow store-payment-collection>validate: Check mode, credit limit and reason
         Map<String, String> errors = new LinkedHashMap<>();
         if (!PaymentCollection.OPERATOR.equals(mode) && !PaymentCollection.DIRECT.equals(mode)) {
             errors.put("mode", "must be OPERATOR or DIRECT");
@@ -637,6 +666,7 @@ public class StoreService {
         }
         failIfAny(errors, "PAYMENT_COLLECTION_INVALID");
         StoreDocument store = findStore(storeId);
+        // @flow store-payment-collection>set: Set mode and credit limit, keep the reason
         store.setPaymentCollection(mode);
         store.setCollection(new PaymentCollection(mode, creditLimitMinor, why, userId, this.clock.instant()));
         BrandDocument brand = findBrand(store.getBrandId());
@@ -644,6 +674,7 @@ public class StoreService {
         owners.addAll(brand.getOwnerUserIds());
         String name = (store.getBranchName() == null || store.getBranchName().isBlank()) ? brand.getName()
                 : brand.getName() + " · " + store.getBranchName();
+        // @flow store-payment-collection>save: Save branch; record StorePaymentCollectionChanged and StoreChanged
         return saveBranch(store, () -> this.outbox.append(new StorePaymentCollectionChanged(storeId, store.getBrandId(), name,
                 java.util.Set.copyOf(owners), mode, creditLimitMinor, why, userId)), userId);
     }
@@ -654,6 +685,7 @@ public class StoreService {
         brand.setBranchPromotionsAllowed(allowed);
         brand.setUpdatedAt(this.clock.instant());
         brand.setUpdatedBy(userId);
+        // @flow store-brand-branch-promotions>save: Save brand; record BrandChanged and BranchPromotionsChanged
         BrandDocument saved = this.transaction.execute((status) -> {
             BrandDocument result = this.brands.save(brand);
             this.outbox.append(new BrandChanged(brandId, version(result.getVersion()), userId));
@@ -683,6 +715,7 @@ public class StoreService {
 
     /** The owner's branch details (PRD BB-2, ST-7, ST-13). */
     public StoreDetails updateBranch(String storeId, UpdateBranch update, long expectedVersion, String userId) {
+        // @flow store-update-branch>validate: Check fields, time zone, paper size and version
         Map<String, String> errors = new LinkedHashMap<>();
         optionalText(errors, "branchName", update.branchName(), 60);
         validate(errors, update.address(), update.location());
@@ -702,6 +735,7 @@ public class StoreService {
         StoreDocument store = findStore(storeId);
         requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
         if (update.deliveryMode() == DeliveryMode.OPERATOR && !store.isOperatorDeliveryAllowed()) {
+            // @flow store-update-branch>operator-delivery: Refuse operator delivery the operator has not allowed [on error OPERATOR_DELIVERY_NOT_ALLOWED]
             throw new ModuleException.Conflict("The operator has not enabled operator delivery for this branch",
                     "OPERATOR_DELIVERY_NOT_ALLOWED");
         }
@@ -715,11 +749,13 @@ public class StoreService {
         if (update.ticketPaperMm() != null) {
             store.setTicketPaperMm(update.ticketPaperMm());
         }
+        // @flow store-update-branch>save: Save branch and record StoreChanged
         return saveBranch(store, userId);
     }
 
     /** Details only the operator edits. Withdrawing operator delivery switches the branch back to self-delivery. */
     public StoreDetails updateAdmin(String storeId, StoreAdminUpdate update, long expectedVersion, String userId) {
+        // @flow store-update-admin>validate: Check legal name, tax id, city and version
         Map<String, String> errors = new LinkedHashMap<>();
         requireText(errors, "legalName", update.legalName(), 1, 120);
         optionalText(errors, "taxId", update.taxId(), 40);
@@ -731,15 +767,18 @@ public class StoreService {
         store.setLegalName(update.legalName().trim());
         store.setTaxId(blankToNull(update.taxId()));
         store.setOperatorDeliveryAllowed(update.operatorDeliveryAllowed());
+        // @flow store-update-admin>self: Switch back to self-delivery [when operator delivery is withdrawn]
         if (!update.operatorDeliveryAllowed() && store.getDeliveryMode() == DeliveryMode.OPERATOR) {
             store.setDeliveryMode(DeliveryMode.SELF);
         }
+        // @flow store-update-admin>save: Save branch and record StoreChanged
         return saveBranch(store, userId);
     }
 
     /** Weekly opening hours and holiday closures (PRD ST-2). */
     public StoreDetails updateHours(String storeId, Map<DayOfWeek, List<TimeRange>> hours, List<Closure> closures,
             long expectedVersion, String userId) {
+        // @flow store-update-hours>validate: Check day ranges and closures [each day]
         Map<String, String> errors = new LinkedHashMap<>();
         Map<DayOfWeek, List<TimeRange>> cleanHours = new EnumMap<>(DayOfWeek.class);
         if (hours != null) {
@@ -778,11 +817,13 @@ public class StoreService {
             }
         }
         failIfAny(errors, "HOURS_INVALID");
+        // @flow store-update-hours>set: Set hours; drop closures that already ended
         StoreDocument store = findStore(storeId);
         requireVersion("branch", store.getVersion(), expectedVersion, "STORE_VERSION_CONFLICT");
         store.setOpeningHours(cleanHours);
         LocalDate today = LocalDate.ofInstant(this.clock.instant(), zone(store, this.settings.getLocale()));
         store.setClosures(cleanClosures.stream().filter((c) -> !c.to().isBefore(today.minusDays(1))).toList());
+        // @flow store-update-hours>save: Save branch and record StoreChanged
         return saveBranch(store, userId);
     }
 
@@ -793,6 +834,7 @@ public class StoreService {
         if (reason != null && reason.trim().length() > 120) {
             throw new ModuleException.BadRequest("The reason must be at most 120 characters", "STORE_INVALID");
         }
+        // @flow store-availability>set: Set closed or open with the reason
         StoreDocument store = findStore(storeId);
         Instant now = this.clock.instant();
         store.setTemporarilyClosed(closed);
@@ -800,6 +842,7 @@ public class StoreService {
         store.setClosedAt(closed ? now : null);
         store.setUpdatedAt(now);
         store.setUpdatedBy(userId);
+        // @flow store-availability>save: Save branch and record StoreAvailabilityChanged
         StoreDocument saved = this.transaction.execute((status) -> {
             StoreDocument result = this.stores.save(store);
             this.outbox.append(new StoreAvailabilityChanged(storeId, closed, result.getClosedReason(), userId));
@@ -814,14 +857,17 @@ public class StoreService {
      */
     public StoreDetails setStatus(String storeId, StoreStatus status, String userId) {
         StoreDocument store = findStore(storeId);
+        // @flow store-status>readiness: Check location, menu and delivery area [when going live]
         if (status == StoreStatus.LIVE) {
             List<String> missing = readiness(store);
             if (!missing.isEmpty()) {
+                // @flow store-status>not-ready: Refuse with what is missing [on error STORE_NOT_READY]
                 throw new ModuleException.Conflict("The branch is not ready to go live", "STORE_NOT_READY",
                         Map.of("missing", missing));
             }
         }
         store.setStatus(status);
+        // @flow store-status>save: Save branch and record StoreChanged
         return saveBranch(store, userId);
     }
 
@@ -835,9 +881,11 @@ public class StoreService {
         if (store.getLocation() == null) {
             missing.add("LOCATION");
         }
+        // @flow store-status>readiness>menu, store-readiness>menu: Count the brand's menu items
         if (this.items.countByBrandIdAndDeletedAtIsNull(store.getBrandId()) == 0) {
             missing.add("MENU");
         }
+        // @flow store-status>readiness>area, store-readiness>area: Ask geo for a delivery area [when pickup is off]
         if (!store.isPickupEnabled() && store.getLocation() != null && this.geo
             .deliveryArea(new DeliveryAreaRequest(store.getId(), location(store), store.getDeliveryMode(), store.getCityId()))
             .isEmpty()) {
@@ -879,14 +927,17 @@ public class StoreService {
     public OwnerDetails addOwner(String storeId, NewOwner owner, String userId) {
         StoreDocument store = findStore(storeId);
         if (store.getOwnerUserIds().size() >= MAX_OWNERS) {
+            // @flow store-add-owner>limit: Refuse past the owner limit [on error OWNER_LIMIT]
             throw new ModuleException.Conflict("A branch can have at most " + MAX_OWNERS + " owners", "OWNER_LIMIT");
         }
+        // @flow store-add-owner>grant: Grant branch access in identity
         UserView user = this.identity.grantStoreAccess(new StoreAccessGrant(owner.email(), owner.displayName(),
                 owner.initialPassword(), storeId, userId));
         store.getOwnerUserIds().add(user.id());
         Instant now = this.clock.instant();
         store.setUpdatedAt(now);
         store.setUpdatedBy(userId);
+        // @flow store-add-owner>save: Save branch and record StoreChanged
         this.transaction.executeWithoutResult((status) -> {
             StoreDocument saved = this.stores.save(store);
             this.outbox.append(new StoreChanged(storeId, saved.getBrandId(), version(saved.getVersion()), userId));
@@ -899,12 +950,14 @@ public class StoreService {
         if (!store.getOwnerUserIds().remove(ownerUserId)) {
             return;
         }
+        // @flow store-remove-owner>save: Save branch and record StoreChanged [when they were an owner]
         store.setUpdatedAt(this.clock.instant());
         store.setUpdatedBy(userId);
         this.transaction.executeWithoutResult((status) -> {
             StoreDocument saved = this.stores.save(store);
             this.outbox.append(new StoreChanged(storeId, saved.getBrandId(), version(saved.getVersion()), userId));
         });
+        // @flow store-remove-owner>revoke: Revoke branch access in identity
         this.identity.revokeStoreAccess(ownerUserId, storeId);
     }
 
@@ -912,13 +965,16 @@ public class StoreService {
     public OwnerDetails addBrandOwner(String brandId, NewOwner owner, String userId) {
         BrandDocument brand = findBrand(brandId);
         if (brand.getOwnerUserIds().size() >= MAX_OWNERS) {
+            // @flow store-brand-add-owner>limit: Refuse past the owner limit [on error OWNER_LIMIT]
             throw new ModuleException.Conflict("A brand can have at most " + MAX_OWNERS + " owners", "OWNER_LIMIT");
         }
+        // @flow store-brand-add-owner>grant: Grant brand access in identity
         UserView user = this.identity.grantBrandAccess(new BrandAccessGrant(owner.email(), owner.displayName(),
                 owner.initialPassword(), brandId, userId));
         brand.getOwnerUserIds().add(user.id());
         brand.setUpdatedAt(this.clock.instant());
         brand.setUpdatedBy(userId);
+        // @flow store-brand-add-owner>save: Save brand; record BrandChanged and StoreChanged for each branch
         saveBrandAndBranches(brand, userId);
         return new OwnerDetails(user.id(), user.email(), user.displayName());
     }
@@ -930,7 +986,9 @@ public class StoreService {
         }
         brand.setUpdatedAt(this.clock.instant());
         brand.setUpdatedBy(userId);
+        // @flow store-brand-remove-owner>save: Save brand; record BrandChanged and StoreChanged for each branch [when they were an owner]
         saveBrandAndBranches(brand, userId);
+        // @flow store-brand-remove-owner>revoke: Revoke brand access in identity
         this.identity.revokeBrandAccess(ownerUserId, brandId);
     }
 
@@ -950,13 +1008,17 @@ public class StoreService {
 
     /** Delivery charge and time from the branch to an address (PRD SE-7). */
     public DeliveryQuote quote(String storeId, GeoPoint destination) {
+        // @flow store-delivery-quote>location?: Does the branch have a location?
+        // @flow store-delivery-quote>location?>none: Out of area [when no location]
         StoreDocument store = findStore(storeId);
         String currency = this.settings.getLocale().currency();
         if (store.getLocation() == null) {
             return new DeliveryQuote(false, DeliveryQuoteView.OUT_OF_AREA, 0, 0, null, 0, 0, currency);
         }
+        // @flow store-delivery-quote>quote: Delivery charge and distance from geo
         DeliveryQuoteView quote = this.geo.quote(new QuoteRequest(storeId, location(store), store.getDeliveryMode(),
                 destination, zone(store, this.settings.getLocale()).getId(), store.getCityId()));
+        // @flow store-delivery-quote>eta: Add prep time and rider travel time
         int travel = (int) Math.ceil(quote.distanceMeters() / 1000.0 / RIDER_KMH * 60);
         return new DeliveryQuote(quote.deliverable(), quote.reason(), quote.chargeMinor(), quote.minOrderMinor(),
                 quote.freeDeliveryAboveMinor(), quote.distanceMeters(), store.getPrepMinutes() + travel, currency);

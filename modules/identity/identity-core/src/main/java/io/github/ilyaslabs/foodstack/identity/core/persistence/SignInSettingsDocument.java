@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.identity.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 
@@ -19,6 +20,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedAt when
  */
 @Document("identity_settings")
+@EVL.Database("foodstack_identity")
 public record SignInSettingsDocument(@Id String id, List<String> googleClientIds, List<String> appleClientIds,
         String updatedBy, Instant updatedAt) {
 

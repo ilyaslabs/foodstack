@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.identity.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -70,6 +72,7 @@ public class AccountDeletion {
      * @return when the account is deleted
      */
     public Instant request(String userId) {
+        // @flow identity-request-deletion>check: Active customer accounts only, once
         UserDocument user = this.mongo.findById(userId, UserDocument.class);
         if (user == null) {
             throw new ModuleException.NotFound("User " + userId + " not found", "USER_NOT_FOUND");
@@ -84,6 +87,7 @@ public class AccountDeletion {
         if (user.getDeleteAfter() != null) {
             return user.getDeleteAfter();
         }
+        // @flow identity-request-deletion>schedule: Set the delete date and record AccountDeletionScheduled
         Instant now = this.clock.instant();
         Instant deleteAfter = now.plus(this.grace);
         this.transaction.executeWithoutResult((status) -> {
@@ -96,6 +100,7 @@ public class AccountDeletion {
                     UserDocument.class);
             this.outbox.append(new AccountDeletionScheduled(userId, deleteAfter));
         });
+        // @flow identity-request-deletion>revoke: Sign out everywhere
         this.users.revokeTokens(userId, "DELETION_REQUESTED");
         return deleteAfter;
     }
@@ -105,14 +110,18 @@ public class AccountDeletion {
      * replicas at once: each account is taken by a conditional update.
      * @return how many accounts were deleted
      */
+    @Flow(value = "identity-account-deletion", label = "Delete accounts after the grace period", description = "Erases due accounts and records UserDeleted for the other modules")
+    @EVL.Job(schedule = "every deletion sweep (config)")
     public int runDue(int limit) {
         Instant now = this.clock.instant();
         Query due = Query
             .query(Criteria.where("status").is(UserStatus.ACTIVE).and("deleteAfter").lte(now))
             .limit(limit);
         due.fields().include("_id");
+        // @flow identity-account-deletion>find: Find up to 200 accounts past their delete date
         List<UserDocument> users = this.mongo.find(due, UserDocument.class);
         int deleted = 0;
+        // @flow identity-account-deletion>erase: Erase each account [each user in users]
         for (UserDocument user : users) {
             if (erase(user.getId())) {
                 deleted++;
@@ -124,6 +133,7 @@ public class AccountDeletion {
     /** Erases one account whose grace period is over; {@code false} when it was cancelled or done already. */
     boolean erase(String userId) {
         Instant now = this.clock.instant();
+        // @flow identity-account-deletion>erase>wipe: Mark deleted, clear personal data, login key, addresses and refresh tokens; record UserDeleted
         UserDocument before = this.transaction.execute((status) -> {
             UserDocument user = this.mongo.findAndModify(
                     Query.query(Criteria.where("_id").is(userId)
@@ -157,6 +167,7 @@ public class AccountDeletion {
         if (before == null) {
             return false;
         }
+        // @flow identity-account-deletion>erase>revoke: Set the revocation floor
         this.revocations.revokeBefore(userId, before.getTokenVersion() + 1);
         return true;
     }

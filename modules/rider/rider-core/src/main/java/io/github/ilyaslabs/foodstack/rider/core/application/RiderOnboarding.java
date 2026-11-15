@@ -96,6 +96,7 @@ public class RiderOnboarding {
     public Papers addDocument(String riderId, DocumentInput input) {
         requireManage();
         requireOperatorRider(riderId);
+        // @flow rider-papers-add-document>validate: Check type, number, photo and expiry
         Map<String, String> errors = new LinkedHashMap<>();
         String type = (input.type() != null) ? input.type().strip().toUpperCase(Locale.ROOT) : "";
         if (!TYPES.contains(type)) {
@@ -121,6 +122,7 @@ public class RiderOnboarding {
             throw new ModuleException.BadRequest("Check the document", "RIDER_DOCUMENT_INVALID", errors);
         }
         OnboardingDocument current = load(riderId);
+        // @flow rider-papers-add-document>limit: Refuse past the document limit
         if (current.documents().size() >= MAX_DOCUMENTS) {
             throw new ModuleException.BadRequest("A rider can keep at most " + MAX_DOCUMENTS + " documents; remove an old one first",
                     "RIDER_DOCUMENT_LIMIT");
@@ -128,10 +130,12 @@ public class RiderOnboarding {
         String id = Ids.newId();
         MediaOwner owner = owner(id);
         String back = blankToNull(input.backMediaId());
+        // @flow rider-papers-add-document>claim: Claim the photos in media
         this.serviceCalls.call(() -> this.media.claim(input.frontMediaId().strip(), MediaPurpose.RIDER_DOCUMENT, owner));
         if (back != null) {
             this.serviceCalls.call(() -> this.media.claim(back, MediaPurpose.RIDER_DOCUMENT, owner));
         }
+        // @flow rider-papers-add-document>save: Save the document, number encrypted
         List<IdDocument> documents = new ArrayList<>(current.documents());
         documents.add(new IdDocument(id, type, this.pii.encrypt(number), last4(number), input.frontMediaId().strip(), back,
                 expiresOn, this.clock.instant(), RiderService.actor(), null, null));
@@ -166,7 +170,9 @@ public class RiderOnboarding {
             .orElseThrow(RiderOnboarding::notFound);
         List<IdDocument> documents = new ArrayList<>(current.documents());
         documents.remove(removed);
+        // @flow rider-papers-remove-document>save: Save the papers without the document
         OnboardingDocument saved = save(current, documents, current.payout());
+        // @flow rider-papers-remove-document>release: Release the photos in media
         release(removed);
         return view(riderId, saved);
     }

@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.ledger.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +42,8 @@ public class Rollups {
     }
 
     /** Rolls up what is new in the given buckets ({@code null} = every bucket); returns how many transactions. */
+    @Flow(value = "ledger-rollup", label = "Roll up postings into daily totals", description = "Per bucket and day, for the buckets this replica leases")
+    @EVL.Job(schedule = "every few seconds (config), partitioned by account bucket")
     public int rollUp(Set<Integer> buckets) {
         Criteria fresh = Criteria.where("rolled").is(false);
         if (buckets != null) {
@@ -47,12 +51,14 @@ public class Rollups {
         }
         Query query = Query.query(fresh).limit(BATCH);
         query.fields().include("_id", "bucket", "day");
+        // @flow ledger-rollup>find: Find unrolled postings
         List<Document> found = this.mongo.find(query, Document.class, this.mongo.getCollectionName(TransactionDocument.class));
         Map<String, List<String>> byBucketDay = new LinkedHashMap<>();
         for (Document t : found) {
             byBucketDay.computeIfAbsent(t.getInteger("bucket") + "|" + t.getString("day"), (k) -> new ArrayList<>())
                 .add(t.getString("_id"));
         }
+        // @flow ledger-rollup>rebuild: Mark rolled and rebuild that day's totals in a transaction [each bucket and day]
         for (Map.Entry<String, List<String>> entry : byBucketDay.entrySet()) {
             String[] key = entry.getKey().split("\\|", 2);
             int bucket = Integer.parseInt(key[0]);

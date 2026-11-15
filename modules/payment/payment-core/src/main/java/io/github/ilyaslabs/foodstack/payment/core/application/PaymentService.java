@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.payment.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -122,6 +124,7 @@ public class PaymentService {
     }
 
     public CardSessionView startCard(StartCardRequest request) {
+        // @flow order-place>payment?>card>enabled: Check card payments are on
         PaymentOptionsView options = options();
         if (!options.card()) {
             throw new ModuleException.BadRequest("Card payments are not available", "PAYMENT_UNAVAILABLE");
@@ -130,6 +133,7 @@ public class PaymentService {
             throw new ModuleException.BadRequest("Nothing to pay by card", "PAYMENT_AMOUNT_INVALID");
         }
         Instant now = this.clock.instant();
+        // @flow order-place>payment?>card>record: Create the payment record, or reuse an open one
         PaymentDocument existing = find(request.orderId());
         if (existing == null) {
             try {
@@ -158,6 +162,7 @@ public class PaymentService {
         boolean operator = OPERATOR_ACCOUNT.equals(merchantAccount);
         boolean embedded = operator && OrderingView.EMBEDDED.equals(options.cardStyle()) && request.payUrl() != null;
         String customer = null;
+        // @flow order-place>payment?>card>customer: Get or create the gateway customer for saved cards [when operator account and saved cards on]
         if (operator && options.savedCards()) {
             try {
                 customer = customerReference(request.customerId(), true);
@@ -166,6 +171,7 @@ public class PaymentService {
                 log.warn("Could not set up saved cards for order {}: {}", request.orderId(), ex.getMessage());
             }
         }
+        // @flow order-place>payment?>card>session: Open a payment session at the gateway
         CardGateway.HostedSession session;
         try {
             session = gatewayFor(merchantAccount).createSession(new CardGateway.SessionRequest(request.orderId(), request.orderNumber(),
@@ -173,6 +179,7 @@ public class PaymentService {
                     request.cancelUrl(), now.plus(this.sessionTtl), embedded, customer));
         }
         catch (GatewayException ex) {
+            // @flow order-place>payment?>card>session>refused: Mark a refusing merchant account failed and answer unavailable [on error GatewayException]
             log.warn("Could not open a payment page for order {}: {}", request.orderId(), ex.getMessage());
             if (!ex.isRetryable() && this.accounts != null) {
                 this.accounts.markFailed(merchantAccount, ex.getMessage());
@@ -180,6 +187,7 @@ public class PaymentService {
             throw new ModuleException.Unavailable("The card payment service is not answering; try again or pay cash",
                     "PAYMENT_GATEWAY_UNAVAILABLE");
         }
+        // @flow order-place>payment?>card>pending: Mark the payment pending with session, URL and expiry
         PaymentDocument pending = this.mongo.findAndModify(
                 Query.query(Criteria.where("_id").is(request.orderId()).and("status").is(PaymentDocument.CREATED)),
                 new Update().set("status", PaymentDocument.PENDING).set("sessionReference", session.sessionReference())
@@ -216,11 +224,13 @@ public class PaymentService {
         }
         WebhookEvent event;
         try {
+            // @flow payment-webhook>verify: Verify the signature and parse the event
             event = this.gateway.parseWebhook(body, headers);
         }
         catch (GatewayException ex) {
             throw new ModuleException.BadRequest(ex.getMessage(), "WEBHOOK_INVALID");
         }
+        // @flow payment-webhook>apply: Apply the outcome
         apply(gatewayId, OPERATOR_ACCOUNT, event);
     }
 
@@ -233,6 +243,7 @@ public class PaymentService {
         if (this.gateway == null || !this.gateway.id().equals(gatewayId) || this.accounts == null) {
             throw new ModuleException.NotFound("No gateway " + gatewayId + " is set up", "GATEWAY_NOT_FOUND");
         }
+        // @flow payment-owner-webhook>verify: Try each of the owner's accounts until one signature matches [each account of the owner]
         for (MerchantAccountDocument account : this.accounts.webhookAccounts(scope, ownerId)) {
             WebhookEvent event;
             try {
@@ -241,9 +252,11 @@ public class PaymentService {
             catch (GatewayException ex) {
                 continue;
             }
+            // @flow payment-owner-webhook>apply: Apply the outcome
             apply(gatewayId, account.id(), event);
             return;
         }
+        // @flow payment-owner-webhook>no-match: Refuse when no account matches [on error BadRequest]
         throw new ModuleException.BadRequest("Webhook signature does not match this account", "WEBHOOK_INVALID");
     }
 
@@ -263,6 +276,7 @@ public class PaymentService {
         if (event == null) {
             return;
         }
+        // @flow payment-webhook>apply>match, payment-owner-webhook>apply>match: Ignore events for unknown payments or another account
         PaymentDocument payment = find(event.orderId());
         if (payment == null || !Objects.equals(payment.sessionReference(), event.sessionReference())
                 || !merchantAccount.equals(account(payment.merchantAccount()))) {
@@ -270,6 +284,8 @@ public class PaymentService {
             return;
         }
         Instant now = this.clock.instant();
+        // @flow payment-webhook>apply>outcome?, payment-owner-webhook>apply>outcome?: Did the payment succeed?
+        // @flow payment-webhook>apply>outcome?>succeeded, payment-owner-webhook>apply>outcome?>succeeded: Mark succeeded and record PaymentSucceeded once [when SUCCEEDED]
         if (WebhookEvent.SUCCEEDED.equals(event.outcome())) {
             this.transaction.executeWithoutResult((status) -> {
                 PaymentDocument before = this.mongo.findAndModify(
@@ -284,6 +300,7 @@ public class PaymentService {
             });
         }
         else {
+            // @flow payment-webhook>apply>outcome?>failed, payment-owner-webhook>apply>outcome?>failed: Mark failed or expired and record PaymentFailed [when else]
             String outcome = WebhookEvent.EXPIRED.equals(event.outcome()) ? PaymentDocument.EXPIRED : PaymentDocument.FAILED;
             String reason = WebhookEvent.EXPIRED.equals(event.outcome()) ? PaymentFailed.EXPIRED
                     : Objects.requireNonNullElse(event.reason(), PaymentFailed.DECLINED);
@@ -292,6 +309,8 @@ public class PaymentService {
     }
 
     /** Ends pages nobody finished; returns how many. */
+    @Flow(value = "payment-expiry", label = "Expire stale payments", description = "Pending or never-opened payments past their expiry")
+    @EVL.Job(schedule = "every 1 min")
     public int expireStale() {
         Instant now = this.clock.instant();
         Instant cutoff = now.minus(EXPIRY_GRACE);
@@ -301,6 +320,7 @@ public class PaymentService {
             .with(Sort.by("expiresAt"))
             .limit(100);
         int count = 0;
+        // @flow payment-expiry>fail: Mark each expired and record PaymentFailed [each stale payment, up to 100]
         for (PaymentDocument payment : this.mongo.find(stale, PaymentDocument.class)) {
             if (fail(payment.id(), PaymentDocument.EXPIRED, PaymentFailed.EXPIRED, now)) {
                 count++;
@@ -313,6 +333,7 @@ public class PaymentService {
      * Gives money back for an order. Idempotent per {@code refundId}; asks for at most what is left.
      * Throws {@link GatewayException} when the gateway may succeed later, so the event is retried.
      */
+    @Flow(value = "payment-on-order>refund", label = "Refund at the gateway")
     public void refund(String orderId, long amountMinor, String refundId, String reason) {
         PaymentDocument payment = find(orderId);
         if (payment == null || amountMinor <= 0 || !PaymentDocument.SUCCEEDED.equals(payment.status())
@@ -324,6 +345,7 @@ public class PaymentService {
             return;
         }
         Instant now = this.clock.instant();
+        // @flow payment-on-order>refund>reserve: Reserve the amount on the payment, once per event
         PaymentDocument reserved = this.mongo.findAndModify(
                 Query.query(Criteria.where("_id").is(orderId).and("status").is(PaymentDocument.SUCCEEDED)
                     .and("refunds.id").ne(refundId).and("refundedMinor").lte(payment.amountMinor() - amount)),
@@ -335,10 +357,12 @@ public class PaymentService {
         }
         String reference;
         try {
+            // @flow payment-on-order>refund>gateway: Ask the gateway to refund
             reference = gatewayFor(payment.merchantAccount()).refund(payment.paymentReference(), amount, payment.currency(),
                     refundId);
         }
         catch (GatewayException ex) {
+            // @flow payment-on-order>refund>gateway>retry: Undo the reservation and let the event retry [on error retryable GatewayException]
             if (ex.isRetryable()) {
                 this.mongo.updateFirst(Query.query(Criteria.where("_id").is(orderId)),
                         new Update().pull("refunds", Query.query(Criteria.where("id").is(refundId)).getQueryObject())
@@ -346,6 +370,7 @@ public class PaymentService {
                         PaymentDocument.class);
                 throw ex;
             }
+            // @flow payment-on-order>refund>gateway>refused: Mark the refund failed and record RefundFailed [on error GatewayException]
             this.transaction.executeWithoutResult((status) -> {
                 this.mongo.updateFirst(Query.query(Criteria.where("_id").is(orderId).and("refunds.id").is(refundId)),
                         new Update().set("refunds.$.status", "FAILED").inc("refundedMinor", -amount), PaymentDocument.class);
@@ -353,6 +378,7 @@ public class PaymentService {
             });
             return;
         }
+        // @flow payment-on-order>refund>done: Mark the refund succeeded and record RefundSucceeded
         this.transaction.executeWithoutResult((status) -> {
             this.mongo.updateFirst(Query.query(Criteria.where("_id").is(orderId).and("refunds.id").is(refundId)),
                     new Update().set("refunds.$.status", "SUCCEEDED").set("refunds.$.gatewayReference", reference),
@@ -399,17 +425,20 @@ public class PaymentService {
 
     /** The signed-in customer's saved cards, kept by the operator's gateway. */
     public List<SavedCardView> cards() {
+        // @flow payment-saved-cards>list: Read the customer's cards from the gateway
         String reference = customerReference(CurrentUser.id(), false);
         return (reference != null) ? cardsOf(this.gateway, reference) : List.of();
     }
 
     /** Forgets one of the signed-in customer's saved cards. */
     public void removeCard(String cardId) {
+        // @flow payment-remove-card>check: Check the card belongs to the customer
         String reference = customerReference(CurrentUser.id(), false);
         if (reference == null || cardsOf(this.gateway, reference).stream().noneMatch((c) -> c.id().equals(cardId))) {
             throw new ModuleException.NotFound("No such saved card", "CARD_NOT_FOUND");
         }
         try {
+            // @flow payment-remove-card>remove: Remove the card at the gateway
             this.gateway.removeCard(reference, cardId);
         }
         catch (GatewayException ex) {
@@ -422,6 +451,7 @@ public class PaymentService {
      * A deleted customer's saved cards (PRD ID-7, on {@code UserDeleted}): the gateway forgets the
      * customer, then the reference goes. Safe to run again.
      */
+    @Flow(value = "payment-on-user-deleted>erase", label = "Delete the gateway customer and its saved cards")
     public void eraseCustomer(String userId) {
         Document customer = this.mongo.findById(userId, Document.class, CUSTOMERS);
         if (customer == null) {

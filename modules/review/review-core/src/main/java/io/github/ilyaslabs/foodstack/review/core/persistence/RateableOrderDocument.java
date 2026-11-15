@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.review.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.Set;
 
@@ -27,6 +28,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param riderRated whether the rider was rated
  */
 @Document("review_orders")
+@EVL.Database("foodstack_review")
 public record RateableOrderDocument(@Id String id, String number, String customerId, String storeId, String brandId,
         String storeName, Set<String> storeOwnerIds, String language, Instant completedAt, String riderId, String riderName,
         String riderKind, String storeReviewId, Boolean riderRated) {

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.rider.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.Set;
 
@@ -25,6 +26,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param assignedAt when the rider took it
  */
 @Document("rider_assignments")
+@EVL.Database("foodstack_rider")
 public record AssignmentDocument(@Id String id, String riderId, String riderName, String vehicle, String customerId,
         String storeId, Set<String> storeOwnerIds, double pickupLat, double pickupLng, double dropoffLat, double dropoffLng,
         boolean pickedUp, Instant assignedAt) {

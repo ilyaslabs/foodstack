@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.notification.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.Map;
 
 import io.github.ilyaslabs.foodstack.notification.core.application.PushService;
@@ -43,6 +45,8 @@ class DevicesController {
     }
 
     @GetMapping("/api/v1/devices/push-config")
+    @Flow(value = "notification-push-config", label = "Push setup for the app", description = "Whether web push is on and its public key")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/devices/push-config", caller = "Customer web")
     PushConfig config() {
         boolean web = this.push.enabled() && this.webConfig != null && this.vapidKey != null;
         return new PushConfig(web, web ? this.webConfig : null, web ? this.vapidKey : null);
@@ -50,6 +54,8 @@ class DevicesController {
 
     @PostMapping("/api/v1/devices")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "notification-device-register", label = "Register device for push")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/devices", caller = "Customer web")
     ResponseEntity<Void> register(@RequestBody DeviceRequest request) {
         this.push.register(CurrentUser.id(), request.token(), request.platform(), request.app());
         return ResponseEntity.noContent().build();
@@ -57,6 +63,8 @@ class DevicesController {
 
     @PostMapping("/api/v1/devices/remove")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "notification-device-remove", label = "Unregister device")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/devices/remove", caller = "Customer web")
     ResponseEntity<Void> remove(@RequestBody DeviceRequest request) {
         this.push.unregister(CurrentUser.id(), request.token());
         return ResponseEntity.noContent().build();

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.media.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.media.api.MediaApi;
 import io.github.ilyaslabs.foodstack.media.api.MediaAssetView;
 import io.github.ilyaslabs.foodstack.media.api.MediaOwner;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Component;
  * stores, their own brand) or the platform may claim and release one (TDD 9.1).
  */
 @Component
+@EVL.Service("media module")
 class MediaApiImpl implements MediaApi {
 
     /** Permissions of the screens that attach images: branding, any store, an owner's own store. */

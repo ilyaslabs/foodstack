@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.order.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.util.function.Consumer;
 
 import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
@@ -10,6 +11,7 @@ import io.github.ilyaslabs.foodstack.platform.kafka.LiveChannels;
  * {@code <ns>:order:rt:order:<orderId>} and {@code <ns>:order:rt:store:<storeId>}; the replica
  * holding a customer's or a store's stream forwards it, and the screen reloads what it shows.
  */
+@EVL.Queue("Redis live channels")
 public class OrderLiveUpdates {
 
     private final LiveChannels live;

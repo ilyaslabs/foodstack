@@ -46,6 +46,7 @@ public class GeocodingService {
             throw new ModuleException.BadRequest("Type at least 3 characters", "ADDRESS_QUERY_INVALID");
         }
         String lang = language(language);
+        // @flow geo-address-search>lookup: Ask the geocoding provider, cached in Redis
         return cached("q:" + lang + ":" + text.toLowerCase(Locale.ROOT), () -> this.provider.search(text, lang));
     }
 
@@ -55,6 +56,7 @@ public class GeocodingService {
         }
         String lang = language(language);
         String key = "r:" + lang + ":" + Math.round(lat * 10_000) + ":" + Math.round(lng * 10_000);
+        // @flow geo-address-reverse>lookup: Ask the geocoding provider, cached in Redis
         return cached(key, () -> this.provider.reverse(lat, lng, lang));
     }
 

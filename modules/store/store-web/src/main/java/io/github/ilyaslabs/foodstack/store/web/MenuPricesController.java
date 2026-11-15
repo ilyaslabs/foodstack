@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.store.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 import java.util.Map;
 
@@ -52,6 +54,8 @@ class MenuPricesController {
 
     @GetMapping("/api/v1/stores/{storeId}/menu/prices")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-branch-prices", label = "Show branch prices", description = "Branch price overrides and pending requests")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/stores/{storeId}/menu/prices", caller = "Back office")
     BranchPricesResponse branchPrices(@PathVariable String storeId) {
         CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
         MenuPrices.BranchPrices found = this.prices.branchPrices(storeId);
@@ -62,6 +66,8 @@ class MenuPricesController {
 
     @PutMapping("/api/v1/stores/{storeId}/menu/items/{itemId}/price")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-branch-price-set", label = "Set branch price", description = "Applies at once, or asks for approval when approval is on")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/stores/{storeId}/menu/items/{itemId}/price", caller = "Back office")
     OutcomeResponse setBranchPrice(@PathVariable String storeId, @PathVariable String itemId,
             @RequestBody BranchPriceRequest request) {
         CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
@@ -71,6 +77,8 @@ class MenuPricesController {
 
     @GetMapping("/api/v1/brands/{brandId}/menu/price-changes")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "store-brand-price-changes", label = "List brand price requests")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/brands/{brandId}/menu/price-changes", caller = "Back office")
     List<PriceChangeResponse> brandPending(@PathVariable String brandId) {
         CurrentUser.requireBrandAccess(brandId, OPERATOR_PERMISSION);
         return this.prices.brandPending(brandId).stream().map(MenuPricesController::response).toList();
@@ -78,18 +86,24 @@ class MenuPricesController {
 
     @GetMapping("/api/v1/price-changes")
     @PreAuthorize("hasAuthority('store:manage')")
+    @Flow(value = "store-price-changes", label = "List price requests", description = "All waiting price changes, for operator staff")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/price-changes", caller = "Back office")
     List<PriceChangeResponse> pending() {
         return this.prices.pending().stream().map(MenuPricesController::response).toList();
     }
 
     @PostMapping("/api/v1/price-changes/{id}/approve")
     @PreAuthorize("hasAuthority('store:manage')")
+    @Flow(value = "store-price-change-approve", label = "Approve price change")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/price-changes/{id}/approve", caller = "Back office")
     PriceChangeResponse approve(@PathVariable String id) {
         return response(this.prices.decide(id, true, CurrentUser.id()));
     }
 
     @PostMapping("/api/v1/price-changes/{id}/reject")
     @PreAuthorize("hasAuthority('store:manage')")
+    @Flow(value = "store-price-change-reject", label = "Reject price change")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/price-changes/{id}/reject", caller = "Back office")
     PriceChangeResponse reject(@PathVariable String id) {
         return response(this.prices.decide(id, false, CurrentUser.id()));
     }

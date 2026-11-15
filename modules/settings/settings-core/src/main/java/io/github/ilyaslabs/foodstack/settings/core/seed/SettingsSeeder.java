@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.settings.core.seed;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Instant;
 
 import io.github.ilyaslabs.foodstack.settings.core.application.SettingsService;
@@ -38,6 +40,8 @@ class SettingsSeeder {
 
     @EventListener(ApplicationReadyEvent.class)
     @Order(20)
+    @Flow(value = "settings-seed", label = "Seed demo settings", description = "Once per database")
+    @EVL.Job(trigger = "application ready")
     void seed() {
         try {
             this.mongo.insert(new Document("_id", "v1").append("seededAt", Instant.now()), "settings_seed");

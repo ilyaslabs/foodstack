@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.platform.kafka;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.util.function.Consumer;
 
 /**
@@ -10,6 +11,7 @@ import java.util.function.Consumer;
  * configuration only: the same code runs on one machine and on a cluster. Lost messages only
  * delay a screen until its next refresh.
  */
+@EVL.Queue("Redis live channels")
 public interface LiveChannels {
 
     /** Sends {@code message} to whoever listens on {@code channel} now; never fails the caller. */

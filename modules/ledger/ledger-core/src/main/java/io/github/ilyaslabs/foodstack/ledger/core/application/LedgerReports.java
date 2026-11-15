@@ -284,9 +284,11 @@ public class LedgerReports {
      * settling the same period again finds nothing due.
      */
     public SettlementView settle(String accountId, String to, String reference) {
+        // @flow ledger-settle>access: Finance only
         if (!CurrentUser.hasAuthority(LEDGER_SETTLE)) {
             throw new ModuleException.Forbidden("Only finance can settle balances", "LEDGER_ACCESS_DENIED");
         }
+        // @flow ledger-settle>validate: Branch or rider account, a reference, a closed period not settled yet
         String type = Accounts.partyType(accountId == null ? "" : accountId);
         if (!Accounts.STORE.equals(type) && !Accounts.RIDER.equals(type)) {
             throw new ModuleException.BadRequest("Only branch and rider balances are settled", "LEDGER_ACCOUNT_INVALID");
@@ -308,6 +310,7 @@ public class LedgerReports {
             throw new ModuleException.Conflict("This balance is already settled up to " + latest.periodTo(),
                     "SETTLEMENT_PERIOD_SETTLED", Map.of("periodTo", latest.periodTo()));
         }
+        // @flow ledger-settle>due: Work out what is due up to the period end; refuse when nothing is
         long due = dueUpTo(accountId, last);
         if (due == 0) {
             throw new ModuleException.Conflict("Nothing is due for this period", "NOTHING_TO_SETTLE");
@@ -324,6 +327,7 @@ public class LedgerReports {
         SettlementDocument settlement = new SettlementDocument(id, accountId, type, partyId, brandId, last.toString(), due,
                 currency, ref, actor, now);
         try {
+            // @flow ledger-settle>save: Save the settlement and its ledger posting, record PayoutSettled (and StoreBalanceSettled)
             this.transactions.executeWithoutResult((status) -> {
                 this.mongo.insert(settlement);
                 String partition = Accounts.STORE.equals(type) ? partyId : accountId;
@@ -342,6 +346,7 @@ public class LedgerReports {
             throw new ModuleException.Conflict("Someone settled this balance just now", "SETTLEMENT_CHANGED");
         }
         if (Accounts.STORE.equals(type) && this.creditLimits != null) {
+            // @flow ledger-settle>credit: Re-check the branch's credit limit [when branch]
             this.creditLimits.check(partyId);
         }
         return view(settlement, account);

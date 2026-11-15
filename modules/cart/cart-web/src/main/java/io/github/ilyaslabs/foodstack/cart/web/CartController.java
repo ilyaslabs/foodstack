@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.cart.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.cart.api.CheckoutRequest;
 import io.github.ilyaslabs.foodstack.cart.api.CheckoutView;
 import io.github.ilyaslabs.foodstack.cart.core.application.AddLine;
@@ -52,38 +54,51 @@ class CartController {
     }
 
     @GetMapping
+    @Flow(value = "cart-get", label = "Show cart", description = "Prices the cart's lines with current menu prices")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/carts/me", caller = "Customer web")
     CartResponse get() {
         return toResponse(this.carts.get(CurrentUser.id()));
     }
 
     @PostMapping("/lines")
+    @Flow(value = "cart-add-line", label = "Add item to cart", description = "Checks the item against the branch menu, then adds or merges the line")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/carts/me/lines", caller = "Customer web")
     CartResponse addLine(@Valid @RequestBody AddLineRequest request) {
         return toResponse(this.carts.addLine(CurrentUser.id(), new AddLine(request.storeId(), request.itemId(),
                 request.quantity(), request.optionIds(), request.note(), Boolean.TRUE.equals(request.replaceOtherStore()))));
     }
 
     @PatchMapping("/lines/{lineId}")
+    @Flow(value = "cart-set-quantity", label = "Change line quantity", description = "0 removes the line")
+    @EVL.Endpoint(method = "PATCH", path = "/api/v1/carts/me/lines/{lineId}", caller = "Customer web")
     CartResponse setQuantity(@PathVariable String lineId, @RequestBody QuantityRequest request) {
         return toResponse(this.carts.setQuantity(CurrentUser.id(), lineId, request.quantity()));
     }
 
     @DeleteMapping("/lines/{lineId}")
+    @Flow(value = "cart-remove-line", label = "Remove cart line")
+    @EVL.Endpoint(method = "DELETE", path = "/api/v1/carts/me/lines/{lineId}", caller = "Customer web")
     CartResponse removeLine(@PathVariable String lineId) {
         return toResponse(this.carts.setQuantity(CurrentUser.id(), lineId, 0));
     }
 
     @DeleteMapping
+    @Flow(value = "cart-clear", label = "Empty cart")
+    @EVL.Endpoint(method = "DELETE", path = "/api/v1/carts/me", caller = "Customer web")
     ResponseEntity<Void> clear() {
         this.carts.clear(CurrentUser.id());
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/checkout")
+    @Flow(value = "cart-checkout", label = "Checkout quote", description = "Adds delivery, coupon, fees, tax and tip exactly as placing the order will")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/carts/me/checkout", caller = "Customer web")
     CheckoutView quote(@RequestBody CheckoutQuoteRequest request) {
         GeoPoint destination = (request.lat() != null && request.lng() != null) ? new GeoPoint(request.lat(), request.lng())
                 : null;
         if (this.rateLimiter != null && request.couponCode() != null && !request.couponCode().isBlank()) {
             // coupon checks per customer, so codes cannot be guessed by trying many (TDD 8.1)
+            // @flow cart-checkout>coupon-limit: Rate-limit coupon checks per customer [when coupon code given]
             this.rateLimiter.check("cart", "coupon", CurrentUser.id(), COUPON_CHECKS_PER_WINDOW, COUPON_WINDOW);
         }
         return this.checkout.checkout(new CheckoutRequest(CurrentUser.id(), request.fulfilment(), destination,

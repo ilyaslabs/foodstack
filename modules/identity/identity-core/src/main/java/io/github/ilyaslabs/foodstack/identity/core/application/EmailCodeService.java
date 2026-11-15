@@ -75,18 +75,22 @@ public class EmailCodeService {
         if (email == null || email.isBlank()) {
             return;
         }
+        // @flow identity-code>limit: Rate limit codes per email
         this.rateLimiter.check("identity", "email-code", this.pii.blindIndex(email), CODES_PER_WINDOW, CODE_WINDOW);
+        // @flow identity-code>account: Stop quietly when there is no active account [when no account]
         Optional<UserDocument> user = this.users.findByEmail(email).filter((u) -> u.getStatus() == UserStatus.ACTIVE);
         if (user.isEmpty()) {
             return;
         }
         String userId = user.get().getId();
+        // @flow identity-code>store: Keep a hashed code in Redis for 5 minutes
         String code = "%06d".formatted(RANDOM.nextInt(1_000_000));
         Instant expiresAt = this.clock.instant().plus(TTL);
         String key = key(purpose, userId);
         this.redis.delete(key);
         this.redis.opsForHash().putAll(key, Map.of("hash", hash(userId, code), "attempts", "0"));
         this.redis.expire(key, TTL);
+        // @flow identity-code>event: Record EmailCodeIssued for the email
         this.transaction.executeWithoutResult(
                 (status) -> this.outbox.append(new EmailCodeIssued(userId, purpose, this.pii.encrypt(code), expiresAt)));
     }

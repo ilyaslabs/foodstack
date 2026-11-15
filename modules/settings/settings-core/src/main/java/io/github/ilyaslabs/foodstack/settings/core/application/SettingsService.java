@@ -76,11 +76,13 @@ public class SettingsService {
      * @param expectedVersion the version the editor started from; a different current version fails with 409
      */
     public BrandingDetails updateBranding(UpdateBranding update, long expectedVersion, String userId) {
+        // @flow settings-branding-update>validate: Check fields and that the version still matches
         validate(update);
         BrandingDocument branding = loadBranding();
         requireVersion("branding", branding.getVersion(), expectedVersion);
         String oldLogo = branding.getLogoMediaId();
         String newLogo = blankToNull(update.logoMediaId());
+        // @flow settings-branding-update>claim: Claim the new logo in media [when logo changed]
         if (newLogo != null && !newLogo.equals(oldLogo)) {
             this.mediaApi.claim(newLogo, MediaPurpose.BRANDING, LOGO_OWNER);
         }
@@ -92,12 +94,15 @@ public class SettingsService {
         branding.setLogoMediaId(newLogo);
         branding.setUpdatedAt(this.clock.instant());
         branding.setUpdatedBy(userId);
+        // @flow settings-branding-update>save: Save and record SettingsChanged
         BrandingDocument saved = this.transaction.execute((status) -> {
             BrandingDocument result = this.brandingRepository.save(branding);
             this.outbox.append(new SettingsChanged(SettingsChanged.BRANDING, result.getVersion(), userId));
             return result;
         });
+        // @flow settings-branding-update>evict: Drop the cached branding
         this.cache.evict(SettingsChanged.BRANDING);
+        // @flow settings-branding-update>release: Release the old logo in media [when replaced]
         if (oldLogo != null && !oldLogo.equals(newLogo)) {
             this.mediaApi.release(oldLogo, LOGO_OWNER);
         }
@@ -105,6 +110,7 @@ public class SettingsService {
     }
 
     public LocaleDetails updateLocale(UpdateLocale update, long expectedVersion, String userId) {
+        // @flow settings-locale-update>validate: Check languages, currency, time zone and version
         List<String> languages = validate(update);
         LocaleDocument locale = loadLocale();
         requireVersion("locale", locale.getVersion(), expectedVersion);
@@ -114,11 +120,13 @@ public class SettingsService {
         locale.setTimezone(update.timezone());
         locale.setUpdatedAt(this.clock.instant());
         locale.setUpdatedBy(userId);
+        // @flow settings-locale-update>save: Save and record SettingsChanged
         LocaleDocument saved = this.transaction.execute((status) -> {
             LocaleDocument result = this.localeRepository.save(locale);
             this.outbox.append(new SettingsChanged(SettingsChanged.LOCALE, result.getVersion(), userId));
             return result;
         });
+        // @flow settings-locale-update>evict: Drop the cached locale
         this.cache.evict(SettingsChanged.LOCALE);
         return locale(saved);
     }

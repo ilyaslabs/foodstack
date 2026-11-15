@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.payment.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts;
 import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts.AccountView;
 import io.github.ilyaslabs.foodstack.payment.core.application.MerchantAccounts.CollectionView;
@@ -35,12 +37,16 @@ class MerchantAccountsController {
 
     @GetMapping
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "payment-collection-view", label = "Show payment collection", description = "How a branch collects card payments and its merchant accounts")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/payments/merchant-accounts", caller = "Back office")
     CollectionResponse view(@RequestParam String storeId) {
         return response(this.accounts.view(storeId));
     }
 
     @PutMapping("/{scope}/{ownerId}")
     @PreAuthorize("hasAuthority('payment:account')")
+    @Flow(value = "payment-account-connect", label = "Connect merchant account", description = "A brand or branch connects its own gateway keys")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/payments/merchant-accounts/{scope}/{ownerId}", caller = "Back office")
     AccountResponse connect(@PathVariable String scope, @PathVariable String ownerId, @RequestBody ConnectRequest request) {
         return response(this.accounts.connect(scope(scope), ownerId, request.secretKey(), request.webhookSecret()));
     }
@@ -48,6 +54,8 @@ class MerchantAccountsController {
     @DeleteMapping("/{scope}/{ownerId}")
     @PreAuthorize("hasAuthority('payment:account')")
     @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Flow(value = "payment-account-disconnect", label = "Disconnect merchant account")
+    @EVL.Endpoint(method = "DELETE", path = "/api/v1/payments/merchant-accounts/{scope}/{ownerId}", caller = "Back office")
     void disconnect(@PathVariable String scope, @PathVariable String ownerId) {
         this.accounts.disconnect(scope(scope), ownerId);
     }

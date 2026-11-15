@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.payment.impl;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.payment.api.CardSessionView;
 import io.github.ilyaslabs.foodstack.payment.api.MerchantView;
 import io.github.ilyaslabs.foodstack.payment.api.PaymentApi;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
  * and finance staff may read any (TDD 9.1).
  */
 @Component
+@EVL.Service("payment module")
 class PaymentApiImpl implements PaymentApi {
 
     private final PaymentService payments;

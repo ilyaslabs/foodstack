@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.promotion.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Date;
@@ -56,10 +57,12 @@ public class CouponService {
 
     public CouponEvaluation evaluate(CouponRequest request) {
         String code = CouponRules.normalize(request.code());
+        // @flow cart-checkout>quote>coupon>find, order-place>checkout>coupon>find: Find the promotion by its code
         PromotionDocument promotion = findByCode(code);
         if (promotion == null) {
             return CouponEvaluation.rejected(code, null, CouponEvaluation.NOT_FOUND, Map.of());
         }
+        // @flow cart-checkout>quote>coupon>rules, order-place>checkout>coupon>rules: Apply dates, minimum, targeting, payment method and per-customer limits
         return CouponRules.evaluate(promotion, request, customerUses(promotion.id(), request.customerId()),
                 confirmedOrders(request.customerId()), this.clock.instant());
     }
@@ -70,6 +73,7 @@ public class CouponService {
         if (existing != null && !RedemptionDocument.RELEASED.equals(existing.status())) {
             return evaluation(existing);
         }
+        // @flow order-place>coupon>evaluate: Evaluate the coupon again
         CouponEvaluation evaluation = evaluate(request);
         if (!evaluation.applies()) {
             return evaluation;
@@ -77,6 +81,7 @@ public class CouponService {
         PromotionDocument promotion = this.mongo.findById(evaluation.promotionId(), PromotionDocument.class);
         Instant now = this.clock.instant();
         try {
+            // @flow order-place>coupon>hold: Count the use against total and per-customer limits and save the reservation
             return this.transaction.execute((status) -> {
                 // Only a limited coupon counts uses on its own document; a nationwide unlimited coupon
                 // would make that one document the hottest write of every order (TDD 7.5).
@@ -103,12 +108,14 @@ public class CouponService {
                 return evaluation;
             });
         }
+        // @flow order-place>coupon>used-up: Answer used up or customer limit reached [on error LimitReached]
         catch (LimitReached ex) {
             return CouponEvaluation.rejected(evaluation.code(), promotion.id(), ex.reason, Map.of());
         }
     }
 
     /** The order was confirmed: the held use becomes a redemption. */
+    @Flow(value = "promotion-on-order>type?>confirmed>redeem", label = "Mark the reservation redeemed and record CouponRedeemed")
     public void redeem(String orderId) {
         this.transaction.executeWithoutResult((status) -> {
             RedemptionDocument redeemed = this.mongo.findAndModify(
@@ -124,6 +131,7 @@ public class CouponService {
     }
 
     /** Gives the use back (placement failed, or the order was cancelled, rejected or failed). */
+    @Flow(value = "promotion-on-order>type?>closed", label = "Give the use back and record CouponReleased", when = "OrderCancelled, OrderRejected, OrderFailed")
     public void release(String orderId) {
         this.transaction.executeWithoutResult((status) -> {
             RedemptionDocument before = this.mongo.findAndModify(
@@ -149,6 +157,7 @@ public class CouponService {
     }
 
     /** Counts a confirmed order for first-order-only coupons. */
+    @Flow(value = "promotion-on-order>type?>confirmed>count", label = "Count the customer's confirmed orders for first-order coupons")
     public void recordConfirmedOrder(String customerId) {
         this.mongo.upsert(Query.query(Criteria.where("_id").is(customerId)),
                 new Update().inc("confirmedOrders", 1).set("updatedAt", Date.from(this.clock.instant())), CUSTOMERS);

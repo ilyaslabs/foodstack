@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.notification.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -135,10 +137,16 @@ public class NotificationService {
         this.push = push;
     }
 
+    @Flow(value = "notification-on-order>send", label = "Write the inbox message and queue push and email")
+    @Flow(value = "notification-on-dispatch>send", label = "Write the inbox message and queue push and email")
+    @Flow(value = "notification-on-identity>send", label = "Write the inbox message and queue push and email")
+    @Flow(value = "notification-on-ledger>send", label = "Write the inbox message and queue push and email")
     public void send(Message message) {
         Instant now = this.clock.instant();
+        // @flow notification-on-order>send>render, notification-on-dispatch>send>render, notification-on-identity>send>render, notification-on-ledger>send>render: Render the template in the user's language
         Templates.Rendered rendered = this.templates.render(message.template(), message.language(), message.params());
         boolean fresh = true;
+        // @flow notification-on-order>send>inbox, notification-on-dispatch>send>inbox, notification-on-identity>send>inbox, notification-on-ledger>send>inbox: Write the inbox message once per event [when in-app]
         if (message.inApp() && message.userId() != null) {
             try {
                 this.mongo.insert(new InboxDocument(message.eventId() + ":" + message.userId(), message.userId(),
@@ -149,6 +157,7 @@ public class NotificationService {
                 fresh = false;
             }
         }
+        // @flow notification-on-order>send>push, notification-on-dispatch>send>push, notification-on-identity>send>push, notification-on-ledger>send>push: Queue a push delivery and try it now [when push and the device has push on]
         if (message.push() && fresh && message.userId() != null && this.push != null && this.push.enabled()) {
             String url = (message.link() != null) ? (message.backOffice() ? this.adminUrl : this.webUrl) + message.link() : null;
             String pushId = message.eventId() + ":" + message.userId() + ":" + PUSH;
@@ -165,9 +174,11 @@ public class NotificationService {
         if (!message.email()) {
             return;
         }
+        // @flow notification-on-order>send>email, notification-on-dispatch>send>email, notification-on-identity>send>email, notification-on-ledger>send>email: Email the user [when email, unless they turned order emails off]
         if (!message.required() && message.userId() != null && !preferences(message.userId()).orderEmails()) {
             return;
         }
+        // @flow notification-on-order>send>email>address, notification-on-dispatch>send>email>address, notification-on-identity>send>email>address, notification-on-ledger>send>email>address: Find the address in identity [when not given]
         String address = message.emailAddress();
         if (address == null && message.userId() != null) {
             UserView user = this.serviceCalls.call(() -> {
@@ -183,6 +194,7 @@ public class NotificationService {
         if (address == null || address.isBlank()) {
             return;
         }
+        // @flow notification-on-order>send>email>render, notification-on-dispatch>send>email>render, notification-on-identity>send>email>render, notification-on-ledger>send>email>render: Lay out HTML and text with the operator's branding
         BrandingView branding = this.settings.getBranding();
         String brand = (branding != null && branding.name() != null) ? branding.name() : "FoodStack";
         String url = (message.link() != null) ? (message.backOffice() ? this.adminUrl : this.webUrl) + message.link() : null;
@@ -195,6 +207,7 @@ public class NotificationService {
         try {
             // A code is a secret: the log shows only the title, and the email itself is kept encrypted
             boolean sealed = message.required();
+            // @flow notification-on-order>send>email>queue, notification-on-dispatch>send>email>queue, notification-on-identity>send>email>queue, notification-on-ledger>send>email>queue: Queue the delivery, sealed for codes, and try it now
             this.mongo.insert(new DeliveryDocument(id, message.userId(), EMAIL, message.template(), this.pii.encrypt(address),
                     sealed ? rendered.title() : rendered.subject(), sealed ? this.pii.encrypt(html) : html,
                     sealed ? this.pii.encrypt(text) : text, ready ? DeliveryDocument.QUEUED : DeliveryDocument.SKIPPED, 0,
@@ -237,6 +250,8 @@ public class NotificationService {
     }
 
     /** Sends emails and push messages that are due (queued, or a retry); returns how many went out. */
+    @Flow(value = "notification-send-due", label = "Send queued emails and pushes", description = "Claims due deliveries with a lease and retries with back-off")
+    @EVL.Job(schedule = "every 5 s")
     public int sendDue() {
         List<String> channels = new ArrayList<>();
         if (this.mail != null) {
@@ -249,12 +264,14 @@ public class NotificationService {
             return 0;
         }
         int sent = 0;
+        // @flow notification-send-due>claim: Claim the next due delivery [each delivery, up to 200]
         for (int i = 0; i < 200; i++) {
             DeliveryDocument claimed = claim(Criteria.where("status").in(DeliveryDocument.QUEUED, DeliveryDocument.SENDING)
                 .and("nextAttemptAt").lte(this.clock.instant()).and("channel").in(channels));
             if (claimed == null) {
                 break;
             }
+            // @flow notification-send-due>deliver: Deliver it
             if (deliver(claimed)) {
                 sent++;
             }
@@ -264,6 +281,7 @@ public class NotificationService {
 
     /** Puts a failed email back in the queue (PRD NO-4). */
     public void retry(String deliveryId) {
+        // @flow notification-retry>requeue: Queue a failed email again; never an expired code
         DeliveryDocument updated = this.mongo.findAndModify(
                 Query.query(Criteria.where("_id").is(deliveryId)
                     .and("status").in(DeliveryDocument.FAILED, DeliveryDocument.SKIPPED)
@@ -276,6 +294,7 @@ public class NotificationService {
                     "DELIVERY_NOT_FAILED");
         }
         if (this.mail != null) {
+            // @flow notification-retry>kick: Try it now [when email is set up]
             kick(deliveryId);
         }
     }
@@ -359,9 +378,12 @@ public class NotificationService {
     }
 
     private boolean deliver(DeliveryDocument delivery) {
+        // @flow notification-send-due>deliver>channel?: Push or email?
+        // @flow notification-send-due>deliver>channel?>push: Send the push through FCM [when PUSH]
         if (PUSH.equals(delivery.channel())) {
             return deliverPush(delivery);
         }
+        // @flow notification-send-due>deliver>channel?>email: Send over SMTP; retry with back-off, fail after the last try [when EMAIL]
         Instant now = this.clock.instant();
         try {
             if (delivery.sealed()) {

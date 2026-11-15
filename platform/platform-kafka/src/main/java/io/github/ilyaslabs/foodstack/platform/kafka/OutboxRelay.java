@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.platform.kafka;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
@@ -40,6 +42,7 @@ import org.springframework.kafka.core.KafkaTemplate;
  * marked, so later events of the same aggregate are sent again after it: ordering per aggregate
  * is kept, at the price of duplicates that consumers drop through their inbox.
  */
+@EVL.Queue("module event topics (Kafka)")
 public class OutboxRelay implements SmartLifecycle {
 
     private static final Log logger = LogFactory.getLog(OutboxRelay.class);
@@ -189,15 +192,19 @@ public class OutboxRelay implements SmartLifecycle {
      * Sends one batch of pending rows of the given buckets.
      * @return how many rows were marked sent
      */
+    @Flow(value = "outbox-relay", label = "Publish module events to Kafka", description = "Each module's outbox rows, for the buckets this replica leases; loops while there is work")
+    @EVL.Job(schedule = "continuous poll, partitioned by outbox bucket")
     public int publishBatch(Set<Integer> buckets) {
         Query pending = Query.query(Criteria.where("status").is(OutboxWriter.STATUS_NEW).and("bucket").in(buckets))
             .with(Sort.by("_id"))
             .limit(this.settings.getBatchSize());
+        // @flow outbox-relay>read: Read a batch of new outbox rows, oldest first
         List<Document> rows = this.template.find(pending, Document.class, this.collection);
         if (rows.isEmpty()) {
             return 0;
         }
         List<CompletableFuture<?>> sends = new ArrayList<>(rows.size());
+        // @flow outbox-relay>send: Send each row as a CloudEvent with its trace header [each row in rows]
         for (Document row : rows) {
             ProducerRecord<String, String> record = new ProducerRecord<>(this.topic, row.getString("subject"),
                     CloudEvents.fromOutbox(row, this.jsonMapper));
@@ -210,6 +217,7 @@ public class OutboxRelay implements SmartLifecycle {
         }
         List<String> sent = new ArrayList<>();
         String failedId = null;
+        // @flow outbox-relay>wait: Wait for Kafka to confirm each send
         for (int i = 0; i < rows.size(); i++) {
             try {
                 sends.get(i).get(this.settings.getSendTimeout().toMillis(), TimeUnit.MILLISECONDS);
@@ -221,6 +229,7 @@ public class OutboxRelay implements SmartLifecycle {
                 break;
             }
             catch (Exception ex) {
+                // @flow outbox-relay>stop: Stop at the first failed send [on error send failure]
                 failedId = rows.get(i).getString("_id");
                 logger.warn("Could not publish event " + failedId + " of module '" + this.module + "'", ex);
                 break;
@@ -229,11 +238,13 @@ public class OutboxRelay implements SmartLifecycle {
         if (!sent.isEmpty() && this.published != null) {
             this.published.increment(sent.size());
         }
+        // @flow outbox-relay>mark: Mark sent rows SENT
         if (!sent.isEmpty()) {
             this.template.updateMulti(Query.query(Criteria.where("_id").in(sent)),
                     new Update().set("status", OutboxWriter.STATUS_SENT).set("sentAt", Date.from(this.clock.instant())),
                     this.collection);
         }
+        // @flow outbox-relay>retry: Count an attempt on the failed row [when a send failed]
         if (failedId != null) {
             this.template.updateFirst(Query.query(Criteria.where("_id").is(failedId)), new Update().inc("attempts", 1),
                     this.collection);

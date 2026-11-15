@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.payment.core.persistence;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Instant;
 import java.util.List;
 
@@ -33,6 +34,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * @param updatedAt last change
  */
 @Document("payment_intents")
+@EVL.Database("foodstack_payment")
 public record PaymentDocument(@Id String id, String customerId, String status, long amountMinor, String currency,
         String merchantAccount, String gateway, String sessionReference, String paymentReference, String redirectUrl,
         String returnUrl, String cancelUrl, Instant expiresAt, long refundedMinor, List<Refund> refunds, String failureReason,

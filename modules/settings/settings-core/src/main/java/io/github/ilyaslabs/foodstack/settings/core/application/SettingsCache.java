@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.settings.core.application;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Duration;
 import java.util.function.Supplier;
 
@@ -11,6 +12,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * Read-through cache of settings sections in Redis, under {@code <ns>:settings:cache:<section>}
  * (TDD 10). Shared by every replica; evicted on change.
  */
+@EVL.Cache("Redis settings cache")
 public class SettingsCache {
 
     private final StringRedisTemplate redis;
