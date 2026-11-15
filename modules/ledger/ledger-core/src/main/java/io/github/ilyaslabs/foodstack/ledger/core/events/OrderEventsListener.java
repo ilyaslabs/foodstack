@@ -4,6 +4,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.ledger.core.application.CreditLimits;
 import io.github.ilyaslabs.foodstack.ledger.core.application.LedgerPosting;
 import io.github.ilyaslabs.foodstack.order.api.OrderSummary;
@@ -57,6 +59,8 @@ public class OrderEventsListener {
         this.creditLimits = creditLimits;
     }
 
+    @Flow(value = "ledger-order-events", label = "Post orders to the ledger", description = "Each posting is written once (transaction id)")
+    @EVL.Job(trigger = "<ns>.order.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.ledger:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-ledger-orders", groupId = "${foodstack.namespace:foodstack}-ledger",
             topics = "${foodstack.namespace:foodstack}.order.events", properties = "auto.offset.reset=earliest")
@@ -64,9 +68,11 @@ public class OrderEventsListener {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
         Instant at = (event.time() != null) ? event.time() : this.clock.instant();
+        // @flow ledger-order-events>type?: Which order event?
         if (PLACED.equals(type)) {
             this.posting.orderPlaced(event.dataAs(OrderPlaced.class, this.jsonMapper).order());
         }
+        // @flow ledger-order-events>type?>done: Order done [when OrderDelivered, OrderCollected]
         else if (DELIVERED.equals(type)) {
             OrderSummary order = event.dataAs(OrderDelivered.class, this.jsonMapper).order();
             this.posting.orderDone(order, at);
@@ -77,6 +83,7 @@ public class OrderEventsListener {
             this.posting.orderDone(order, at);
             checkCredit(order.storeId());
         }
+        // @flow ledger-order-events>type?>refunded: Order refunded [when OrderRefunded]
         else if (REFUNDED.equals(type)) {
             OrderRefunded refunded = event.dataAs(OrderRefunded.class, this.jsonMapper);
             this.posting.orderRefunded(event.id(), refunded, at);

@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.ledger.api.StoreBalance;
 import io.github.ilyaslabs.foodstack.ledger.api.events.PayoutSettled;
 import io.github.ilyaslabs.foodstack.ledger.api.events.StoreBalanceSettled;
@@ -103,6 +104,9 @@ public class LedgerReports {
      * Every branch's (or rider's) balance for a period, netted, with what moved by kind and who pays
      * whom. {@code brandId} limits it to a brand's branches, with the brand's totals (the roll-up).
      */
+    @Flow(value = "ledger-payouts>report", label = "Build the report")
+    @Flow(value = "ledger-payouts-csv>report", label = "Build the report")
+    @Flow(value = "ledger-payouts-pdf>report", label = "Build the report")
     public PayoutReport payouts(String partyType, String from, String to, String brandId) {
         String type = partyType(partyType);
         LocalDate first = date(from, "from");
@@ -160,11 +164,13 @@ public class LedgerReports {
     }
 
     /** {@link #payouts} as CSV (PRD FI-3). */
+    @Flow(value = "ledger-payouts-csv>csv", label = "Write CSV rows")
     public String payoutsCsv(String partyType, String from, String to, String brandId) {
         return PayoutExports.csv(payouts(partyType, from, to, brandId));
     }
 
     /** {@link #payouts} as a PDF with the operator's name on top (PRD FI-3). */
+    @Flow(value = "ledger-payouts-pdf>pdf", label = "Render the PDF")
     public byte[] payoutsPdf(String partyType, String from, String to, String brandId) {
         PayoutReport report = payouts(partyType, from, to, brandId);
         String name;
@@ -178,6 +184,7 @@ public class LedgerReports {
     }
 
     /** What the operator earned and spent in a period, and the money on its way at the end of it. Finance only. */
+    @Flow(value = "ledger-operator-summary>sum", label = "Sum the operator accounts' roll-ups")
     public OperatorSummary operator(String from, String to) {
         requireFinance();
         LocalDate first = date(from, "from");
@@ -219,6 +226,7 @@ public class LedgerReports {
     // ---- statements and balances -------------------------------------------------------------
 
     /** An account's transactions, newest first; {@code before} is the previous page's {@code nextBefore}. */
+    @Flow(value = "ledger-statement>page", label = "Check access, read transactions")
     public StatementPage statement(String accountId, String from, String to, String before, int limit) {
         requireAccountAccess(accountId);
         int size = Math.max(1, Math.min(limit, 100));
@@ -267,6 +275,7 @@ public class LedgerReports {
     }
 
     /** A branch's balance with the operator now (for the credit limit of direct collection). */
+    @Flow(value = "ledger-api-store-balance>balance", label = "Roll-ups plus not yet rolled up")
     public StoreBalance storeBalance(String storeId) {
         return new StoreBalance(storeId, balance(Accounts.store(storeId)), currency());
     }
@@ -283,7 +292,9 @@ public class LedgerReports {
      * the bank or payment reference (PRD FI-3). What was due moves to the operator's bank account;
      * settling the same period again finds nothing due.
      */
+    @Flow(value = "ledger-settle>settle", label = "Settle")
     public SettlementView settle(String accountId, String to, String reference) {
+        // @flow ledger-settle>settle>validate: Finance only; branch or rider account; a reference; up to yesterday
         if (!CurrentUser.hasAuthority(LEDGER_SETTLE)) {
             throw new ModuleException.Forbidden("Only finance can settle balances", "LEDGER_ACCESS_DENIED");
         }
@@ -302,12 +313,14 @@ public class LedgerReports {
             throw new ModuleException.BadRequest("Settle up to yesterday at the latest; today is not over yet",
                     "SETTLEMENT_PERIOD_OPEN");
         }
+        // @flow ledger-settle>settle>period: Not already settled for this period [on error SETTLEMENT_PERIOD_SETTLED]
         SettlementDocument latest = this.mongo.findOne(Query.query(Criteria.where("accountId").is(accountId))
             .with(Sort.by(Sort.Order.desc("periodTo"))).limit(1), SettlementDocument.class);
         if (latest != null && last.toString().compareTo(latest.periodTo()) < 0) {
             throw new ModuleException.Conflict("This balance is already settled up to " + latest.periodTo(),
                     "SETTLEMENT_PERIOD_SETTLED", Map.of("periodTo", latest.periodTo()));
         }
+        // @flow ledger-settle>settle>due: Amount due up to that day [on error NOTHING_TO_SETTLE]
         long due = dueUpTo(accountId, last);
         if (due == 0) {
             throw new ModuleException.Conflict("Nothing is due for this period", "NOTHING_TO_SETTLE");
@@ -324,6 +337,7 @@ public class LedgerReports {
         SettlementDocument settlement = new SettlementDocument(id, accountId, type, partyId, brandId, last.toString(), due,
                 currency, ref, actor, now);
         try {
+            // @flow ledger-settle>settle>write: Settlement, settlement transaction, PayoutSettled and StoreBalanceSettled in one transaction [on error DuplicateKeyException -> SETTLEMENT_CHANGED]
             this.transactions.executeWithoutResult((status) -> {
                 this.mongo.insert(settlement);
                 String partition = Accounts.STORE.equals(type) ? partyId : accountId;
@@ -348,6 +362,7 @@ public class LedgerReports {
     }
 
     /** Settlements, newest first: one account's (its party may see them) or everyone's (finance). */
+    @Flow(value = "ledger-settlements>list", label = "Newest first, by access")
     public List<SettlementView> settlements(String accountId, int limit) {
         Query query;
         if (accountId != null && !accountId.isBlank()) {
@@ -385,6 +400,7 @@ public class LedgerReports {
     // ---- access -------------------------------------------------------------------------------
 
     /** Which roll-up rows the caller may read. */
+    @Flow(value = "ledger-payouts>report>scope", label = "Whose balances: finance all, owners their branches or brand")
     Criteria scope(String type, String brandId) {
         Criteria where = Criteria.where("partyType").is(type);
         if (CurrentUser.hasAuthority(LEDGER_READ)) {

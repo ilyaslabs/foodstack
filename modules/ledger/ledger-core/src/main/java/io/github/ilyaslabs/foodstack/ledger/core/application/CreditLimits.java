@@ -3,6 +3,7 @@ package io.github.ilyaslabs.foodstack.ledger.core.application;
 import java.time.Clock;
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.ledger.api.events.StoreCreditLimitExceeded;
 import io.github.ilyaslabs.foodstack.ledger.api.events.StoreCreditRestored;
 import io.github.ilyaslabs.foodstack.ledger.core.domain.Accounts;
@@ -45,6 +46,7 @@ public class CreditLimits {
     }
 
     /** Finance changed who collects for the branch or its limit; then it is checked. */
+    @Flow(value = "ledger-store-events>type?>collection", label = "Keep mode and limit, then check", when = "StorePaymentCollectionChanged")
     public void collectionChanged(String storeId, String brandId, String storeName, java.util.Set<String> ownerUserIds,
             String mode, Long creditLimitMinor) {
         this.mongo.upsert(Query.query(Criteria.where("_id").is(storeId)),
@@ -56,6 +58,7 @@ public class CreditLimits {
     }
 
     /** The operator's default limit changed: every direct-collecting branch is checked again. */
+    @Flow(value = "ledger-store-events>type?>ordering", label = "Check every direct-collecting branch", when = "SettingsChanged (ordering)")
     public void defaultChanged() {
         for (CreditDocument credit : this.mongo.find(Query.query(Criteria.where("mode").is(CreditDocument.DIRECT)),
                 CreditDocument.class)) {
@@ -64,6 +67,11 @@ public class CreditLimits {
     }
 
     /** Compares the branch's debt with its limit and announces a crossing. A no-op for branches that do not collect. */
+    @Flow(value = "ledger-order-events>type?>done>credit", label = "Check the credit limit", description = "announces StoreCreditLimitExceeded or StoreCreditRestored when the branch crosses it")
+    @Flow(value = "ledger-order-events>type?>refunded>credit", label = "Check the credit limit", description = "announces StoreCreditLimitExceeded or StoreCreditRestored when the branch crosses it")
+    @Flow(value = "ledger-store-events>type?>collection>check", label = "Check the credit limit", description = "announces StoreCreditLimitExceeded or StoreCreditRestored when the branch crosses it")
+    @Flow(value = "ledger-store-events>type?>ordering>check", label = "Check the credit limit", description = "announces StoreCreditLimitExceeded or StoreCreditRestored when the branch crosses it")
+    @Flow(value = "ledger-settle>settle>credit", label = "Check the credit limit", description = "announces StoreCreditLimitExceeded or StoreCreditRestored when the branch crosses it")
     public void check(String storeId) {
         CreditDocument credit = this.mongo.findById(storeId, CreditDocument.class);
         if (credit == null) {

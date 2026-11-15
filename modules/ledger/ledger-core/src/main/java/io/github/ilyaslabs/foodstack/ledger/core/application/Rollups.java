@@ -6,6 +6,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.ledger.core.domain.Accounts;
 import io.github.ilyaslabs.foodstack.ledger.core.persistence.DailyDocument;
 import io.github.ilyaslabs.foodstack.ledger.core.persistence.TransactionDocument;
@@ -40,7 +42,10 @@ public class Rollups {
     }
 
     /** Rolls up what is new in the given buckets ({@code null} = every bucket); returns how many transactions. */
+    @Flow(value = "ledger-rollups", label = "Roll up ledger transactions by day", description = "Reports and balances read daily roll-ups, not the append-only ledger")
+    @EVL.Job(schedule = "every 30 s (foodstack.ledger.rollup-interval), over the buckets this replica leases")
     public int rollUp(Set<Integer> buckets) {
+        // @flow ledger-rollups>find: Not-yet-rolled transactions of the leased buckets
         Criteria fresh = Criteria.where("rolled").is(false);
         if (buckets != null) {
             fresh = fresh.and("bucket").in(buckets);
@@ -53,6 +58,7 @@ public class Rollups {
             byBucketDay.computeIfAbsent(t.getInteger("bucket") + "|" + t.getString("day"), (k) -> new ArrayList<>())
                 .add(t.getString("_id"));
         }
+        // @flow ledger-rollups>rebuild: Mark rolled, re-sum the day per account and kind, upsert daily rows [each bucket and day]
         for (Map.Entry<String, List<String>> entry : byBucketDay.entrySet()) {
             String[] key = entry.getKey().split("\\|", 2);
             int bucket = Integer.parseInt(key[0]);

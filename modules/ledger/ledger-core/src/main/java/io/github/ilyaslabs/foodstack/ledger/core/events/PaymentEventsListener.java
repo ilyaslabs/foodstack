@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.ledger.core.events;
 import java.time.Clock;
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.ledger.core.application.LedgerPosting;
 import io.github.ilyaslabs.foodstack.payment.api.events.PaymentSucceeded;
 import io.github.ilyaslabs.foodstack.payment.api.events.RefundSucceeded;
@@ -31,12 +33,15 @@ public class PaymentEventsListener {
         this.clock = clock;
     }
 
+    @Flow(value = "ledger-payment-events", label = "Post card payments and refunds", description = "")
+    @EVL.Job(trigger = "<ns>.payment.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.ledger:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-ledger-payments", groupId = "${foodstack.namespace:foodstack}-ledger",
             topics = "${foodstack.namespace:foodstack}.payment.events", properties = "auto.offset.reset=earliest")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         Instant at = (event.time() != null) ? event.time() : this.clock.instant();
+        // @flow ledger-payment-events>type?: Which payment event?
         if (SUCCEEDED.equals(event.type())) {
             this.posting.paymentReceived(event.dataAs(PaymentSucceeded.class, this.jsonMapper), at);
         }

@@ -3,6 +3,8 @@ package io.github.ilyaslabs.foodstack.ledger.core.events;
 import java.time.Clock;
 import java.time.Instant;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.dispatch.api.events.DeliveryCompleted;
 import io.github.ilyaslabs.foodstack.ledger.core.application.LedgerPosting;
 import io.github.ilyaslabs.foodstack.platform.core.EventTypes;
@@ -28,6 +30,8 @@ public class DispatchEventsListener {
         this.clock = clock;
     }
 
+    @Flow(value = "ledger-dispatch-events", label = "Post rider earnings", description = "On DeliveryCompleted")
+    @EVL.Job(trigger = "<ns>.dispatch.events")
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.ledger:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-ledger-dispatch", groupId = "${foodstack.namespace:foodstack}-ledger",
             topics = "${foodstack.namespace:foodstack}.dispatch.events", properties = "auto.offset.reset=earliest")
