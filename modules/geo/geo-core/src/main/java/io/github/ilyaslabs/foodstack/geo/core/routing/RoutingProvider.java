@@ -1,8 +1,10 @@
 package io.github.ilyaslabs.foodstack.geo.core.routing;
 
+import io.github.ilyaslabs.evl.EVL;
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
 
 /** Road distance and driving time between two points (TDD 14.1 provider SPI). */
+@EVL.External("Routing provider")
 public interface RoutingProvider {
 
     /**

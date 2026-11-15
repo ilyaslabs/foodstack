@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.geo.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
@@ -50,6 +52,8 @@ class CitiesController {
 
     @GetMapping
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "geo-cities", label = "List cities")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/geo/cities", caller = "Customer web")
     List<CityResponse> list() {
         return this.cityService.list().stream().map(CitiesController::toResponse).toList();
     }
@@ -57,6 +61,8 @@ class CitiesController {
     /** The active city nearest to a point, to fill in a new branch's or rider's city; 204 when none is near. */
     @GetMapping("/nearest")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "geo-city-nearest", label = "Nearest city")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/geo/cities/nearest", caller = "Customer web")
     ResponseEntity<CityResponse> nearest(@RequestParam double lat, @RequestParam double lng) {
         City city = this.cityService.nearest(new GeoPoint(lat, lng));
         return (city != null) ? ResponseEntity.ok(toResponse(city)) : ResponseEntity.noContent().build();
@@ -64,6 +70,8 @@ class CitiesController {
 
     @GetMapping("/{cityId}")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "geo-city-get", label = "Show city")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/geo/cities/{cityId}", caller = "Back office")
     ResponseEntity<CityResponse> get(@PathVariable String cityId) {
         City city = this.cityService.get(cityId);
         return ResponseEntity.ok().eTag(ETags.of(CITY, city.version())).body(toResponse(city));
@@ -71,6 +79,8 @@ class CitiesController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('geo:manage')")
+    @Flow(value = "geo-city-create", label = "Add city", description = "With its own delivery pricing")
+    @EVL.Endpoint(method = "POST", path = "/api/v1/geo/cities", caller = "Back office")
     ResponseEntity<CityResponse> create(@Valid @RequestBody CityRequest request) {
         City city = this.cityService.create(toInput(request), CurrentUser.id());
         return ResponseEntity.status(HttpStatus.CREATED).eTag(ETags.of(CITY, city.version())).body(toResponse(city));
@@ -78,6 +88,8 @@ class CitiesController {
 
     @PutMapping("/{cityId}")
     @PreAuthorize("hasAuthority('geo:manage')")
+    @Flow(value = "geo-city-update", label = "Edit city", description = "Needs If-Match")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/geo/cities/{cityId}", caller = "Back office")
     ResponseEntity<CityResponse> update(@PathVariable String cityId,
             @RequestHeader(value = HttpHeaders.IF_MATCH, required = false) String ifMatch,
             @Valid @RequestBody CityRequest request) {

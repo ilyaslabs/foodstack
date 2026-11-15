@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.geo.web;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 
 import io.github.ilyaslabs.foodstack.geo.api.GeoPoint;
@@ -40,6 +42,8 @@ class ZonesController {
 
     @GetMapping("/stores/{storeId}")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "geo-zones-get", label = "Branch delivery zones")
+    @EVL.Endpoint(method = "GET", path = "/api/v1/zones/stores/{storeId}", caller = "Back office")
     ZonesResponse zones(@PathVariable String storeId) {
         CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
         return toResponse(storeId, this.zoneService.getZones(storeId));
@@ -47,7 +51,10 @@ class ZonesController {
 
     @PutMapping("/stores/{storeId}")
     @PreAuthorize("isAuthenticated()")
+    @Flow(value = "geo-zones-replace", label = "Draw branch delivery zones", description = "Replaces all zones of a self-delivery branch")
+    @EVL.Endpoint(method = "PUT", path = "/api/v1/zones/stores/{storeId}", caller = "Back office")
     ZonesResponse replace(@PathVariable String storeId, @Valid @RequestBody ZonesRequest request) {
+        // @flow geo-zones-replace>access: Check the caller manages the branch
         CurrentUser.requireStoreAccess(storeId, OPERATOR_PERMISSION);
         List<ZoneInput> inputs = request.zones().stream().map(ZonesController::toInput).toList();
         return toResponse(storeId, this.zoneService.replaceZones(storeId, inputs, CurrentUser.id()));

@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.geo.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.events.CityChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.OperatorDeliveryPricingChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.ZoneChanged;
@@ -15,6 +17,7 @@ import org.springframework.kafka.annotation.KafkaListener;
  * value a reader cached just before the change commits does not live out its TTL. Eviction is
  * harmless to repeat, so there is no inbox.
  */
+@EVL.Queue("foodstack.geo.events")
 public class GeoCacheListener {
 
     private static final String ZONE_CHANGED = EventTypes.type("geo", ZoneChanged.class);
@@ -35,6 +38,8 @@ public class GeoCacheListener {
     @KafkaListener(concurrency = "${foodstack.kafka.concurrency.geo:${foodstack.kafka.listener-concurrency:3}}",
             id = "${foodstack.namespace:foodstack}-geo-cache", groupId = "${foodstack.namespace:foodstack}-geo-cache",
             topics = "${foodstack.namespace:foodstack}.geo.events", properties = "auto.offset.reset=latest")
+    @Flow(value = "geo-on-change", label = "Evict cached zones, pricing and cities on every replica", after = "geo-zones-replace")
+    @EVL.Job(trigger = "ZoneChanged, OperatorPricingChanged, CityChanged")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         if (ZONE_CHANGED.equals(event.type())) {
