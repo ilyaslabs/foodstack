@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.platform.mongo;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Clock;
 import java.util.Date;
 
@@ -15,6 +16,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * The inbox row and the handler's writes commit in one transaction of the consuming module, so a
  * redelivered event is skipped and a failed handler leaves no inbox row.
  */
+@EVL.Database("module inbox")
 public class InboxGuard {
 
     private final String collection;

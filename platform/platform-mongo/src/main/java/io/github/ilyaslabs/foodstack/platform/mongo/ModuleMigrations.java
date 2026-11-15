@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.platform.mongo;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -47,12 +49,17 @@ public class ModuleMigrations implements InitializingBean {
     }
 
     @Override
+    @Flow(value = "module-migrations", label = "Migrate a module's database", description = "Each local module at start, or once in a migrate-only run")
+    @EVL.Job(trigger = "module start")
     public void afterPropertiesSet() throws Exception {
         if (this.properties.getMigrations().isEnabled()) {
+            // @flow module-migrations>liquibase: Apply pending Liquibase change sets [when migrations are on]
             migrate();
+            // @flow module-migrations>buckets: Give old outbox rows a bucket [when migrations are on]
             backfillOutboxBuckets();
         }
         if (this.properties.getSharding().isEnabled()) {
+            // @flow module-migrations>shards: Shard collections by their keys [when sharding is on]
             applyShardKeys();
         }
     }

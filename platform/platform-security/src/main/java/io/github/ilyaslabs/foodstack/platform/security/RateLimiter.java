@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.platform.security;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Clock;
 import java.time.Duration;
 
@@ -16,6 +17,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * window, so it works on Redis Cluster. When Redis is down the limit is skipped (fail open), as at
  * the edge.
  */
+@EVL.Cache("Redis rate limits")
 public class RateLimiter {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimiter.class);

@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.platform.security;
 
+import io.github.ilyaslabs.evl.EVL;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
@@ -17,6 +18,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
  * {@code identity} raises the version when an account is blocked, a password changes, roles are
  * removed or the user logs out everywhere; every module then rejects older tokens.
  */
+@EVL.Cache("Redis token revocations")
 public class TokenRevocations {
 
     /** Default for how many users' versions each process keeps in memory. */
