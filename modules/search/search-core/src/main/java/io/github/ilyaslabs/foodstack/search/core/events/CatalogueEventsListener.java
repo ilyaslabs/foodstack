@@ -1,5 +1,7 @@
 package io.github.ilyaslabs.foodstack.search.core.events;
 
+import io.github.ilyaslabs.evl.EVL;
+import io.github.ilyaslabs.evl.Flow;
 import io.github.ilyaslabs.foodstack.geo.api.events.CityChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.OperatorDeliveryPricingChanged;
 import io.github.ilyaslabs.foodstack.geo.api.events.ZoneChanged;
@@ -25,6 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
  * no inbox is kept. A failing refresh is retried with backoff and then sent to the dead-letter
  * topic (platform {@code DeadLetters}); the scheduled or manual rebuild repairs anything missed.
  */
+@EVL.Queue("foodstack.store.events")
 public class CatalogueEventsListener {
 
     private static final Logger log = LoggerFactory.getLogger(CatalogueEventsListener.class);
@@ -64,9 +67,12 @@ public class CatalogueEventsListener {
             topics = { "${foodstack.namespace:foodstack}.store.events", "${foodstack.namespace:foodstack}.geo.events",
                 "${foodstack.namespace:foodstack}.review.events" },
             properties = "auto.offset.reset=earliest")
+    @Flow(value = "search-on-catalogue", label = "Keep the search index in step", description = "store, geo and review events", after = "store-update-branch")
+    @EVL.Job(trigger = "store, geo and review events")
     public void onEvent(String value) {
         CloudEvents.Envelope event = CloudEvents.parse(value, this.jsonMapper);
         String type = event.type();
+        // @flow search-on-catalogue>type?: Which event?
         if (STORE_CHANGED.equals(type)) {
             this.indexer.refresh(event.dataAs(StoreChanged.class, this.jsonMapper).storeId());
         }

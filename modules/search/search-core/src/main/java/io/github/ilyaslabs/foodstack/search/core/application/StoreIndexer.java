@@ -1,5 +1,6 @@
 package io.github.ilyaslabs.foodstack.search.core.application;
 
+import io.github.ilyaslabs.evl.Flow;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -59,6 +60,7 @@ public class StoreIndexer {
     }
 
     /** Re-reads one branch and indexes it, or removes it when it is not live (or gone). */
+    @Flow(value = "search-on-catalogue>type?>store", label = "Re-index one branch", when = "branch, availability, zone or review changed")
     public void refresh(String storeId) {
         this.serviceCalls.run(() -> refreshAsService(storeId));
     }
@@ -66,19 +68,24 @@ public class StoreIndexer {
     private void refreshAsService(String storeId) {
         StoreListingView listing;
         try {
+            // @flow search-on-catalogue>type?>store>listing: Read the branch listing from store
             listing = this.stores.getListing(storeId);
         }
         catch (ModuleException.NotFound ex) {
             this.engine.delete(storeId);
             return;
         }
+        // @flow search-on-catalogue>type?>store>remove: Remove it from the index [when gone, not live or no location]
         if (listing.status() != StoreStatus.LIVE || listing.location() == null) {
             this.engine.delete(storeId, listing.version());
             return;
         }
+        // @flow search-on-catalogue>type?>store>rating: Read its rating from review
         StoreRating rating = rating(storeId);
+        // @flow search-on-catalogue>type?>store>area: Read its delivery area from geo
         DeliveryAreaView area = this.geo.deliveryArea(
                 new DeliveryAreaRequest(storeId, listing.location(), listing.deliveryMode(), listing.cityId()));
+        // @flow search-on-catalogue>type?>store>index: Write the document, versioned by the listing
         this.engine.index(new IndexedStore(listing.storeId(), listing.slug(), listing.brandId(), listing.brandName(), listing.branchName(),
                 listing.branchCount(), listing.description(), listing.cuisines(), listing.logoUrls(), listing.coverUrls(),
                 listing.location(), listing.area(), listing.city(), listing.deliveryMode().name(), listing.pickupEnabled(),
@@ -104,11 +111,13 @@ public class StoreIndexer {
     }
 
     /** A brand change (name, images, menu) touches every indexed branch of the brand. */
+    @Flow(value = "search-on-catalogue>type?>brand", label = "Re-index every branch of the brand", when = "BrandChanged, MenuChanged")
     public void refreshBrand(String brandId) {
         this.engine.storeIdsOfBrand(brandId).forEach(this::refresh);
     }
 
     /** Operator delivery pricing sets the area of every branch delivered by operator riders. */
+    @Flow(value = "search-on-catalogue>type?>operator", label = "Re-index every operator-delivered branch", when = "operator pricing or city changed")
     public void refreshOperatorDelivery() {
         this.engine.storeIdsWithDeliveryMode(DeliveryMode.OPERATOR.name()).forEach(this::refresh);
     }
@@ -117,6 +126,9 @@ public class StoreIndexer {
      * Re-reads every branch. Runs at most once at a time per instance; returns the number of
      * branches read, or -1 when a rebuild was already running.
      */
+    @Flow(value = "search-reindex>rebuild", label = "Re-read every branch into the index, one rebuild at a time")
+    @Flow(value = "search-bootstrap>rebuild", label = "Re-read every branch into the index")
+    @Flow(value = "search-scheduled-rebuild>rebuild", label = "Re-read every branch into the index")
     public int rebuild() {
         if (!this.rebuilding.compareAndSet(false, true)) {
             return -1;
